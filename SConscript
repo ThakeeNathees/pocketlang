@@ -31,6 +31,8 @@ test = env.Program(
 	LIBS    = 'miniscript',
 )
 
+env.Append(CPPPATH=CPPPATH)
+
 Requires(test, vm)
 
 

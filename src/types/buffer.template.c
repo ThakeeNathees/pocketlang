@@ -18,14 +18,14 @@ void $name_l$BufferInit($name$Buffer* self) {
 	self->capacity = 0;
 }
 
-void $name_l$BufferClear($name$Buffer* self, VM* vm) {
+void $name_l$BufferClear($name$Buffer* self, MSVM* vm) {
 	vmRealloc(vm, self->data, self->capacity * sizeof($type$), 0);
 	self->data = NULL;
 	self->count = 0;
 	self->capacity = 0;
 }
 
-void $name_l$BufferFill($name$Buffer* self, VM* vm, $type$ data, int count) {
+void $name_l$BufferFill($name$Buffer* self, MSVM* vm, $type$ data, int count) {
 	
 	if (self->capacity < self->count + count) {
 		int capacity = utilPowerOf2Ceil((int)self->count + count);
@@ -39,6 +39,6 @@ void $name_l$BufferFill($name$Buffer* self, VM* vm, $type$ data, int count) {
 	}
 }
 
-void $name_l$BufferWrite($name$Buffer* self, VM* vm, $type$ data) {
+void $name_l$BufferWrite($name$Buffer* self, MSVM* vm, $type$ data) {
 	$name_l$BufferFill(self, vm, data, 1);
 }

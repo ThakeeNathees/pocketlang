@@ -30,6 +30,8 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "miniscript.h"
+
 #include "types/gen/byte_buffer.h"
 #include "types/gen/function_buffer.h"
 #include "types/gen/int_buffer.h"
@@ -232,6 +234,8 @@ struct Range {
 struct Script {
 	Object _super;
 
+	String* path;              //< Absolute path of the script.
+
 	ID imports[MAX_IMPORT_SCRIPTS]; //< Imported script IDs.
 	int import_count;               //< Number of import in imports.
 
@@ -275,21 +279,21 @@ struct Function {
 
 // Methods.
 
-void varInitObject(Object* self, VM* vm, ObjectType type);
+void varInitObject(Object* self, MSVM* vm, ObjectType type);
 
 // Instead use VAR_NUM(value) and AS_NUM(value)
 Var doubleToVar(double value);
 double varToDouble(Var value);
 
 // Allocate new String object and return String*.
-String* newString(VM* vm, const char* text, uint32_t length);
+String* newString(MSVM* vm, const char* text, uint32_t length);
 
 // Allocate new Script object and return Script*.
-Script* newScript(VM* vm);
+Script* newScript(MSVM* vm);
 
 // Allocate new Function object and return Function*. Parameter [name] should
 // be the name in the Script's nametable.
-Function* newFunction(VM* vm, const char* name, Script* owner, bool is_native);
+Function* newFunction(MSVM* vm, const char* name, Script* owner, bool is_native);
 
 
 #endif // VAR_H

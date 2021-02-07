@@ -6,7 +6,7 @@
 #include "var.h"
 #include "vm.h"
 
-void varInitObject(Object* self, VM* vm, ObjectType type) {
+void varInitObject(Object* self, MSVM* vm, ObjectType type) {
 	self->type = type;
 	self->next = vm->first;
 	vm->first = self;
@@ -42,7 +42,7 @@ static inline double varToDouble(Var value) {
 #endif // VAR_NAN_TAGGING
 }
 
-String* newString(VM* vm, const char* text, uint32_t length) {
+String* newString(MSVM* vm, const char* text, uint32_t length) {
 
 	ASSERT(length == 0 || text != NULL, "Unexpected NULL string.");
 
@@ -55,7 +55,7 @@ String* newString(VM* vm, const char* text, uint32_t length) {
 	return string;
 }
 
-Script* newScript(VM* vm) {
+Script* newScript(MSVM* vm) {
 	Script* script = ALLOCATE(vm, Script);
 	varInitObject(&script->_super, vm, OBJ_SCRIPT);
 
@@ -68,7 +68,7 @@ Script* newScript(VM* vm) {
 	return script;
 }
 
-Function* newFunction(VM* vm, const char* name, Script* owner,
+Function* newFunction(MSVM* vm, const char* name, Script* owner,
                       bool is_native) {
 
 	Function* func = ALLOCATE(vm, Function);

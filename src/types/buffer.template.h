@@ -33,13 +33,13 @@ typedef struct {
 void $name_l$BufferInit($name$Buffer* self);
 
 // Clears the allocated elementes from the VM's realloc function.
-void $name_l$BufferClear($name$Buffer* self, VM* vm);
+void $name_l$BufferClear($name$Buffer* self, MSVM* vm);
 
 // Fill the buffer at the end of it with provided data if the capacity isn't
 // enough using VM's realloc function.
-void $name_l$BufferFill($name$Buffer* self, VM* vm, $type$ data, int count);
+void $name_l$BufferFill($name$Buffer* self, MSVM* vm, $type$ data, int count);
 
 // Write to the buffer with provided data at the end of the buffer.
-void $name_l$BufferWrite($name$Buffer* self, VM* vm, $type$ data);
+void $name_l$BufferWrite($name$Buffer* self, MSVM* vm, $type$ data);
 
 #endif // $name_u$_BUFFER_H

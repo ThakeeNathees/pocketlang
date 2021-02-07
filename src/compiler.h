@@ -6,12 +6,14 @@
 #ifndef COMPILER_H
 #define COMPILER_H
 
+#include "miniscript.h"
+
 #include "common.h"
 #include "var.h"
 
 typedef struct Compiler Compiler;
 
-Script* compileSource(VM* vm, const char* source);
+Script* compileSource(MSVM* vm, const char* path);
 
 
 #endif // COMPILER_H

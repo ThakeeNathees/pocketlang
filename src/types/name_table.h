@@ -16,10 +16,10 @@ typedef StringBuffer NameTable;
 void nameTableInit(NameTable* self);
 
 // Remove the elements of the symbol table.
-void nameTableClear(NameTable* self, VM* vm);
+void nameTableClear(NameTable* self, MSVM* vm);
 
 // Add a name to the name table and return the index of the name in the table.
-int nameTableAdd(NameTable* self, VM* vm, const char* name, size_t length);
+int nameTableAdd(NameTable* self, MSVM* vm, const char* name, size_t length);
 
 // Return name at index.
 const char* nameTableGet(NameTable* self, int index);

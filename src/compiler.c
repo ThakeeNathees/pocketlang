@@ -183,9 +183,10 @@ static _Keyword _keywords[] = {
 };
 
 typedef struct {
-	VM* vm;             //< Owner of the parser (for reporting errors, etc).
+	MSVM* vm;             //< Owner of the parser (for reporting errors, etc).
 
 	const char* source; //< Currently compiled source.
+	const char* path;   //< Path of the source.
 
 	const char* token_start;  //< Start of the currently parsed token.
 	const char* current_char; //< Current char position in the source.
@@ -239,6 +240,7 @@ typedef struct {
 	const char* name; //< Directly points into the source string.
 	int length;       //< Length of the name.
 	int depth;        //< The depth the local is defined in. (-1 means global)
+	int line;         //< The line variable declared for debugging.
 } Variable;
 
 typedef struct sLoop {
@@ -263,7 +265,7 @@ typedef struct sLoop {
 
 struct Compiler {
 
-	VM* vm;
+	MSVM* vm;
 	Parser parser;
 
 	// Current depth the compiler in (-1 means top level) 0 means function
@@ -279,6 +281,39 @@ struct Compiler {
 	Loop* loop;     //< Current loop.
 	Function* fn;   //< Current function.
 };
+
+/*****************************************************************************
+ * ERROR HANDLERS                                                            *
+ *****************************************************************************/
+
+static void reportError(Parser* parser, const char* file, int line,
+                        const char* fmt, va_list args) {
+	parser->has_errors = true;
+	// TODO: parser->vm->config.error_fn(...)
+}
+
+// Error caused at the middle of lexing (and TK_ERROR will be lexed insted).
+static void lexError(Parser* parser, const char* fmt, ...) {
+	va_list args;
+	va_start(args, fmt);
+	reportError(parser, parser->path, parser->current_line, fmt, args);
+	va_end(args);
+}
+
+// Error caused when parsing. The associated token assumed to be last consumed
+// which is [parser->previous].
+static void parseError(Parser* parser, const char* fmt, ...) {
+
+	Token* token = &parser->previous;
+
+	// Lex errors would repored earlier by lexError and lexed a TK_ERROR token.
+	if (token->type == TK_ERROR) return;
+
+	va_list args;
+	va_start(args, fmt);
+	reportError(parser, parser->path, token->line, fmt, args);
+	va_end(args);
+}
 
 /*****************************************************************************
  * LEXING                                                                    *
@@ -391,8 +426,13 @@ static void eatNumber(Parser* parser) {
 		while (utilIsDigit(peekChar(parser)))
 			eatChar(parser);
 	}
-
+	errno = 0;
 	Var value = VAR_NUM(strtod(parser->token_start, NULL));
+	if (errno == ERANGE) {
+		// TODO: error() literal number is too large.
+		value = VAR_NUM(0);
+	}
+
 	setNextValueToken(parser, TK_NUMBER, value);
 }
 
@@ -557,9 +597,11 @@ static void lexToken(Parser* parser) {
  *****************************************************************************/
 
  // Initialize the parser.
-static void parserInit(Parser* self, VM* vm, const char* source) {
+static void parserInit(Parser* self, MSVM* vm, const char* source,
+                       const char* path) {
 	self->vm = vm;
 	self->source = source;
+	self->path = path;
 	self->token_start = source;
 	self->current_char = source;
 	self->current_line = 1;
@@ -609,7 +651,7 @@ static void matchEndStatement(Parser* parser) {
 	if (peek(parser) == TK_SEMICOLLON)
 		match(parser, TK_SEMICOLLON);
 
-	matchLine(parser);
+	skipNewLines(parser);
 }
 
 // Match optional "do" keyword and new lines.
@@ -619,7 +661,7 @@ static void matchStartBlock(Parser* parser) {
 	if (peek(parser) == TK_DO)
 		match(parser, TK_DO);
 
-	matchLine(parser);
+	skipNewLines(parser);
 }
 
 // Consume the the current token and if it's not [expected] emits error log
@@ -780,7 +822,7 @@ typedef enum {
 	NAME_NOT_DEFINED,
 	NAME_LOCAL_VAR, //< Including parameter.
 	NAME_GLOBAL_VAR,
-	NAME_SCRIPT_FN,
+	NAME_FUNCTION,
 } NameDefnType;
 
 // Identifier search result.
@@ -801,11 +843,16 @@ typedef struct {
 		int func;
 	} index;
 
+	// The line it declared.
+	int line;
+
 } NameSearchResult;
 
-static void compilerInit(Compiler* compiler, VM* vm, const char* source) {
-	parserInit(&compiler->parser, vm, source);
+static void compilerInit(Compiler* compiler, MSVM* vm, const char* source,
+                         const char* path) {
+	parserInit(&compiler->parser, vm, source, path);
 	compiler->vm = vm;
+	vm->compiler = compiler;
 	compiler->scope_depth = -1;
 	compiler->var_count = 0;
 	Loop* loop = NULL;
@@ -828,6 +875,8 @@ static int compilerSearchVariables(Compiler* compiler, const char* name,
 		}
 	}
 
+	// TODO: Search in imported scripts globals too. and return NameSearchResult.
+
 	return -1;
 }
 
@@ -843,11 +892,12 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
 // Add a variable and return it's index to the context. Assumes that the
 // variable name is unique and not defined before in the current scope.
 static int compilerAddVariable(Compiler* compiler, const char* name,
-                                int length) {
+                                int length, int line) {
 	Variable* variable = &compiler->variables[compiler->var_count];
 	variable->name = name;
 	variable->length = length;
 	variable->depth = compiler->scope_depth;
+	variable->line = line;
 	return compiler->var_count++;
 }
 
@@ -863,7 +913,7 @@ static void compileFunction(Compiler* compiler, bool is_native) {
 		name_length);
 
 	if (result.type != NAME_NOT_DEFINED) {
-		// TODO: multiple definition error();
+		// TODO: multiple definition error(); or allow name overriden.
 	}
 
 	int index = nameTableAdd(&compiler->script->function_names, compiler->vm,
@@ -907,13 +957,29 @@ static void compileFunction(Compiler* compiler, bool is_native) {
 	compiler->fn = NULL;
 }
 
-Script* compileSource(VM* vm, const char* source) {
+/*****************************************************************************
+ * COMPILING (STATEMENTS)                                                    *
+ *****************************************************************************/
+
+// Compiles a statement. Assignment could be an assignment statement or a new
+// variable declaration, which will be handled.
+static void compileStatement(Compiler* compiler) {
+	// TODO:
+}
+
+Script* compileSource(MSVM* vm, const char* path) {
+
+	MSLoadScriptResult res = vm->config.load_script_fn(vm, path);
+	if (res.is_failed) // FIXME:
+		vm->config.error_fn(vm, MS_ERROR_COMPILE, NULL, -1,
+			"file load source failed.");
+	const char* source = res.source;
 
 	// Skip utf8 BOM if there is any.
 	if (strncmp(source, "\xEF\xBB\xBF", 3) == 0) source += 3;
 
 	Compiler compiler;
-	compilerInit(&compiler, vm, source);
+	compilerInit(&compiler, vm, source, path);
 
 	Script* script = newScript(vm);
 	compiler.script = script;
@@ -935,11 +1001,18 @@ Script* compileSource(VM* vm, const char* source) {
 			compileFunction(&compiler, false);
 
 		} else if (match(parser, TK_IMPORT)) {
-			// TODO:
+			// TODO: import statement must be first of all other.
 
 		} else {
-			// name = value # Variable defn.
-			// name()       # statement
+			compileStatement(&compiler);
 		}
 	}
+
+	// Source done callback.
+	if (vm->config.load_script_done_fn != NULL)
+		vm->config.load_script_done_fn(vm, path, res.user_data);
+
+	vm->compiler = NULL;
+
+	return script;
 }

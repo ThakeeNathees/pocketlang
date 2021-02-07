@@ -6,6 +6,8 @@
 #ifndef VM_H
 #define VM_H
 
+#include "miniscript.h"
+
 #include "common.h"
 #include "compiler.h"
 #include "var.h"
@@ -14,7 +16,7 @@
 // garbage collected.
 #define MAX_TEMP_REFERENCE 8
 
-struct VM {
+struct MSVM {
 
 	// The first object in the link list of all heap allocated objects.
 	Object* first;
@@ -25,6 +27,9 @@ struct VM {
 	// doesn't garbage collected.
 	Object* temp_reference[MAX_TEMP_REFERENCE];
 	int temp_reference_count;
+
+	// VM's configurations.
+	MSConfiguration config;
 
 	// current compiler reference to mark it's heap allocated objects.
 	Compiler* compiler;
@@ -37,12 +42,12 @@ struct VM {
 //   and it'll returns NULL.
 // - The [old_size] parameter is required to keep track of the VM's
 //    allocations to trigger the garbage collections.
-void* vmRealloc(VM* self, void* memory, size_t old_size, size_t new_size);
+void* vmRealloc(MSVM* self, void* memory, size_t old_size, size_t new_size);
 
 // Push the object to temporary references stack.
-void vmPushTempRef(VM* self, Object* obj);
+void vmPushTempRef(MSVM* self, Object* obj);
 
 // Pop the top most object from temporary reference stack.
-void vmPopTempRef(VM* self);
+void vmPopTempRef(MSVM* self);
 
 #endif // VM_H
