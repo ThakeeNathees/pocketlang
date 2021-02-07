@@ -1,0 +1,55 @@
+
+# MiniScript ignore list
+build/
+MiniScript/test/
+src/test/
+MiniScript/.import/
+release/
+debug/
+*__pycache__/
+.vs/
+.vscode/
+
+config.json
+run.bat
+*.dblite
+*.idb
+*.pdb
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.obj.enc
+
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app

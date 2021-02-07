@@ -1,0 +1,6 @@
+
+## Ignore all generated source files.
+*.gen.h
+*.gen.c
+gen/
+*.bat
