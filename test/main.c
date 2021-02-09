@@ -35,7 +35,10 @@ MSLoadScriptResult loadScript(MSVM* vm, const char* path) {
 	MSLoadScriptResult result;
 	result.is_failed = false;
 
-	result.source = "def someFunction(a, b, c);";
+	result.source = ""
+		"if -1+2 * 3\n"
+		"end\n"
+		;
 	return result;
 
 	// FIXME:
@@ -60,7 +63,6 @@ int main() {
 	//clogger_logfError("[DummyError] dummy error\n");
 	//clogger_logfWarning("[DummyWarning] dummy warning\n");
 
-	printf("Here are the first 8 chars: %.8s\n", "A string that is more than 8 chars");
 	//parseError(parser, "A function named %.*s already exists at %s:%s", length, start, file, line);
 
 	FILE* fp = fopen("test.ms", "r");

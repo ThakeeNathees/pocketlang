@@ -37,6 +37,16 @@
   #define MS_PUBLIC
 #endif
 
+#define STRINGIFY(x) TOSTRING(x)
+#define TOSTRING(x) #x
+
+// The factor by which a buffer will grow when it's capacity reached.
+#define GROW_FACTOR 2
+
+// The initial capacity of a buffer.
+#define MIN_CAPACITY 8
+
+
 // Unique number to identify for various cases.
 typedef uint32_t ID;
 
@@ -77,7 +87,7 @@ typedef struct Function Function;
 #define UNREACHABLE()                                                    \
     do {                                                                 \
         fprintf(stderr, "Execution reached an unreachable path\n"        \
-            "\tat %s() (%s:%i)\n", __FILE__, __LINE__, __func__);        \
+            "\tat %s() (%s:%i)\n", __func__, __FILE__, __LINE__);        \
         abort();                                                         \
     } while (false)
 

@@ -16,6 +16,12 @@
 // garbage collected.
 #define MAX_TEMP_REFERENCE 8
 
+typedef enum {
+	#define OPCODE(name, _, __) OP_##name,
+	#include "opcodes.h"
+	#undef OPCODE
+} Opcode;
+
 struct MSVM {
 
 	// The first object in the link list of all heap allocated objects.

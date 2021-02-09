@@ -13,12 +13,6 @@
 #include "../common.h"
 #include "miniscript.h"
 
-// The factor by which the buffer will grow when it's capacity reached.
-#define GROW_FACTOR 2
-
-// The initial capacity of the buffer.
-#define MIN_CAPACITY 16
-
 // A place holder typedef to prevent IDE syntax errors. Remove this line 
 // when generating the source.
 typedef uint8_t $type$;

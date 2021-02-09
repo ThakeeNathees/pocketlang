@@ -62,6 +62,12 @@ Script* newScript(MSVM* vm) {
 	varBufferInit(&script->globals);
 	nameTableInit(&script->global_names);
 
+	varBufferInit(&script->literals);
+
+	vmPushTempRef(vm, &script->_super);
+	script->body = newFunction(vm, "@(ScriptLevel)", script, false);
+	vmPopTempRef(vm);
+
 	functionBufferInit(&script->functions);
 	nameTableInit(&script->function_names);
 	
@@ -83,9 +89,9 @@ Function* newFunction(MSVM* vm, const char* name, Script* owner,
 	if (is_native) {
 		func->native = NULL;
 	} else {
-		vmPushTempRef(vm, &func->_super);
+		//vmPushTempRef(vm, &func->_super);
 		Fn* fn = ALLOCATE(vm, Fn);
-		vmPopTempRef(vm);
+		//vmPopTempRef(vm);
 
 		byteBufferInit(&fn->opcodes);
 		intBufferInit(&fn->oplines);
@@ -93,4 +99,14 @@ Function* newFunction(MSVM* vm, const char* name, Script* owner,
 		func->fn = fn;
 	}
 	return func;
+}
+
+
+bool isVauesSame(Var v1, Var v2) {
+#if VAR_NAN_TAGGING
+	// Bit representation of each values are unique so just compare the bits.
+	return v1 == v2;
+#else
+#error TODO:
+#endif
 }

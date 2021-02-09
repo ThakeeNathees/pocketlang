@@ -242,6 +242,10 @@ struct Script {
 	VarBuffer globals;         //< Script level global variables.
 	NameTable global_names;    //< Name map to index in globals.
 
+	VarBuffer literals;        //< Script literal constant values.
+
+	Function* body;            //< Script body is an anonymous function.
+
 	FunctionBuffer functions;  //< Script level functions.
 	NameTable function_names;  //< Name map to index in functions.
 
@@ -293,7 +297,11 @@ Script* newScript(MSVM* vm);
 
 // Allocate new Function object and return Function*. Parameter [name] should
 // be the name in the Script's nametable.
-Function* newFunction(MSVM* vm, const char* name, Script* owner, bool is_native);
+Function* newFunction(MSVM* vm, const char* name, Script* owner,
+                      bool is_native);
 
+// Utility functions //////////////////////////////////////////////////////////
+
+bool isVauesSame(Var v1, Var v2);
 
 #endif // VAR_H

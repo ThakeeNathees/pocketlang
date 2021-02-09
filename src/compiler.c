@@ -15,6 +15,16 @@
 // which is using a single byte value to identify the local.
 #define MAX_VARIABLES 256
 
+// The maximum number of constant literal a script can contain. Also it's
+// limited by it's opcode which is using a short value to identify.
+#define MAX_CONSTANTS (1 << 16)
+
+// The maximum address possible to jump. Similar limitation as above.
+#define MAX_JUMP (1 << 16)
+
+// Max number of break statement in a loop statement to patch.
+#define MAX_BREAK_PATCH 256
+
 typedef enum {
 
 	TK_ERROR = 0,
@@ -246,16 +256,16 @@ typedef struct {
 typedef struct sLoop {
 
 	// Index of the loop's start instruction where the execution will jump
-	// back to once it reach the loop end.
+	// back to once it reach the loop end or continue used.
 	int start;
 
 	// Index of the jump out address instruction to patch it's value once done
 	// compiling the loop.
 	int exit_jump;
 
-	// Index of the first body instruction. Needed to start patching jump
-	// address from which till the loop end.
-	int body;
+	// Array of address indexes to patch break address.
+	int patches[MAX_BREAK_PATCH];
+	int patch_count;
 
 	// The outer loop of the current loop used to set and reset the compiler's
 	// current loop context.
@@ -275,11 +285,24 @@ struct Compiler {
 	Variable variables[MAX_VARIABLES]; //< Variables in the current context.
 	int var_count;                     //< Number of locals in [variables].
 
+	int stack_size; //< Current size including locals ind temps.
+
 	// TODO: compiler should mark Script* below not to be garbage collected.
 
-	Script* script; //< Current script.
-	Loop* loop;     //< Current loop.
-	Function* fn;   //< Current function.
+	Script* script;      //< Current script.
+	Loop* loop;          //< Current loop.
+	Function* function;  //< Current function.
+};
+
+typedef struct {
+	int params;
+	int stack;
+} OpInfo;
+
+static OpInfo opcode_info[] = {
+	#define OPCODE(name, params, stack) { params, stack },
+	#include "opcodes.h"
+	#undef OPCODE
 };
 
 /*****************************************************************************
@@ -289,6 +312,7 @@ struct Compiler {
 static void reportError(Parser* parser, const char* file, int line,
                         const char* fmt, va_list args) {
 	parser->has_errors = true;
+	ASSERT(false, "TODO:");
 	// TODO: parser->vm->config.error_fn(...)
 }
 
@@ -337,7 +361,7 @@ static void eatString(Parser* parser) {
 		if (c == '"') break;
 
 		if (c == '\0') {
-			// TODO: syntaxError()
+			lexError(parser, "Non terminated string.");
 
 			// Null byte is required by TK_EOF.
 			parser->current_char--;
@@ -353,7 +377,7 @@ static void eatString(Parser* parser) {
 				case 't': byteBufferWrite(&buff, parser->vm, '\t'); break;
 
 				default:
-					// TODO: syntaxError("Error: invalid escape character")
+					lexError(parser, "Error: invalid escape character");
 					break;
 			}
 		} else {
@@ -429,7 +453,9 @@ static void eatNumber(Parser* parser) {
 	errno = 0;
 	Var value = VAR_NUM(strtod(parser->token_start, NULL));
 	if (errno == ERANGE) {
-		// TODO: error() literal number is too large.
+		const char* start = parser->token_start;
+		int len = (parser->current_char - start);
+		lexError(parser, "Literal is too large (%.*s)", len, start);
 		value = VAR_NUM(0);
 	}
 
@@ -577,9 +603,9 @@ static void lexToken(Parser* parser) {
 					eatName(parser);
 				} else {
 					if (c >= 32 && c <= 126) {
-						// TODO: syntaxError("Invalid character %c", c);
+						lexError(parser, "Invalid character %c", c);
 					} else {
-						// TODO: syntaxError("Invalid byte 0x%x", (uint8_t)c);
+						lexError(parser, "Invalid byte 0x%x", (uint8_t)c);
 					}
 					setNextToken(parser, TK_ERROR);
 				}
@@ -645,23 +671,33 @@ static bool matchLine(Parser* parser) {
 }
 
 // Match semi collon or multiple new lines.
-static void matchEndStatement(Parser* parser) {
+static void consumeEndStatement(Parser* parser) {
+	bool consumed = false;
 
 	// Semi collon must be on the same line.
-	if (peek(parser) == TK_SEMICOLLON)
+	if (peek(parser) == TK_SEMICOLLON) {
 		match(parser, TK_SEMICOLLON);
-
-	skipNewLines(parser);
+		consumed = true;
+	}
+	if (matchLine(parser)) consumed = true;
+	if (!consumed && peek(parser) != TK_EOF) {
+		parseError(parser, "Expected statement end with newline or ';'.");
+	}
 }
 
 // Match optional "do" keyword and new lines.
-static void matchStartBlock(Parser* parser) {
+static void consumeStartBlock(Parser* parser) {
+	bool consumed = false;
 
 	// "do" must be on the same line.
-	if (peek(parser) == TK_DO)
+	if (peek(parser) == TK_DO) {
 		match(parser, TK_DO);
-
-	skipNewLines(parser);
+		consumed = true;
+	}
+	if (matchLine(parser)) consumed = true;
+	if (!consumed) {
+		parseError(parser, "Expected enter block with newline or 'do'.");
+	}
 }
 
 // Consume the the current token and if it's not [expected] emits error log
@@ -673,7 +709,7 @@ static void consume(Parser* self, TokenType expected, const char* err_msg) {
 
 	lexToken(self);
 	if (self->previous.type != expected) {
-		// TODO: syntaxError(err_msg);
+		parseError(self, "%s", err_msg);
 
 		// If the next token is expected discard the current to minimize
 		// cascaded errors and continue parsing.
@@ -687,14 +723,21 @@ static void consume(Parser* self, TokenType expected, const char* err_msg) {
  * PARSING GRAMMAR                                                           *
  *****************************************************************************/
 
-// Forward declaration of grammar functions.
+// Forward declaration of codegen functions.
+static void emitOpcode(Compiler* compiler, Opcode opcode);
+static int emitByte(Compiler* compiler, int byte);
+static int emitShort(Compiler* compiler, int arg);
+static int compilerAddConstant(Compiler* compiler, Var value);
 
+// Forward declaration of grammar functions.
+static void parsePrecedence(Compiler* compiler, Precedence precedence);
+
+static void compileExpression(Compiler* compiler);
 static void exprAssignment(Compiler* compiler, bool can_assign);
 
 // Bool, Num, String, Null, -and- bool_t, Array_t, String_t, ...
 static void exprLiteral(Compiler* compiler, bool can_assign);
 static void exprName(Compiler* compiler, bool can_assign);
-
 
 static void exprBinaryOp(Compiler* compiler, bool can_assign);
 static void exprUnaryOp(Compiler* compiler, bool can_assign);
@@ -732,7 +775,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
 	/* TK_PIPE       */ { NULL,          exprBinaryOp,     PREC_BITWISE_OR },
 	/* TK_CARET      */ { NULL,          exprBinaryOp,     PREC_BITWISE_XOR },
 	/* TK_PLUS       */ { NULL,          exprBinaryOp,     PREC_TERM },
-	/* TK_MINUS      */ { NULL,          exprBinaryOp,     PREC_TERM },
+	/* TK_MINUS      */ { exprUnaryOp,   exprBinaryOp,     PREC_TERM },
 	/* TK_STAR       */ { NULL,          exprBinaryOp,     PREC_FACTOR },
 	/* TK_FSLASH     */ { NULL,          exprBinaryOp,     PREC_FACTOR },
 	/* TK_BSLASH     */   NO_RULE,
@@ -760,7 +803,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
 	/* TK_IN         */ { NULL,          exprBinaryOp,     PREC_IN },
 	/* TK_AND        */ { NULL,          exprBinaryOp,     PREC_LOGICAL_AND },
 	/* TK_OR         */ { NULL,          exprBinaryOp,     PREC_LOGICAL_OR },
-	/* TK_NOT        */ { NULL,          exprUnaryOp,      PREC_LOGICAL_NOT },
+	/* TK_NOT        */ { exprUnaryOp,   NULL,             PREC_LOGICAL_NOT },
 	/* TK_TRUE       */ { exprLiteral,   NULL,             NO_INFIX },
 	/* TK_FALSE      */ { exprLiteral,   NULL,             NO_INFIX },
 	/* TK_BOOL_T     */ { exprLiteral,   NULL,             NO_INFIX },
@@ -789,23 +832,93 @@ static GrammarRule* getRule(TokenType type) {
 	return &(rules[(int)type]);
 }
 
-static void exprAssignment(Compiler* compiler, bool can_assign) { /*TODO*/ }
+static void exprAssignment(Compiler* compiler, bool can_assign) { ASSERT(false, "TODO:"); }
 
-static void exprLiteral(Compiler* compiler, bool can_assign) { /*TODO*/ }
-static void exprName(Compiler* compiler, bool can_assign) { /*TODO*/ }
+static void exprLiteral(Compiler* compiler, bool can_assign) {
+	Token* value = &compiler->parser.previous;
+	int index = compilerAddConstant(compiler, value->value);
+	emitOpcode(compiler, OP_CONSTANT);
+	emitShort(compiler, index);
+}
 
+static void exprName(Compiler* compiler, bool can_assign) { ASSERT(false, "TODO:"); }
 
-static void exprBinaryOp(Compiler* compiler, bool can_assign) { /*TODO*/ }
-static void exprUnaryOp(Compiler* compiler, bool can_assign) { /*TODO*/ }
+static void exprBinaryOp(Compiler* compiler, bool can_assign) {
+	TokenType op = compiler->parser.previous.type;
+	skipNewLines(&compiler->parser);
+	parsePrecedence(compiler, (Precedence)(getRule(op)->precedence + 1));
 
-static void exprGrouping(Compiler* compiler, bool can_assign) { /*TODO*/ }
-static void exprArray(Compiler* compiler, bool can_assign) { /*TODO*/ }
-static void exprMap(Compiler* compiler, bool can_assign) { /*TODO*/ }
+	switch (op) {
+		case TK_DOTDOT:  emitOpcode(compiler, OP_RANGE);      break;
+		case TK_PERCENT: emitOpcode(compiler, OP_MOD);        break;
+		case TK_AMP:     emitOpcode(compiler, OP_BIT_AND);    break;
+		case TK_PIPE:    emitOpcode(compiler, OP_BIT_OR);     break;
+		case TK_CARET:   emitOpcode(compiler, OP_BIT_XOR);    break;
+		case TK_PLUS:    emitOpcode(compiler, OP_ADD);        break;
+		case TK_MINUS:   emitOpcode(compiler, OP_SUBTRACT);   break;
+		case TK_STAR:    emitOpcode(compiler, OP_MULTIPLY);   break;
+		case TK_FSLASH:  emitOpcode(compiler, OP_DIVIDE);     break;
+		case TK_GT:      emitOpcode(compiler, OP_GT);         break;
+		case TK_LT:      emitOpcode(compiler, OP_LT);         break;
+		case TK_EQEQ:    emitOpcode(compiler, OP_EQEQ);       break;
+		case TK_NOTEQ:   emitOpcode(compiler, OP_NOTEQ);      break;
+		case TK_GTEQ:    emitOpcode(compiler, OP_GTEQ);       break;
+		case TK_LTEQ:    emitOpcode(compiler, OP_LTEQ);       break;
+		case TK_SRIGHT:  emitOpcode(compiler, OP_BIT_RSHIFT); break;
+		case TK_SLEFT:   emitOpcode(compiler, OP_BIT_LSHIFT); break;
+		case TK_IS:      emitOpcode(compiler, OP_IS);         break;
+		case TK_IN:      emitOpcode(compiler, OP_IN);         break;
+		case TK_AND:     emitOpcode(compiler, OP_AND);        break;
+		case TK_OR:      emitOpcode(compiler, OP_OR);         break;
+		default:
+			UNREACHABLE();
+	}
+}
 
-static void exprCall(Compiler* compiler, bool can_assign) { /*TODO*/ }
-static void exprAttrib(Compiler* compiler, bool can_assign) { /*TODO*/ }
-static void exprSubscript(Compiler* compiler, bool can_assign) { /*TODO*/ }
+static void exprUnaryOp(Compiler* compiler, bool can_assign) {
+	TokenType op = compiler->parser.previous.type;
+	skipNewLines(&compiler->parser);
+	parsePrecedence(compiler, (Precedence)(PREC_UNARY + 1));
 
+	switch (op) {
+		case TK_TILD:  emitOpcode(compiler, OP_BIT_NOT); break;
+		case TK_MINUS: emitOpcode(compiler, OP_NEGATIVE); break;
+		case TK_NOT:   emitOpcode(compiler, OP_NOT); break;
+		default:
+			UNREACHABLE();
+	}
+}
+
+static void exprGrouping(Compiler* compiler, bool can_assign) {
+	compileExpression(compiler);
+	consume(&compiler->parser, TK_RPARAN, "Expected ')' after expression ");
+}
+
+static void exprArray(Compiler* compiler, bool can_assign) { ASSERT(false, "TODO:"); }
+static void exprMap(Compiler* compiler, bool can_assign) { ASSERT(false, "TODO:"); }
+
+static void exprCall(Compiler* compiler, bool can_assign) { ASSERT(false, "TODO:"); }
+static void exprAttrib(Compiler* compiler, bool can_assign) { ASSERT(false, "TODO:"); }
+static void exprSubscript(Compiler* compiler, bool can_assign) { ASSERT(false, "TODO:"); }
+
+static void parsePrecedence(Compiler* compiler, Precedence precedence) {
+	lexToken(&compiler->parser);
+	GrammarFn prefix = getRule(compiler->parser.previous.type)->prefix;
+
+	if (prefix == NULL) {
+		parseError(&compiler->parser, "Expected an expression.");
+		return;
+	}
+
+	bool can_assign = precedence <= PREC_ASSIGNMENT;
+	prefix(compiler, can_assign);
+
+	while (getRule(compiler->parser.current.type)->precedence >= precedence) {
+		lexToken(&compiler->parser);
+		GrammarFn infix = getRule(compiler->parser.previous.type)->infix;
+		infix(compiler, can_assign);
+	}
+}
 
 /*****************************************************************************
  * COMPILING                                                                 *
@@ -855,6 +968,7 @@ static void compilerInit(Compiler* compiler, MSVM* vm, const char* source,
 	vm->compiler = compiler;
 	compiler->scope_depth = -1;
 	compiler->var_count = 0;
+	compiler->stack_size = 0;
 	Loop* loop = NULL;
 	Function* fn = NULL;
 }
@@ -901,6 +1015,97 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
 	return compiler->var_count++;
 }
 
+// Add a literal constant to scripts literals and return it's index.
+static int compilerAddConstant(Compiler* compiler, Var value) {
+	VarBuffer* literals = &compiler->script->literals;
+
+	for (int i = 0; i < literals->count; i++) {
+		if (isVauesSame(literals->data[i], value)) {
+			return i;
+		}
+	}
+
+	// Add new constant to script.
+	if (literals->count < MAX_CONSTANTS) {
+		varBufferWrite(literals, compiler->vm, value);
+	} else {
+		parseError(&compiler->parser, "A script should contain at most %d "
+			"unique constants.", MAX_CONSTANTS);
+	}
+	return (int)literals->count - 1;
+}
+
+// Enters inside a block.
+static void compilerEnterBlock(Compiler* compiler) {
+	compiler->scope_depth++;
+}
+
+// Exits a block.
+static void compilerExitBlock(Compiler* compiler) {
+	ASSERT(compiler->scope_depth > -1, "Cannot exit toplevel.");
+
+	while (compiler->variables[compiler->var_count - 1].depth >=
+		compiler->scope_depth) {
+		compiler->var_count--;
+		compiler->stack_size--;
+	}
+	compiler->scope_depth--;
+}
+
+/*****************************************************************************
+ * COMPILING (EMIT BYTECODE)                                                 *
+ *****************************************************************************/
+
+// Emit a single byte and return it's index.
+static int emitByte(Compiler* compiler, int byte) {
+
+	byteBufferWrite(&compiler->function->fn->opcodes, compiler->vm,
+                    (uint8_t)byte);
+	intBufferWrite(&compiler->function->fn->oplines, compiler->vm,
+                   compiler->parser.previous.line);
+	return (int)compiler->function->fn->opcodes.count - 1;
+}
+
+// Emit 2 bytes argument as big indian. return it's starting index.
+static int emitShort(Compiler* compiler, int arg) {
+	emitByte(compiler, (arg >> 8) & 0xff);
+	return emitByte(compiler, arg & 0xff) - 1;
+}
+
+// Emits an instruction and update stack size (variable stack size opcodes
+// should be handled).
+static void emitOpcode(Compiler* compiler, Opcode opcode) {
+	emitByte(compiler, (int)opcode);
+
+	compiler->stack_size += opcode_info[opcode].stack;
+	if (compiler->stack_size > compiler->function->fn->stack_size) {
+		compiler->function->fn->stack_size = compiler->stack_size;
+	}
+}
+
+// Emits a constant value if it doesn't exists on the current script it'll make
+// one.
+static void emitConstant(Compiler* compiler, Var value) {
+	int index = compilerAddConstant(compiler, value);
+	emitOpcode(compiler, OP_CONSTANT);
+	emitShort(compiler, index);
+}
+
+static void patchJump(Compiler* compiler, int addr_index) {
+	int jump_to = (int)compiler->function->fn->opcodes.count;
+	ASSERT(jump_to < MAX_JUMP, "Too large address to jump.");
+
+	compiler->function->fn->opcodes.data[addr_index] = (jump_to >> 8) & 0xff;
+	compiler->function->fn->opcodes.data[addr_index + 1] = jump_to & 0xff;
+}
+
+ /*****************************************************************************
+  * COMPILING (PARSE TOPLEVEL)                                                *
+  *****************************************************************************/
+
+static void compileStatement(Compiler* compiler);
+static void compileBlockBody(Compiler* compiler, bool if_body);
+
 static void compileFunction(Compiler* compiler, bool is_native) {
 
 	Parser* parser = &compiler->parser;
@@ -926,7 +1131,7 @@ static void compileFunction(Compiler* compiler, bool is_native) {
 	functionBufferWrite(&compiler->script->functions, compiler->vm, func);
 	vmPopTempRef(compiler->vm);
 
-	compiler->fn = func;
+	compiler->function = func;
 
 	consume(parser, TK_LPARAN, "Expected '(' after function name.");
 
@@ -937,34 +1142,153 @@ static void compileFunction(Compiler* compiler, bool is_native) {
 		int predef = compilerSearchVariables(compiler, parser->previous.start,
 			parser->previous.length, SCOPE_CURRENT);
 		if (predef != -1) {
-			// TODO: error("Multiple definition of a parameter");
+			parseError(parser, "Multiple definition of a parameter");
 		}
 		match(parser, TK_COMMA);
 	}
 
 	consume(parser, TK_RPARAN, "Expected ')' after parameters end.");
-	matchEndStatement(parser);
+	consumeEndStatement(parser);
 
 	if (is_native) { // Done here.
 		compiler->scope_depth--; // Parameter scope.
-		compiler->fn = NULL;
+		compiler->function = NULL;
 		return;
 	}
-
-	// TODO: Compile body.
+	
+	compileBlockBody(compiler, false);
 
 	compiler->scope_depth--; // Parameter scope.
-	compiler->fn = NULL;
+	compiler->function = compiler->script->body;
 }
 
-/*****************************************************************************
- * COMPILING (STATEMENTS)                                                    *
- *****************************************************************************/
+// Finish a block body.
+static void compileBlockBody(Compiler* compiler, bool if_body) {
+	compilerEnterBlock(compiler);
+
+	TokenType next = peek(&compiler->parser);
+	while (!(next == TK_END || next == TK_EOF || (
+		if_body && (next == TK_ELSE || next == TK_ELIF)))) {
+
+		compileStatement(compiler);
+		next = peek(&compiler->parser);
+	}
+
+	compilerExitBlock(compiler);
+}
+
+// Compiles an expression. An expression will result a value on top of the
+// stack.
+static void compileExpression(Compiler* compiler) {
+	parsePrecedence(compiler, PREC_LOWEST);
+}
+
+static void compileIfStatement(Compiler* compiler) {
+
+	compileExpression(compiler); //< Condition.
+	emitOpcode(compiler, OP_JUMP_IF_NOT);
+	int ifpatch = emitByte(compiler, 0xffff); //< Will be patched.
+
+	consumeStartBlock(&compiler->parser);
+
+	compileBlockBody(compiler, true);
+
+	if (match(&compiler->parser, TK_ELIF)) {
+		patchJump(compiler, ifpatch);
+		compileBlockBody(compiler, true);
+
+	} else if (match(&compiler->parser, TK_ELSE)) {
+		patchJump(compiler, ifpatch);
+		compileBlockBody(compiler, false);
+
+	} else {
+		patchJump(compiler, ifpatch);
+	}
+}
+
+static void compileWhileStatement(Compiler* compiler) {
+	Loop loop;
+	loop.start = (int)compiler->function->fn->opcodes.count;
+	loop.patch_count = 0;
+	loop.outer_loop = compiler->loop;
+	compiler->loop = &loop;
+
+	compileExpression(compiler); //< Condition.
+	emitOpcode(compiler, OP_JUMP_IF_NOT);
+	int whilepatch = emitByte(compiler, 0xffff); //< Will be patched.
+
+	compileBlockBody(compiler, false);
+
+	emitOpcode(compiler, OP_JUMP);
+	emitShort(compiler, loop.start);
+
+	patchJump(compiler, whilepatch);
+
+	// Patch break statement.
+	for (int i = 0; i < compiler->loop->patch_count; i++) {
+		patchJump(compiler, compiler->loop->patches[i]);
+	}
+
+	compiler->loop = loop.outer_loop;
+}
+
+static void compileForStatement(Compiler* compiler) {
+	ASSERT(false, "TODO:");
+}
 
 // Compiles a statement. Assignment could be an assignment statement or a new
 // variable declaration, which will be handled.
 static void compileStatement(Compiler* compiler) {
-	// TODO:
+	Parser* parser = &compiler->parser;
+	if (match(parser, TK_BREAK)) {
+		if (compiler->loop == NULL) {
+			parseError(parser, "Cannot use 'break' outside a loop.");
+			return;
+		}
+
+		ASSERT(compiler->loop->patch_count < MAX_BREAK_PATCH,
+			"Too many break statements (" STRINGIFY(MAX_BREAK_PATCH) ")." );
+
+		emitOpcode(compiler, OP_JUMP);
+		int patch = emitByte(compiler, 0xffff); //< Will be patched.
+		compiler->loop->patches[compiler->loop->patch_count++] = patch;
+
+	} else if (match(parser, TK_CONTINUE)) {
+		if (compiler->loop == NULL) {
+			parseError(parser, "Cannot use 'continue' outside a loop.");
+			return;
+		}
+
+		emitOpcode(compiler, OP_JUMP);
+		emitShort(compiler, compiler->loop->start);
+
+	} else if (match(parser, TK_RETURN)) {
+
+		if (compiler->scope_depth == -1) {
+			parseError(parser, "Invalid 'return' outside a function.");
+			return;
+		}
+
+		if (peek(parser) == TK_SEMICOLLON || peek(parser) == TK_LINE) {
+			emitOpcode(compiler, OP_PUSH_NULL);
+			emitOpcode(compiler, OP_RETURN);
+		} else {
+			compileExpression(compiler); //< Return value is at stack top.
+			emitOpcode(compiler, OP_RETURN);
+		}
+	} else if (match(parser, TK_IF)) {
+		compileIfStatement(compiler);
+
+	} else if (match(parser, TK_WHILE)) {
+		compileWhileStatement(compiler);
+
+	} else if (match(parser, TK_FOR)) {
+		compileForStatement(compiler);
+
+	} else {
+		compileExpression(compiler);
+		emitOpcode(compiler, OP_POP);
+	}
 }
 
 Script* compileSource(MSVM* vm, const char* path) {
@@ -983,6 +1307,7 @@ Script* compileSource(MSVM* vm, const char* path) {
 
 	Script* script = newScript(vm);
 	compiler.script = script;
+	compiler.function = script->body;
 
 	// Parser pointer for quick access.
 	Parser* parser = &compiler.parser;
@@ -1002,7 +1327,7 @@ Script* compileSource(MSVM* vm, const char* path) {
 
 		} else if (match(parser, TK_IMPORT)) {
 			// TODO: import statement must be first of all other.
-
+			ASSERT(false, "TODO:");
 		} else {
 			compileStatement(&compiler);
 		}

@@ -29,6 +29,7 @@ void $name_l$BufferFill($name$Buffer* self, MSVM* vm, $type$ data, int count) {
 	
 	if (self->capacity < self->count + count) {
 		int capacity = utilPowerOf2Ceil((int)self->count + count);
+		if (capacity < MIN_CAPACITY) capacity = MIN_CAPACITY;
 		self->data = ($type$*)vmRealloc(vm, self->data,
 			self->capacity * sizeof($type$), capacity * sizeof($type$));
 		self->capacity = capacity;
