@@ -24,4 +24,7 @@ int nameTableAdd(NameTable* self, MSVM* vm, const char* name, size_t length);
 // Return name at index.
 const char* nameTableGet(NameTable* self, int index);
 
+// Find and return the index of the name. If not found returns -1.
+int nameTableFind(NameTable* self, const char* name, size_t length);
+
 #endif // SYMBOL_TABLE_H

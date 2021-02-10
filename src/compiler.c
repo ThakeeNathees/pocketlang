@@ -90,24 +90,12 @@ typedef enum {
 
 	TK_NULL,       // null
 	TK_SELF,       // self
-	TK_IS,         // is
 	TK_IN,         // in
 	TK_AND,        // and
 	TK_OR,         // or
 	TK_NOT,        // not
 	TK_TRUE,       // true
 	TK_FALSE,      // false
-
-	// Type names for is test.
-	// TK_NULL already defined.
-	TK_BOOL_T,    // Bool
-	TK_NUM_T,     // Num
-	TK_STRING_T,  // String
-	TK_ARRAY_T,   // Array
-	TK_MAP_T,     // Map
-	TK_RANGE_T,   // Range
-	TK_FUNC_T,    // Function 
-	TK_OBJ_T,     // Object (self, user data, etc.)
 
 	TK_DO,         // do
 	TK_WHILE,      // while
@@ -162,7 +150,6 @@ static _Keyword _keywords[] = {
 	{ "end",      3,  TK_END },
 	{ "null",     4, TK_NULL },
 	{ "self",     4, TK_SELF },
-	{ "is",       2, TK_IS },
 	{ "in",       2, TK_IN },
 	{ "and",      3, TK_AND },
 	{ "or",       2, TK_OR },
@@ -178,16 +165,6 @@ static _Keyword _keywords[] = {
 	{ "break",    5, TK_BREAK },
 	{ "continue", 8, TK_CONTINUE },
 	{ "return",   6, TK_RETURN },
-
-	// Type names.
-	{ "Bool",     4, TK_BOOL_T },
-	{ "Num",      3, TK_NUM_T },
-	{ "String",   6, TK_STRING_T },
-	{ "Array",    5, TK_ARRAY_T },
-	{ "Map",      3, TK_MAP_T },
-	{ "Range",    5, TK_RANGE_T },
-	{ "Object",   6, TK_OBJ_T },
-	{ "Function", 8, TK_FUNC_T },
 
 	{ NULL,      (TokenType)(0) }, // Sentinal to mark the end of the array
 };
@@ -216,7 +193,6 @@ typedef struct {
 typedef enum {
 	PREC_NONE,
 	PREC_LOWEST,
-	PREC_ASSIGNMENT,    // =
 	PREC_LOGICAL_OR,    // or
 	PREC_LOGICAL_AND,   // and
 	PREC_LOGICAL_NOT,   // not
@@ -284,6 +260,7 @@ struct Compiler {
 
 	Variable variables[MAX_VARIABLES]; //< Variables in the current context.
 	int var_count;                     //< Number of locals in [variables].
+	int global_count;                  //< Number of globals in [variables].
 
 	int stack_size; //< Current size including locals ind temps.
 
@@ -454,7 +431,7 @@ static void eatNumber(Parser* parser) {
 	Var value = VAR_NUM(strtod(parser->token_start, NULL));
 	if (errno == ERANGE) {
 		const char* start = parser->token_start;
-		int len = (parser->current_char - start);
+		int len = (int)(parser->current_char - start);
 		lexError(parser, "Literal is too large (%.*s)", len, start);
 		value = VAR_NUM(0);
 	}
@@ -720,6 +697,85 @@ static void consume(Parser* self, TokenType expected, const char* err_msg) {
 }
 
 /*****************************************************************************
+ * NAME SEARCH                                                               *
+ *****************************************************************************/
+
+// Result type for an identifier definition.
+typedef enum {
+	NAME_NOT_DEFINED,
+	NAME_LOCAL_VAR, //< Including parameter.
+	NAME_GLOBAL_VAR,
+	NAME_FUNCTION,
+	// TODO: enum
+} NameDefnType;
+
+// Identifier search result.
+typedef struct {
+
+	NameDefnType type;
+
+	// Could be found in one of the imported script or in it's imported script
+	// recursively. If true [_extern] will be the script ID.
+	bool is_extern;
+
+	// Extern script's index.
+	int _extern;
+
+	// Index in the variable/function buffer/array.
+	int index;
+
+	// The line it declared.
+	int line;
+
+} NameSearchResult;
+
+// Will check if the name already defined.
+static NameSearchResult compilerSearchName(Compiler* compiler,
+	const char* name, int length) {
+
+	NameSearchResult result;
+	result.type = NAME_NOT_DEFINED;
+
+	result.is_extern = false;
+
+	// Search through local and global valriables.
+	NameDefnType type = NAME_LOCAL_VAR; //< Will change to local.
+	int index = compiler->var_count - compiler->global_count - 1;
+
+	for (int i = compiler->var_count - 1; i >= 0; i--) {
+		Variable* variable = &compiler->variables[i];
+
+		if (type == NAME_LOCAL_VAR && variable->depth == -1) {
+			type = NAME_GLOBAL_VAR;
+			index = compiler->global_count - 1;
+		}
+
+		if (length == variable->length) {
+			if (strncmp(variable->name, name, length) == 0) {
+				result.type = type;
+				result.index = index;
+				return result;
+			}
+		}
+
+		index--;
+	}
+
+	// Search through functions.
+	index = nameTableFind(&compiler->script->function_names, name, length);
+	if (index != -1) {
+		result.type = NAME_FUNCTION;
+		result.index = index;
+		return result;
+	}
+
+	// TODO: search in imported scripts.
+
+	return result;
+}
+
+
+/*****************************************************************************
  * PARSING GRAMMAR                                                           *
  *****************************************************************************/
 
@@ -729,13 +785,14 @@ static int emitByte(Compiler* compiler, int byte);
 static int emitShort(Compiler* compiler, int arg);
 static int compilerAddConstant(Compiler* compiler, Var value);
 
+static int compilerAddVariable(Compiler* compiler, const char* name,
+	int length, int line);
+static int compilerAddConstant(Compiler* compiler, Var value);
+
 // Forward declaration of grammar functions.
 static void parsePrecedence(Compiler* compiler, Precedence precedence);
-
 static void compileExpression(Compiler* compiler);
-static void exprAssignment(Compiler* compiler, bool can_assign);
 
-// Bool, Num, String, Null, -and- bool_t, Array_t, String_t, ...
 static void exprLiteral(Compiler* compiler, bool can_assign);
 static void exprName(Compiler* compiler, bool can_assign);
 
@@ -749,6 +806,9 @@ static void exprMap(Compiler* compiler, bool can_assign);
 static void exprCall(Compiler* compiler, bool can_assign);
 static void exprAttrib(Compiler* compiler, bool can_assign);
 static void exprSubscript(Compiler* compiler, bool can_assign);
+
+// true, false, null, self.
+static void exprValue(Compiler* compiler, bool can_assign);
 
 #define NO_RULE { NULL,          NULL,          PREC_NONE }
 #define NO_INFIX PREC_NONE
@@ -779,17 +839,17 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
 	/* TK_STAR       */ { NULL,          exprBinaryOp,     PREC_FACTOR },
 	/* TK_FSLASH     */ { NULL,          exprBinaryOp,     PREC_FACTOR },
 	/* TK_BSLASH     */   NO_RULE,
-	/* TK_EQ         */ { NULL,          exprAssignment,   PREC_ASSIGNMENT },
+	/* TK_EQ         */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
 	/* TK_GT         */ { NULL,          exprBinaryOp,     PREC_COMPARISION },
 	/* TK_LT         */ { NULL,          exprBinaryOp,     PREC_COMPARISION },
 	/* TK_EQEQ       */ { NULL,          exprBinaryOp,     PREC_EQUALITY },
 	/* TK_NOTEQ      */ { NULL,          exprBinaryOp,     PREC_EQUALITY },
 	/* TK_GTEQ       */ { NULL,          exprBinaryOp,     PREC_COMPARISION },
 	/* TK_LTEQ       */ { NULL,          exprBinaryOp,     PREC_COMPARISION },
-	/* TK_PLUSEQ     */ { NULL,          exprAssignment,   PREC_ASSIGNMENT },
-	/* TK_MINUSEQ    */ { NULL,          exprAssignment,   PREC_ASSIGNMENT },
-	/* TK_STAREQ     */ { NULL,          exprAssignment,   PREC_ASSIGNMENT },
-	/* TK_DIVEQ      */ { NULL,          exprAssignment,   PREC_ASSIGNMENT },
+	/* TK_PLUSEQ     */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
+	/* TK_MINUSEQ    */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
+	/* TK_STAREQ     */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
+	/* TK_DIVEQ      */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
 	/* TK_SRIGHT     */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
 	/* TK_SLEFT      */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
 	/* TK_IMPORT     */   NO_RULE,
@@ -797,23 +857,14 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
 	/* TK_DEF        */   NO_RULE,
 	/* TK_EXTERN     */   NO_RULE,
 	/* TK_END        */   NO_RULE,
-	/* TK_NULL       */   NO_RULE,
-	/* TK_SELF       */   NO_RULE,
-	/* TK_IS         */ { NULL,          exprBinaryOp,     PREC_IS },
+	/* TK_NULL       */ { exprValue,     NULL,             NO_INFIX },
+	/* TK_SELF       */ { exprValue,     NULL,             NO_INFIX },
 	/* TK_IN         */ { NULL,          exprBinaryOp,     PREC_IN },
 	/* TK_AND        */ { NULL,          exprBinaryOp,     PREC_LOGICAL_AND },
 	/* TK_OR         */ { NULL,          exprBinaryOp,     PREC_LOGICAL_OR },
 	/* TK_NOT        */ { exprUnaryOp,   NULL,             PREC_LOGICAL_NOT },
-	/* TK_TRUE       */ { exprLiteral,   NULL,             NO_INFIX },
-	/* TK_FALSE      */ { exprLiteral,   NULL,             NO_INFIX },
-	/* TK_BOOL_T     */ { exprLiteral,   NULL,             NO_INFIX },
-	/* TK_NUM_T      */ { exprLiteral,   NULL,             NO_INFIX },
-	/* TK_STRING_T   */ { exprLiteral,   NULL,             NO_INFIX },
-	/* TK_ARRAY_T    */ { exprLiteral,   NULL,             NO_INFIX },
-	/* TK_MAP_T      */ { exprLiteral,   NULL,             NO_INFIX },
-	/* TK_RANGE_T    */ { exprLiteral,   NULL,             NO_INFIX },
-	/* TK_FUNC_T     */ { exprLiteral,   NULL,             NO_INFIX },
-	/* TK_OBJ_T      */ { exprLiteral,   NULL,             NO_INFIX },
+	/* TK_TRUE       */ { exprValue,     NULL,             NO_INFIX },
+	/* TK_FALSE      */ { exprValue,     NULL,             NO_INFIX },
 	/* TK_DO         */   NO_RULE,
 	/* TK_WHILE      */   NO_RULE,
 	/* TK_FOR        */   NO_RULE,
@@ -832,7 +883,36 @@ static GrammarRule* getRule(TokenType type) {
 	return &(rules[(int)type]);
 }
 
-static void exprAssignment(Compiler* compiler, bool can_assign) { ASSERT(false, "TODO:"); }
+// Emit variable store.
+static void _emitStoreVariable(Compiler* compiler, int index, bool global) {
+	if (global) {
+		emitOpcode(compiler, OP_STORE_GLOBAL);
+		emitShort(compiler, index);
+
+	} else {
+		if (index < 9) { //< 0..8 locals have single opcode.
+			emitOpcode(compiler, (Opcode)(OP_STORE_LOCAL_0 + index));
+		} else {
+			emitOpcode(compiler, OP_STORE_LOCAL_N);
+			emitShort(compiler, index);
+		}
+	}
+}
+
+static void _emitPushVariable(Compiler* compiler, int index, bool global) {
+	if (global) {
+		emitOpcode(compiler, OP_PUSH_GLOBAL);
+		emitShort(compiler, index);
+
+	} else {
+		if (index < 9) { //< 0..8 locals have single opcode.
+			emitOpcode(compiler, (Opcode)(OP_PUSH_LOCAL_0 + index));
+		} else {
+			emitOpcode(compiler, OP_PUSH_LOCAL_N);
+			emitShort(compiler, index);
+		}
+	}
+}
 
 static void exprLiteral(Compiler* compiler, bool can_assign) {
 	Token* value = &compiler->parser.previous;
@@ -841,7 +921,73 @@ static void exprLiteral(Compiler* compiler, bool can_assign) {
 	emitShort(compiler, index);
 }
 
-static void exprName(Compiler* compiler, bool can_assign) { ASSERT(false, "TODO:"); }
+// Local/global variables, script/native/builtin functions name.
+static void exprName(Compiler* compiler, bool can_assign) {
+	Token* name_tk = &compiler->parser.previous;
+	NameSearchResult result = compilerSearchName(compiler, name_tk->start,
+                                                 name_tk->length);
+
+	// TODO: can_assign && match(&compiler->parser, TK_EQ)
+	// also check for TK_PLUSEQ, etc.
+
+	if (result.type == NAME_NOT_DEFINED) {
+
+		if (can_assign && match(&compiler->parser, TK_EQ)) {
+			int index = compilerAddVariable(compiler, name_tk->start,
+				                            name_tk->length, name_tk->line);
+			compileExpression(compiler);
+			_emitStoreVariable(compiler, index, compiler->scope_depth == -1);
+			return;
+		} else {
+			parseError(&compiler->parser, "Name \"%.*s\" is not defined.",
+                   name_tk->length, name_tk->start);
+		}
+	}
+
+	switch (result.type) {
+		case NAME_LOCAL_VAR:
+			if (can_assign && match(&compiler->parser, TK_EQ)) {
+				compileExpression(compiler);
+				_emitStoreVariable(compiler, result.index, false);
+			} else {
+				_emitPushVariable(compiler, result.index, false);
+			}
+			return;
+
+		case NAME_GLOBAL_VAR:
+			if (can_assign && match(&compiler->parser, TK_EQ)) {
+				compileExpression(compiler);
+				if (result.is_extern) {
+					emitOpcode(compiler, OP_STORE_GLOBAL_EXT);
+					emitShort(compiler, result._extern);
+					emitShort(compiler, result.index);
+				} else {
+					_emitStoreVariable(compiler, result.index, true);
+				}
+			} else {
+				if (result.is_extern) {
+					emitOpcode(compiler, OP_PUSH_GLOBAL_EXT);
+					emitShort(compiler, result._extern);
+					emitShort(compiler, result.index);
+				} else {
+					emitOpcode(compiler, OP_PUSH_GLOBAL);
+					emitShort(compiler, result.index);
+				}
+			}
+			return;
+
+		case NAME_FUNCTION:
+			if (result.is_extern) {
+				emitOpcode(compiler, OP_PUSH_FN_EXT);
+				emitShort(compiler, result._extern);
+				emitShort(compiler, result.index);
+			} else {
+				emitOpcode(compiler, OP_PUSH_FN);
+				emitShort(compiler, result.index);
+			}
+			return;
+	}
+}
 
 static void exprBinaryOp(Compiler* compiler, bool can_assign) {
 	TokenType op = compiler->parser.previous.type;
@@ -866,7 +1012,6 @@ static void exprBinaryOp(Compiler* compiler, bool can_assign) {
 		case TK_LTEQ:    emitOpcode(compiler, OP_LTEQ);       break;
 		case TK_SRIGHT:  emitOpcode(compiler, OP_BIT_RSHIFT); break;
 		case TK_SLEFT:   emitOpcode(compiler, OP_BIT_LSHIFT); break;
-		case TK_IS:      emitOpcode(compiler, OP_IS);         break;
 		case TK_IN:      emitOpcode(compiler, OP_IN);         break;
 		case TK_AND:     emitOpcode(compiler, OP_AND);        break;
 		case TK_OR:      emitOpcode(compiler, OP_OR);         break;
@@ -898,8 +1043,45 @@ static void exprArray(Compiler* compiler, bool can_assign) { ASSERT(false, "TODO
 static void exprMap(Compiler* compiler, bool can_assign) { ASSERT(false, "TODO:"); }
 
 static void exprCall(Compiler* compiler, bool can_assign) { ASSERT(false, "TODO:"); }
-static void exprAttrib(Compiler* compiler, bool can_assign) { ASSERT(false, "TODO:"); }
+
+static void exprAttrib(Compiler* compiler, bool can_assign) {
+	consume(&compiler->parser, TK_NAME, "Expected an attribute name after '.'.");
+	const char* name = compiler->parser.previous.start;
+	int length = compiler->parser.previous.length;
+
+	// Store the name in script's names.
+	String* string = newString(compiler->vm, name, length);
+	vmPushTempRef(compiler->vm, &string->_super);
+	stringBufferWrite(&compiler->script->names, compiler->vm, string);
+	vmPopTempRef(compiler->vm);
+
+	int index = (int)compiler->script->names.count - 1;
+
+	// TODO: +=, -=, ...
+	if (can_assign && match(&compiler->parser, TK_EQ)) {
+		compileExpression(compiler);
+		emitOpcode(compiler, OP_SET_ATTRIB);
+		emitShort(compiler, index);
+
+	} else {
+		emitOpcode(compiler, OP_GET_ATTRIB);
+		emitShort(compiler, index);
+	}
+}
+
 static void exprSubscript(Compiler* compiler, bool can_assign) { ASSERT(false, "TODO:"); }
+
+static void exprValue(Compiler* compiler, bool can_assign) {
+	TokenType op = compiler->parser.previous.type;
+	switch (op) {
+		case TK_NULL:  emitOpcode(compiler, OP_PUSH_NULL); return;
+		case TK_SELF:  emitOpcode(compiler, OP_PUSH_SELF); return;
+		case TK_TRUE:  emitOpcode(compiler, OP_PUSH_TRUE); return;
+		case TK_FALSE: emitOpcode(compiler, OP_PUSH_FALSE); return;
+		default:
+			UNREACHABLE();
+	}
+}
 
 static void parsePrecedence(Compiler* compiler, Precedence precedence) {
 	lexToken(&compiler->parser);
@@ -910,7 +1092,7 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
 		return;
 	}
 
-	bool can_assign = precedence <= PREC_ASSIGNMENT;
+	bool can_assign = precedence <= PREC_LOWEST;
 	prefix(compiler, can_assign);
 
 	while (getRule(compiler->parser.current.type)->precedence >= precedence) {
@@ -924,43 +1106,6 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
  * COMPILING                                                                 *
  *****************************************************************************/
 
-// Used in searching for local variables.
-typedef enum {
-	SCOPE_ANY = -3,
-	SCOPE_CURRENT,
-} ScopeType;
-
-// Result type for an identifier definition.
-typedef enum {
-	NAME_NOT_DEFINED,
-	NAME_LOCAL_VAR, //< Including parameter.
-	NAME_GLOBAL_VAR,
-	NAME_FUNCTION,
-} NameDefnType;
-
-// Identifier search result.
-typedef struct {
-
-	NameDefnType type;
-
-	// Could be found in one of the imported script or in it's imported script
-	// recursively. If true [_extern] will be the script ID.
-	bool is_extern;
-
-	// Extern script's ID.
-	ID _extern;
-
-	union {
-		int local;
-		int global;
-		int func;
-	} index;
-
-	// The line it declared.
-	int line;
-
-} NameSearchResult;
-
 static void compilerInit(Compiler* compiler, MSVM* vm, const char* source,
                          const char* path) {
 	parserInit(&compiler->parser, vm, source, path);
@@ -968,39 +1113,10 @@ static void compilerInit(Compiler* compiler, MSVM* vm, const char* source,
 	vm->compiler = compiler;
 	compiler->scope_depth = -1;
 	compiler->var_count = 0;
+	compiler->global_count = 0;
 	compiler->stack_size = 0;
 	Loop* loop = NULL;
 	Function* fn = NULL;
-}
-
-// Search for the name through compiler's variables. Returns -1 if not found.
-static int compilerSearchVariables(Compiler* compiler, const char* name,
-                                   int length, ScopeType scope) {
-
-	for (int i = 0; i < compiler->var_count; i++) {
-		Variable* variable = &compiler->variables[i];
-		if (scope == SCOPE_CURRENT &&
-			compiler->scope_depth != variable->depth) {
-			continue;
-		}
-		if (variable->length == length &&
-			strncmp(variable->name, name, length) == 0) {
-			return i;
-		}
-	}
-
-	// TODO: Search in imported scripts globals too. and return NameSearchResult.
-
-	return -1;
-}
-
-// Will check if the name already defined.
-static NameSearchResult compilerSearchName(Compiler* compiler,
-                                           const char* name, int length) {
-	// TODO:
-	NameSearchResult result;
-	result.type = NAME_NOT_DEFINED;
-	return result;
 }
 
 // Add a variable and return it's index to the context. Assumes that the
@@ -1012,6 +1128,7 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
 	variable->length = length;
 	variable->depth = compiler->scope_depth;
 	variable->line = line;
+	if (variable->depth == -1) compiler->global_count++;
 	return compiler->var_count++;
 }
 
@@ -1083,8 +1200,8 @@ static void emitOpcode(Compiler* compiler, Opcode opcode) {
 	}
 }
 
-// Emits a constant value if it doesn't exists on the current script it'll make
-// one.
+// Emits a constant value if it doesn't exists on the current script it'll
+// make one.
 static void emitConstant(Compiler* compiler, Var value) {
 	int index = compilerAddConstant(compiler, value);
 	emitOpcode(compiler, OP_CONSTANT);
@@ -1099,9 +1216,9 @@ static void patchJump(Compiler* compiler, int addr_index) {
 	compiler->function->fn->opcodes.data[addr_index + 1] = jump_to & 0xff;
 }
 
- /*****************************************************************************
-  * COMPILING (PARSE TOPLEVEL)                                                *
-  *****************************************************************************/
+ /****************************************************************************
+  * COMPILING (PARSE TOPLEVEL)                                               *
+  ****************************************************************************/
 
 static void compileStatement(Compiler* compiler);
 static void compileBlockBody(Compiler* compiler, bool if_body);
@@ -1124,8 +1241,9 @@ static void compileFunction(Compiler* compiler, bool is_native) {
 	int index = nameTableAdd(&compiler->script->function_names, compiler->vm,
 		name_start, name_length);
 
-	Function* func = newFunction(compiler->vm, nameTableGet(
-		&compiler->script->function_names, index), compiler->script, is_native);
+	Function* func = newFunction(compiler->vm, 
+		nameTableGet(&compiler->script->function_names, index),
+		compiler->script, is_native);
 
 	vmPushTempRef(compiler->vm, &func->_super);
 	functionBufferWrite(&compiler->script->functions, compiler->vm, func);
@@ -1139,11 +1257,21 @@ static void compileFunction(Compiler* compiler, bool is_native) {
 
 	// Compile parameter list.
 	while (match(parser, TK_NAME)) {
-		int predef = compilerSearchVariables(compiler, parser->previous.start,
-			parser->previous.length, SCOPE_CURRENT);
-		if (predef != -1) {
-			parseError(parser, "Multiple definition of a parameter");
+
+		const char* param_name = parser->previous.start;
+		int param_len = parser->previous.length;
+
+		bool predefined = false;
+		for (int i = compiler->var_count-1; i >= 0; i--) {
+			Variable* variable = &compiler->variables[i];
+			if (compiler->scope_depth != variable->depth) break;
+			if (variable->length == param_len &&
+				strncmp(variable->name, param_name, param_len) == 0) {
+				predefined = true;
+				break;
+			}
 		}
+		if (predefined) parseError(parser, "Multiple definition of a parameter");
 		match(parser, TK_COMMA);
 	}
 
@@ -1187,7 +1315,7 @@ static void compileIfStatement(Compiler* compiler) {
 
 	compileExpression(compiler); //< Condition.
 	emitOpcode(compiler, OP_JUMP_IF_NOT);
-	int ifpatch = emitByte(compiler, 0xffff); //< Will be patched.
+	int ifpatch = emitShort(compiler, 0xffff); //< Will be patched.
 
 	consumeStartBlock(&compiler->parser);
 
@@ -1204,6 +1332,8 @@ static void compileIfStatement(Compiler* compiler) {
 	} else {
 		patchJump(compiler, ifpatch);
 	}
+
+	consume(&compiler->parser, TK_END, "Expected 'end' after statement end.");
 }
 
 static void compileWhileStatement(Compiler* compiler) {
@@ -1230,6 +1360,7 @@ static void compileWhileStatement(Compiler* compiler) {
 	}
 
 	compiler->loop = loop.outer_loop;
+	consume(&compiler->parser, TK_END, "Expected 'end' after statement end.");
 }
 
 static void compileForStatement(Compiler* compiler) {

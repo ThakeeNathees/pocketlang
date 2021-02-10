@@ -32,7 +32,7 @@ Var doubleToVar(double value) {
 #endif // VAR_NAN_TAGGING
 }
 
-static inline double varToDouble(Var value) {
+double varToDouble(Var value) {
 #if VAR_NAN_TAGGING
 	_DoubleBitsConv bits;
 	bits.bits64 = value;
@@ -70,6 +70,8 @@ Script* newScript(MSVM* vm) {
 
 	functionBufferInit(&script->functions);
 	nameTableInit(&script->function_names);
+
+	stringBufferInit(&script->names);
 	
 	return script;
 }
@@ -101,6 +103,7 @@ Function* newFunction(MSVM* vm, const char* name, Script* owner,
 	return func;
 }
 
+// Utility functions //////////////////////////////////////////////////////////
 
 bool isVauesSame(Var v1, Var v2) {
 #if VAR_NAN_TAGGING

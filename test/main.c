@@ -18,6 +18,13 @@
 #include "../src/types/gen/string_buffer.h"
 #include "../src/types/gen/byte_buffer.h"
 
+static const char* opnames[] = {
+	#define OPCODE(name, params, stack) #name,
+	#include "../src/opcodes.h"
+	#undef OPCODE
+	NULL,
+};
+
 void errorPrint(MSVM* vm, MSErrorType type, const char* file, int line,
                    const char* message) {
 	printf("Error:%s\n\tat %s:%i\n", message, file, line);
@@ -36,8 +43,7 @@ MSLoadScriptResult loadScript(MSVM* vm, const char* path) {
 	result.is_failed = false;
 
 	result.source = ""
-		"if -1+2 * 3\n"
-		"end\n"
+		"1 + 2 * 3\n"
 		;
 	return result;
 
@@ -65,41 +71,37 @@ int main() {
 
 	//parseError(parser, "A function named %.*s already exists at %s:%s", length, start, file, line);
 
-	FILE* fp = fopen("test.ms", "r");
-	if (fp != NULL) {
-		char buff[1024];
-		size_t read = fread(buff, 1, sizeof(buff), fp);
-		buff[read] = '\0';
-		printf("%s\n", buff);
-		fclose(fp);
-	} else {
-		clogger_logfError("[Error] cannot open file test.ms\n");
-	}
-
-	MSVM* vm = (MSVM*)malloc(sizeof(MSVM));
-	memset(vm, 0, sizeof(MSVM));
-
-	ByteBuffer buff;
-	byteBufferInit(&buff);
-
-	byteBufferWrite(&buff, vm, 'a');
-	byteBufferWrite(&buff, vm, 'b');
-	byteBufferWrite(&buff, vm, 'c');
-
-	String* str = newString(vm, (const char*)buff.data, 3);
-	Var vstr = VAR_OBJ(&str->_super);
-	if (strcmp(AS_CSTRING(vstr), "abc") != 0) {
-		clogger_logfError("[Error] something went wrong.\n");
-	}
+	//FILE* fp = fopen("test.ms", "r");
+	//if (fp != NULL) {
+	//	char buff[1024];
+	//	size_t read = fread(buff, 1, sizeof(buff), fp);
+	//	buff[read] = '\0';
+	//	printf("%s\n", buff);
+	//	fclose(fp);
+	//} else {
+	//	clogger_logfError("[Error] cannot open file test.ms\n");
+	//}
 
 	MSConfiguration config;
 	config.error_fn = errorPrint;
 	config.write_fn = writeFunction;
 	config.load_script_fn = loadScript;
 	config.load_script_done_fn = loadScriptDone;
-	vm->config = config;
 
-	compileSource(vm, "../some/path/file.ms");
+	MSVM* vm = (MSVM*)malloc(sizeof(MSVM));
+	vmInit(vm, &config);
+
+	Script* script = compileSource(vm, "../some/path/file.ms");
+	vmRunScript(vm, script);
+
+	ByteBuffer* bytes = &script->body->fn->opcodes;
+	for (int i = 0; i < bytes->count; i++) {
+		const char* op = "(???)";
+		if (bytes->data[i] <= (int)OP_END) {
+			op = opnames[bytes->data[i]];
+		}
+		printf("%s    %i\n", op, bytes->data[i]);
+	}
 
 	return 0;
 }

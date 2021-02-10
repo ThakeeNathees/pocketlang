@@ -77,4 +77,16 @@ typedef struct {
 
 } MSConfiguration;
 
+typedef enum {
+	RESULT_SUCCESS,
+	RESULT_COMPILE_ERROR,
+	RESULT_RUNTIME_ERROR,
+} MSInterpretResult;
+
+// Compile and execut file at given path.
+MSInterpretResult msInterpret(MSVM* vm, const char* file);
+
+// Set a runtime error to vm.
+void msSetRuntimeError(MSVM* vm, const char* format, ...);
+
 #endif // MINISCRIPT_H

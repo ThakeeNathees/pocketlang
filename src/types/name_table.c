@@ -29,3 +29,14 @@ const char* nameTableGet(NameTable* self, int index) {
 	ASSERT(0 <= index && index < self->count, "Index out of bounds.");
 	return self->data[index]->data;
 }
+
+int nameTableFind(NameTable* self, const char* name, size_t length) {
+
+	for (int i = 0; i < self->count; i++) {
+		if (self->data[i]->length == length &&
+			strncmp(self->data[i]->data, name, length) == 0) {
+			return i;
+		}
+	}
+	return -1;
+}

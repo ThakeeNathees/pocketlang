@@ -241,24 +241,13 @@ struct Script {
 
 	VarBuffer globals;         //< Script level global variables.
 	NameTable global_names;    //< Name map to index in globals.
-
 	VarBuffer literals;        //< Script literal constant values.
-
-	Function* body;            //< Script body is an anonymous function.
-
 	FunctionBuffer functions;  //< Script level functions.
 	NameTable function_names;  //< Name map to index in functions.
+	StringBuffer names;        //< Name literals, attribute names, etc.
 
-	// TODO: literal constants as Map.
+	Function* body;            //< Script body is an anonymous function.
 };
-
-// To maintain simpilicity I won't implement object oriantation in MiniScript.
-//struct Class {
-//	Object _super;
-//
-//	Class* _base_class;
-//	String* name;
-//};
 
 // Script function pointer.
 typedef struct {

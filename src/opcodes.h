@@ -20,6 +20,9 @@ OPCODE(CONSTANT, 2, 1)
 // Push null on the stack.
 OPCODE(PUSH_NULL, 0, 0)
 
+// Push self on the stack. If the runtime don't have self it'll push null.
+OPCODE(PUSH_SELF, 0, 0)
+
 // Push true on the stack.
 OPCODE(PUSH_TRUE, 0, 0)
 
@@ -62,8 +65,8 @@ OPCODE(PUSH_GLOBAL, 2, 1)
 OPCODE(STORE_GLOBAL, 2, -1)
 
 // Push imported script's global value on the stack.
-// params: 4 bytes script ID and 2 bytes index.
-OPCODE(PUSH_GLOBAL_EXT, 6, 1)
+// params: 2 bytes script index and 2 bytes index.
+OPCODE(PUSH_GLOBAL_EXT, 4, 1)
 
 // Pop and store the value to imported script's global.
 // params: 4 bytes script ID and 2 bytes index.
@@ -75,8 +78,8 @@ OPCODE(STORE_GLOBAL_EXT, 6, -1)
 OPCODE(PUSH_FN, 2, 1)
 
 // Push an imported script's function.
-// params: 4 bytes script ID and 2 bytes index.
-OPCODE(PUSH_FN_EXT, 6, 1)
+// params: 2 bytes script index and 2 bytes index.
+OPCODE(PUSH_FN_EXT, 4, 1)
 
 // Pop the stack top.
 OPCODE(POP, 0, -1)
@@ -169,7 +172,6 @@ OPCODE(GT, 0, -1)
 OPCODE(GTEQ, 0, -1)
 
 OPCODE(RANGE, 0, -1) //< Pop 2 integer make range push.
-OPCODE(IS, 0, -1)
 OPCODE(IN, 0, -1)
 
 // TODO: literal list, map

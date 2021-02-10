@@ -46,7 +46,6 @@
 // The initial capacity of a buffer.
 #define MIN_CAPACITY 8
 
-
 // Unique number to identify for various cases.
 typedef uint32_t ID;
 
@@ -114,5 +113,13 @@ typedef struct Function Function;
 // with [count] entries.
 #define ALLOCATE_DYNAMIC(vm, type, count, tail_type) \
     ((type*)vmRealloc(vm, NULL, 0, sizeof(type) + sizeof(tail_type) * (count)))
+
+// Allocate [count] ammount of object of [type] array.
+#define ALLOCATE_ARRAY(vm, type, count) \
+    ((type*)vmRealloc(vm, NULL, 0, sizeof(type) * (count)))
+
+// Deallocate a pointer allocated by vmRealloc before.
+#define DEALLOCATE(vm, pointer) \
+    vmRealloc(vm, pointer, 0, 0)
 
 #endif //MS_COMMON_H
