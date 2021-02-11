@@ -74,23 +74,32 @@ typedef struct Function Function;
 
 #include <stdio.h>
 
-#define ASSERT(condition, message)                                       \
-    do {                                                                 \
-        if (!(condition)) {                                              \
-            fprintf(stderr, "Assertion failed: %s\n\tat %s() (%s:%i)\n", \
-                message, __func__, __FILE__, __LINE__);                  \
-            abort();                                                     \
-        }                                                                \
-    } while (false)
+#ifdef _MSC_VER
+  #define DEBUG_BREAK() __debugbreak()
+#else
+  #define DEBUG_BREAK() __builtin_trap()
+#endif
 
-#define UNREACHABLE()                                                    \
-    do {                                                                 \
-        fprintf(stderr, "Execution reached an unreachable path\n"        \
-            "\tat %s() (%s:%i)\n", __func__, __FILE__, __LINE__);        \
-        abort();                                                         \
-    } while (false)
+#define ASSERT(condition, message)                                   \
+  do {                                                               \
+    if (!(condition)) {                                              \
+      fprintf(stderr, "Assertion failed: %s\n\tat %s() (%s:%i)\n",   \
+        message, __func__, __FILE__, __LINE__);                      \
+      DEBUG_BREAK();                                                 \
+      abort();                                                       \
+    }                                                                \
+  } while (false)
+
+#define UNREACHABLE()                                                \
+  do {                                                               \
+    fprintf(stderr, "Execution reached an unreachable path\n"        \
+      "\tat %s() (%s:%i)\n", __func__, __FILE__, __LINE__);          \
+    abort();                                                         \
+  } while (false)
 
 #else
+
+#define DEBUG_BREAK()
 
 #define ASSERT(condition, message) do { } while (false)
 
@@ -104,6 +113,8 @@ typedef struct Function Function;
 #endif
 
 #endif // DEBUG
+
+#define TODO ASSERT(false, "TODO")
 
 // Allocate object of [type] using the vmRealloc function.
 #define ALLOCATE(vm, type) \

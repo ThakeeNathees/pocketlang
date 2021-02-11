@@ -11,27 +11,23 @@ SOURCES = [
 	Glob('src/types/gen/*.c'),	
 ]
 
-CPPPATH = [
-	'include/',
-]
-
 ## Compile miniscript lib.
 vm = env.Library(
 	target  = 'bin/miniscript',
 	source  = SOURCES,
-	CPPPATH = CPPPATH,
+	CPPPATH = ['include/'],
 )
 
 ## Test executable
 test = env.Program(
 	target  = 'bin/miniscript',
 	source  = ['test/main.c'],
-	CPPPATH = CPPPATH,
+	CPPPATH = ['include/'],
 	LIBPATH = 'bin',
 	LIBS    = 'miniscript',
 )
 
-env.Append(CPPPATH=CPPPATH)
+env.Append(CPPPATH=['include/'])
 
 Requires(test, vm)
 

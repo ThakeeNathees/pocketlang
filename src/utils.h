@@ -21,11 +21,9 @@ bool utilIsDigit(char c);
 
 #endif // UTILS_H
 
-
 /****************************************************************************
  * UTF8                                                                     *
  ****************************************************************************/
-
 
 #ifndef UTF8_H
 #define UTF8_H
@@ -107,6 +105,5 @@ int utf8_encodeValue(int value, uint8_t* bytes);
 // returns the number of bytes the value decoded, if invalid write -1 to the
 // value.
 int utf8_decodeBytes(uint8_t* bytes, int* value);
-
 
 #endif // UTF8_H

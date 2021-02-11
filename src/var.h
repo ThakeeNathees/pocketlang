@@ -166,108 +166,108 @@ typedef uint64_t Var;
 
 
 typedef enum {
-	VAR_UNDEFINED, //< Internal type for exceptions.
-	VAR_NULL,      //< Null pointer type.
-	VAR_BOOL,      //< Yin and yang of software.
-	VAR_INT,       //< Only 32bit integers (to consistance with Nan-Tagging).
-	VAR_FLOAT,     //< Floats are stored as (64bit) double.
+  VAR_UNDEFINED, //< Internal type for exceptions.
+  VAR_NULL,      //< Null pointer type.
+  VAR_BOOL,      //< Yin and yang of software.
+  VAR_INT,       //< Only 32bit integers (to consistance with Nan-Tagging).
+  VAR_FLOAT,     //< Floats are stored as (64bit) double.
 
-	VAR_OBJECT,    //< Base type for all \ref var_Object types.
+  VAR_OBJECT,    //< Base type for all \ref var_Object types.
 } VarType;
 
 typedef struct {
-	VarType type;
-	union {
-		bool _bool;
-		int _int;
-		double _float;
-		Object* _obj;
-	};
+  VarType type;
+  union {
+    bool _bool;
+    int _int;
+    double _float;
+    Object* _obj;
+  };
 } var;
 
 #endif // VAR_NAN_TAGGING
 
 typedef enum /* ObjectType */ {
-	OBJ_STRING,
-	OBJ_ARRAY,
-	OBJ_MAP,
-	OBJ_RANGE,
+  OBJ_STRING,
+  OBJ_ARRAY,
+  OBJ_MAP,
+  OBJ_RANGE,
 
-	OBJ_SCRIPT,
-	OBJ_FUNC,
-	OBJ_INSTANCE,
+  OBJ_SCRIPT,
+  OBJ_FUNC,
+  OBJ_INSTANCE,
 
-	OBJ_USER,
+  OBJ_USER,
 } ObjectType;
 
 // Base struct for all heap allocated objects.
 struct Object {
-	ObjectType type;  //< Type of the object in \ref var_Object_Type.
-	//Class* is;      //< The class the object IS. // No OOP in MS.
+  ObjectType type;  //< Type of the object in \ref var_Object_Type.
+  //Class* is;      //< The class the object IS. // No OOP in MS.
 
-	Object* next;     //< Next object in the heap allocated link list.
+  Object* next;     //< Next object in the heap allocated link list.
 };
 
 struct String {
-	Object _super;
+  Object _super;
 
-	uint32_t length;    //< Length of the string in \ref data.
-	uint32_t capacity;  //< Size of allocated \ref data.
-	char data[DYNAMIC_TAIL_ARRAY];
+  uint32_t length;    //< Length of the string in \ref data.
+  uint32_t capacity;  //< Size of allocated \ref data.
+  char data[DYNAMIC_TAIL_ARRAY];
 };
 
 struct Array {
-	Object _super;
+  Object _super;
 
-	VarBuffer elements; //< Elements of the array.
+  VarBuffer elements; //< Elements of the array.
 };
 
 // TODO: struct Map here.
 
 struct Range {
-	Object _super;
+  Object _super;
 
-	double from; //< Beggining of the range inclusive.
-	double to;   //< End of the range exclusive.
+  double from; //< Beggining of the range inclusive.
+  double to;   //< End of the range exclusive.
 };
 
 struct Script {
-	Object _super;
+  Object _super;
 
-	String* path;              //< Absolute path of the script.
+  String* path;              //< Absolute path of the script.
 
-	ID imports[MAX_IMPORT_SCRIPTS]; //< Imported script IDs.
-	int import_count;               //< Number of import in imports.
+  ID imports[MAX_IMPORT_SCRIPTS]; //< Imported script IDs.
+  int import_count;               //< Number of import in imports.
 
-	VarBuffer globals;         //< Script level global variables.
-	NameTable global_names;    //< Name map to index in globals.
-	VarBuffer literals;        //< Script literal constant values.
-	FunctionBuffer functions;  //< Script level functions.
-	NameTable function_names;  //< Name map to index in functions.
-	StringBuffer names;        //< Name literals, attribute names, etc.
+  VarBuffer globals;         //< Script level global variables.
+  NameTable global_names;    //< Name map to index in globals.
+  VarBuffer literals;        //< Script literal constant values.
+  FunctionBuffer functions;  //< Script level functions.
+  NameTable function_names;  //< Name map to index in functions.
+  StringBuffer names;        //< Name literals, attribute names, etc.
 
-	Function* body;            //< Script body is an anonymous function.
+  Function* body;            //< Script body is an anonymous function.
 };
 
 // Script function pointer.
 typedef struct {
-	ByteBuffer opcodes;  //< Buffer of opcodes.
-	IntBuffer oplines;   //< Line number of opcodes for debug (1 based).
-	int stack_size;      //< Maximum size of stack required.
+  ByteBuffer opcodes;  //< Buffer of opcodes.
+  IntBuffer oplines;   //< Line number of opcodes for debug (1 based).
+  int stack_size;      //< Maximum size of stack required.
 } Fn;
 
 struct Function {
-	Object _super;
+  Object _super;
 
-	const char* name;    //< Name in the script [owner].
-	Script* owner;       //< Owner script of the function.
-	int arity;           //< Number of argument the function expects.
+  const char* name;    //< Name in the script [owner].
+  Script* owner;       //< Owner script of the function.
+  int arity;           //< Number of argument the function expects.
 
-	bool is_native;      //< True if Native function.
-	union {
-		MiniScriptNativeFn native;  //< Native function pointer.
-		Fn* fn;                     //< Script function pointer.
-	};
+  bool is_native;      //< True if Native function.
+  union {
+    MiniScriptNativeFn native;  //< Native function pointer.
+    Fn* fn;                     //< Script function pointer.
+  };
 };
 
 // Methods.
@@ -291,6 +291,10 @@ Function* newFunction(MSVM* vm, const char* name, Script* owner,
 
 // Utility functions //////////////////////////////////////////////////////////
 
+// Returns true if both variables are the same.
 bool isVauesSame(Var v1, Var v2);
+
+// Returns the string version of the value.
+String* toString(MSVM* vm, Var v);
 
 #endif // VAR_H

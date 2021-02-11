@@ -18,9 +18,9 @@
 typedef uint8_t $type$;
 
 typedef struct {
-	$type$* data;
-	size_t count;
-	size_t capacity;
+  $type$* data;
+  size_t count;
+  size_t capacity;
 } $name$Buffer;
 
 // Initialize a new buffer int instance.

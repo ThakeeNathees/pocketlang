@@ -27,14 +27,14 @@ typedef void (*MiniScriptNativeFn)(MSVM* vm);
 
 typedef enum {
 
-	// Compile time errors (syntax errors, unresolved fn, etc).
-	MS_ERROR_COMPILE,
+  // Compile time errors (syntax errors, unresolved fn, etc).
+  MS_ERROR_COMPILE,
 
-	// Runtime error message.
-	MS_ERROR_RUNTIME,
+  // Runtime error message.
+  MS_ERROR_RUNTIME,
 
-	// One entry of a runtime error stack.
-	MS_ERROR_STACKTRACE,
+  // One entry of a runtime error stack.
+  MS_ERROR_STACKTRACE,
 } MSErrorType;
 
 // Error callback function pointer. for runtime error it'll call first with
@@ -48,9 +48,9 @@ typedef void (*MiniScriptWriteFn) (MSVM* vm, const char* text);
 
 // Result of the MiniScriptLoadScriptFn function.
 typedef struct {
-	bool is_failed;
-	const char* source;
-	void* user_data;
+  bool is_failed;
+  const char* source;
+  void* user_data;
 } MSLoadScriptResult;
 
 // Load and return the script. Called by the compiler to fetch initial source
@@ -66,22 +66,25 @@ typedef void (*MiniScriptLoadScriptDoneFn) (MSVM* vm, const char* path,
 
 typedef struct {
 
-	MiniScriptErrorFn error_fn;
-	MiniScriptWriteFn write_fn;
+  MiniScriptErrorFn error_fn;
+  MiniScriptWriteFn write_fn;
 
-	MiniScriptLoadScriptFn load_script_fn;
-	MiniScriptLoadScriptDoneFn load_script_done_fn;
+  MiniScriptLoadScriptFn load_script_fn;
+  MiniScriptLoadScriptDoneFn load_script_done_fn;
 
-	// User defined data associated with VM.
-	void* user_data;
+  // User defined data associated with VM.
+  void* user_data;
 
 } MSConfiguration;
 
 typedef enum {
-	RESULT_SUCCESS,
-	RESULT_COMPILE_ERROR,
-	RESULT_RUNTIME_ERROR,
+  RESULT_SUCCESS,
+  RESULT_COMPILE_ERROR,
+  RESULT_RUNTIME_ERROR,
 } MSInterpretResult;
+
+// Allocate initialize and returns a new VM
+MSVM* msNewVM(MSConfiguration* config);
 
 // Compile and execut file at given path.
 MSInterpretResult msInterpret(MSVM* vm, const char* file);

@@ -81,6 +81,10 @@ OPCODE(PUSH_FN, 2, 1)
 // params: 2 bytes script index and 2 bytes index.
 OPCODE(PUSH_FN_EXT, 4, 1)
 
+// Push a built in function.
+// params: 2 bytes index of the script.
+OPCODE(PUSH_BUILTIN_FN, 2, 1)
+
 // Pop the stack top.
 OPCODE(POP, 0, -1)
 
@@ -89,29 +93,34 @@ OPCODE(POP, 0, -1)
 // function should set the 0 th argment to return value. Locals at 0 to 8 
 // marked explicitly since it's performance criticle.
 // params: CALL_0..8 -> 2 bytes index. _N -> 2 bytes index and 2 bytes count.
-OPCODE(CALL_0, 2,  1) //< Return value will be pushed.
-OPCODE(CALL_1, 2,  0) //< 1st argument poped and return value pushed.
-OPCODE(CALL_2, 2, -1) //< 2 args will be popped and return value pushed.
-OPCODE(CALL_3, 2, -2)
-OPCODE(CALL_4, 2, -3)
-OPCODE(CALL_5, 2, -4)
-OPCODE(CALL_6, 2, -5)
-OPCODE(CALL_7, 2, -6)
-OPCODE(CALL_8, 2, -7)
-OPCODE(CALL_N, 4, -0) //< Will calculated at compile time.
 
+// TODO: may be later.
+//OPCODE(CALL_0, 2,  0) //< Push null call null will be the return value.
+//OPCODE(CALL_1, 2, -1) //< Push null and arg1. arg1 will be popped.
+//OPCODE(CALL_2, 2, -2) //< And so on.
+//OPCODE(CALL_3, 2, -3)
+//OPCODE(CALL_4, 2, -4)
+//OPCODE(CALL_5, 2, -5)
+//OPCODE(CALL_6, 2, -6)
+//OPCODE(CALL_7, 2, -7)
+//OPCODE(CALL_8, 2, -8)
+OPCODE(CALL, 4, -0) //< Will calculated at compile time.
+
+// A function pointer will be on top of the stack and it'll be called by OP_CALL...
+// and doesn't need to specify opcode for extern or not.
+//
 // Call a function from an imported script.
-// params: 4 bytes script ID and 2 bytes index. _N -> +2 bytes for argc.
-OPCODE(CALL_EXT_0, 6,  1)
-OPCODE(CALL_EXT_1, 6,  0)
-OPCODE(CALL_EXT_2, 6, -1)
-OPCODE(CALL_EXT_3, 6, -2)
-OPCODE(CALL_EXT_4, 6, -3)
-OPCODE(CALL_EXT_5, 6, -4)
-OPCODE(CALL_EXT_6, 6, -5)
-OPCODE(CALL_EXT_7, 6, -6)
-OPCODE(CALL_EXT_8, 6, -7)
-OPCODE(CALL_EXT_N, 8, -0) //< Will calculated at compile time.
+// params: 2 bytes script ID and 2 bytes index. _N -> +2 bytes for argc.
+//OPCODE(CALL_EXT_0, 4,  0)
+//OPCODE(CALL_EXT_1, 4, -1)
+//OPCODE(CALL_EXT_2, 4, -2)
+//OPCODE(CALL_EXT_3, 4, -3)
+//OPCODE(CALL_EXT_4, 4, -4)
+//OPCODE(CALL_EXT_5, 4, -5)
+//OPCODE(CALL_EXT_6, 4, -6)
+//OPCODE(CALL_EXT_7, 4, -7)
+//OPCODE(CALL_EXT_8, 4, -8)
+//OPCODE(CALL_EXT_N, 6, -0) //< Will calculated at compile time.
 
 // The address to jump to. It'll set the ip to the address it should jump to
 // and the address is absolute not an offset from ip's current value.
