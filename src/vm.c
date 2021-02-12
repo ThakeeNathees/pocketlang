@@ -61,7 +61,7 @@ void vmPopTempRef(MSVM* self) {
 void _printStackTop(MSVM* vm) {
   if (vm->sp != vm->stack) {
     Var v = *(vm->sp - 1);
-    printf("%s\n", toString(vm, v)->data);
+    printf("%s\n", toString(vm, v, false)->data);
   }
 }
 
@@ -123,7 +123,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
   register uint8_t* ip;      //< Current instruction pointer.
   register Var* rbp;         //< Stack base pointer register.
   register CallFrame* frame; //< Current call frame.
-  Script* script;            //< Currently executing script.
+  register Script* script;   //< Currently executing script.
 
 #define PUSH(value) (*vm->sp++ = (value))
 #define POP()       (*(--vm->sp))
@@ -215,6 +215,22 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
       PUSH(VAR_FALSE);
       DISPATCH();
 
+    OPCODE(PUSH_LIST):
+    {
+      List* list = newList(vm, (uint32_t)READ_SHORT());
+      PUSH(VAR_OBJ(&list->_super));
+      DISPATCH();
+    }
+
+    OPCODE(LIST_APPEND):
+    {
+      Var elem = POP();
+      Var list = *(vm->sp - 1);
+      ASSERT(IS_OBJ(list) && AS_OBJ(list)->type == OBJ_LIST, OOPS);
+      varBufferWrite(&((List*)AS_OBJ(list))->elements, vm, elem);
+      DISPATCH();
+    }
+
     OPCODE(PUSH_LOCAL_0):
     OPCODE(PUSH_LOCAL_1):
     OPCODE(PUSH_LOCAL_2):
@@ -260,7 +276,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(PUSH_GLOBAL):
     {
       int index = READ_SHORT();
-      ASSERT(index < script->globals.count, "Oops a Bug report plese!");
+      ASSERT(index < script->globals.count, OOPS);
       PUSH(script->globals.data[index]);
       DISPATCH();
     }
@@ -268,7 +284,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(STORE_GLOBAL):
     {
       int index = READ_SHORT();
-      ASSERT(index < script->globals.count, "Oops a Bug report plese!");
+      ASSERT(index < script->globals.count, OOPS);
       script->globals.data[index] = POP();
       DISPATCH();
     }
@@ -276,7 +292,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(PUSH_FN):
     {
       int index = READ_SHORT();
-      ASSERT(index < script->functions.count, "Oops a Bug report plese!");
+      ASSERT(index < script->functions.count, OOPS);
       Function* fn = script->functions.data[index];
       PUSH(VAR_OBJ(&fn->_super));
       DISPATCH();
@@ -301,7 +317,9 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
       if (IS_OBJ(*callable) && AS_OBJ(*callable)->type == OBJ_FUNC) {
 
         Function* fn = (Function*)AS_OBJ(*callable);
-        if (fn->arity != argc) {
+
+        // -1 argument means multiple number of args.
+        if (fn->arity != -1 && fn->arity != argc) {
           RUNTIME_ERROR("Expected excatly %d argument(s).", fn->arity);
         }
 
@@ -330,8 +348,35 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
       DISPATCH();
     }
 
-    OPCODE(JUMP):
-    OPCODE(JUMP_NOT):
+    OPCODE(ITER) :
+    {
+      Var* iter_value = (vm->sp - 1);
+      Var* iterator   = (vm->sp - 2);
+      Var* container  = (vm->sp - 3);
+      int jump_offset = READ_SHORT();
+      if (!varIterate(vm, *container, iterator, iter_value)) {
+        DROP(); //< Iter value.
+        DROP(); //< Iterator.
+        DROP(); //< Container.
+        ip += jump_offset;
+      }
+      DISPATCH();
+    }
+
+    OPCODE(JUMP): {
+      int offset = READ_SHORT();
+      ip += offset;
+      DISPATCH();
+    }
+
+    OPCODE(LOOP): {
+      int offset = READ_SHORT();
+      ip -= offset;
+      DISPATCH();
+    }
+
+
+    OPCODE(JUMP_IF):
     OPCODE(JUMP_IF_NOT):
       TODO;
 
@@ -361,25 +406,40 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(SET_ATTRIB):
     OPCODE(GET_SUBSCRIPT):
     OPCODE(SET_SUBSCRIPT):
+      TODO;
+
     OPCODE(NEGATIVE):
+    {
+      Var num = POP();
+      if (!IS_NUM(num)) {
+        RUNTIME_ERROR("Cannot negate a non numeric value.");
+      }
+      PUSH(VAR_NUM(-AS_NUM(num)));
+      DISPATCH();
+    }
+
     OPCODE(NOT):
     OPCODE(BIT_NOT):
       TODO;
 
     OPCODE(ADD):
       PUSH(varAdd(vm, POP(), POP()));
+      CHECK_ERROR();
       DISPATCH();
 
     OPCODE(SUBTRACT):
       PUSH(varSubtract(vm, POP(), POP()));
+      CHECK_ERROR();
       DISPATCH();
 
     OPCODE(MULTIPLY):
       PUSH(varMultiply(vm, POP(), POP()));
+      CHECK_ERROR();
       DISPATCH();
 
     OPCODE(DIVIDE):
       PUSH(varDivide(vm, POP(), POP()));
+      CHECK_ERROR();
       DISPATCH();
 
     OPCODE(MOD):

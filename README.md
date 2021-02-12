@@ -6,29 +6,29 @@ MiniScript is a simple embeddable, functional, dynamic-typed, bytecode-interpret
 
 ```ruby
 
-## Find and return the maximum value in the array.
-def get_max(arr)
-  ret = arr[0]
-  for i in 1..arr.length
-    ret = max(ret, arr[i])
+## Find and return the maximum value in the [list].
+def get_max(list)
+  ret = list[0]
+  for i in 1..list.length
+    ret = max(ret, list[i])
   end
   return ret
 end
 
-## Return an array where each element returns true with function [fn] and
-## belongs to [arr].
-def filter(arr, fn)
+## Return a list where each element returns true with function [fn] and
+## belongs to [list].
+def filter(list, fn)
   ret = []
-  for elem in arr
+  for elem in list
     if fn(elem)
-        array_append(ret, elem)
+      list_append(ret, elem)
     end
   end
   return ret
 end
 
-array = [42, null, 3.14, "String", 0..10, [100]]
-nums = filter(array, is_num)
+list = [42, null, 3.14, "String", 0..10, ['hello']]
+nums = filter(list, is_num)
 print(get_max(nums))
 
 ```

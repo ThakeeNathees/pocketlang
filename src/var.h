@@ -153,7 +153,7 @@
 
 #define AS_STRING(value)  ((String*)AS_OBJ(value))
 #define AS_CSTRING(value) (AS_STRING(value)->data)
-#define AS_ARRAY(value)   ((Array*)AS_OBJ(value))
+#define AS_ARRAY(value)   ((List*)AS_OBJ(value))
 #define AS_MAP(value)     ((Map*)AS_OBJ(value))
 #define AS_RANGE(value)   ((Range*)AS_OBJ(value))
 
@@ -189,7 +189,7 @@ typedef struct {
 
 typedef enum /* ObjectType */ {
   OBJ_STRING,
-  OBJ_ARRAY,
+  OBJ_LIST,
   OBJ_MAP,
   OBJ_RANGE,
 
@@ -215,7 +215,7 @@ struct String {
   char data[DYNAMIC_TAIL_ARRAY];
 };
 
-struct Array {
+struct List {
   Object _super;
 
   VarBuffer elements; //< Elements of the array.
@@ -280,6 +280,9 @@ double varToDouble(Var value);
 // Allocate new String object and return String*.
 String* newString(MSVM* vm, const char* text, uint32_t length);
 
+// Allocate new List and return List*.
+List* newList(MSVM* vm, uint32_t size);
+
 // Allocate new Range object and return Range*.
 Range* newRange(MSVM* vm, double from, double to);
 
@@ -296,7 +299,8 @@ Function* newFunction(MSVM* vm, const char* name, Script* owner,
 // Returns true if both variables are the same.
 bool isVauesSame(Var v1, Var v2);
 
-// Returns the string version of the value.
-String* toString(MSVM* vm, Var v);
+// Returns the string version of the value. Note: pass false as [_recursive]
+// It's an internal use (or may be I could make a wrapper around).
+String* toString(MSVM* vm, Var v, bool _recursive);
 
 #endif // VAR_H

@@ -18,16 +18,24 @@
 OPCODE(CONSTANT, 2, 1)
 
 // Push null on the stack.
-OPCODE(PUSH_NULL, 0, 0)
+OPCODE(PUSH_NULL, 0, 1)
 
 // Push self on the stack. If the runtime don't have self it'll push null.
-OPCODE(PUSH_SELF, 0, 0)
+OPCODE(PUSH_SELF, 0, 1)
 
 // Push true on the stack.
-OPCODE(PUSH_TRUE, 0, 0)
+OPCODE(PUSH_TRUE, 0, 1)
 
 // Push false on the stack.
-OPCODE(PUSH_FALSE, 0, 0)
+OPCODE(PUSH_FALSE, 0, 1)
+
+// Push a new list to construct from literal.
+// param: 2 bytes list size (defalt is 0).
+OPCODE(PUSH_LIST, 2, 1)
+
+// Pop the value on the stack the next stack top would be a list. Append the
+// value to the list. Used in literal array construction.
+OPCODE(LIST_APPEND, 0, -1)
 
 // Push stack local on top of the stack. Locals at 0 to 8 marked explicitly
 // since it's performance criticle.
@@ -94,14 +102,23 @@ OPCODE(POP, 0, -1)
 //OPCODE(CALL_8, 2, -8)
 OPCODE(CALL, 4, -0) //< Will calculated at compile time.
 
-// The address to jump to. It'll set the ip to the address it should jump to
-// and the address is absolute not an offset from ip's current value.
-// param: 2 bytes jump address.
+// The stack top will be iteration value, next one is iterator (integer) and
+// next would be the container. It'll update those values but not push or pop
+// any values. We need to ensure that stack state at the point.
+// param: 2 bytes jump offset if the iteration should stop.
+OPCODE(ITER, 2, 0)
+
+// The address offset to jump to. It'll add the offset to ip.
+// param: 2 bytes jump address offset.
 OPCODE(JUMP, 2, 0)
+
+// The address offset to jump to. It'll SUBTRACT the offset to ip.
+// param: 2 bytes jump address offset.
+OPCODE(LOOP, 2, 0)
 
 // Pop the stack top value and if it's true jump.
 // param: 2 bytes jump address.
-OPCODE(JUMP_NOT, 2, -1)
+OPCODE(JUMP_IF, 2, -1)
 
 // Pop the stack top value and if it's false jump.
 // param: 2 bytes jump address.

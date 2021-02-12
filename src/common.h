@@ -63,11 +63,10 @@ typedef struct Var Var;
 
 typedef struct Object Object;
 typedef struct String String;
-typedef struct Array Array;
+typedef struct List List;
 typedef struct Range Range;
 
 typedef struct Script Script;
-//typedef struct Class Class;
 typedef struct Function Function;
 
 #ifdef DEBUG
@@ -115,6 +114,7 @@ typedef struct Function Function;
 #endif // DEBUG
 
 #define TODO ASSERT(false, "TODO")
+#define OOPS "Oops a bug!! report plese."
 
 // Allocate object of [type] using the vmRealloc function.
 #define ALLOCATE(vm, type) \

@@ -58,6 +58,16 @@ String* newString(MSVM* vm, const char* text, uint32_t length) {
   return string;
 }
 
+List* newList(MSVM* vm, uint32_t size) {
+  List* list = ALLOCATE(vm, List);
+  varInitObject(&list->_super, vm, OBJ_LIST);
+  varBufferInit(&list->elements);
+  if (size > 0) {
+    varBufferFill(&list->elements, vm, VAR_NULL, size);
+    list->elements.count = 0;
+  }
+}
+
 Range* newRange(MSVM* vm, double from, double to) {
   Range* range = ALLOCATE(vm, Range);
   varInitObject(&range->_super, vm, OBJ_RANGE);
@@ -95,7 +105,7 @@ Function* newFunction(MSVM* vm, const char* name, Script* owner,
 
   func->name = name;
   func->owner = owner;
-  func->arity = -1;
+  func->arity = -2; // -1 means variadic args.
 
   func->is_native = is_native;
 
@@ -125,7 +135,7 @@ bool isVauesSame(Var v1, Var v2) {
 #endif
 }
 
-String* toString(MSVM* vm, Var v) {
+String* toString(MSVM* vm, Var v, bool recursive) {
 
   if (IS_NULL(v)) {
     return newString(vm, "null", 4);
@@ -147,10 +157,15 @@ String* toString(MSVM* vm, Var v) {
     Object* obj = AS_OBJ(v);
     switch (obj->type) {
       case OBJ_STRING:
-        return newString(vm, ((String*)obj)->data, ((String*)obj)->length);
+      {
+        // If recursive return with quotes (ex: [42, "hello", 0..10])
+        if (!recursive)
+          return newString(vm, ((String*)obj)->data, ((String*)obj)->length);
+        TODO; //< Add quotes around the string.
         break;
+      }
 
-      case OBJ_ARRAY:  return newString(vm, "[Array]",   7); // TODO;
+      case OBJ_LIST:   return newString(vm, "[Array]",   7); // TODO;
       case OBJ_MAP:    return newString(vm, "[Map]",     5); // TODO;
       case OBJ_RANGE:  return newString(vm, "[Range]",   7); // TODO;
       case OBJ_SCRIPT: return newString(vm, "[Script]",  8); // TODO;

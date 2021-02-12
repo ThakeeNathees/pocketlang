@@ -332,14 +332,14 @@ static void setNextToken(Parser* parser, TokenType type);
 static bool matchChar(Parser* parser, char c);
 static bool matchLine(Parser* parser);
 
-static void eatString(Parser* parser) {
+static void eatString(Parser* parser, char quote) {
   ByteBuffer buff;
   byteBufferInit(&buff);
 
   while (true) {
     char c = eatChar(parser);
 
-    if (c == '"') break;
+    if (c == quote) break;
 
     if (c == '\0') {
       lexError(parser, "Non terminated string.");
@@ -352,6 +352,7 @@ static void eatString(Parser* parser) {
     if (c == '\\') {
       switch (eatChar(parser)) {
         case '"': byteBufferWrite(&buff, parser->vm, '"'); break;
+        case '\'': byteBufferWrite(&buff, parser->vm, '\''); break;
         case '\\': byteBufferWrite(&buff, parser->vm, '\\'); break;
         case 'n': byteBufferWrite(&buff, parser->vm, '\n'); break;
         case 'r': byteBufferWrite(&buff, parser->vm, '\r'); break;
@@ -427,7 +428,8 @@ static void eatNumber(Parser* parser) {
   while (utilIsDigit(peekChar(parser)))
     eatChar(parser);
 
-  if (matchChar(parser, '.')) {
+  if (peekChar(parser) == '.' && utilIsDigit(peekNextChar(parser))) {
+    matchChar(parser, '.');
     while (utilIsDigit(peekChar(parser)))
       eatChar(parser);
   }
@@ -574,7 +576,9 @@ static void lexToken(Parser* parser) {
         setNextTwoCharToken(parser, '=', TK_FSLASH, TK_DIVEQ);
         return;
 
-      case '"': eatString(parser); return;
+      case '"': eatString(parser, '"'); return;
+
+      case '\'': eatString(parser, '\''); return;
 
       default: {
 
@@ -731,14 +735,7 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
 
   NameSearchResult result;
   result.type = NAME_NOT_DEFINED;
-
-  // Search through builtin functions.
-  int index = findBuiltinFunction(name, length);
-  if (index != -1) {
-    result.type = NAME_BUILTIN;
-    result.index = index;
-    return result;
-  }
+  int index;
 
   // Search through local and global valriables.
   NameDefnType type = NAME_LOCAL_VAR; //< Will change to local.
@@ -771,6 +768,14 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
     return result;
   }
 
+  // Search through builtin functions.
+  index = findBuiltinFunction(name, length);
+  if (index != -1) {
+    result.type = NAME_BUILTIN;
+    result.index = index;
+    return result;
+  }
+
   return result;
 }
 
@@ -799,7 +804,7 @@ static void exprBinaryOp(Compiler* compiler, bool can_assign);
 static void exprUnaryOp(Compiler* compiler, bool can_assign);
 
 static void exprGrouping(Compiler* compiler, bool can_assign);
-static void exprArray(Compiler* compiler, bool can_assign);
+static void exprList(Compiler* compiler, bool can_assign);
 static void exprMap(Compiler* compiler, bool can_assign);
 
 static void exprCall(Compiler* compiler, bool can_assign);
@@ -824,7 +829,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_HASH       */   NO_RULE,
   /* TK_LPARAN     */ { exprGrouping,  exprCall,         PREC_CALL },
   /* TK_RPARAN     */   NO_RULE,
-  /* TK_LBRACKET   */ { exprArray,     exprSubscript,    PREC_SUBSCRIPT },
+  /* TK_LBRACKET   */ { exprList,      exprSubscript,    PREC_SUBSCRIPT },
   /* TK_RBRACKET   */   NO_RULE,
   /* TK_LBRACE     */ { exprMap,       NULL,             NO_INFIX },
   /* TK_RBRACE     */   NO_RULE,
@@ -1026,7 +1031,28 @@ static void exprGrouping(Compiler* compiler, bool can_assign) {
   consume(&compiler->parser, TK_RPARAN, "Expected ')' after expression ");
 }
 
-static void exprArray(Compiler* compiler, bool can_assign) { TODO; }
+static void exprList(Compiler* compiler, bool can_assign) {
+
+  emitOpcode(compiler, OP_PUSH_LIST);
+  int size_index = emitShort(compiler, 0);
+
+  int size = 0;
+  do {
+    skipNewLines(&compiler->parser);
+    if (peek(&compiler->parser) == TK_COMMA) break;
+
+    compileExpression(compiler);
+    emitOpcode(compiler, OP_LIST_APPEND);
+    size++;
+
+  } while (match(&compiler->parser, TK_COMMA));
+
+  consume(&compiler->parser, TK_RBRACKET, "Expected ']' after list elements.");
+
+  compiler->function->fn->opcodes.data[size_index] = (size >> 8) & 0xff;
+  compiler->function->fn->opcodes.data[size_index + 1] = size & 0xff;
+}
+
 static void exprMap(Compiler* compiler, bool can_assign) { TODO; }
 
 static void exprCall(Compiler* compiler, bool can_assign) {
@@ -1211,12 +1237,21 @@ static void emitConstant(Compiler* compiler, Var value) {
   emitShort(compiler, index);
 }
 
+// Update the jump offset.
 static void patchJump(Compiler* compiler, int addr_index) {
-  int jump_to = (int)compiler->function->fn->opcodes.count;
-  ASSERT(jump_to < MAX_JUMP, "Too large address to jump.");
+  int jump_to = (int)compiler->function->fn->opcodes.count - addr_index - 2;
+  ASSERT(jump_to < MAX_JUMP, "Too large address offset to jump to.");
 
   compiler->function->fn->opcodes.data[addr_index] = (jump_to >> 8) & 0xff;
   compiler->function->fn->opcodes.data[addr_index + 1] = jump_to & 0xff;
+}
+
+// Jump back to the start of the loop.
+static void emitLoopJump(Compiler* compiler) {
+  emitOpcode(compiler, OP_LOOP);
+  int offset = (int)compiler->function->fn->opcodes.count - 
+               compiler->loop->start + 2;
+  emitShort(compiler, offset);
 }
 
  /****************************************************************************
@@ -1229,14 +1264,12 @@ static void compileBlockBody(Compiler* compiler, bool if_body);
 static void compileFunction(Compiler* compiler, bool is_native) {
 
   Parser* parser = &compiler->parser;
-
-  consume(&compiler->parser, TK_NAME, "Expected a function name.");
+  consume(parser, TK_NAME, "Expected a function name.");
 
   const char* name_start = parser->previous.start;
   int name_length = parser->previous.length;
   NameSearchResult result = compilerSearchName(compiler, name_start,
                                                name_length);
-
   if (result.type != NAME_NOT_DEFINED) {
     parseError(&compiler->parser, "Name %.*s already exists.", name_length,
                name_start);
@@ -1309,6 +1342,8 @@ static void compileFunction(Compiler* compiler, bool is_native) {
 
 // Finish a block body.
 static void compileBlockBody(Compiler* compiler, bool if_body) {
+
+  consumeStartBlock(&compiler->parser);
   compilerEnterBlock(compiler);
   skipNewLines(&compiler->parser);
 
@@ -1338,8 +1373,6 @@ static void compileIfStatement(Compiler* compiler) {
   emitOpcode(compiler, OP_JUMP_IF_NOT);
   int ifpatch = emitShort(compiler, 0xffff); //< Will be patched.
 
-  consumeStartBlock(&compiler->parser);
-
   compileBlockBody(compiler, true);
 
   if (match(&compiler->parser, TK_ELIF)) {
@@ -1365,30 +1398,78 @@ static void compileWhileStatement(Compiler* compiler) {
   loop.outer_loop = compiler->loop;
   compiler->loop = &loop;
 
-  skipNewLines(&compiler->parser);
   compileExpression(compiler); //< Condition.
   emitOpcode(compiler, OP_JUMP_IF_NOT);
   int whilepatch = emitByte(compiler, 0xffff); //< Will be patched.
 
   compileBlockBody(compiler, false);
 
-  emitOpcode(compiler, OP_JUMP);
-  emitShort(compiler, loop.start);
-
+  emitLoopJump(compiler);
   patchJump(compiler, whilepatch);
 
   // Patch break statement.
   for (int i = 0; i < compiler->loop->patch_count; i++) {
     patchJump(compiler, compiler->loop->patches[i]);
   }
-
   compiler->loop = loop.outer_loop;
+
   skipNewLines(&compiler->parser);
   consume(&compiler->parser, TK_END, "Expected 'end' after statement end.");
 }
 
 static void compileForStatement(Compiler* compiler) {
-  TODO;
+  compilerEnterBlock(compiler);
+
+  Parser* parser = &compiler->parser;
+  consume(parser, TK_NAME, "Expected an iterator name.");
+
+  // Unlike functions local variable could shadow a name.
+  const char* iter_name = parser->previous.start;
+  int iter_len = parser->previous.length;
+  int iter_line = parser->previous.line;
+
+  consume(parser, TK_IN, "Expected 'in' after iterator name.");
+
+  // Compile and store container.
+  int container = compilerAddVariable(compiler, "@container", 10, iter_line);
+  compileExpression(compiler);
+
+  // Add iterator to locals. It would initially be null and once the loop
+  // started it'll be an increasing integer indicating that the current 
+  // loop is nth.
+  int iterator = compilerAddVariable(compiler, "@iterator", 9, iter_line);
+  emitOpcode(compiler, OP_PUSH_NULL);
+
+  // Add the iteration value. It'll be updated to each element in an array of
+  // each character in a string etc.
+  int iter_value = compilerAddVariable(compiler, iter_name, iter_len,
+                                       iter_line);
+  emitOpcode(compiler, OP_PUSH_NULL);
+
+  Loop loop;
+  loop.start = (int)compiler->function->fn->opcodes.count;
+  loop.patch_count = 0;
+  loop.outer_loop = compiler->loop;
+  compiler->loop = &loop;
+
+  // Compile next iteration.
+  emitOpcode(compiler, OP_ITER);
+  int forpatch = emitShort(compiler, 0xffff);
+
+  compileBlockBody(compiler, false);
+
+  emitLoopJump(compiler);
+  patchJump(compiler, forpatch);
+
+  // Patch break statement.
+  for (int i = 0; i < compiler->loop->patch_count; i++) {
+    patchJump(compiler, compiler->loop->patches[i]);
+  }
+  compiler->loop = loop.outer_loop;
+
+  skipNewLines(&compiler->parser);
+  consume(&compiler->parser, TK_END, "Expected 'end' after statement end.");
+  compilerExitBlock(compiler); //< Iterator scope.
 }
 
 // Compiles a statement. Assignment could be an assignment statement or a new
@@ -1417,8 +1498,7 @@ static void compileStatement(Compiler* compiler) {
     }
 
     consumeEndStatement(parser);
-    emitOpcode(compiler, OP_JUMP);
-    emitShort(compiler, compiler->loop->start);
+    emitLoopJump(compiler);
 
   } else if (match(parser, TK_RETURN)) {
 
