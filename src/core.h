@@ -24,5 +24,11 @@ Var varSubtract(MSVM* vm, Var v1, Var v2);
 Var varMultiply(MSVM* vm, Var v1, Var v2);
 Var varDivide(MSVM* vm, Var v1, Var v2);
 
+// Functions //////////////////////////////////////////////////////////////////
+
+// Parameter [iterator] should be VAR_NULL before starting the iteration.
+// If an element is obtained by iteration it'll return true otherwise returns
+// false indicating that the iteration is over.
+bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value);
 
 #endif // CORE_H

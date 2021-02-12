@@ -61,8 +61,7 @@ void vmPopTempRef(MSVM* self) {
 void _printStackTop(MSVM* vm) {
   if (vm->sp != vm->stack) {
     Var v = *(vm->sp - 1);
-    double n = AS_NUM(v);
-    printf("%f\n", n);
+    printf("%s\n", toString(vm, v)->data);
   }
 }
 
@@ -93,7 +92,6 @@ static inline void pushCallFrame(MSVM* vm, Function* fn) {
   frame->fn = fn;
   frame->ip = fn->fn->opcodes.data;
 }
-
 
 void msSetRuntimeError(MSVM* vm, const char* format, ...) {
   vm->error = newString(vm, "TODO:", 5);
@@ -168,7 +166,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
   #error "OPCODE" should not be deifined here.
 #endif
 
-#define DEBUG_INSTRUCTION()
+#define DEBUG_INSTRUCTION() //_printStackTop(vm)
 
 #define SWITCH(code)                 \
   L_vm_main_loop:                    \
@@ -231,7 +229,6 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
       PUSH(rbp[index]);
       DISPATCH();
     }
-
     OPCODE(PUSH_LOCAL_N):
     {
       int index = READ_SHORT();
@@ -248,8 +245,17 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(STORE_LOCAL_6):
     OPCODE(STORE_LOCAL_7):
     OPCODE(STORE_LOCAL_8):
+    {
+      int index = (int)(instruction - OP_STORE_LOCAL_0);
+      rbp[index] = POP();
+      DISPATCH();
+    }
     OPCODE(STORE_LOCAL_N):
-      TODO;
+    {
+      int index = READ_SHORT();
+      rbp[index] = POP();
+      DISPATCH();
+    }
 
     OPCODE(PUSH_GLOBAL):
     {
@@ -267,10 +273,6 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
       DISPATCH();
     }
 
-    OPCODE(PUSH_GLOBAL_EXT):
-    OPCODE(STORE_GLOBAL_EXT):
-      TODO;
-
     OPCODE(PUSH_FN):
     {
       int index = READ_SHORT();
@@ -279,9 +281,6 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
       PUSH(VAR_OBJ(&fn->_super));
       DISPATCH();
     }
-
-    OPCODE(PUSH_FN_EXT) :
-      TODO;
 
     OPCODE(PUSH_BUILTIN_FN):
     {
@@ -298,7 +297,6 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     {
       int argc = READ_SHORT();
       Var* callable = vm->sp - argc - 1;
-      vm->rbp = callable; //< Next call frame starts here.
 
       if (IS_OBJ(*callable) && AS_OBJ(*callable)->type == OBJ_FUNC) {
 
@@ -311,8 +309,13 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
         // initialized with VAR_NULL as return value.
         *callable = VAR_NULL;
 
+        // Next call frame starts here. (including return value).
+        vm->rbp = callable;
+
         if (fn->is_native) {
           fn->native(vm);
+          // Pop function arguments except for the return value.
+          vm->sp = vm->rbp + 1;
           CHECK_ERROR();
 
         } else {
@@ -330,7 +333,30 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(JUMP):
     OPCODE(JUMP_NOT):
     OPCODE(JUMP_IF_NOT):
+      TODO;
+
     OPCODE(RETURN):
+    {
+      Var ret = POP();
+      vm->frame_count--;
+
+      // If no more call frames. We're done.
+      if (vm->frame_count == 0) {
+        vm->sp = vm->stack;
+        PUSH(ret);
+        return RESULT_SUCCESS;
+      }
+
+      // Set the return value.
+      *(frame->rbp - 1) = ret;
+
+      // Pop the locals and update stack pointer.
+      vm->sp = frame->rbp;
+
+      LOAD_FRAME();
+      DISPATCH();
+    }
+
     OPCODE(GET_ATTRIB):
     OPCODE(SET_ATTRIB):
     OPCODE(GET_SUBSCRIPT):
@@ -370,9 +396,22 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(LTEQ):
     OPCODE(GT):
     OPCODE(GTEQ):
+      TODO;
+
     OPCODE(RANGE):
+    {
+      Var to = POP();
+      Var from = POP();
+      if (!IS_NUM(from) || !IS_NUM(to)) {
+        RUNTIME_ERROR("Range arguments must be number.");
+      }
+      PUSH(VAR_OBJ(newRange(vm, AS_NUM(from), AS_NUM(to))));
+      DISPATCH();
+    }
+
     OPCODE(IN):
     OPCODE(END):
+      TODO;
       break;
 
     default:

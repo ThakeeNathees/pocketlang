@@ -195,7 +195,6 @@ typedef enum /* ObjectType */ {
 
   OBJ_SCRIPT,
   OBJ_FUNC,
-  OBJ_INSTANCE,
 
   OBJ_USER,
 } ObjectType;
@@ -280,6 +279,9 @@ double varToDouble(Var value);
 
 // Allocate new String object and return String*.
 String* newString(MSVM* vm, const char* text, uint32_t length);
+
+// Allocate new Range object and return Range*.
+Range* newRange(MSVM* vm, double from, double to);
 
 // Allocate new Script object and return Script*.
 Script* newScript(MSVM* vm);

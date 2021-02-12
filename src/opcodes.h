@@ -64,22 +64,10 @@ OPCODE(PUSH_GLOBAL, 2, 1)
 // params: 2 bytes (uint16_t) index.
 OPCODE(STORE_GLOBAL, 2, -1)
 
-// Push imported script's global value on the stack.
-// params: 2 bytes script index and 2 bytes index.
-OPCODE(PUSH_GLOBAL_EXT, 4, 1)
-
-// Pop and store the value to imported script's global.
-// params: 4 bytes script ID and 2 bytes index.
-OPCODE(STORE_GLOBAL_EXT, 6, -1)
-
 // Push the script's function on the stack. It could later be called. But a
 // function can't be stored i.e. can't assign a function with something else.
 // params: 2 bytes index.
 OPCODE(PUSH_FN, 2, 1)
-
-// Push an imported script's function.
-// params: 2 bytes script index and 2 bytes index.
-OPCODE(PUSH_FN_EXT, 4, 1)
 
 // Push a built in function.
 // params: 2 bytes index of the script.
@@ -105,22 +93,6 @@ OPCODE(POP, 0, -1)
 //OPCODE(CALL_7, 2, -7)
 //OPCODE(CALL_8, 2, -8)
 OPCODE(CALL, 4, -0) //< Will calculated at compile time.
-
-// A function pointer will be on top of the stack and it'll be called by OP_CALL...
-// and doesn't need to specify opcode for extern or not.
-//
-// Call a function from an imported script.
-// params: 2 bytes script ID and 2 bytes index. _N -> +2 bytes for argc.
-//OPCODE(CALL_EXT_0, 4,  0)
-//OPCODE(CALL_EXT_1, 4, -1)
-//OPCODE(CALL_EXT_2, 4, -2)
-//OPCODE(CALL_EXT_3, 4, -3)
-//OPCODE(CALL_EXT_4, 4, -4)
-//OPCODE(CALL_EXT_5, 4, -5)
-//OPCODE(CALL_EXT_6, 4, -6)
-//OPCODE(CALL_EXT_7, 4, -7)
-//OPCODE(CALL_EXT_8, 4, -8)
-//OPCODE(CALL_EXT_N, 6, -0) //< Will calculated at compile time.
 
 // The address to jump to. It'll set the ip to the address it should jump to
 // and the address is absolute not an offset from ip's current value.

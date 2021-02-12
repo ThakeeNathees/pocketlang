@@ -58,6 +58,14 @@ String* newString(MSVM* vm, const char* text, uint32_t length) {
   return string;
 }
 
+Range* newRange(MSVM* vm, double from, double to) {
+  Range* range = ALLOCATE(vm, Range);
+  varInitObject(&range->_super, vm, OBJ_RANGE);
+  range->from = from;
+  range->to = to;
+  return range;
+}
+
 Script* newScript(MSVM* vm) {
   Script* script = ALLOCATE(vm, Script);
   varInitObject(&script->_super, vm, OBJ_SCRIPT);
@@ -142,13 +150,20 @@ String* toString(MSVM* vm, Var v) {
         return newString(vm, ((String*)obj)->data, ((String*)obj)->length);
         break;
 
-      case OBJ_ARRAY:    TODO;
-      case OBJ_MAP:      TODO;
-      case OBJ_RANGE:    TODO;
-      case OBJ_SCRIPT:   TODO;
-      case OBJ_FUNC:     TODO;
-      case OBJ_INSTANCE: TODO;
-      case OBJ_USER:     TODO;
+      case OBJ_ARRAY:  return newString(vm, "[Array]",   7); // TODO;
+      case OBJ_MAP:    return newString(vm, "[Map]",     5); // TODO;
+      case OBJ_RANGE:  return newString(vm, "[Range]",   7); // TODO;
+      case OBJ_SCRIPT: return newString(vm, "[Script]",  8); // TODO;
+      case OBJ_FUNC: {
+        const char* name = ((Function*)obj)->name;
+        int length = (int)strlen(name); // TODO: Assert length.
+        char buff[TO_STRING_BUFF_SIZE];
+        memcpy(buff, "[func:", 6);
+        memcpy(buff + 6, name, length);
+        buff[6 + length] = ']';
+        return newString(vm, buff, 6 + length + 1);
+      }
+      case OBJ_USER:   return newString(vm, "[UserObj]", 9); // TODO;
         break;
     }
 

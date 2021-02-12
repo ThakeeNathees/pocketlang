@@ -87,7 +87,6 @@ typedef enum {
   //TK_XOREQ,      // ^=
 
   // Keywords.
-  TK_IMPORT,     // import
   TK_DEF,        // def
   TK_NATIVE,     // native (C function declaration)
   TK_END,        // end
@@ -146,7 +145,6 @@ typedef struct {
 
 // List of keywords mapped into their identifiers.
 static _Keyword _keywords[] = {
-  { "import",   6, TK_IMPORT },
   { "def",      3, TK_DEF },
   { "native",   6, TK_NATIVE },
   { "end",      3, TK_END },
@@ -719,13 +717,6 @@ typedef struct {
 
   NameDefnType type;
 
-  // Could be found in one of the imported script or in it's imported script
-  // recursively. If true [_extern] will be the script ID.
-  bool is_extern;
-
-  // Extern script's index.
-  int _extern;
-
   // Index in the variable/function buffer/array.
   int index;
 
@@ -740,7 +731,6 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
 
   NameSearchResult result;
   result.type = NAME_NOT_DEFINED;
-  result.is_extern = false;
 
   // Search through builtin functions.
   int index = findBuiltinFunction(name, length);
@@ -780,8 +770,6 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
     result.index = index;
     return result;
   }
-
-  // TODO: search in imported scripts.
 
   return result;
 }
@@ -863,7 +851,6 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_DIVEQ      */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
   /* TK_SRIGHT     */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_SLEFT      */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
-  /* TK_IMPORT     */   NO_RULE,
   /* TK_DEF        */   NO_RULE,
   /* TK_EXTERN     */   NO_RULE,
   /* TK_END        */   NO_RULE,
@@ -967,34 +954,17 @@ static void exprName(Compiler* compiler, bool can_assign) {
     case NAME_GLOBAL_VAR:
       if (can_assign && match(&compiler->parser, TK_EQ)) {
         compileExpression(compiler);
-        if (result.is_extern) {
-          emitOpcode(compiler, OP_STORE_GLOBAL_EXT);
-          emitShort(compiler, result._extern);
-          emitShort(compiler, result.index);
-        } else {
-          _emitStoreVariable(compiler, result.index, true);
-        }
+        _emitStoreVariable(compiler, result.index, true);
+        
       } else {
-        if (result.is_extern) {
-          emitOpcode(compiler, OP_PUSH_GLOBAL_EXT);
-          emitShort(compiler, result._extern);
-          emitShort(compiler, result.index);
-        } else {
-          emitOpcode(compiler, OP_PUSH_GLOBAL);
-          emitShort(compiler, result.index);
-        }
+        emitOpcode(compiler, OP_PUSH_GLOBAL);
+        emitShort(compiler, result.index);
       }
       return;
 
     case NAME_FUNCTION:
-      if (result.is_extern) {
-        emitOpcode(compiler, OP_PUSH_FN_EXT);
-        emitShort(compiler, result._extern);
-        emitShort(compiler, result.index);
-      } else {
-        emitOpcode(compiler, OP_PUSH_FN);
-        emitShort(compiler, result.index);
-      }
+      emitOpcode(compiler, OP_PUSH_FN);
+      emitShort(compiler, result.index);
       return;
 
     case NAME_BUILTIN:
@@ -1329,6 +1299,10 @@ static void compileFunction(Compiler* compiler, bool is_native) {
   
   consume(parser, TK_END, "Expected 'end' after function definition end.");
 
+  emitOpcode(compiler,  OP_PUSH_NULL);
+  emitOpcode(compiler, OP_RETURN);
+  emitOpcode(compiler, OP_END);
+
   compilerExitBlock(compiler); // Parameter depth.
   compiler->function = compiler->script->body;
 }
@@ -1511,9 +1485,6 @@ Script* compileSource(MSVM* vm, const char* path) {
     } else if (match(parser, TK_DEF)) {
       compileFunction(&compiler, false);
 
-    } else if (match(parser, TK_IMPORT)) {
-      // TODO: import statement must be first of all other.
-      TODO;
     } else {
       compileStatement(&compiler);
     }

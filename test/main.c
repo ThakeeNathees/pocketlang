@@ -12,13 +12,6 @@
 
 #include <stdlib.h>
 
-// FIXME:
-//#include "../src/common.h"
-//#include "../src/var.h"
-//#include "../src/vm.h"
-//#include "../src/types/gen/string_buffer.h"
-//#include "../src/types/gen/byte_buffer.h"
-
 static const char* opnames[] = {
   #define OPCODE(name, params, stack) #name,
   #include "../src/opcodes.h"
