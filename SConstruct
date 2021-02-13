@@ -2,10 +2,11 @@
 import os, subprocess, sys
 
 def get_variant_dir(env):
-	ret = 'build/' + env['platform'] + '/' + env['target'];
+	ret = 'build/' + env['platform'] + '/' + env['target'] + '/'
 	if env['platform'] == 'windows':
-		return ret + '/' + env['bits']
+		return ret + env['bits'] + '/'
 	return ret
+env.get_variant_dir = get_variant_dir
 
 opts = Variables([], ARGUMENTS)
 ## Define our options

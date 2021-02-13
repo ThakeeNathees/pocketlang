@@ -27,9 +27,10 @@ def filter(list, fn)
   return ret
 end
 
-list = [42, null, 3.14, "String", 0..10, ['hello']]
+## A list of range literal, first class functions and more types.
+list = [42, null, 0..10, function() print('hello') end, [3.14]]
 nums = filter(list, is_num)
-print(get_max(nums))
+print("Max is", get_max(nums))
 
 ```
 
