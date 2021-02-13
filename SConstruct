@@ -146,7 +146,6 @@ if not env['verbose']:
 	
 Export('env')
 env['variant_dir'] = get_variant_dir(env)
-env.get_variant_dir = get_variant_dir
 SConscript('SConscript', variant_dir=env['variant_dir'], duplicate=0)
 
 ## --------------------------------------------------------------------------------

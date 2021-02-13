@@ -66,6 +66,7 @@ List* newList(MSVM* vm, uint32_t size) {
     varBufferFill(&list->elements, vm, VAR_NULL, size);
     list->elements.count = 0;
   }
+  return list;
 }
 
 Range* newRange(MSVM* vm, double from, double to) {
