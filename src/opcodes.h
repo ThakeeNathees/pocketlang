@@ -51,26 +51,28 @@ OPCODE(PUSH_LOCAL_7, 0, 1)
 OPCODE(PUSH_LOCAL_8, 0, 1)
 OPCODE(PUSH_LOCAL_N, 2, 1)
 
-// Pop the stack top value and store to another stack local index.
+// Store the stack top value to another stack local index and don't pop since
+// it's the result of the assignment.
 // params: STORE_LOCAL_N -> 2 bytes (uint16_t) count value.
-OPCODE(STORE_LOCAL_0, 0, -1)
-OPCODE(STORE_LOCAL_1, 0, -1)
-OPCODE(STORE_LOCAL_2, 0, -1)
-OPCODE(STORE_LOCAL_3, 0, -1)
-OPCODE(STORE_LOCAL_4, 0, -1)
-OPCODE(STORE_LOCAL_5, 0, -1)
-OPCODE(STORE_LOCAL_6, 0, -1)
-OPCODE(STORE_LOCAL_7, 0, -1)
-OPCODE(STORE_LOCAL_8, 0, -1)
-OPCODE(STORE_LOCAL_N, 2, -1)
+OPCODE(STORE_LOCAL_0, 0, 0)
+OPCODE(STORE_LOCAL_1, 0, 0)
+OPCODE(STORE_LOCAL_2, 0, 0)
+OPCODE(STORE_LOCAL_3, 0, 0)
+OPCODE(STORE_LOCAL_4, 0, 0)
+OPCODE(STORE_LOCAL_5, 0, 0)
+OPCODE(STORE_LOCAL_6, 0, 0)
+OPCODE(STORE_LOCAL_7, 0, 0)
+OPCODE(STORE_LOCAL_8, 0, 0)
+OPCODE(STORE_LOCAL_N, 2, 0)
 
 // Push the script global value on the stack.
 // params: 2 bytes (uint16_t) index.
 OPCODE(PUSH_GLOBAL, 2, 1)
 
-// Pop and store the value to script's global.
+// Store the stack top value to a global value and don't pop since it's the
+// result of the assignment.
 // params: 2 bytes (uint16_t) index.
-OPCODE(STORE_GLOBAL, 2, -1)
+OPCODE(STORE_GLOBAL, 2, 0)
 
 // Push the script's function on the stack. It could later be called. But a
 // function can't be stored i.e. can't assign a function with something else.

@@ -128,7 +128,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 #define PUSH(value) (*vm->sp++ = (value))
 #define POP()       (*(--vm->sp))
 #define DROP()      (--vm->sp)
-#define PEEK()      (vm->sp - 1)
+#define PEEK()      (*(vm->sp - 1))
 #define READ_BYTE() (*ip++)
 #define READ_SHORT() (ip+=2, (uint16_t)((ip[-2] << 8) | ip[-1]))
 
@@ -263,13 +263,13 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(STORE_LOCAL_8):
     {
       int index = (int)(instruction - OP_STORE_LOCAL_0);
-      rbp[index] = POP();
+      rbp[index] = PEEK();
       DISPATCH();
     }
     OPCODE(STORE_LOCAL_N):
     {
       int index = READ_SHORT();
-      rbp[index] = POP();
+      rbp[index] = PEEK();
       DISPATCH();
     }
 
@@ -285,7 +285,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     {
       int index = READ_SHORT();
       ASSERT(index < script->globals.count, OOPS);
-      script->globals.data[index] = POP();
+      script->globals.data[index] = PEEK();
       DISPATCH();
     }
 

@@ -1,7 +1,11 @@
 import sys, os
 
+def main():
+	generate_files()
+
+
 def log(*msg):
-	print("[autotool.py]", end='')
+	print("[ms:configure.py]", end='')
 	for _msg in msg:
 		print(' ' + _msg, end='')
 	print()
@@ -22,4 +26,4 @@ def generate_files():
 	return ec
 	
 if __name__ == '__main__':
-	generate_files()
+	main()

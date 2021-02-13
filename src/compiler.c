@@ -88,7 +88,8 @@ typedef enum {
 
   // Keywords.
   TK_DEF,        // def
-  TK_NATIVE,     // native (C function declaration)
+  TK_NATIVE,     // native   (C function declaration)
+  TK_FUNCTION,   // function (literal function)
   TK_END,        // end
 
   TK_NULL,       // null
@@ -147,6 +148,7 @@ typedef struct {
 static _Keyword _keywords[] = {
   { "def",      3, TK_DEF },
   { "native",   6, TK_NATIVE },
+  { "function", 8, TK_FUNCTION },
   { "end",      3, TK_END },
   { "null",     4, TK_NULL },
   { "self",     4, TK_SELF },
@@ -222,10 +224,22 @@ typedef struct {
   Precedence precedence;
 } GrammarRule;
 
+typedef enum {
+  DEPTH_SCRIPT = -2, //< Only used for script body function's depth.
+  DEPTH_GLOBAL = -1, //< Global variables.
+  DEPTH_LOCAL,       //< Local scope. Increase with inner scope.
+} Depth;
+
+typedef enum {
+  FN_NATIVE,    //< Native C function.
+  FN_SCRIPT,    //< Script level functions defined with 'def'.
+  FN_LITERAL,   //< Literal functions defined with 'function(){...}'
+} FuncType;
+
 typedef struct {
   const char* name; //< Directly points into the source string.
   int length;       //< Length of the name.
-  int depth;        //< The depth the local is defined in. (-1 means global)
+  int depth;        //< The depth the local is defined in.
   int line;         //< The line variable declared for debugging.
 } Variable;
 
@@ -249,6 +263,24 @@ typedef struct sLoop {
 
 } Loop;
 
+typedef struct sFunc {
+
+  // Scope of the function. -2 for script body, -1 for top level function and 
+  // literal functions will have the scope where it declared.
+  int depth;
+
+  // The actual function pointer which is being compiled.
+  Function* ptr;
+
+  // If outer function of a literal or the script body function of a script
+  // function. Null for script body function.
+  struct sFunc* outer_func;
+
+} Func;
+
+// A convinent macro to get the current function.
+#define _FN (compiler->func->ptr->fn)
+
 struct Compiler {
 
   MSVM* vm;
@@ -266,9 +298,9 @@ struct Compiler {
 
   // TODO: compiler should mark Script* below not to be garbage collected.
 
-  Script* script;      //< Current script.
-  Loop* loop;          //< Current loop.
-  Function* function;  //< Current function.
+  Script* script;  //< Current script.
+  Loop* loop;      //< Current loop.
+  Func* func;      //< Current function.
 };
 
 typedef struct {
@@ -332,9 +364,11 @@ static void setNextToken(Parser* parser, TokenType type);
 static bool matchChar(Parser* parser, char c);
 static bool matchLine(Parser* parser);
 
-static void eatString(Parser* parser, char quote) {
+static void eatString(Parser* parser, bool single_quote) {
   ByteBuffer buff;
   byteBufferInit(&buff);
+
+  char quote = (single_quote) ? '\'' : '"';
 
   while (true) {
     char c = eatChar(parser);
@@ -507,7 +541,7 @@ static void lexToken(Parser* parser) {
       case ',': setNextToken(parser, TK_COMMA); return;
       case ':': setNextToken(parser, TK_COLLON); return;
       case ';': setNextToken(parser, TK_SEMICOLLON); return;
-      case '#': setNextToken(parser, TK_HASH); return;
+      case '#': skipLineComment(parser); break;
       case '(': setNextToken(parser, TK_LPARAN); return;
       case ')': setNextToken(parser, TK_RPARAN); return;
       case '[': setNextToken(parser, TK_LBRACKET); return;
@@ -576,9 +610,9 @@ static void lexToken(Parser* parser) {
         setNextTwoCharToken(parser, '=', TK_FSLASH, TK_DIVEQ);
         return;
 
-      case '"': eatString(parser, '"'); return;
+      case '"': eatString(parser, false); return;
 
-      case '\'': eatString(parser, '\''); return;
+      case '\'': eatString(parser, true); return;
 
       default: {
 
@@ -739,12 +773,21 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
 
   // Search through local and global valriables.
   NameDefnType type = NAME_LOCAL_VAR; //< Will change to local.
+
+  // [index] will points to the ith local or ith global (will update).
   index = compiler->var_count - compiler->global_count - 1;
 
   for (int i = compiler->var_count - 1; i >= 0; i--) {
     Variable* variable = &compiler->variables[i];
 
-    if (type == NAME_LOCAL_VAR && variable->depth == -1) {
+    // Literal functions are not closures and ignore it's outer function's
+    // local variables.
+    if (variable->depth != DEPTH_GLOBAL &&
+        compiler->func->depth >= variable->depth) {
+      continue;
+    }
+
+    if (type == NAME_LOCAL_VAR && variable->depth == DEPTH_GLOBAL) {
       type = NAME_GLOBAL_VAR;
       index = compiler->global_count - 1;
     }
@@ -792,12 +835,14 @@ static int compilerAddConstant(Compiler* compiler, Var value);
 static int compilerAddVariable(Compiler* compiler, const char* name,
   int length, int line);
 static int compilerAddConstant(Compiler* compiler, Var value);
+static int compileFunction(Compiler* compiler, FuncType fn_type);
 
 // Forward declaration of grammar functions.
 static void parsePrecedence(Compiler* compiler, Precedence precedence);
 static void compileExpression(Compiler* compiler);
 
 static void exprLiteral(Compiler* compiler, bool can_assign);
+static void exprFunc(Compiler* compiler, bool can_assign);
 static void exprName(Compiler* compiler, bool can_assign);
 
 static void exprBinaryOp(Compiler* compiler, bool can_assign);
@@ -858,6 +903,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_SLEFT      */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_DEF        */   NO_RULE,
   /* TK_EXTERN     */   NO_RULE,
+  /* TK_FUNCTION   */ { exprFunc,      NULL,            NO_INFIX },
   /* TK_END        */   NO_RULE,
   /* TK_NULL       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_SELF       */ { exprValue,     NULL,             NO_INFIX },
@@ -923,6 +969,12 @@ static void exprLiteral(Compiler* compiler, bool can_assign) {
   emitShort(compiler, index);
 }
 
+static void exprFunc(Compiler* compiler, bool can_assign) {
+  int fn_index = compileFunction(compiler, FN_LITERAL);
+  emitOpcode(compiler, OP_PUSH_FN);
+  emitShort(compiler, fn_index);
+}
+
 // Local/global variables, script/native/builtin functions name.
 static void exprName(Compiler* compiler, bool can_assign) {
   const char* name_start = compiler->parser.previous.start;
@@ -936,7 +988,7 @@ static void exprName(Compiler* compiler, bool can_assign) {
       int index = compilerAddVariable(compiler, name_start, name_len,
                                       name_line);
       compileExpression(compiler);
-      _emitStoreVariable(compiler, index, compiler->scope_depth == -1);
+      _emitStoreVariable(compiler, index, compiler->scope_depth == DEPTH_GLOBAL);
       return;
     } else {
       parseError(&compiler->parser, "Name \"%.*s\" is not defined.", name_len,
@@ -1049,8 +1101,8 @@ static void exprList(Compiler* compiler, bool can_assign) {
 
   consume(&compiler->parser, TK_RBRACKET, "Expected ']' after list elements.");
 
-  compiler->function->fn->opcodes.data[size_index] = (size >> 8) & 0xff;
-  compiler->function->fn->opcodes.data[size_index + 1] = size & 0xff;
+  _FN->opcodes.data[size_index] = (size >> 8) & 0xff;
+  _FN->opcodes.data[size_index + 1] = size & 0xff;
 }
 
 static void exprMap(Compiler* compiler, bool can_assign) { TODO; }
@@ -1140,7 +1192,7 @@ static void compilerInit(Compiler* compiler, MSVM* vm, const char* source,
   parserInit(&compiler->parser, vm, source, path);
   compiler->vm = vm;
   vm->compiler = compiler;
-  compiler->scope_depth = -1;
+  compiler->scope_depth = DEPTH_GLOBAL;
   compiler->var_count = 0;
   compiler->global_count = 0;
   compiler->stack_size = 0;
@@ -1157,7 +1209,7 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
   variable->length = length;
   variable->depth = compiler->scope_depth;
   variable->line = line;
-  if (variable->depth == -1) compiler->global_count++;
+  if (variable->depth == DEPTH_GLOBAL) compiler->global_count++;
   return compiler->var_count++;
 }
 
@@ -1188,7 +1240,7 @@ static void compilerEnterBlock(Compiler* compiler) {
 
 // Exits a block.
 static void compilerExitBlock(Compiler* compiler) {
-  ASSERT(compiler->scope_depth > -1, "Cannot exit toplevel.");
+  ASSERT(compiler->scope_depth > (int)DEPTH_GLOBAL, "Cannot exit toplevel.");
 
   while (compiler->var_count > 0 && compiler->variables[
       compiler->var_count - 1].depth >= compiler->scope_depth) {
@@ -1205,11 +1257,11 @@ static void compilerExitBlock(Compiler* compiler) {
 // Emit a single byte and return it's index.
 static int emitByte(Compiler* compiler, int byte) {
 
-  byteBufferWrite(&compiler->function->fn->opcodes, compiler->vm,
+  byteBufferWrite(&_FN->opcodes, compiler->vm,
                     (uint8_t)byte);
-  intBufferWrite(&compiler->function->fn->oplines, compiler->vm,
+  intBufferWrite(&_FN->oplines, compiler->vm,
                    compiler->parser.previous.line);
-  return (int)compiler->function->fn->opcodes.count - 1;
+  return (int)_FN->opcodes.count - 1;
 }
 
 // Emit 2 bytes argument as big indian. return it's starting index.
@@ -1224,8 +1276,8 @@ static void emitOpcode(Compiler* compiler, Opcode opcode) {
   emitByte(compiler, (int)opcode);
 
   compiler->stack_size += opcode_info[opcode].stack;
-  if (compiler->stack_size > compiler->function->fn->stack_size) {
-    compiler->function->fn->stack_size = compiler->stack_size;
+  if (compiler->stack_size > _FN->stack_size) {
+    _FN->stack_size = compiler->stack_size;
   }
 }
 
@@ -1239,18 +1291,17 @@ static void emitConstant(Compiler* compiler, Var value) {
 
 // Update the jump offset.
 static void patchJump(Compiler* compiler, int addr_index) {
-  int jump_to = (int)compiler->function->fn->opcodes.count - addr_index - 2;
+  int jump_to = (int)_FN->opcodes.count - addr_index - 2;
   ASSERT(jump_to < MAX_JUMP, "Too large address offset to jump to.");
 
-  compiler->function->fn->opcodes.data[addr_index] = (jump_to >> 8) & 0xff;
-  compiler->function->fn->opcodes.data[addr_index + 1] = jump_to & 0xff;
+  _FN->opcodes.data[addr_index] = (jump_to >> 8) & 0xff;
+  _FN->opcodes.data[addr_index + 1] = jump_to & 0xff;
 }
 
 // Jump back to the start of the loop.
 static void emitLoopJump(Compiler* compiler) {
   emitOpcode(compiler, OP_LOOP);
-  int offset = (int)compiler->function->fn->opcodes.count - 
-               compiler->loop->start + 2;
+  int offset = (int)_FN->opcodes.count - compiler->loop->start + 2;
   emitShort(compiler, offset);
 }
 
@@ -1261,33 +1312,47 @@ static void emitLoopJump(Compiler* compiler) {
 static void compileStatement(Compiler* compiler);
 static void compileBlockBody(Compiler* compiler, bool if_body);
 
-static void compileFunction(Compiler* compiler, bool is_native) {
+// Compile a function and return it's index in the script's function buffer.
+static int compileFunction(Compiler* compiler, FuncType fn_type) {
 
   Parser* parser = &compiler->parser;
-  consume(parser, TK_NAME, "Expected a function name.");
 
-  const char* name_start = parser->previous.start;
-  int name_length = parser->previous.length;
-  NameSearchResult result = compilerSearchName(compiler, name_start,
-                                               name_length);
-  if (result.type != NAME_NOT_DEFINED) {
-    parseError(&compiler->parser, "Name %.*s already exists.", name_length,
-               name_start);
-    // Not returning here as to complete for skip cascaded errors.
+  const char* name;
+
+  if (fn_type != FN_LITERAL) {
+    consume(parser, TK_NAME, "Expected a function name.");
+    const char* name_start = parser->previous.start;
+    int name_length = parser->previous.length;
+    NameSearchResult result = compilerSearchName(compiler, name_start,
+                                                 name_length);
+    if (result.type != NAME_NOT_DEFINED) {
+      parseError(&compiler->parser, "Name %.*s already exists.", name_length,
+                 name_start);
+      // Not returning here as to complete for skip cascaded errors.
+    }
+
+    int index = nameTableAdd(&compiler->script->function_names, compiler->vm,
+                             name_start, name_length);
+    name = nameTableGet(&compiler->script->function_names, index);
+
+  } else {
+    name = "[FunctionLiteral]";
   }
-
-  int index = nameTableAdd(&compiler->script->function_names, compiler->vm,
-                           name_start, name_length);
-
-  Function* func = newFunction(compiler->vm,
-                     nameTableGet(&compiler->script->function_names, index),
-                     compiler->script, is_native);
+  
+  Function* func = newFunction(compiler->vm, name,
+                               compiler->script, fn_type == FN_NATIVE);
 
   vmPushTempRef(compiler->vm, &func->_super);
   functionBufferWrite(&compiler->script->functions, compiler->vm, func);
   vmPopTempRef(compiler->vm);
+  int fn_index = compiler->script->functions.count - 1;
 
-  compiler->function = func;
+  Func curr_func;
+  curr_func.outer_func = compiler->func;
+  curr_func.ptr = func;
+  curr_func.depth = compiler->scope_depth;
+
+  compiler->func = &curr_func;
 
   int argc = 0;
   compilerEnterBlock(compiler); // Parameter depth.
@@ -1326,7 +1391,7 @@ static void compileFunction(Compiler* compiler, bool is_native) {
 
   func->arity = argc;
 
-  if (!is_native) {
+  if (fn_type != FN_NATIVE) {
     compileBlockBody(compiler, false);
   }
   
@@ -1337,7 +1402,9 @@ static void compileFunction(Compiler* compiler, bool is_native) {
   emitOpcode(compiler, OP_END);
 
   compilerExitBlock(compiler); // Parameter depth.
-  compiler->function = compiler->script->body;
+  compiler->func = compiler->func->outer_func;
+
+  return fn_index;
 }
 
 // Finish a block body.
@@ -1393,7 +1460,7 @@ static void compileIfStatement(Compiler* compiler) {
 
 static void compileWhileStatement(Compiler* compiler) {
   Loop loop;
-  loop.start = (int)compiler->function->fn->opcodes.count;
+  loop.start = (int)_FN->opcodes.count;
   loop.patch_count = 0;
   loop.outer_loop = compiler->loop;
   compiler->loop = &loop;
@@ -1447,7 +1514,7 @@ static void compileForStatement(Compiler* compiler) {
   emitOpcode(compiler, OP_PUSH_NULL);
 
   Loop loop;
-  loop.start = (int)compiler->function->fn->opcodes.count;
+  loop.start = (int)_FN->opcodes.count;
   loop.patch_count = 0;
   loop.outer_loop = compiler->loop;
   compiler->loop = &loop;
@@ -1502,7 +1569,7 @@ static void compileStatement(Compiler* compiler) {
 
   } else if (match(parser, TK_RETURN)) {
 
-    if (compiler->scope_depth == -1) {
+    if (compiler->scope_depth == DEPTH_GLOBAL) {
       parseError(parser, "Invalid 'return' outside a function.");
       return;
     }
@@ -1547,7 +1614,12 @@ Script* compileSource(MSVM* vm, const char* path) {
 
   Script* script = newScript(vm);
   compiler.script = script;
-  compiler.function = script->body;
+
+  Func curr_fn;
+  curr_fn.depth = DEPTH_SCRIPT;
+  curr_fn.ptr = script->body;
+  curr_fn.outer_func = NULL;
+  compiler.func = &curr_fn;
 
   // Parser pointer for quick access.
   Parser* parser = &compiler.parser;
@@ -1560,10 +1632,10 @@ Script* compileSource(MSVM* vm, const char* path) {
   while (!match(parser, TK_EOF)) {
 
     if (match(parser, TK_NATIVE)) {
-      compileFunction(&compiler, true);
+      compileFunction(&compiler, FN_NATIVE);
 
     } else if (match(parser, TK_DEF)) {
-      compileFunction(&compiler, false);
+      compileFunction(&compiler, FN_SCRIPT);
 
     } else {
       compileStatement(&compiler);
@@ -1582,7 +1654,7 @@ Script* compileSource(MSVM* vm, const char* path) {
 
   // Create script globals.
   for (int i = 0; i < compiler.var_count; i++) {
-    ASSERT(compiler.variables[i].depth == -1, "Oops Some bug. Please report!");
+    ASSERT(compiler.variables[i].depth == (int)DEPTH_GLOBAL, "Oops Some bug. Please report!");
     varBufferWrite(&script->globals, vm, VAR_NULL);
   }
 
