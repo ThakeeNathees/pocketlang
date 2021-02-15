@@ -3,6 +3,8 @@
  *  Licensed under: MIT License
  */
 
+#include <stdio.h>
+
 #include "var.h"
 #include "vm.h"
 
@@ -186,4 +188,30 @@ String* toString(MSVM* vm, Var v, bool recursive) {
   }
   UNREACHABLE();
   return NULL;
+}
+
+bool toBool(Var v) {
+  if (IS_BOOL(v)) return AS_BOOL(v);
+  if (IS_NULL(v)) return false;
+  if (IS_NUM(v)) {
+    return AS_NUM(v) != 0;
+  }
+
+  ASSERT(IS_OBJ(v), OOPS);
+  Object* o = AS_OBJ(v);
+  switch (o->type) {
+    case OBJ_STRING: return ((String*)o)->length != 0;
+
+    case OBJ_LIST:   return ((List*)o)->elements.count != 0;
+    case OBJ_MAP:    TODO;
+    case OBJ_RANGE:  TODO; // Nout sure.
+    case OBJ_SCRIPT: // [[FALLTHROUGH]]
+    case OBJ_FUNC:
+    case OBJ_USER:
+      return true;
+    default:
+      UNREACHABLE();
+  }
+
+  return true;
 }

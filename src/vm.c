@@ -14,7 +14,7 @@
 #define INITIAL_CALL_FRAMES 4
 
 // Minimum size of the stack.
-#define MIN_STACK_SIZE 16
+#define MIN_STACK_SIZE 128
 
 void* vmRealloc(MSVM* self, void* memory, size_t old_size, size_t new_size) {
 
@@ -57,6 +57,8 @@ void vmPopTempRef(MSVM* self) {
  * RUNTIME                                                                    *
  *****************************************************************************/
 
+#ifdef DEBUG
+#include <stdio.h>
 // TODO: A function for quick debug. REMOVE.
 void _printStackTop(MSVM* vm) {
   if (vm->sp != vm->stack) {
@@ -64,6 +66,7 @@ void _printStackTop(MSVM* vm) {
     printf("%s\n", toString(vm, v, false)->data);
   }
 }
+#endif
 
 static void ensureStackSize(MSVM* vm, int size) {
   if (vm->stack_size > size) return;
@@ -377,8 +380,24 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 
 
     OPCODE(JUMP_IF):
+    {
+      Var cond = POP();
+      int offset = READ_SHORT();
+      if (toBool(cond)) {
+        ip += offset;
+      }
+      DISPATCH();
+    }
+
     OPCODE(JUMP_IF_NOT):
-      TODO;
+    {
+      Var cond = POP();
+      int offset = READ_SHORT();
+      if (!toBool(cond)) {
+        ip += offset;
+      }
+      DISPATCH();
+    }
 
     OPCODE(RETURN):
     {
@@ -419,6 +438,12 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     }
 
     OPCODE(NOT):
+    {
+      Var val = POP();
+      PUSH(VAR_BOOL(!toBool(val)));
+      DISPATCH();
+    }
+
     OPCODE(BIT_NOT):
       TODO;
 
@@ -452,9 +477,23 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(OR):
     OPCODE(EQEQ):
     OPCODE(NOTEQ):
+      TODO;
+
     OPCODE(LT):
+    {
+      PUSH(VAR_BOOL(varLesser(POP(), POP())));
+      DISPATCH();
+    }
+
     OPCODE(LTEQ):
+      TODO;
+
     OPCODE(GT):
+    {
+      PUSH(VAR_BOOL(varGreater(POP(), POP())));
+      DISPATCH();
+    }
+
     OPCODE(GTEQ):
       TODO;
 

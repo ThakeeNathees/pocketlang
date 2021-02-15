@@ -5,6 +5,9 @@
 
 #include "compiler.h"
 
+#include <stdio.h>
+#include <string.h>
+
 #include "core.h"
 #include "types/name_table.h"
 #include "types/gen/byte_buffer.h"
@@ -481,10 +484,10 @@ static void eatNumber(Parser* parser) {
 
 // Read and ignore chars till it reach new line or EOF.
 static void skipLineComment(Parser* parser) {
-  char c = eatChar(parser);
-
-  while (c != '\n' && c != '\0') {
-    c = eatChar(parser);
+  char c;
+  while ((c = peekChar(parser)) != '\0') {
+    eatChar(parser);
+    if (c == '\n') return;
   }
 }
 
@@ -680,6 +683,30 @@ static bool match(Parser* self, TokenType expected) {
   return true;
 }
 
+// Consume the the current token and if it's not [expected] emits error log
+// and continue parsing for more error logs.
+static void consume(Parser* self, TokenType expected, const char* err_msg) {
+  //ASSERT(expected != TK_LINE, "Can't match TK_LINE.");
+  //matchLine(self);
+
+  lexToken(self);
+  if (self->previous.type != expected) {
+    parseError(self, "%s", err_msg);
+
+    // If the next token is expected discard the current to minimize
+    // cascaded errors and continue parsing.
+    if (peek(self) == expected) {
+      lexToken(self);
+
+    } else {
+      // Skip the current line, to prevent multiple caseaded errors on the
+      // same line.
+      skipLineComment(self);
+    }
+  }
+}
+
+
 // Match one or more lines and return true if there any.
 static bool matchLine(Parser* parser) {
   if (peek(parser) != TK_LINE) return false;
@@ -688,17 +715,20 @@ static bool matchLine(Parser* parser) {
   return true;
 }
 
-// Match semi collon or multiple new lines.
-static void consumeEndStatement(Parser* parser) {
-  bool consumed = false;
-
-  // Semi collon must be on the same line.
-  if (peek(parser) == TK_SEMICOLLON) {
-    match(parser, TK_SEMICOLLON);
-    consumed = true;
+// Match semi collon, multiple new lines or peek 'end' keyword.
+static bool matchEndStatement(Parser* parser) {
+  if (match(parser, TK_SEMICOLLON)) {
+    skipNewLines(parser);
+    return true;
   }
-  if (matchLine(parser)) consumed = true;
-  if (!consumed && peek(parser) != TK_EOF) {
+
+  if (matchLine(parser) || peek(parser) == TK_END || peek(parser) == TK_EOF)
+    return true;
+}
+
+// Consume semi collon, multiple new lines or peek 'end' keyword.
+static void consumeEndStatement(Parser* parser) {
+  if (!matchEndStatement(parser)) {
     parseError(parser, "Expected statement end with newline or ';'.");
   }
 }
@@ -719,22 +749,14 @@ static void consumeStartBlock(Parser* parser) {
   }
 }
 
-// Consume the the current token and if it's not [expected] emits error log
-// and continue parsing for more error logs.
-static void consume(Parser* self, TokenType expected, const char* err_msg) {
-  //ASSERT(expected != TK_LINE, "Can't match TK_LINE.");
-  //matchLine(self);
-
-  lexToken(self);
-  if (self->previous.type != expected) {
-    parseError(self, "%s", err_msg);
-
-    // If the next token is expected discard the current to minimize
-    // cascaded errors and continue parsing.
-    if (peek(self) == expected) {
-      lexToken(self);
-    }
-  }
+// Returns a optional compound assignment.
+static bool matchAssignment(Parser* parser) {
+  if (match(parser, TK_EQ)) return true;
+  if (match(parser, TK_PLUSEQ)) return true;
+  if (match(parser, TK_MINUSEQ)) return true;
+  if (match(parser, TK_STAREQ)) return true;
+  if (match(parser, TK_DIVEQ)) return true;
+  return false;
 }
 
 /*****************************************************************************
@@ -932,7 +954,7 @@ static GrammarRule* getRule(TokenType type) {
 }
 
 // Emit variable store.
-static void _emitStoreVariable(Compiler* compiler, int index, bool global) {
+static void emitStoreVariable(Compiler* compiler, int index, bool global) {
   if (global) {
     emitOpcode(compiler, OP_STORE_GLOBAL);
     emitShort(compiler, index);
@@ -947,7 +969,7 @@ static void _emitStoreVariable(Compiler* compiler, int index, bool global) {
   }
 }
 
-static void _emitPushVariable(Compiler* compiler, int index, bool global) {
+static void emitPushVariable(Compiler* compiler, int index, bool global) {
   if (global) {
     emitOpcode(compiler, OP_PUSH_GLOBAL);
     emitShort(compiler, index);
@@ -977,45 +999,56 @@ static void exprFunc(Compiler* compiler, bool can_assign) {
 
 // Local/global variables, script/native/builtin functions name.
 static void exprName(Compiler* compiler, bool can_assign) {
-  const char* name_start = compiler->parser.previous.start;
-  int name_len = compiler->parser.previous.length;
-  int name_line = compiler->parser.previous.line;
+
+  Parser* parser = &compiler->parser;
+
+  const char* name_start = parser->previous.start;
+  int name_len = parser->previous.length;
+  int name_line = parser->previous.line;
   NameSearchResult result = compilerSearchName(compiler, name_start, name_len);
 
   if (result.type == NAME_NOT_DEFINED) {
 
-    if (can_assign && match(&compiler->parser, TK_EQ)) {
+    if (can_assign && match(parser, TK_EQ)) {
       int index = compilerAddVariable(compiler, name_start, name_len,
                                       name_line);
       compileExpression(compiler);
-      _emitStoreVariable(compiler, index, compiler->scope_depth == DEPTH_GLOBAL);
+      emitStoreVariable(compiler, index, compiler->scope_depth == DEPTH_GLOBAL);
       return;
     } else {
-      parseError(&compiler->parser, "Name \"%.*s\" is not defined.", name_len,
-                 name_start);
+      parseError(parser, "Name \"%.*s\" is not defined.", name_len, name_start);
     }
   }
 
   // TODO: can_assign and += -= etc.
-
   switch (result.type) {
     case NAME_LOCAL_VAR:
-      if (can_assign && match(&compiler->parser, TK_EQ)) {
-        compileExpression(compiler);
-        _emitStoreVariable(compiler, result.index, false);
-      } else {
-        _emitPushVariable(compiler, result.index, false);
-      }
-      return;
-
     case NAME_GLOBAL_VAR:
-      if (can_assign && match(&compiler->parser, TK_EQ)) {
-        compileExpression(compiler);
-        _emitStoreVariable(compiler, result.index, true);
-        
+
+      if (can_assign && matchAssignment(parser)) {
+        TokenType assignment = parser->previous.type;
+        if (assignment != TK_EQ) {
+          emitPushVariable(compiler, result.index, result.type == NAME_GLOBAL_VAR);
+          compileExpression(compiler);
+
+          switch (assignment) {
+            case TK_PLUSEQ: emitOpcode(compiler, OP_ADD); break;
+            case TK_MINUSEQ: emitOpcode(compiler, OP_SUBTRACT); break;
+            case TK_STAREQ: emitOpcode(compiler, OP_MULTIPLY); break;
+            case TK_DIVEQ: emitOpcode(compiler, OP_DIVIDE); break;
+            default:
+              UNREACHABLE();
+              break;
+
+          }
+        } else {
+          compileExpression(compiler);
+        }
+
+        emitStoreVariable(compiler, result.index, result.type == NAME_GLOBAL_VAR);
+
       } else {
-        emitOpcode(compiler, OP_PUSH_GLOBAL);
-        emitShort(compiler, result.index);
+        emitPushVariable(compiler, result.index, result.type == NAME_GLOBAL_VAR);
       }
       return;
 
@@ -1345,7 +1378,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   vmPushTempRef(compiler->vm, &func->_super);
   functionBufferWrite(&compiler->script->functions, compiler->vm, func);
   vmPopTempRef(compiler->vm);
-  int fn_index = compiler->script->functions.count - 1;
+  int fn_index = (int)compiler->script->functions.count - 1;
 
   Func curr_func;
   curr_func.outer_func = compiler->func;
@@ -1574,7 +1607,7 @@ static void compileStatement(Compiler* compiler) {
       return;
     }
 
-    if (match(parser, TK_SEMICOLLON)|| match(parser, TK_LINE)) {
+    if (matchEndStatement(parser)) {
       emitOpcode(compiler, OP_PUSH_NULL);
       emitOpcode(compiler, OP_RETURN);
     } else {

@@ -303,4 +303,7 @@ bool isVauesSame(Var v1, Var v2);
 // It's an internal use (or may be I could make a wrapper around).
 String* toString(MSVM* vm, Var v, bool _recursive);
 
+// Returns the truthy value of the var.
+bool toBool(Var v);
+
 #endif // VAR_H

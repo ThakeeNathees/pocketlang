@@ -6,6 +6,8 @@
 #include "core.h"
 
 #include <math.h>
+#include <time.h>
+
 #include "vm.h"
 
 typedef struct {
@@ -50,7 +52,7 @@ int findBuiltinFunction(const char* name, int length) {
 // Validators /////////////////////////////////////////////////////////////////
 
 // Check if a numeric value bool/number and set [value].
-static bool isNumeric(Var var, double* value) {
+static inline bool isNumeric(Var var, double* value) {
   if (IS_BOOL(var)) {
     *value = AS_BOOL(var);
     return true;
@@ -170,6 +172,13 @@ void coreImport(MSVM* vm) {
   }
 }
 
+// TODO: Temp function to benchmark.
+void coreClock(MSVM* vm) {
+  RET(VAR_NUM((double)clock() / CLOCKS_PER_SEC));
+}
+
+
+
 void initializeCore(MSVM* vm) {
 
   int i = 0; //< Iterate through builtins.
@@ -190,6 +199,9 @@ void initializeCore(MSVM* vm) {
   initializeBuiltinFN(vm, &builtins[i++], "to_string",   1, coreToString);
   initializeBuiltinFN(vm, &builtins[i++], "print",      -1, corePrint);
   initializeBuiltinFN(vm, &builtins[i++], "import",      1, coreImport);
+
+  // FIXME: move this. temp for benchmarking.
+  initializeBuiltinFN(vm, &builtins[i++], "clock",       0, coreClock);
 
   // Sentinal to mark the end of the array.
   initializeBuiltinFN(vm, &builtins[i], NULL, 0, NULL);
@@ -213,7 +225,15 @@ Var varAdd(MSVM* vm, Var v1, Var v2) {
 }
 
 Var varSubtract(MSVM* vm, Var v1, Var v2) {
-  TODO;
+  double d1, d2;
+  if (isNumeric(v1, &d1)) {
+    if (validateNumeric(vm, v2, &d2, "Right operand")) {
+      return VAR_NUM(d1 - d2);
+    }
+    return VAR_NULL;
+  }
+
+  TODO; //string addition/ array addition etc.
   return VAR_NULL;
 }
 
@@ -234,6 +254,27 @@ Var varMultiply(MSVM* vm, Var v1, Var v2) {
 Var varDivide(MSVM* vm, Var v1, Var v2) {
   TODO;
   return VAR_NULL;
+}
+
+bool varGreater(Var v1, Var v2) {
+  
+  double d1, d2;
+  if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
+    return d1 > d2;
+  }
+
+  TODO;
+  return false;
+}
+
+bool varLesser(Var v1, Var v2) {
+  double d1, d2;
+  if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
+    return d1 < d2;
+  }
+
+  TODO;
+  return false;
 }
 
 bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value) {

@@ -63,6 +63,19 @@ MSLoadScriptResult loadScript(MSVM* vm, const char* path) {
 
 int main(int argc, char** argv) {
 
+  const char* notice =
+    "MiniScript " MS_VERSION_STRING " (https://github.com/ThakeeNathees/miniscript/)\n"
+    "Copyright(c) 2020 - 2021 ThakeeNathees.\n"
+    "Free and open source software under the terms of the MIT license.\n";
+  const char* help = "Usage: miniscript <source_path>\n";
+
+  if (argc < 2) {
+    printf("%s\n%s", notice, help);
+    return 0;
+  }
+
+  const char* source_path = argv[1];
+
   MSConfiguration config;
   config.error_fn = errorPrint;
   config.write_fn = writeFunction;
@@ -70,19 +83,7 @@ int main(int argc, char** argv) {
   config.load_script_done_fn = loadScriptDone;
 
   MSVM* vm = msNewVM(&config);
-  MSInterpretResult result = msInterpret(vm, "build/test.ms");
+  MSInterpretResult result = msInterpret(vm, source_path);
 
-  //Script* script = compileSource(vm, "../some/path/file.ms");
-  //vmRunScript(vm, script);
-  //
-  //ByteBuffer* bytes = &script->body->fn->opcodes;
-  //for (int i = 0; i < bytes->count; i++) {
-  //  const char* op = "(???)";
-  //  if (bytes->data[i] <= (int)OP_END) {
-  //    op = opnames[bytes->data[i]];
-  //  }
-  //  printf("%s    %i\n", op, bytes->data[i]);
-  //}
-
-  return 0;
+  return result;
 }

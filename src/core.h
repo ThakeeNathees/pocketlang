@@ -24,6 +24,9 @@ Var varSubtract(MSVM* vm, Var v1, Var v2);
 Var varMultiply(MSVM* vm, Var v1, Var v2);
 Var varDivide(MSVM* vm, Var v1, Var v2);
 
+bool varGreater(Var v1, Var v2);
+bool varLesser(Var v1, Var v2);
+
 // Functions //////////////////////////////////////////////////////////////////
 
 // Parameter [iterator] should be VAR_NULL before starting the iteration.
