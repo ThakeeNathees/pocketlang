@@ -83,41 +83,47 @@ Script* newScript(MSVM* vm) {
   Script* script = ALLOCATE(vm, Script);
   varInitObject(&script->_super, vm, OBJ_SCRIPT);
 
+  script->name = NULL;
+  script->name_length = 0;
+  script->path = NULL;
+
   varBufferInit(&script->globals);
   nameTableInit(&script->global_names);
-
   varBufferInit(&script->literals);
-
-  vmPushTempRef(vm, &script->_super);
-  script->body = newFunction(vm, "@(ScriptLevel)", script, false);
-  vmPopTempRef(vm);
-
   functionBufferInit(&script->functions);
   nameTableInit(&script->function_names);
-
   stringBufferInit(&script->names);
+
+  vmPushTempRef(vm, &script->_super);
+  const char* fn_name = "@(ScriptLevel)";
+  script->body = newFunction(vm, fn_name, (int)strlen(fn_name), script, false);
+  vmPopTempRef(vm);
 
   return script;
 }
 
-Function* newFunction(MSVM* vm, const char* name, Script* owner,
+Function* newFunction(MSVM* vm, const char* name, int length, Script* owner,
                       bool is_native) {
 
   Function* func = ALLOCATE(vm, Function);
   varInitObject(&func->_super, vm, OBJ_FUNC);
 
-  func->name = name;
+  // Add the name in the script's function buffer.
+  String* name_ptr;
+  vmPushTempRef(vm, &func->_super);
+  functionBufferWrite(&owner->functions, vm, func);
+  nameTableAdd(&owner->function_names, vm, name, length, &name_ptr);
+  vmPopTempRef(vm);
+
+  func->name = name_ptr->data;
   func->owner = owner;
   func->arity = -2; // -1 means variadic args.
-
   func->is_native = is_native;
 
   if (is_native) {
     func->native = NULL;
   } else {
-    vmPushTempRef(vm, &func->_super);
     Fn* fn = ALLOCATE(vm, Fn);
-    vmPopTempRef(vm);
 
     byteBufferInit(&fn->opcodes);
     intBufferInit(&fn->oplines);
@@ -128,6 +134,27 @@ Function* newFunction(MSVM* vm, const char* name, Script* owner,
 }
 
 // Utility functions //////////////////////////////////////////////////////////
+
+const char* varTypeName(Var v) {
+  if (IS_NULL(v)) return "null";
+  if (IS_BOOL(v)) return "bool";
+  if (IS_NUM(v)) return "number";
+
+  ASSERT(IS_OBJ(v), OOPS);
+  Object* obj = AS_OBJ(v);
+  switch (obj->type) {
+    case OBJ_STRING:  return "String";
+    case OBJ_LIST:    return "List";
+    case OBJ_MAP:     return "Map";
+    case OBJ_RANGE:   return "Range";
+    case OBJ_SCRIPT:  return "Script";
+    case OBJ_FUNC:    return "Func";
+    case OBJ_USER:    return "UserObj";
+      TODO;
+    default:
+      UNREACHABLE();
+  }
+}
 
 bool isVauesSame(Var v1, Var v2) {
 #if VAR_NAN_TAGGING
@@ -176,7 +203,7 @@ String* toString(MSVM* vm, Var v, bool recursive) {
         const char* name = ((Function*)obj)->name;
         int length = (int)strlen(name); // TODO: Assert length.
         char buff[TO_STRING_BUFF_SIZE];
-        memcpy(buff, "[func:", 6);
+        memcpy(buff, "[Func:", 6);
         memcpy(buff + 6, name, length);
         buff[6 + length] = ']';
         return newString(vm, buff, 6 + length + 1);

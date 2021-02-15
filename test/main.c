@@ -5,19 +5,9 @@
 
 #include <stdio.h>
 
-//#define CLOGGER_IMPLEMENT
-//#include "clogger.h"
-
 #include "miniscript.h"
 
 #include <stdlib.h>
-
-static const char* opnames[] = {
-  #define OPCODE(name, params, stack) #name,
-  #include "../src/opcodes.h"
-  #undef OPCODE
-  NULL,
-};
 
 void errorPrint(MSVM* vm, MSErrorType type, const char* file, int line,
                    const char* message) {

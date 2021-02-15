@@ -134,12 +134,21 @@ OPCODE(RETURN, 0, -1)
 // param: 2 byte attrib name index.
 OPCODE(GET_ATTRIB, 2, 0)
 
+// Get attribute to perform assignment operation before store it, so don't
+// pop the var.
+// param: 2 byte attrib name index.
+OPCODE(GET_ATTRIB_AOP, 2, 1)
+
 // Pop var and value update the attribute push result.
 // param: 2 byte attrib name index.
 OPCODE(SET_ATTRIB, 2, -1)
 
 // Pop var, key, get value and push the result.
 OPCODE(GET_SUBSCRIPT, 0, -1)
+
+// Get subscript to perform assignment operation before store it, so it won't 
+// pop the var and the key.
+OPCODE(GET_SUBSCRIPT_AOP, 0, 1)
 
 // Pop var, key, value set and push value back.
 OPCODE(SET_SUBSCRIPT, 0, -2)

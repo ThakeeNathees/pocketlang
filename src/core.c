@@ -49,7 +49,9 @@ int findBuiltinFunction(const char* name, int length) {
   return -1;
 }
 
-// Validators /////////////////////////////////////////////////////////////////
+/*****************************************************************************/
+/* VALIDATORS                                                                */
+/*****************************************************************************/
 
 // Check if a numeric value bool/number and set [value].
 static inline bool isNumeric(Var var, double* value) {
@@ -65,7 +67,7 @@ static inline bool isNumeric(Var var, double* value) {
 }
 
 // Check if [var] is bool/number. If not set error and return false.
-static bool validateNumeric(MSVM* vm, Var var, double* value,
+static inline bool validateNumeric(MSVM* vm, Var var, double* value,
   const char* name) {
   if (isNumeric(var, value)) return true;
   msSetRuntimeError(vm, "%s must be a numeric value.", name);
@@ -73,7 +75,7 @@ static bool validateNumeric(MSVM* vm, Var var, double* value,
 }
 
 // Check if [var] is integer. If not set error and return false.
-static bool validateIngeger(MSVM* vm, Var var, int32_t* value,
+static inline bool validateIngeger(MSVM* vm, Var var, int32_t* value,
   const char* name) {
   double number;
   if (isNumeric(var, &number)) {
@@ -88,7 +90,7 @@ static bool validateIngeger(MSVM* vm, Var var, int32_t* value,
   return false;
 }
 
-static bool validateIndex(MSVM* vm, int32_t index, int32_t size,
+static inline bool validateIndex(MSVM* vm, int32_t index, int32_t size,
   const char* container) {
   if (index < 0 || size <= index) {
     msSetRuntimeError(vm, "%s index out of range.", container);
@@ -97,7 +99,9 @@ static bool validateIndex(MSVM* vm, int32_t index, int32_t size,
   return true;
 }
 
-// Builtin Functions //////////////////////////////////////////////////////////
+/*****************************************************************************/
+/* BUILTIN FUNCTIONS                                                         */
+/*****************************************************************************/
 
 // Argument getter (1 based).
 #define ARG(n) vm->rbp[n]
@@ -106,7 +110,11 @@ static bool validateIndex(MSVM* vm, int32_t index, int32_t size,
 #define ARGC ((int)(vm->sp - vm->rbp) - 1)
 
 // Set return value.
-#define RET(value) vm->rbp[0] = value
+#define RET(value)      \
+  do {                  \
+    vm->rbp[0] = value; \
+    return;             \
+  } while (false)
 
 Function* getBuiltinFunction(int index) {
   ASSERT(index < BUILTIN_COUNT, "Index out of bound.");
@@ -165,20 +173,44 @@ void corePrint(MSVM* vm) {
 
 void coreImport(MSVM* vm) {
   Var arg1 = vm->rbp[1];
-  if (IS_OBJ(arg1) && AS_OBJ(arg1)->type == OBJ_STRING) {
-    TODO;
-  } else {
+  if (!IS_OBJ(arg1) || !AS_OBJ(arg1)->type == OBJ_STRING) {
     msSetRuntimeError(vm, "Expected a String argument.");
   }
+
+  String* path = (String*)AS_OBJ(arg1);
+  if (path->length > 4 && strncmp(path->data, "std:", 4) == 0) {
+    Script* scr = vmGetStdScript(vm, path->data + 4);
+    ASSERT(scr != NULL, OOPS);
+    RET(VAR_OBJ(scr));
+  }
+
+  TODO;
 }
 
-// TODO: Temp function to benchmark.
-void coreClock(MSVM* vm) {
+/*****************************************************************************/
+/* STD METHODS                                                               */
+/*****************************************************************************/
+
+// std:list Methods.
+void stdListSort(MSVM* vm) {
+  Var list = ARG(1);
+  if (!IS_OBJ(list) || AS_OBJ(list)->type != OBJ_LIST) {
+    msSetRuntimeError(vm, "Expected a list at argument 1.");
+  }
+
+  // TODO: sort.
+  
+  RET(list);
+}
+
+// std:os Methods.
+void stdOsClock(MSVM* vm) {
   RET(VAR_NUM((double)clock() / CLOCKS_PER_SEC));
 }
 
-
-
+/*****************************************************************************/
+/* CORE INITIALIZATION                                                       */
+/*****************************************************************************/
 void initializeCore(MSVM* vm) {
 
   int i = 0; //< Iterate through builtins.
@@ -200,15 +232,43 @@ void initializeCore(MSVM* vm) {
   initializeBuiltinFN(vm, &builtins[i++], "print",      -1, corePrint);
   initializeBuiltinFN(vm, &builtins[i++], "import",      1, coreImport);
 
-  // FIXME: move this. temp for benchmarking.
-  initializeBuiltinFN(vm, &builtins[i++], "clock",       0, coreClock);
-
   // Sentinal to mark the end of the array.
   initializeBuiltinFN(vm, &builtins[i], NULL, 0, NULL);
 
+  // Make STD scripts.
+  Script* std;  // A temporary pointer to the current std script.
+  Function* fn; // A temporary pointer to the allocated function function.  
+
+#define STD_NEW_SCRIPT(_name)              \
+  do {                                     \
+    std = newScript(vm);                   \
+    std->name = _name;                     \
+    std->name_length = (int)strlen(_name); \
+    vmPushTempRef(vm, &std->_super);       \
+    vmAddStdScript(vm, std);               \
+    vmPopTempRef(vm);                      \
+  } while (false)
+
+#define STD_ADD_FUNCTION(_name, fptr, _arity)                   \
+  do {                                                          \
+    fn = newFunction(vm, _name, (int)strlen(_name), std, true); \
+    fn->native = fptr;                                          \
+    fn->arity = _arity;                                         \
+  } while (false)
+
+  // std:list script.
+  STD_NEW_SCRIPT("std:list");
+  STD_ADD_FUNCTION("sort", stdListSort, 1);
+
+
+  // std:os script.
+  STD_NEW_SCRIPT("std:os");
+  STD_ADD_FUNCTION("clock", stdOsClock, 0); // TODO: rename coreClock.
 }
 
-// Operators //////////////////////////////////////////////////////////////////
+/*****************************************************************************/
+/* OPERATORS                                                                 */
+/*****************************************************************************/
 
 Var varAdd(MSVM* vm, Var v1, Var v2) {
 
@@ -233,7 +293,9 @@ Var varSubtract(MSVM* vm, Var v1, Var v2) {
     return VAR_NULL;
   }
 
-  TODO; //string addition/ array addition etc.
+  msSetRuntimeError(vm, "Unsupported operand types for operator '-' "
+    "%s and %s", varTypeName(v1), varTypeName(v2));
+
   return VAR_NULL;
 }
 
@@ -247,17 +309,26 @@ Var varMultiply(MSVM* vm, Var v1, Var v2) {
     return VAR_NULL;
   }
 
-  TODO;
+  msSetRuntimeError(vm, "Unsupported operand types for operator '*' "
+    "%s and %s", varTypeName(v1), varTypeName(v2));
   return VAR_NULL;
 }
 
 Var varDivide(MSVM* vm, Var v1, Var v2) {
-  TODO;
+  double d1, d2;
+  if (isNumeric(v1, &d1)) {
+    if (validateNumeric(vm, v2, &d2, "Right operand")) {
+      return VAR_NUM(d1 / d2);
+    }
+    return VAR_NULL;
+  }
+
+  msSetRuntimeError(vm, "Unsupported operand types for operator '/' "
+    "%s and %s", varTypeName(v1), varTypeName(v2));
   return VAR_NULL;
 }
 
-bool varGreater(Var v1, Var v2) {
-  
+bool varGreater(MSVM* vm, Var v1, Var v2) {
   double d1, d2;
   if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
     return d1 > d2;
@@ -267,7 +338,7 @@ bool varGreater(Var v1, Var v2) {
   return false;
 }
 
-bool varLesser(Var v1, Var v2) {
+bool varLesser(MSVM* vm, Var v1, Var v2) {
   double d1, d2;
   if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
     return d1 < d2;
@@ -275,6 +346,120 @@ bool varLesser(Var v1, Var v2) {
 
   TODO;
   return false;
+}
+
+Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
+  if (!IS_OBJ(on)) {
+    msSetRuntimeError(vm, "%s type is not subscriptable.", varTypeName(on));
+    return VAR_NULL;
+  }
+
+  Object* obj = (Object*)AS_OBJ(on);
+  switch (obj->type) {
+    case OBJ_STRING:
+    case OBJ_LIST:
+    case OBJ_MAP:
+    case OBJ_RANGE:
+      TODO;
+
+    case OBJ_SCRIPT: {
+      Script* scr = (Script*)obj;
+
+      // Search in functions.
+      int index = nameTableFind(&scr->function_names, attrib->data,
+                                attrib->length);
+      if (index != -1) {
+        // TODO: Assert index (not a runtime error).
+        return VAR_OBJ(scr->functions.data[index]);
+      }
+
+      TODO; // Search in global variables.
+    }
+
+    case OBJ_FUNC:
+    case OBJ_USER:
+      TODO;
+
+    default:
+      UNREACHABLE();
+  }
+
+  UNREACHABLE();
+  return VAR_NULL;
+}
+
+void varSetAttrib(MSVM* vm, Var on, String* name, Var value) {
+  TODO;
+}
+
+Var varGetSubscript(MSVM* vm, Var on, Var key) {
+  if (!IS_OBJ(on)) {
+    msSetRuntimeError(vm, "%s type is not subscriptable.", varTypeName(on));
+    return VAR_NULL;
+  }
+
+  Object* obj = AS_OBJ(on);
+  switch (obj->type) {
+    case OBJ_STRING: TODO;
+
+    case OBJ_LIST:
+    {
+      int32_t index;
+      VarBuffer* elems = &((List*)obj)->elements;
+      if (!validateIngeger(vm, key, &index, "List index")) {
+        return VAR_NULL;
+      }
+      if (!validateIndex(vm, index, (int)elems->count, "List")) {
+        return VAR_NULL;
+      }
+      return elems->data[index];
+    }
+
+    case OBJ_MAP:
+    case OBJ_RANGE:
+    case OBJ_SCRIPT:
+    case OBJ_FUNC:
+    case OBJ_USER:
+      TODO;
+    default:
+      UNREACHABLE();
+  }
+
+  UNREACHABLE();
+  return VAR_NULL;
+}
+
+void varsetSubscript(MSVM* vm, Var on, Var key, Var value) {
+  if (!IS_OBJ(on)) {
+    msSetRuntimeError(vm, "%s type is not subscriptable.", varTypeName(on));
+    return;
+  }
+
+  Object* obj = AS_OBJ(on);
+  switch (obj->type) {
+    case OBJ_STRING: TODO;
+
+    case OBJ_LIST:
+    {
+      int32_t index;
+      VarBuffer* elems = &((List*)obj)->elements;
+      if (!validateIngeger(vm, key, &index, "List index")) return;
+      if (!validateIndex(vm, index, (int)elems->count, "List")) return;
+      elems->data[index] = value;
+      return;
+    }
+
+    case OBJ_MAP:
+    case OBJ_RANGE:
+    case OBJ_SCRIPT:
+    case OBJ_FUNC:
+    case OBJ_USER:
+      TODO;
+    default:
+      UNREACHABLE();
+  }
+
+  UNREACHABLE();
 }
 
 bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value) {
@@ -355,6 +540,6 @@ bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value) {
       UNREACHABLE();
   }
 
-  TODO;
+  UNREACHABLE();
   return false;
 }

@@ -49,6 +49,12 @@ struct MSVM {
   // Current compiler reference to mark it's heap allocated objects.
   Compiler* compiler;
 
+  // Std scripts array.
+  Script* std_scripts[MAX_SCRIPT_CACHE];
+
+  // Std scripts count.
+  int std_count;
+
   // Execution variables ////////////////////////////////////////////////////
 
   // Compiled script cache.
@@ -104,6 +110,14 @@ void vmPushTempRef(MSVM* self, Object* obj);
 
 // Pop the top most object from temporary reference stack.
 void vmPopTempRef(MSVM* self);
+
+// Add a std script to vm when initializing core.
+void vmAddStdScript(MSVM* self, Script* script);
+
+// Returns the std script with the name [name]. Note that the name shouldn't
+// be start with "std:" but the actual name of the script. If not found
+// returns NULL.
+Script* vmGetStdScript(MSVM* self, const char* name);
 
 // Runs the script and return result.
 MSInterpretResult vmRunScript(MSVM* vm, Script* script);

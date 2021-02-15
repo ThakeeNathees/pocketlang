@@ -15,14 +15,17 @@ void nameTableClear(NameTable* self, MSVM* vm) {
   stringBufferClear(self, vm);
 }
 
-int nameTableAdd(NameTable* self, MSVM* vm, const char* name, size_t length) {
+int nameTableAdd(NameTable* self, MSVM* vm, const char* name, size_t length,
+                 String** ptr) {
   String* string = newString(vm, name, (uint32_t)length);
 
   vmPushTempRef(vm, &string->_super);
   stringBufferWrite(self, vm, string);
   vmPopTempRef(vm);
 
-  return (int)(self->count - 1);
+  int index = (int)(self->count - 1);
+  if (ptr != NULL) *ptr = self->data[index];
+  return index;
 }
 
 const char* nameTableGet(NameTable* self, int index) {

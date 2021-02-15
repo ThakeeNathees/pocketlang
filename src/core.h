@@ -24,8 +24,14 @@ Var varSubtract(MSVM* vm, Var v1, Var v2);
 Var varMultiply(MSVM* vm, Var v1, Var v2);
 Var varDivide(MSVM* vm, Var v1, Var v2);
 
-bool varGreater(Var v1, Var v2);
-bool varLesser(Var v1, Var v2);
+bool varGreater(MSVM* vm, Var v1, Var v2);
+bool varLesser(MSVM* vm, Var v1, Var v2);
+
+Var varGetAttrib(MSVM* vm, Var on, String* attrib);
+void varSetAttrib(MSVM* vm, Var on, String* name, Var value);
+
+Var varGetSubscript(MSVM* vm, Var on, Var key);
+void varsetSubscript(MSVM* vm, Var on, Var key, Var value);
 
 // Functions //////////////////////////////////////////////////////////////////
 

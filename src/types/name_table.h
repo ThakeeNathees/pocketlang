@@ -19,7 +19,9 @@ void nameTableInit(NameTable* self);
 void nameTableClear(NameTable* self, MSVM* vm);
 
 // Add a name to the name table and return the index of the name in the table.
-int nameTableAdd(NameTable* self, MSVM* vm, const char* name, size_t length);
+// Parameter [ptr] will updated with the string entry if it's not NULL.
+int nameTableAdd(NameTable* self, MSVM* vm, const char* name, size_t length,
+	               String** ptr);
 
 // Return name at index.
 const char* nameTableGet(NameTable* self, int index);

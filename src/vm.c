@@ -53,6 +53,22 @@ void vmPopTempRef(MSVM* self) {
   self->temp_reference_count--;
 }
 
+void vmAddStdScript(MSVM* self, Script* script) {
+  ASSERT(self->std_count < MAX_SCRIPT_CACHE, OOPS);
+  self->std_scripts[self->std_count++] = script;
+}
+
+Script* vmGetStdScript(MSVM* self, const char* name) {
+  for (int i = 0; i < self->std_count; i++) {
+    Script* scr = self->std_scripts[i];
+    // +4 to skip "std:".
+    if (strcmp(name, scr->name + 4) == 0) {
+      return scr;
+    }
+  }
+  return NULL;
+}
+
 /******************************************************************************
  * RUNTIME                                                                    *
  *****************************************************************************/
@@ -422,10 +438,54 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     }
 
     OPCODE(GET_ATTRIB):
+    {
+      Var on = POP();
+      String* name = script->names.data[READ_SHORT()];
+      PUSH(varGetAttrib(vm, on, name));
+      DISPATCH();
+    }
+
+    OPCODE(GET_ATTRIB_AOP):
+    {
+      Var on = *(vm->sp - 1);
+      String* name = script->names.data[READ_SHORT()];
+      PUSH(varGetAttrib(vm, on, name));
+      DISPATCH();
+    }
+
     OPCODE(SET_ATTRIB):
-    OPCODE(GET_SUBSCRIPT):
-    OPCODE(SET_SUBSCRIPT):
       TODO;
+
+    OPCODE(GET_SUBSCRIPT):
+    {
+      Var key = POP();
+      Var on = POP();
+      PUSH(varGetSubscript(vm, on, key));
+      CHECK_ERROR();
+      DISPATCH();
+    }
+
+    OPCODE(GET_SUBSCRIPT_AOP):
+    {
+      Var key = *(vm->sp - 1);
+      Var on = *(vm->sp - 2);
+      PUSH(varGetSubscript(vm, on, key));
+      CHECK_ERROR();
+      DISPATCH();
+    }
+
+    OPCODE(SET_SUBSCRIPT):
+    {
+      Var value = POP();
+      Var key = POP();
+      Var on = POP();
+
+      varsetSubscript(vm, on, key, value);
+      CHECK_ERROR();
+      PUSH(value);
+
+      DISPATCH();
+    }
 
     OPCODE(NEGATIVE):
     {
@@ -481,7 +541,8 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 
     OPCODE(LT):
     {
-      PUSH(VAR_BOOL(varLesser(POP(), POP())));
+      PUSH(VAR_BOOL(varLesser(vm, POP(), POP())));
+      CHECK_ERROR();
       DISPATCH();
     }
 
@@ -490,7 +551,8 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 
     OPCODE(GT):
     {
-      PUSH(VAR_BOOL(varGreater(POP(), POP())));
+      PUSH(VAR_BOOL(varGreater(vm, POP(), POP())));
+      CHECK_ERROR();
       DISPATCH();
     }
 

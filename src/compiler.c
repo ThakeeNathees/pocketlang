@@ -697,15 +697,9 @@ static void consume(Parser* self, TokenType expected, const char* err_msg) {
     // cascaded errors and continue parsing.
     if (peek(self) == expected) {
       lexToken(self);
-
-    } else {
-      // Skip the current line, to prevent multiple caseaded errors on the
-      // same line.
-      skipLineComment(self);
     }
   }
 }
-
 
 // Match one or more lines and return true if there any.
 static bool matchLine(Parser* parser) {
@@ -724,6 +718,7 @@ static bool matchEndStatement(Parser* parser) {
 
   if (matchLine(parser) || peek(parser) == TK_END || peek(parser) == TK_EOF)
     return true;
+  return false;
 }
 
 // Consume semi collon, multiple new lines or peek 'end' keyword.
@@ -888,7 +883,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_ERROR      */   NO_RULE,
   /* TK_EOF        */   NO_RULE,
   /* TK_LINE       */   NO_RULE,
-  /* TK_DOT        */ { exprAttrib,    NULL,             PREC_ATTRIB },
+  /* TK_DOT        */ { NULL,          exprAttrib,       PREC_ATTRIB },
   /* TK_DOTDOT     */ { NULL,          exprBinaryOp,     PREC_RANGE },
   /* TK_COMMA      */   NO_RULE,
   /* TK_COLLON     */   NO_RULE,
@@ -1159,9 +1154,10 @@ static void exprCall(Compiler* compiler, bool can_assign) {
 }
 
 static void exprAttrib(Compiler* compiler, bool can_assign) {
-  consume(&compiler->parser, TK_NAME, "Expected an attribute name after '.'.");
-  const char* name = compiler->parser.previous.start;
-  int length = compiler->parser.previous.length;
+  Parser* parser = &compiler->parser;
+  consume(parser, TK_NAME, "Expected an attribute name after '.'.");
+  const char* name = parser->previous.start;
+  int length = parser->previous.length;
 
   // Store the name in script's names.
   String* string = newString(compiler->vm, name, length);
@@ -1171,9 +1167,27 @@ static void exprAttrib(Compiler* compiler, bool can_assign) {
 
   int index = (int)compiler->script->names.count - 1;
 
-  // TODO: +=, -=, ...
-  if (can_assign && match(&compiler->parser, TK_EQ)) {
-    compileExpression(compiler);
+  if (can_assign && matchAssignment(parser)) {
+
+    TokenType assignment = parser->previous.type;
+    if (assignment != TK_EQ) {
+      emitOpcode(compiler, OP_GET_ATTRIB_AOP);
+      emitShort(compiler, index);
+      compileExpression(compiler);
+
+      switch (assignment) {
+        case TK_PLUSEQ: emitOpcode(compiler, OP_ADD); break;
+        case TK_MINUSEQ: emitOpcode(compiler, OP_SUBTRACT); break;
+        case TK_STAREQ: emitOpcode(compiler, OP_MULTIPLY); break;
+        case TK_DIVEQ: emitOpcode(compiler, OP_DIVIDE); break;
+        default:
+          UNREACHABLE();
+          break;
+      }
+    } else {
+      compileExpression(compiler);
+    }
+
     emitOpcode(compiler, OP_SET_ATTRIB);
     emitShort(compiler, index);
 
@@ -1183,7 +1197,37 @@ static void exprAttrib(Compiler* compiler, bool can_assign) {
   }
 }
 
-static void exprSubscript(Compiler* compiler, bool can_assign) { TODO; }
+static void exprSubscript(Compiler* compiler, bool can_assign) {
+  Parser* parser = &compiler->parser;
+  compileExpression(compiler);
+  consume(parser, TK_RBRACKET, "Expected ']' after subscription ends.");
+
+  if (can_assign && matchAssignment(parser)) {
+
+    TokenType assignment = parser->previous.type;
+    if (assignment != TK_EQ) {
+      emitOpcode(compiler, OP_GET_SUBSCRIPT_AOP);
+      compileExpression(compiler);
+
+      switch (assignment) {
+        case TK_PLUSEQ: emitOpcode(compiler, OP_ADD); break;
+        case TK_MINUSEQ: emitOpcode(compiler, OP_SUBTRACT); break;
+        case TK_STAREQ: emitOpcode(compiler, OP_MULTIPLY); break;
+        case TK_DIVEQ: emitOpcode(compiler, OP_DIVIDE); break;
+        default:
+          UNREACHABLE();
+          break;
+      }
+    } else {
+      compileExpression(compiler);
+    }
+
+    emitOpcode(compiler, OP_SET_SUBSCRIPT);
+
+  } else {
+    emitOpcode(compiler, OP_GET_SUBSCRIPT);
+  }
+}
 
 static void exprValue(Compiler* compiler, bool can_assign) {
   TokenType op = compiler->parser.previous.type;
@@ -1342,8 +1386,16 @@ static void emitLoopJump(Compiler* compiler) {
   * COMPILING (PARSE TOPLEVEL)                                               *
   ****************************************************************************/
 
+typedef enum {
+  BLOCK_FUNC,
+  BLOCK_LOOP,
+  BLOCK_IF,
+  BLOCK_ELIF,
+  BLOCK_ELSE,
+} BlockType;
+
 static void compileStatement(Compiler* compiler);
-static void compileBlockBody(Compiler* compiler, bool if_body);
+static void compileBlockBody(Compiler* compiler, BlockType type);
 
 // Compile a function and return it's index in the script's function buffer.
 static int compileFunction(Compiler* compiler, FuncType fn_type) {
@@ -1351,33 +1403,27 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   Parser* parser = &compiler->parser;
 
   const char* name;
+  int name_length;
 
   if (fn_type != FN_LITERAL) {
     consume(parser, TK_NAME, "Expected a function name.");
-    const char* name_start = parser->previous.start;
-    int name_length = parser->previous.length;
-    NameSearchResult result = compilerSearchName(compiler, name_start,
+    name = parser->previous.start;
+    name_length = parser->previous.length;
+    NameSearchResult result = compilerSearchName(compiler, name,
                                                  name_length);
     if (result.type != NAME_NOT_DEFINED) {
       parseError(&compiler->parser, "Name %.*s already exists.", name_length,
-                 name_start);
+                 name);
       // Not returning here as to complete for skip cascaded errors.
     }
 
-    int index = nameTableAdd(&compiler->script->function_names, compiler->vm,
-                             name_start, name_length);
-    name = nameTableGet(&compiler->script->function_names, index);
-
   } else {
     name = "[FunctionLiteral]";
+    name_length = (int)strlen(name);
   }
   
-  Function* func = newFunction(compiler->vm, name,
+  Function* func = newFunction(compiler->vm, name, name_length,
                                compiler->script, fn_type == FN_NATIVE);
-
-  vmPushTempRef(compiler->vm, &func->_super);
-  functionBufferWrite(&compiler->script->functions, compiler->vm, func);
-  vmPopTempRef(compiler->vm);
   int fn_index = (int)compiler->script->functions.count - 1;
 
   Func curr_func;
@@ -1425,7 +1471,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   func->arity = argc;
 
   if (fn_type != FN_NATIVE) {
-    compileBlockBody(compiler, false);
+    compileBlockBody(compiler, BLOCK_FUNC);
   }
   
   consume(parser, TK_END, "Expected 'end' after function definition end.");
@@ -1441,11 +1487,16 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
 }
 
 // Finish a block body.
-static void compileBlockBody(Compiler* compiler, bool if_body) {
+static void compileBlockBody(Compiler* compiler, BlockType type) {
 
-  consumeStartBlock(&compiler->parser);
   compilerEnterBlock(compiler);
-  skipNewLines(&compiler->parser);
+
+  if (type != BLOCK_ELIF) {
+    consumeStartBlock(&compiler->parser);
+    skipNewLines(&compiler->parser);
+  }
+
+  bool if_body = (type == BLOCK_IF) || (type == BLOCK_ELIF);
 
   TokenType next = peek(&compiler->parser);
   while (!(next == TK_END || next == TK_EOF || (
@@ -1473,22 +1524,45 @@ static void compileIfStatement(Compiler* compiler) {
   emitOpcode(compiler, OP_JUMP_IF_NOT);
   int ifpatch = emitShort(compiler, 0xffff); //< Will be patched.
 
-  compileBlockBody(compiler, true);
+  compileBlockBody(compiler, BLOCK_IF);
 
-  if (match(&compiler->parser, TK_ELIF)) {
+  // Elif statement's don't consume 'end' after they end since it's treated as
+  // else and if they require 2 'end' statements. But we're omitting the 'end'
+  // for the 'else' since it'll consumed by the 'if'.
+  bool elif = false;
+
+  if (peek(&compiler->parser) == TK_ELIF) {
+    elif = true;
+    // Override the elif to if so that it'll be parsed as a new if statement
+    // and that's why we're not consuming it here.
+    compiler->parser.current.type = TK_IF;
+
+    // Jump pass else.
+    emitOpcode(compiler, OP_JUMP);
+    int exit_jump = emitShort(compiler, 0xffff); //< Will be patched.
+
     patchJump(compiler, ifpatch);
-    compileBlockBody(compiler, true);
+    compileBlockBody(compiler, BLOCK_ELIF);
+    patchJump(compiler, exit_jump);
 
   } else if (match(&compiler->parser, TK_ELSE)) {
+
+    // Jump pass else.
+    emitOpcode(compiler, OP_JUMP);
+    int exit_jump = emitShort(compiler, 0xffff); //< Will be patched.
+
     patchJump(compiler, ifpatch);
-    compileBlockBody(compiler, false);
+    compileBlockBody(compiler, BLOCK_ELSE);
+    patchJump(compiler, exit_jump);
 
   } else {
     patchJump(compiler, ifpatch);
   }
 
-  skipNewLines(&compiler->parser);
-  consume(&compiler->parser, TK_END, "Expected 'end' after statement end.");
+  if (!elif) {
+    skipNewLines(&compiler->parser);
+    consume(&compiler->parser, TK_END, "Expected 'end' after statement end.");
+  }
 }
 
 static void compileWhileStatement(Compiler* compiler) {
@@ -1502,7 +1576,7 @@ static void compileWhileStatement(Compiler* compiler) {
   emitOpcode(compiler, OP_JUMP_IF_NOT);
   int whilepatch = emitByte(compiler, 0xffff); //< Will be patched.
 
-  compileBlockBody(compiler, false);
+  compileBlockBody(compiler, BLOCK_LOOP);
 
   emitLoopJump(compiler);
   patchJump(compiler, whilepatch);
@@ -1556,7 +1630,7 @@ static void compileForStatement(Compiler* compiler) {
   emitOpcode(compiler, OP_ITER);
   int forpatch = emitShort(compiler, 0xffff);
 
-  compileBlockBody(compiler, false);
+  compileBlockBody(compiler, BLOCK_LOOP);
 
   emitLoopJump(compiler);
   patchJump(compiler, forpatch);
