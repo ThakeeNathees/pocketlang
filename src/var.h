@@ -233,7 +233,9 @@ struct Range {
 struct Script {
   Object _super;
 
-  String* path;              //< Absolute path of the script.
+  const char* name;   //< Std script's name. Null for user script.
+  int name_length;    //< Length of the name.
+  String* path;       //< Absolute path of the script. Null for std scripts.
 
   ID imports[MAX_IMPORT_SCRIPTS]; //< Imported script IDs.
   int import_count;               //< Number of import in imports.
@@ -291,10 +293,13 @@ Script* newScript(MSVM* vm);
 
 // Allocate new Function object and return Function*. Parameter [name] should
 // be the name in the Script's nametable.
-Function* newFunction(MSVM* vm, const char* name, Script* owner,
+Function* newFunction(MSVM* vm, const char* name, int length, Script* owner,
                       bool is_native);
 
 // Utility functions //////////////////////////////////////////////////////////
+
+// Returns the type name of the var [v].
+const char* varTypeName(Var v);
 
 // Returns true if both variables are the same.
 bool isVauesSame(Var v1, Var v2);
@@ -302,5 +307,8 @@ bool isVauesSame(Var v1, Var v2);
 // Returns the string version of the value. Note: pass false as [_recursive]
 // It's an internal use (or may be I could make a wrapper around).
 String* toString(MSVM* vm, Var v, bool _recursive);
+
+// Returns the truthy value of the var.
+bool toBool(Var v);
 
 #endif // VAR_H

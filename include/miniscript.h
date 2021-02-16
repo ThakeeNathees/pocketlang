@@ -78,7 +78,7 @@ typedef struct {
 } MSConfiguration;
 
 typedef enum {
-  RESULT_SUCCESS,
+  RESULT_SUCCESS = 0,
   RESULT_COMPILE_ERROR,
   RESULT_RUNTIME_ERROR,
 } MSInterpretResult;
