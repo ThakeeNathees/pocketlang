@@ -3,11 +3,10 @@
  *  Licensed under: MIT License
  */
 
+#include <stdlib.h>
 #include <stdio.h>
 
 #include "miniscript.h"
-
-#include <stdlib.h>
 
 void errorPrint(MSVM* vm, MSErrorType type, const char* file, int line,
                    const char* message) {

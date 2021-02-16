@@ -6,6 +6,10 @@
 #ifndef MINISCRIPT_H
 #define MINISCRIPT_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -91,5 +95,15 @@ MSInterpretResult msInterpret(MSVM* vm, const char* file);
 
 // Set a runtime error to vm.
 void msSetRuntimeError(MSVM* vm, const char* format, ...);
+
+// Returns the associated user data.
+void* msGetUserData(MSVM* vm);
+
+// Update the user data of the vm.
+void msSetUserData(MSVM* vm, void* user_data);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif // MINISCRIPT_H

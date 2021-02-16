@@ -10,6 +10,7 @@ debug/
 .vs/
 .vscode/
 
+build.py
 config.json
 run.bat
 *.dblite

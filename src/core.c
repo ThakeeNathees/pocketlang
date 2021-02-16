@@ -173,7 +173,7 @@ void corePrint(MSVM* vm) {
 
 void coreImport(MSVM* vm) {
   Var arg1 = vm->rbp[1];
-  if (!IS_OBJ(arg1) || !AS_OBJ(arg1)->type == OBJ_STRING) {
+  if (!IS_OBJ(arg1) || AS_OBJ(arg1)->type != OBJ_STRING) {
     msSetRuntimeError(vm, "Expected a String argument.");
   }
 
@@ -263,7 +263,7 @@ void initializeCore(MSVM* vm) {
 
   // std:os script.
   STD_NEW_SCRIPT("std:os");
-  STD_ADD_FUNCTION("clock", stdOsClock, 0); // TODO: rename coreClock.
+  STD_ADD_FUNCTION("clock", stdOsClock, 0);
 }
 
 /*****************************************************************************/

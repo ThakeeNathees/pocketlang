@@ -68,7 +68,6 @@ typedef enum {
   TK_EQ,         // =
   TK_GT,         // >
   TK_LT,         // <
-  //TK_BANG,     // !  parsed as TK_NOT
 
   TK_EQEQ,       // ==
   TK_NOTEQ,      // !=
@@ -83,11 +82,10 @@ typedef enum {
   TK_SLEFT,      // <<
 
   //TODO:
-  // >>= <<=
-  //TK_PLUSPLUS,   // ++
-  //TK_MINUSMINUS, // --
-  //TK_MODEQ,      // %=
-  //TK_XOREQ,      // ^=
+  //TK_SRIGHTEQ  // >>=
+  //TK_SLEFTEQ   // <<=
+  //TK_MODEQ,    // %=
+  //TK_XOREQ,    // ^=
 
   // Keywords.
   TK_DEF,        // def
@@ -100,7 +98,7 @@ typedef enum {
   TK_IN,         // in
   TK_AND,        // and
   TK_OR,         // or
-  TK_NOT,        // not
+  TK_NOT,        // not / !
   TK_TRUE,       // true
   TK_FALSE,      // false
 
@@ -1015,7 +1013,6 @@ static void exprName(Compiler* compiler, bool can_assign) {
     }
   }
 
-  // TODO: can_assign and += -= etc.
   switch (result.type) {
     case NAME_LOCAL_VAR:
     case NAME_GLOBAL_VAR:
@@ -1056,6 +1053,9 @@ static void exprName(Compiler* compiler, bool can_assign) {
       emitOpcode(compiler, OP_PUSH_BUILTIN_FN);
       emitShort(compiler, result.index);
       return;
+
+    case NAME_NOT_DEFINED:
+      UNREACHABLE(); // Case already handled.
   }
 }
 
@@ -1761,7 +1761,7 @@ Script* compileSource(MSVM* vm, const char* path) {
 
   // Create script globals.
   for (int i = 0; i < compiler.var_count; i++) {
-    ASSERT(compiler.variables[i].depth == (int)DEPTH_GLOBAL, "Oops Some bug. Please report!");
+    ASSERT(compiler.variables[i].depth == (int)DEPTH_GLOBAL, OOPS);
     varBufferWrite(&script->globals, vm, VAR_NULL);
   }
 

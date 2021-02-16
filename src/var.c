@@ -150,7 +150,6 @@ const char* varTypeName(Var v) {
     case OBJ_SCRIPT:  return "Script";
     case OBJ_FUNC:    return "Func";
     case OBJ_USER:    return "UserObj";
-      TODO;
     default:
       UNREACHABLE();
   }

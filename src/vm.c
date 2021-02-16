@@ -43,7 +43,7 @@ void vmInit(MSVM* self, MSConfiguration* config) {
 
 void vmPushTempRef(MSVM* self, Object* obj) {
   ASSERT(obj != NULL, "Cannot reference to NULL.");
-  if (self->temp_reference_count < MAX_TEMP_REFERENCE,
+  ASSERT(self->temp_reference_count < MAX_TEMP_REFERENCE,
       "Too many temp references");
   self->temp_reference[self->temp_reference_count++] = obj;
 }
@@ -67,6 +67,14 @@ Script* vmGetStdScript(MSVM* self, const char* name) {
     }
   }
   return NULL;
+}
+
+void* msGetUserData(MSVM* vm) {
+  return vm->config.user_data;
+}
+
+void msSetUserData(MSVM* vm, void* user_data) {
+  vm->config.user_data = user_data;
 }
 
 /******************************************************************************
@@ -160,11 +168,13 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     }                              \
   } while (false)
 
-#define RUNTIME_ERROR(fmt, ...)              \
-  do {                                       \
-    msSetRuntimeError(vm, fmt, __VA_ARGS__); \
-    vmReportError(vm);                       \
-    return RESULT_RUNTIME_ERROR;             \
+// Note: '##__VA_ARGS__' is not portable but most common compilers including
+// gcc, msvc, clang, tcc (c99) supports.
+#define RUNTIME_ERROR(fmt, ...)                \
+  do {                                         \
+    msSetRuntimeError(vm, fmt, ##__VA_ARGS__); \
+    vmReportError(vm);                         \
+    return RESULT_RUNTIME_ERROR;               \
   } while (false)
 
 // Store the current frame to vm's call frame before pushing a new frame.

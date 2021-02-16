@@ -1,0 +1,16 @@
+
+[] Runtime error trace.
+[] VM's debug informations.
+[] Stack reallocation.
+[] Garbage collection.
+[] VM's script cache (imported).
+[] Map literal.
+[] Hex, binary literals and floats like ".5".
+[] Relative file import.
+[] Compilte core methods.
+[] Complete var methods.
+[] Complete core functions.
+[] Complete builtin operators.
+[] Complete opcodes.
+[] Union tagging alter in var.
+[] Std libs.

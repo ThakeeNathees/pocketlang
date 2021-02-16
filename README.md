@@ -1,6 +1,6 @@
 ## MiniScript Language
 
-MiniScript is a simple embeddable, functional, dynamic-typed, bytecode-interpreted, scripting language written in C. It uses the [mark-and-sweep](https://en.wikipedia.org/wiki/Tracing_garbage_collection) method for garbage collection. MiniScript is  is syntactically similar to Ruby. The frontend and expression parsing techniques were written using [Wren Language](https://wren.io/)  and their wonderful book [craftinginterpreters](http://www.craftinginterpreters.com/) as a reference.
+MiniScript is a simple, fast, embeddable, functional, dynamic-typed, bytecode-interpreted, scripting language written in C. It uses the [mark-and-sweep](https://en.wikipedia.org/wiki/Tracing_garbage_collection) method for garbage collection. MiniScript is  is syntactically similar to Ruby. The frontend and expression parsing techniques were written using [Wren Language](https://wren.io/)  and their wonderful book [craftinginterpreters](http://www.craftinginterpreters.com/) as a reference.
 
 ### What MiniScript looks like
 
