@@ -6,6 +6,7 @@
 #include "vm.h"
 
 #include "core.h"
+#include "debug.h"
 #include "utils.h"
 
 #define HAS_ERROR() (vm->error != NULL)
@@ -229,8 +230,12 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
   SWITCH(instruction) {
 
     OPCODE(CONSTANT):
-      PUSH(script->literals.data[READ_SHORT()]);
+    {
+      int index = READ_SHORT();
+      ASSERT_INDEX(index, script->literals.count);
+      PUSH(script->literals.data[index]);
       DISPATCH();
+    }
 
     OPCODE(PUSH_NULL):
       PUSH(VAR_NULL);

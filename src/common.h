@@ -37,37 +37,8 @@
   #define MS_PUBLIC
 #endif
 
-#define STRINGIFY(x) TOSTRING(x)
-#define TOSTRING(x) #x
-
-// The factor by which a buffer will grow when it's capacity reached.
-#define GROW_FACTOR 2
-
-// The initial capacity of a buffer.
-#define MIN_CAPACITY 8
-
-// Unique number to identify for various cases.
-typedef uint32_t ID;
-
-// Nan-Tagging could be disable for debugging/portability purposes.
-// To disable define `VAR_NAN_TAGGING 0`, otherwise it defaults to Nan-Tagging.
-#ifndef VAR_NAN_TAGGING
-  #define VAR_NAN_TAGGING 1
-#endif
-
-#if VAR_NAN_TAGGING
-typedef uint64_t Var;
-#else
-typedef struct Var Var;
-#endif
-
-typedef struct Object Object;
-typedef struct String String;
-typedef struct List List;
-typedef struct Range Range;
-
-typedef struct Script Script;
-typedef struct Function Function;
+// Set this to dump compiled opcodes of each functions.
+#define DEBUG_DUMP_COMPILED_CODE 1
 
 #ifdef DEBUG
 
@@ -88,6 +59,9 @@ typedef struct Function Function;
       abort();                                                       \
     }                                                                \
   } while (false)
+
+#define ASSERT_INDEX(index, size) \
+  ASSERT(index >= 0 && index < size, "Index out of bounds.")
 
 #define UNREACHABLE()                                                \
   do {                                                               \
@@ -116,6 +90,15 @@ typedef struct Function Function;
 #define TODO ASSERT(false, "TODO")
 #define OOPS "Oops a bug!! report plese."
 
+#define STRINGIFY(x) TOSTRING(x)
+#define TOSTRING(x) #x
+
+// The factor by which a buffer will grow when it's capacity reached.
+#define GROW_FACTOR 2
+
+// The initial capacity of a buffer.
+#define MIN_CAPACITY 8
+
 // Allocate object of [type] using the vmRealloc function.
 #define ALLOCATE(vm, type) \
     ((type*)vmRealloc(vm, NULL, 0, sizeof(type)))
@@ -132,5 +115,29 @@ typedef struct Function Function;
 // Deallocate a pointer allocated by vmRealloc before.
 #define DEALLOCATE(vm, pointer) \
     vmRealloc(vm, pointer, 0, 0)
+
+
+// Nan-Tagging could be disable for debugging/portability purposes.
+// To disable define `VAR_NAN_TAGGING 0`, otherwise it defaults to Nan-Tagging.
+#ifndef VAR_NAN_TAGGING
+  #define VAR_NAN_TAGGING 1
+#endif
+
+#if VAR_NAN_TAGGING
+typedef uint64_t Var;
+#else
+typedef struct Var Var;
+#endif
+
+typedef struct Object Object;
+typedef struct String String;
+typedef struct List List;
+typedef struct Range Range;
+
+typedef struct Script Script;
+typedef struct Function Function;
+
+// Unique number to identify for various cases.
+typedef uint32_t ID;
 
 #endif //MS_COMMON_H

@@ -90,19 +90,19 @@ OPCODE(POP, 0, -1)
 // done the stack top should be stored otherwise it'll be disregarded. The
 // function should set the 0 th argment to return value. Locals at 0 to 8 
 // marked explicitly since it's performance criticle.
-// params: CALL_0..8 -> 2 bytes index. _N -> 2 bytes index and 2 bytes count.
+// params: n bytes argc.
 
 // TODO: may be later.
-//OPCODE(CALL_0, 2,  0) //< Push null call null will be the return value.
-//OPCODE(CALL_1, 2, -1) //< Push null and arg1. arg1 will be popped.
-//OPCODE(CALL_2, 2, -2) //< And so on.
-//OPCODE(CALL_3, 2, -3)
-//OPCODE(CALL_4, 2, -4)
-//OPCODE(CALL_5, 2, -5)
-//OPCODE(CALL_6, 2, -6)
-//OPCODE(CALL_7, 2, -7)
-//OPCODE(CALL_8, 2, -8)
-OPCODE(CALL, 4, -0) //< Will calculated at compile time.
+//OPCODE(CALL_0, 0,  0) //< Push null call null will be the return value.
+//OPCODE(CALL_1, 0, -1) //< Push null and arg1. arg1 will be popped.
+//OPCODE(CALL_2, 0, -2) //< And so on.
+//OPCODE(CALL_3, 0, -3)
+//OPCODE(CALL_4, 0, -4)
+//OPCODE(CALL_5, 0, -5)
+//OPCODE(CALL_6, 0, -6)
+//OPCODE(CALL_7, 0, -7)
+//OPCODE(CALL_8, 0, -8)
+OPCODE(CALL, 2, -0) //< Will calculated at compile time.
 
 // The stack top will be iteration value, next one is iterator (integer) and
 // next would be the container. It'll update those values but not push or pop

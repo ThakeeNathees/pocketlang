@@ -14,6 +14,10 @@
 #include "utils.h"
 #include "vm.h"
 
+#if DEBUG_DUMP_COMPILED_CODE
+  #include "debug.h"
+#endif
+
 // The maximum number of variables (or global if compiling top level script)
 // to lookup from the compiling context. Also it's limited by it's opcode
 // which is using a single byte value to identify the local.
@@ -1001,16 +1005,15 @@ static void exprName(Compiler* compiler, bool can_assign) {
   NameSearchResult result = compilerSearchName(compiler, name_start, name_len);
 
   if (result.type == NAME_NOT_DEFINED) {
-
     if (can_assign && match(parser, TK_EQ)) {
       int index = compilerAddVariable(compiler, name_start, name_len,
                                       name_line);
       compileExpression(compiler);
       emitStoreVariable(compiler, index, compiler->scope_depth == DEPTH_GLOBAL);
-      return;
     } else {
       parseError(parser, "Name \"%.*s\" is not defined.", name_len, name_start);
     }
+    return;
   }
 
   switch (result.type) {
@@ -1481,6 +1484,10 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   emitOpcode(compiler, OP_END);
 
   compilerExitBlock(compiler); // Parameter depth.
+
+#if DEBUG_DUMP_COMPILED_CODE
+  dumpInstructions(compiler->vm, compiler->func->ptr);
+#endif
   compiler->func = compiler->func->outer_func;
 
   return fn_index;
@@ -1574,7 +1581,7 @@ static void compileWhileStatement(Compiler* compiler) {
 
   compileExpression(compiler); //< Condition.
   emitOpcode(compiler, OP_JUMP_IF_NOT);
-  int whilepatch = emitByte(compiler, 0xffff); //< Will be patched.
+  int whilepatch = emitShort(compiler, 0xffff); //< Will be patched.
 
   compileBlockBody(compiler, BLOCK_LOOP);
 
@@ -1766,6 +1773,10 @@ Script* compileSource(MSVM* vm, const char* path) {
   }
 
   vm->compiler = NULL;
+
+#if DEBUG_DUMP_COMPILED_CODE
+  dumpInstructions(vm, script->body);
+#endif
 
   if (compiler.parser.has_errors) return NULL;
   return script;

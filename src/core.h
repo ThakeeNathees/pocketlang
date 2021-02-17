@@ -15,7 +15,11 @@ void initializeCore(MSVM* vm);
 // if not found returns -1.
 int findBuiltinFunction(const char* name, int length);
 
+// Returns the builtin function at index [index].
 Function* getBuiltinFunction(int index);
+
+// Returns the builtin function's name at index [index].
+const char* getBuiltinFunctionName(int index);
 
 // Operators //////////////////////////////////////////////////////////////////
 

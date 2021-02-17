@@ -8,6 +8,7 @@
 #include <math.h>
 #include <time.h>
 
+#include "var.h"
 #include "vm.h"
 
 typedef struct {
@@ -26,9 +27,9 @@ typedef struct {
 _BuiltinFn builtins[BUILTIN_COUNT];
 
 static void initializeBuiltinFN(MSVM* vm, _BuiltinFn* bfn, const char* name,
-                                int arity, MiniScriptNativeFn ptr) {
+                               int length, int arity, MiniScriptNativeFn ptr) {
   bfn->name = name;
-  bfn->length = (name != NULL) ? (int)strlen(name) : 0;
+  bfn->length = length;
 
   varInitObject(&bfn->fn._super, vm, OBJ_FUNC);
   bfn->fn.name = name;
@@ -119,6 +120,11 @@ static inline bool validateIndex(MSVM* vm, int32_t index, int32_t size,
 Function* getBuiltinFunction(int index) {
   ASSERT(index < BUILTIN_COUNT, "Index out of bound.");
   return &builtins[index].fn;
+}
+
+const char* getBuiltinFunctionName(int index) {
+  ASSERT(index < BUILTIN_COUNT, "Index out of bound.");
+  return builtins[index].name;
 }
 
 #define FN_IS_PRIMITE_TYPE(name, check)       \
@@ -215,25 +221,28 @@ void initializeCore(MSVM* vm) {
 
   int i = 0; //< Iterate through builtins.
 
+#define INITALIZE_BUILTIN_FN(name, fn, argc) \
+  initializeBuiltinFN(vm, &builtins[i++], name, (int)strlen(name), argc, fn);
+
   // Initialize builtin functions.
-  initializeBuiltinFN(vm, &builtins[i++], "is_null",     1, coreIsNull);
-  initializeBuiltinFN(vm, &builtins[i++], "is_bool",     1, coreIsBool);
-  initializeBuiltinFN(vm, &builtins[i++], "is_num",      1, coreIsNum);
+  INITALIZE_BUILTIN_FN("is_null",     coreIsNull,     1);
+  INITALIZE_BUILTIN_FN("is_bool",     coreIsBool,     1);
+  INITALIZE_BUILTIN_FN("is_num",      coreIsNum,      1);
 
-  initializeBuiltinFN(vm, &builtins[i++], "is_string",   1, coreIsString);
-  initializeBuiltinFN(vm, &builtins[i++], "is_list",     1, coreIsList);
-  initializeBuiltinFN(vm, &builtins[i++], "is_map",      1, coreIsMap);
-  initializeBuiltinFN(vm, &builtins[i++], "is_range",    1, coreIsRange);
-  initializeBuiltinFN(vm, &builtins[i++], "is_function", 1, coreIsFunction);
-  initializeBuiltinFN(vm, &builtins[i++], "is_script",   1, coreIsScript);
-  initializeBuiltinFN(vm, &builtins[i++], "is_userobj",  1, coreIsUserObj);
+  INITALIZE_BUILTIN_FN("is_string",   coreIsString,   1);
+  INITALIZE_BUILTIN_FN("is_list",     coreIsList,     1);
+  INITALIZE_BUILTIN_FN("is_map",      coreIsMap,      1);
+  INITALIZE_BUILTIN_FN("is_range",    coreIsRange,    1);
+  INITALIZE_BUILTIN_FN("is_function", coreIsFunction, 1);
+  INITALIZE_BUILTIN_FN("is_script",   coreIsScript,   1);
+  INITALIZE_BUILTIN_FN("is_userobj",  coreIsUserObj,  1);
 
-  initializeBuiltinFN(vm, &builtins[i++], "to_string",   1, coreToString);
-  initializeBuiltinFN(vm, &builtins[i++], "print",      -1, corePrint);
-  initializeBuiltinFN(vm, &builtins[i++], "import",      1, coreImport);
+  INITALIZE_BUILTIN_FN("to_string",   coreToString,   1);
+  INITALIZE_BUILTIN_FN("print",       corePrint,     -1);
+  INITALIZE_BUILTIN_FN("import",      coreImport,     1);
 
   // Sentinal to mark the end of the array.
-  initializeBuiltinFN(vm, &builtins[i], NULL, 0, NULL);
+  initializeBuiltinFN(vm, &builtins[i], NULL, 0, 0, NULL);
 
   // Make STD scripts.
   Script* std;  // A temporary pointer to the current std script.
@@ -348,7 +357,16 @@ bool varLesser(MSVM* vm, Var v1, Var v2) {
   return false;
 }
 
+// A convinent convenient macro used in varGetAttrib and varSetAttrib.
+#define IS_ATTRIB(name) \
+  (attrib->length == strlen(name) && strcmp(name, attrib->data) == 0)
+
+#define ERR_NO_ATTRIB()                                             \
+  msSetRuntimeError(vm, "'%s' objects has no attribute named '%s'", \
+    varTypeName(on), attrib->data);
+
 Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
+
   if (!IS_OBJ(on)) {
     msSetRuntimeError(vm, "%s type is not subscriptable.", varTypeName(on));
     return VAR_NULL;
@@ -357,7 +375,29 @@ Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
   Object* obj = (Object*)AS_OBJ(on);
   switch (obj->type) {
     case OBJ_STRING:
+    {
+      if (IS_ATTRIB("length")) {
+        size_t length = ((String*)obj)->length;
+        return VAR_NUM((double)length);
+      } else {
+        ERR_NO_ATTRIB();
+        return VAR_NULL;
+      }
+      UNREACHABLE();
+    }
+
     case OBJ_LIST:
+    {
+      if (IS_ATTRIB("length")) {
+        size_t length = ((List*)obj)->elements.count;
+        return VAR_NUM((double)length);
+      } else {
+        ERR_NO_ATTRIB();
+        return VAR_NULL;
+      }
+      UNREACHABLE();
+    }
+
     case OBJ_MAP:
     case OBJ_RANGE:
       TODO;
@@ -388,8 +428,73 @@ Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
   return VAR_NULL;
 }
 
-void varSetAttrib(MSVM* vm, Var on, String* name, Var value) {
-  TODO;
+void varSetAttrib(MSVM* vm, Var on, String* attrib, Var value) {
+
+#define ATTRIB_IMMUTABLE(prop)                                   \
+do {                                                             \
+  if (IS_ATTRIB(prop)) {                                         \
+    msSetRuntimeError(vm, "'%s' attribute is immutable.", prop); \
+    return;                                                      \
+  }                                                              \
+} while (false)
+
+  if (!IS_OBJ(on)) {
+    msSetRuntimeError(vm, "%s type is not subscriptable.", varTypeName(on));
+    return;
+  }
+
+  Object* obj = (Object*)AS_OBJ(on);
+  switch (obj->type) {
+    case OBJ_STRING:
+      ATTRIB_IMMUTABLE("length");
+      ERR_NO_ATTRIB();
+      return;
+
+    case OBJ_LIST:
+      ATTRIB_IMMUTABLE("length");
+      ERR_NO_ATTRIB();
+      return;
+
+    case OBJ_MAP:
+      TODO;
+      ERR_NO_ATTRIB();
+      return;
+
+    case OBJ_RANGE:
+      ERR_NO_ATTRIB();
+      return;
+
+    case OBJ_SCRIPT: {
+      Script* scr = (Script*)obj;
+
+      // TODO: check globals HERE.
+
+      // Check function.
+      int index = nameTableFind(&scr->function_names, attrib->data,
+        attrib->length);
+      if (index != -1) {
+        ASSERT_INDEX(index, scr->functions.count);
+        ATTRIB_IMMUTABLE(scr->functions.data[index]->name);
+        return;
+      }
+
+      ERR_NO_ATTRIB();
+      return;
+    }
+
+    case OBJ_FUNC:
+      ERR_NO_ATTRIB();
+      return;
+
+    case OBJ_USER:
+      ERR_NO_ATTRIB();
+      return;
+
+    default:
+      UNREACHABLE();
+  }
+
+  UNREACHABLE();
 }
 
 Var varGetSubscript(MSVM* vm, Var on, Var key) {
@@ -400,7 +505,19 @@ Var varGetSubscript(MSVM* vm, Var on, Var key) {
 
   Object* obj = AS_OBJ(on);
   switch (obj->type) {
-    case OBJ_STRING: TODO;
+    case OBJ_STRING:
+    {
+      int32_t index;
+      String* str = ((String*)obj);
+      if (!validateIngeger(vm, key, &index, "List index")) {
+        return VAR_NULL;
+      }
+      if (!validateIndex(vm, index, str->length, "String")) {
+        return VAR_NULL;
+      }
+      String* c = newString(vm, str->data + index, 1);
+      return VAR_OBJ(c);
+    }
 
     case OBJ_LIST:
     {
@@ -496,9 +613,15 @@ bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value) {
 
   switch (obj->type) {
     case OBJ_STRING: {
-      TODO; // Need to consider utf8.
-      
-      TODO; // Return string[index].
+      // TODO: // Need to consider utf8.
+      String* str = ((String*)obj);
+      if (iter < 0 || iter >= str->length) {
+        return false; //< Stop iteration.
+      }
+      // TODO: Or I could add char as a type for efficiency.
+      *value = VAR_OBJ(newString(vm, str->data + iter, 1));
+      *iterator = VAR_NUM((double)iter + 1);
+      return true;
     }
 
     case OBJ_LIST: {
