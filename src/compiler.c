@@ -1130,6 +1130,7 @@ static void exprList(Compiler* compiler, bool can_assign) {
 
   } while (match(&compiler->parser, TK_COMMA));
 
+  skipNewLines(&compiler->parser);
   consume(&compiler->parser, TK_RBRACKET, "Expected ']' after list elements.");
 
   _FN->opcodes.data[size_index] = (size >> 8) & 0xff;
