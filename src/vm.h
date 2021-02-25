@@ -6,8 +6,6 @@
 #ifndef VM_H
 #define VM_H
 
-#include "miniscript.h"
-
 #include "common.h"
 #include "compiler.h"
 #include "var.h"
@@ -30,6 +28,40 @@ typedef struct {
   Function* fn; //< Function of the frame.
   Var* rbp;     //< Stack base pointer. (%rbp)
 } CallFrame;
+
+struct Fiber {
+  Object _super;
+
+  // The root function of the fiber. (For script it'll be the script's implicit
+  // body function).
+  Function* func;
+
+  // The stack of the execution holding locals and temps. A heap  allocated
+  // Will and grow as needed.
+  Var* stack;
+
+  // The stack pointer (%rsp) pointing to the stack top.
+  Var* sp;
+
+  // The stack base pointer of the current frame. It'll be updated before
+  // calling a native function.
+  Var* ret;
+
+  // Size of the allocated stack.
+  int stack_size;
+
+  // Heap allocated array of call frames will grow as needed.
+  CallFrame* frames;
+
+  // Capacity of the frames array.
+  int frame_capacity;
+
+  // Number of frame entry in frames.
+  int frame_count;
+
+  // Runtime error initially NULL, heap allocated.
+  String* error;
+};
 
 struct MSVM {
 
@@ -63,32 +95,11 @@ struct MSVM {
   // Number of script cache.
   int script_count;
 
-  // The stack of the execution holding locals and temps. A heap  allocated
-  // Will and grow as needed.
-  Var* stack;
-
-  // The stack pointer (%rsp) pointing to the stack top.
-  Var* sp;
-
-  // The stack base pointer of the current frame. It'll be updated before
-  // calling a native function.
-  Var* rbp;
-
-  // Size of the allocated stack.
-  int stack_size;
-
-  // Heap allocated array of call frames will grow as needed.
-  CallFrame* frames;
-
-  // Capacity of the frames array.
-  int frame_capacity;
-
-  // Number of frame entry in frames.
-  int frame_count;
-
-  // Runtime error initially NULL, heap allocated.
-  String* error;
+  // Current fiber.
+  Fiber* fiber;
 };
+
+Fiber* newFiber(MSVM* vm);
 
 // A realloc wrapper which handles memory allocations of the VM.
 // - To allocate new memory pass NULL to parameter [memory] and 0 to

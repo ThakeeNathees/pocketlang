@@ -26,6 +26,20 @@ extern "C" {
 // allocations.
 typedef struct MSVM MSVM;
 
+// Nan-Tagging could be disable for debugging/portability purposes only when
+// compiling the compiler. Do not change this if using the miniscript library
+// for embedding. To disable when compiling the compiler, define
+// `VAR_NAN_TAGGING 0`, otherwise it defaults to Nan-Tagging.
+#ifndef VAR_NAN_TAGGING
+  #define VAR_NAN_TAGGING 1
+#endif
+
+#if VAR_NAN_TAGGING
+  typedef uint64_t Var;
+#else
+  typedef struct Var Var;
+#endif
+
 // C function pointer which is callable from MiniScript.
 typedef void (*MiniScriptNativeFn)(MSVM* vm);
 
@@ -101,6 +115,18 @@ void* msGetUserData(MSVM* vm);
 
 // Update the user data of the vm.
 void msSetUserData(MSVM* vm, void* user_data);
+
+// Encode types to var.
+// TODO: user need to use vmPushTempRoot() for strings.
+Var msVarBool(MSVM* vm, bool value);
+Var msVarNumber(MSVM* vm, double value);
+Var msVarString(MSVM* vm, const char* value);
+
+// Decode var types.
+// TODO: const char* should be copied otherwise it'll become dangling pointer.
+bool msAsBool(MSVM* vm, Var value);
+double msAsNumber(MSVM* vm, Var value);
+const char* msAsString(MSVM* vm, Var value);
 
 #ifdef __cplusplus
 } // extern "C"

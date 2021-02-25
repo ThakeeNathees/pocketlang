@@ -306,6 +306,12 @@ struct Compiler {
   Script* script;  //< Current script.
   Loop* loop;      //< Current loop.
   Func* func;      //< Current function.
+
+  // True if the last statement is a new local variable assignment. Because
+  // the assignment is different than reqular assignment and use this boolean 
+  // to tell the compiler that dont pop it's assigned value because the value
+  // itself is the local.
+  bool new_local;
 };
 
 typedef struct {
@@ -1009,7 +1015,13 @@ static void exprName(Compiler* compiler, bool can_assign) {
       int index = compilerAddVariable(compiler, name_start, name_len,
                                       name_line);
       compileExpression(compiler);
-      emitStoreVariable(compiler, index, compiler->scope_depth == DEPTH_GLOBAL);
+      if (compiler->scope_depth == DEPTH_GLOBAL) {
+        emitStoreVariable(compiler, index, true);
+      } else {
+        // This will prevent the assignment from poped out from the stack
+        // since the assigned value itself is the local and not a temp.
+        compiler->new_local = true; 
+      }
     } else {
       parseError(parser, "Name \"%.*s\" is not defined.", name_len, name_start);
     }
@@ -1277,8 +1289,10 @@ static void compilerInit(Compiler* compiler, MSVM* vm, const char* source,
   compiler->var_count = 0;
   compiler->global_count = 0;
   compiler->stack_size = 0;
-  Loop* loop = NULL;
-  Function* fn = NULL;
+  compiler->loop = NULL;
+  compiler->func = NULL;
+  compiler->script = NULL;
+  compiler->new_local = false;
 }
 
 // Add a variable and return it's index to the context. Assumes that the
@@ -1499,7 +1513,7 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
 
   compilerEnterBlock(compiler);
 
-  if (type != BLOCK_ELIF) {
+  if (type != BLOCK_ELSE && type != BLOCK_ELIF) {
     consumeStartBlock(&compiler->parser);
     skipNewLines(&compiler->parser);
   }
@@ -1707,9 +1721,13 @@ static void compileStatement(Compiler* compiler) {
     compileForStatement(compiler);
 
   } else {
+    compiler->new_local = false;
     compileExpression(compiler);
     consumeEndStatement(parser);
-    emitOpcode(compiler, OP_POP);
+    if (!compiler->new_local) {
+      emitOpcode(compiler, OP_POP);
+    }
+    compiler->new_local = false;
   }
 }
 
