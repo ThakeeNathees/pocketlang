@@ -6,6 +6,8 @@
 #ifndef MS_COMMON_H
 #define MS_COMMON_H
 
+#include "miniscript.h"
+
 #include <assert.h>
 #include <errno.h>
 #include <stdarg.h>
@@ -38,7 +40,7 @@
 #endif
 
 // Set this to dump compiled opcodes of each functions.
-#define DEBUG_DUMP_COMPILED_CODE 1
+#define DEBUG_DUMP_COMPILED_CODE 0
 
 #ifdef DEBUG
 
@@ -73,8 +75,8 @@
 #else
 
 #define DEBUG_BREAK()
-
 #define ASSERT(condition, message) do { } while (false)
+#define ASSERT_INDEX(index, size) do {} while (false)
 
 // Reference : https://github.com/wren-lang/
 #if defined( _MSC_VER )
@@ -116,19 +118,6 @@
 #define DEALLOCATE(vm, pointer) \
     vmRealloc(vm, pointer, 0, 0)
 
-
-// Nan-Tagging could be disable for debugging/portability purposes.
-// To disable define `VAR_NAN_TAGGING 0`, otherwise it defaults to Nan-Tagging.
-#ifndef VAR_NAN_TAGGING
-  #define VAR_NAN_TAGGING 1
-#endif
-
-#if VAR_NAN_TAGGING
-typedef uint64_t Var;
-#else
-typedef struct Var Var;
-#endif
-
 typedef struct Object Object;
 typedef struct String String;
 typedef struct List List;
@@ -139,5 +128,8 @@ typedef struct Function Function;
 
 // Unique number to identify for various cases.
 typedef uint32_t ID;
+
+// VM's fiber type.
+typedef struct Fiber Fiber;
 
 #endif //MS_COMMON_H

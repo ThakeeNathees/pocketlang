@@ -8,7 +8,34 @@
 #include "var.h"
 #include "vm.h"
 
- // Number of maximum digits for to_string buffer.
+// Public Api /////////////////////////////////////////////////////////////////
+Var msVarBool(MSVM* vm, bool value) {
+  return VAR_BOOL(value);
+}
+
+Var msVarNumber(MSVM* vm, double value) {
+  return VAR_NUM(value);
+}
+
+Var msVarString(MSVM* vm, const char* value) {
+  return VAR_OBJ(newString(vm, value, (uint32_t)strlen(value)));
+}
+
+bool msAsBool(MSVM* vm, Var value) {
+  return AS_BOOL(value);
+}
+
+double msAsNumber(MSVM* vm, Var value) {
+  return AS_NUM(value);
+}
+
+const char* msAsString(MSVM* vm, Var value) {
+  return AS_STRING(value)->data;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+// Number of maximum digits for to_string buffer.
 #define TO_STRING_BUFF_SIZE 128
 
 void varInitObject(Object* self, MSVM* vm, ObjectType type) {
@@ -84,7 +111,6 @@ Script* newScript(MSVM* vm) {
   varInitObject(&script->_super, vm, OBJ_SCRIPT);
 
   script->name = NULL;
-  script->name_length = 0;
   script->path = NULL;
 
   varBufferInit(&script->globals);

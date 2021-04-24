@@ -7,7 +7,7 @@
 #define CORE_H
 
 #include "var.h"
-#include "miniscript.h"
+#include "common.h"
 
 void initializeCore(MSVM* vm);
 

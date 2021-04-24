@@ -105,16 +105,16 @@ static inline bool validateIndex(MSVM* vm, int32_t index, int32_t size,
 /*****************************************************************************/
 
 // Argument getter (1 based).
-#define ARG(n) vm->rbp[n]
+#define ARG(n) vm->fiber->ret[n]
 
 // Argument count used in variadic functions.
-#define ARGC ((int)(vm->sp - vm->rbp) - 1)
+#define ARGC ((int)(vm->fiber->sp - vm->fiber->ret) - 1)
 
 // Set return value.
-#define RET(value)      \
-  do {                  \
-    vm->rbp[0] = value; \
-    return;             \
+#define RET(value)             \
+  do {                         \
+    *(vm->fiber->ret) = value; \
+    return;                    \
   } while (false)
 
 Function* getBuiltinFunction(int index) {
@@ -178,7 +178,7 @@ void corePrint(MSVM* vm) {
 }
 
 void coreImport(MSVM* vm) {
-  Var arg1 = vm->rbp[1];
+  Var arg1 = vm->fiber->ret[1];
   if (!IS_OBJ(arg1) || AS_OBJ(arg1)->type != OBJ_STRING) {
     msSetRuntimeError(vm, "Expected a String argument.");
   }
@@ -252,7 +252,6 @@ void initializeCore(MSVM* vm) {
   do {                                     \
     std = newScript(vm);                   \
     std->name = _name;                     \
-    std->name_length = (int)strlen(_name); \
     vmPushTempRef(vm, &std->_super);       \
     vmAddStdScript(vm, std);               \
     vmPopTempRef(vm);                      \
@@ -417,12 +416,14 @@ Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
     }
 
     case OBJ_FUNC:
+    case OBJ_FIBER:
     case OBJ_USER:
       TODO;
 
     default:
       UNREACHABLE();
   }
+  CHECK_MISSING_OBJ_TYPE(7);
 
   UNREACHABLE();
   return VAR_NULL;
@@ -486,6 +487,10 @@ do {                                                             \
       ERR_NO_ATTRIB();
       return;
 
+    case OBJ_FIBER:
+      ERR_NO_ATTRIB();
+      return;
+
     case OBJ_USER:
       ERR_NO_ATTRIB();
       return;
@@ -493,7 +498,7 @@ do {                                                             \
     default:
       UNREACHABLE();
   }
-
+  CHECK_MISSING_OBJ_TYPE(7);
   UNREACHABLE();
 }
 
@@ -536,12 +541,14 @@ Var varGetSubscript(MSVM* vm, Var on, Var key) {
     case OBJ_RANGE:
     case OBJ_SCRIPT:
     case OBJ_FUNC:
+    case OBJ_FIBER:
     case OBJ_USER:
       TODO;
     default:
       UNREACHABLE();
   }
 
+  CHECK_MISSING_OBJ_TYPE(7);
   UNREACHABLE();
   return VAR_NULL;
 }
@@ -570,12 +577,13 @@ void varsetSubscript(MSVM* vm, Var on, Var key, Var value) {
     case OBJ_RANGE:
     case OBJ_SCRIPT:
     case OBJ_FUNC:
+    case OBJ_FIBER:
     case OBJ_USER:
       TODO;
     default:
       UNREACHABLE();
   }
-
+  CHECK_MISSING_OBJ_TYPE(7);
   UNREACHABLE();
 }
 
@@ -615,7 +623,7 @@ bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value) {
     case OBJ_STRING: {
       // TODO: // Need to consider utf8.
       String* str = ((String*)obj);
-      if (iter < 0 || iter >= str->length) {
+      if (iter < 0 || iter >= (int)str->length) {
         return false; //< Stop iteration.
       }
       // TODO: Or I could add char as a type for efficiency.
@@ -656,13 +664,14 @@ bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value) {
 
     case OBJ_SCRIPT:
     case OBJ_FUNC:
+    case OBJ_FIBER:
     case OBJ_USER:
       TODO;
       break;
     default:
       UNREACHABLE();
   }
-
+  CHECK_MISSING_OBJ_TYPE(7);
   UNREACHABLE();
   return false;
 }

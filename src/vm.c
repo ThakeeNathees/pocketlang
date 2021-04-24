@@ -9,13 +9,20 @@
 #include "debug.h"
 #include "utils.h"
 
-#define HAS_ERROR() (vm->error != NULL)
+#define HAS_ERROR() (vm->fiber->error != NULL)
 
 // Initially allocated call frame capacity. Will grow dynamically.
 #define INITIAL_CALL_FRAMES 4
 
 // Minimum size of the stack.
 #define MIN_STACK_SIZE 128
+
+Fiber* newFiber(MSVM* vm) {
+  Fiber* fiber = ALLOCATE(vm, Fiber);
+  memset(fiber, 0, sizeof(Fiber));
+  varInitObject(&fiber->_super, vm, OBJ_FIBER);
+  return fiber;
+}
 
 void* vmRealloc(MSVM* self, void* memory, size_t old_size, size_t new_size) {
 
@@ -82,19 +89,8 @@ void msSetUserData(MSVM* vm, void* user_data) {
  * RUNTIME                                                                    *
  *****************************************************************************/
 
-#ifdef DEBUG
-#include <stdio.h>
-// TODO: A function for quick debug. REMOVE.
-void _printStackTop(MSVM* vm) {
-  if (vm->sp != vm->stack) {
-    Var v = *(vm->sp - 1);
-    printf("%s\n", toString(vm, v, false)->data);
-  }
-}
-#endif
-
 static void ensureStackSize(MSVM* vm, int size) {
-  if (vm->stack_size > size) return;
+  if (vm->fiber->stack_size > size) return;
   TODO;
 }
 
@@ -102,27 +98,27 @@ static inline void pushCallFrame(MSVM* vm, Function* fn) {
   ASSERT(!fn->is_native, "Native function shouldn't use call frames.");
 
   // Grow the stack frame if needed.
-  if (vm->frame_count + 1 > vm->frame_capacity) {
-    int new_capacity = vm->frame_capacity * 2;
-    vm->frames = (CallFrame*)vmRealloc(vm, vm->frames,
-                           sizeof(CallFrame) * vm->frame_capacity,
+  if (vm->fiber->frame_count + 1 > vm->fiber->frame_capacity) {
+    int new_capacity = vm->fiber->frame_capacity * 2;
+    vm->fiber->frames = (CallFrame*)vmRealloc(vm, vm->fiber->frames,
+                           sizeof(CallFrame) * vm->fiber->frame_capacity,
                            sizeof(CallFrame) * new_capacity);
-    vm->frame_capacity = new_capacity;
+    vm->fiber->frame_capacity = new_capacity;
   }
 
   // Grow the stack if needed.
-  int stack_size = (int)(vm->sp - vm->stack);
+  int stack_size = (int)(vm->fiber->sp - vm->fiber->stack);
   int needed = stack_size + fn->fn->stack_size;
   ensureStackSize(vm, needed);
 
-  CallFrame* frame = &vm->frames[vm->frame_count++];
-  frame->rbp = vm->rbp + 1; // vm->rbp is the return value.
+  CallFrame* frame = &vm->fiber->frames[vm->fiber->frame_count++];
+  frame->rbp = vm->fiber->ret;
   frame->fn = fn;
   frame->ip = fn->fn->opcodes.data;
 }
 
 void msSetRuntimeError(MSVM* vm, const char* format, ...) {
-  vm->error = newString(vm, "TODO:", 5);
+  vm->fiber->error = newString(vm, "TODO:", 5);
   TODO;
 }
 
@@ -146,6 +142,34 @@ MSInterpretResult msInterpret(MSVM* vm, const char* file) {
   return vmRunScript(vm, script);
 }
 
+#ifdef DEBUG
+#include <stdio.h>
+
+// FIXME: for temp debugging. (implement dump stack frames).
+void _debugRuntime(MSVM* vm) {
+  return;
+  system("cls");
+  Fiber* fiber = vm->fiber;
+
+  for (int i = fiber->frame_count - 1; i >= 0; i--) {
+    CallFrame frame = fiber->frames[i];
+
+    Var* top = fiber->sp - 1;
+    if (i != fiber->frame_count - 1) {
+      top = fiber->frames[i + 1].rbp - 1;
+    }
+
+    for (; top >= frame.rbp; top--) {
+      printf("[*]: ");
+      dumpValue(vm, *top); printf("\n");
+    }
+
+    printf("----------------\n");
+  }
+}
+
+#endif
+
 MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 
   register uint8_t* ip;      //< Current instruction pointer.
@@ -153,11 +177,32 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
   register CallFrame* frame; //< Current call frame.
   register Script* script;   //< Currently executing script.
 
-#define PUSH(value) (*vm->sp++ = (value))
-#define POP()       (*(--vm->sp))
-#define DROP()      (--vm->sp)
-#define PEEK()      (*(vm->sp - 1))
-#define READ_BYTE() (*ip++)
+  vm->fiber = newFiber(vm);
+  vm->fiber->func = _script->body;
+
+  // Allocate stack.
+  int stack_size = utilPowerOf2Ceil(vm->fiber->func->fn->stack_size + 1);
+  if (stack_size < MIN_STACK_SIZE) stack_size = MIN_STACK_SIZE;
+  vm->fiber->stack_size = stack_size;
+  vm->fiber->stack = ALLOCATE_ARRAY(vm, Var, vm->fiber->stack_size);
+  vm->fiber->sp = vm->fiber->stack;
+  vm->fiber->ret = vm->fiber->stack;
+
+  // Allocate call frames.
+  vm->fiber->frame_capacity = INITIAL_CALL_FRAMES;
+  vm->fiber->frames = ALLOCATE_ARRAY(vm, CallFrame, vm->fiber->frame_capacity);
+  vm->fiber->frame_count = 1;
+
+  // Initialize VM's first frame.
+  vm->fiber->frames[0].ip = _script->body->fn->opcodes.data;
+  vm->fiber->frames[0].fn = _script->body;
+  vm->fiber->frames[0].rbp = vm->fiber->stack;
+
+#define PUSH(value)  (*vm->fiber->sp++ = (value))
+#define POP()        (*(--vm->fiber->sp))
+#define DROP()       (--vm->fiber->sp)
+#define PEEK()       (*(vm->fiber->sp - 1))
+#define READ_BYTE()  (*ip++)
 #define READ_SHORT() (ip+=2, (uint16_t)((ip[-2] << 8) | ip[-1]))
 
 // Check if any runtime error exists and if so returns RESULT_RUNTIME_ERROR.
@@ -184,19 +229,24 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 
 // Update the call frame and ip once vm's call frame pushed or popped.
 // fuction call, return or done running imported script.
-#define LOAD_FRAME()                         \
-  do {                                       \
-    frame = &vm->frames[vm->frame_count-1];  \
-    ip = frame->ip;                          \
-    rbp = frame->rbp;                        \
-    script = frame->fn->owner;               \
+#define LOAD_FRAME()                                       \
+  do {                                                     \
+    frame = &vm->fiber->frames[vm->fiber->frame_count-1];  \
+    ip = frame->ip;                                        \
+    rbp = frame->rbp;                                      \
+    script = frame->fn->owner;                             \
   } while (false)
 
 #ifdef OPCODE
   #error "OPCODE" should not be deifined here.
 #endif
 
-#define DEBUG_INSTRUCTION() //_printStackTop(vm)
+#if DEBUG
+  #define DEBUG_INSTRUCTION() _debugRuntime(vm)
+#else
+  #define DEBUG_INSTRUCTION() do { } while (false)
+#endif
+
 
 #define SWITCH(code)                 \
   L_vm_main_loop:                    \
@@ -205,25 +255,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 #define OPCODE(code) case OP_##code
 #define DISPATCH()   goto L_vm_main_loop
 
-  // Allocate stack.
-  int stack_size = utilPowerOf2Ceil(_script->body->fn->stack_size + 1);
-  if (stack_size < MIN_STACK_SIZE) stack_size = MIN_STACK_SIZE;
-  vm->stack_size = stack_size;
-  vm->stack = ALLOCATE_ARRAY(vm, Var, vm->stack_size);
-  vm->sp = vm->stack;
-  vm->rbp = vm->stack;
   PUSH(VAR_NULL); // Return value of the script body.
-
-  // Allocate call frames.
-  vm->frame_capacity = INITIAL_CALL_FRAMES;
-  vm->frames = ALLOCATE_ARRAY(vm, CallFrame, vm->frame_capacity);
-  vm->frame_count = 1;
-
-  // Initialize VM's first frame.
-  vm->frames[0].ip = _script->body->fn->opcodes.data;
-  vm->frames[0].fn = _script->body;
-  vm->frames[0].rbp = vm->rbp + 1; // +1 to skip script's null return value.
-
   LOAD_FRAME();
 
   Opcode instruction;
@@ -259,7 +291,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(LIST_APPEND):
     {
       Var elem = POP();
-      Var list = *(vm->sp - 1);
+      Var list = *(vm->fiber->sp - 1);
       ASSERT(IS_OBJ(list) && AS_OBJ(list)->type == OBJ_LIST, OOPS);
       varBufferWrite(&((List*)AS_OBJ(list))->elements, vm, elem);
       DISPATCH();
@@ -276,13 +308,13 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(PUSH_LOCAL_8):
     {
       int index = (int)(instruction - OP_PUSH_LOCAL_0);
-      PUSH(rbp[index]);
+      PUSH(rbp[index + 1]); // +1: rbp[0] is return value.
       DISPATCH();
     }
     OPCODE(PUSH_LOCAL_N):
     {
       int index = READ_SHORT();
-      PUSH(rbp[index]);
+      PUSH(rbp[index + 1]);  // +1: rbp[0] is return value.
       DISPATCH();
     }
 
@@ -297,13 +329,13 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(STORE_LOCAL_8):
     {
       int index = (int)(instruction - OP_STORE_LOCAL_0);
-      rbp[index] = PEEK();
+      rbp[index + 1] = PEEK();  // +1: rbp[0] is return value.
       DISPATCH();
     }
     OPCODE(STORE_LOCAL_N):
     {
       int index = READ_SHORT();
-      rbp[index] = PEEK();
+      rbp[index + 1] = PEEK();  // +1: rbp[0] is return value.
       DISPATCH();
     }
 
@@ -346,7 +378,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(CALL):
     {
       int argc = READ_SHORT();
-      Var* callable = vm->sp - argc - 1;
+      Var* callable = vm->fiber->sp - argc - 1;
 
       if (IS_OBJ(*callable) && AS_OBJ(*callable)->type == OBJ_FUNC) {
 
@@ -362,12 +394,12 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
         *callable = VAR_NULL;
 
         // Next call frame starts here. (including return value).
-        vm->rbp = callable;
+        vm->fiber->ret = callable;
 
         if (fn->is_native) {
           fn->native(vm);
           // Pop function arguments except for the return value.
-          vm->sp = vm->rbp + 1;
+          vm->fiber->sp = vm->fiber->ret + 1;
           CHECK_ERROR();
 
         } else {
@@ -384,9 +416,9 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 
     OPCODE(ITER) :
     {
-      Var* iter_value = (vm->sp - 1);
-      Var* iterator   = (vm->sp - 2);
-      Var* container  = (vm->sp - 3);
+      Var* iter_value = (vm->fiber->sp - 1);
+      Var* iterator   = (vm->fiber->sp - 2);
+      Var* container  = (vm->fiber->sp - 3);
       int jump_offset = READ_SHORT();
       if (!varIterate(vm, *container, iterator, iter_value)) {
         DROP(); //< Iter value.
@@ -433,20 +465,20 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(RETURN):
     {
       Var ret = POP();
-      vm->frame_count--;
+      vm->fiber->frame_count--;
 
       // If no more call frames. We're done.
-      if (vm->frame_count == 0) {
-        vm->sp = vm->stack;
+      if (vm->fiber->frame_count == 0) {
+        vm->fiber->sp = vm->fiber->stack;
         PUSH(ret);
         return RESULT_SUCCESS;
       }
 
       // Set the return value.
-      *(frame->rbp - 1) = ret;
+      *(frame->rbp) = ret;
 
       // Pop the locals and update stack pointer.
-      vm->sp = frame->rbp;
+      vm->fiber->sp = frame->rbp + 1; // +1: rbp is returned value.
 
       LOAD_FRAME();
       DISPATCH();
@@ -462,7 +494,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 
     OPCODE(GET_ATTRIB_AOP):
     {
-      Var on = *(vm->sp - 1);
+      Var on = *(vm->fiber->sp - 1);
       String* name = script->names.data[READ_SHORT()];
       PUSH(varGetAttrib(vm, on, name));
       DISPATCH();
@@ -482,8 +514,8 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 
     OPCODE(GET_SUBSCRIPT_AOP):
     {
-      Var key = *(vm->sp - 1);
-      Var on = *(vm->sp - 2);
+      Var key = *(vm->fiber->sp - 1);
+      Var on = *(vm->fiber->sp - 2);
       PUSH(varGetSubscript(vm, on, key));
       CHECK_ERROR();
       DISPATCH();

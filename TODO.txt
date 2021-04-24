@@ -22,5 +22,5 @@
 
 // Bugs.
 
-[ ] `function() "do" <body> end` make 'do' keyword optional here.
 [ ] Update cache on each recompilation instead of making a new cache.
+[*] `function() "do" <body> end` make 'do' keyword optional here.

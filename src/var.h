@@ -30,8 +30,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include "miniscript.h"
-
+#include "common.h"
 #include "types/gen/byte_buffer.h"
 #include "types/gen/function_buffer.h"
 #include "types/gen/int_buffer.h"
@@ -157,8 +156,6 @@
 #define AS_MAP(value)     ((Map*)AS_OBJ(value))
 #define AS_RANGE(value)   ((Range*)AS_OBJ(value))
 
-typedef uint64_t Var;
-
 #else
 
 // TODO: Union tagging implementation of all the above macros ignore macros 
@@ -196,8 +193,19 @@ typedef enum /* ObjectType */ {
   OBJ_SCRIPT,
   OBJ_FUNC,
 
+  OBJ_FIBER,
+
   OBJ_USER,
 } ObjectType;
+
+// This will terminate compiler (because of 1/0 evaluvated) if ObjectType max
+// is not [count]. Use this to ensure every time switching ObjectType will
+// cover all object types.
+#if DEBUG
+  #define CHECK_MISSING_OBJ_TYPE(count) (1/ ((int)(!(count ^ OBJ_USER))) )
+#else
+  #define CHECK_MISSING_OBJ_TYPE(count) do {} while (false)
+#endif
 
 // Base struct for all heap allocated objects.
 struct Object {
@@ -233,8 +241,9 @@ struct Range {
 struct Script {
   Object _super;
 
+  // One of the below is null and other one is not. Since "std" script names
+  // are hardcoded and user script names are constructed.
   const char* name;   //< Std script's name. Null for user script.
-  int name_length;    //< Length of the name.
   String* path;       //< Absolute path of the script. Null for std scripts.
 
   ID imports[MAX_IMPORT_SCRIPTS]; //< Imported script IDs.
@@ -271,7 +280,7 @@ struct Function {
   };
 };
 
-// Methods.
+// Methods ////////////////////////////////////////////////////////////////////
 
 void varInitObject(Object* self, MSVM* vm, ObjectType type);
 
@@ -305,7 +314,7 @@ const char* varTypeName(Var v);
 bool isVauesSame(Var v1, Var v2);
 
 // Returns the string version of the value. Note: pass false as [_recursive]
-// It's an internal use (or may be I could make a wrapper around).
+// It's for internal use (or may be I could make a wrapper around).
 String* toString(MSVM* vm, Var v, bool _recursive);
 
 // Returns the truthy value of the var.
