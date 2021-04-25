@@ -40,6 +40,18 @@ typedef struct MSVM MSVM;
   typedef struct Var Var;
 #endif
 
+// A function that'll be called for all the allocation calls by MSVM.
+//
+// - To allocate new memory it'll pass NULL to parameter [memory] and the
+//   required size to [new_size]. On failure the return value would be NULL.
+//
+// - When reallocating an existing memory if it's grow in place the return
+//   address would be the same as [memory] otherwise a new address.
+//
+// - To free an allocated memory pass [memory] and 0 to [new_size]. The
+//   function will return NULL.
+typedef void* (*MiniScriptReallocFn)(void* memory, size_t new_size, void* user_data);
+
 // C function pointer which is callable from MiniScript.
 typedef void (*MiniScriptNativeFn)(MSVM* vm);
 
@@ -84,6 +96,10 @@ typedef void (*MiniScriptLoadScriptDoneFn) (MSVM* vm, const char* path,
 
 typedef struct {
 
+  // The callback used to allocate, reallocate, and free. If the function
+  // pointer is NULL it defaults to the VM's realloc(), free() wrappers.
+  MiniScriptReallocFn realloc_fn;
+
   MiniScriptErrorFn error_fn;
   MiniScriptWriteFn write_fn;
 
@@ -94,6 +110,10 @@ typedef struct {
   void* user_data;
 
 } MSConfiguration;
+
+// Initialize the configuration and set ALL of it's values to the defaults.
+// Call this before setting any particular field of it.
+void MSInitConfiguration(MSConfiguration* config);
 
 typedef enum {
   RESULT_SUCCESS = 0,

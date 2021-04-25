@@ -36,15 +36,15 @@ struct Fiber {
   // body function).
   Function* func;
 
-  // The stack of the execution holding locals and temps. A heap  allocated
-  // Will and grow as needed.
+  // The stack of the execution holding locals and temps. A heap will be
+  // allocated and grow as needed.
   Var* stack;
 
   // The stack pointer (%rsp) pointing to the stack top.
   Var* sp;
 
   // The stack base pointer of the current frame. It'll be updated before
-  // calling a native function.
+  // calling a native function. (`fiber->ret` === `curr_call_frame->rbp`).
   Var* ret;
 
   // Size of the allocated stack.
@@ -68,7 +68,17 @@ struct MSVM {
   // The first object in the link list of all heap allocated objects.
   Object* first;
 
+  // The number of bytes allocated by the vm and not (yet) garbage collected.
   size_t bytes_allocated;
+
+  // The number of bytes that'll trigger the next GC.
+  size_t next_gc;
+
+  // In the tri coloring scheme gray is the working list. We recursively pop
+  // from the list color it balck and add it's referenced objects to gray_list.
+  Object** gray_list;
+  int gray_list_count;
+  int gray_list_capacity;
 
   // A stack of temporary object references to ensure that the object
   // doesn't garbage collected.
@@ -81,7 +91,7 @@ struct MSVM {
   // Current compiler reference to mark it's heap allocated objects.
   Compiler* compiler;
 
-  // Std scripts array.
+  // Std scripts array. (TODO: assert "std" scripts doesn't have global vars).
   Script* std_scripts[MAX_SCRIPT_CACHE];
 
   // Std scripts count.
@@ -121,6 +131,9 @@ void vmPushTempRef(MSVM* self, Object* obj);
 
 // Pop the top most object from temporary reference stack.
 void vmPopTempRef(MSVM* self);
+
+// Trigger garbage collection manually.
+void vmCollectGarbage(MSVM* self);
 
 // Add a std script to vm when initializing core.
 void vmAddStdScript(MSVM* self, Script* script);

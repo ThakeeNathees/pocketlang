@@ -268,7 +268,6 @@ void initializeCore(MSVM* vm) {
   STD_NEW_SCRIPT("std:list");
   STD_ADD_FUNCTION("sort", stdListSort, 1);
 
-
   // std:os script.
   STD_NEW_SCRIPT("std:os");
   STD_ADD_FUNCTION("clock", stdOsClock, 0);
@@ -408,7 +407,7 @@ Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
       int index = nameTableFind(&scr->function_names, attrib->data,
                                 attrib->length);
       if (index != -1) {
-        // TODO: Assert index (not a runtime error).
+        ASSERT_INDEX(index, scr->functions.count);
         return VAR_OBJ(scr->functions.data[index]);
       }
 
@@ -492,7 +491,7 @@ do {                                                             \
       return;
 
     case OBJ_USER:
-      ERR_NO_ATTRIB();
+      TODO; //ERR_NO_ATTRIB();
       return;
 
     default:

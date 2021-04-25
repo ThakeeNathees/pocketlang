@@ -40,6 +40,7 @@ def generate_files():
 	import buffergen
 	ec = buffergen.gen()
 	
+	## .bat files are just for quick rebuild of the buffer templates in windows.
 	if sys.platform == 'win32':
 		with open('src/types/gen.bat', 'w') as f:
 			f.write('python buffergen.py')

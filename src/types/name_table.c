@@ -17,6 +17,8 @@ void nameTableClear(NameTable* self, MSVM* vm) {
 
 int nameTableAdd(NameTable* self, MSVM* vm, const char* name, size_t length,
                  String** ptr) {
+  // Note: Since stringBuffer won't copy the string we don't have to free the
+  // below string, it'll be managed by the string buffer.
   String* string = newString(vm, name, (uint32_t)length);
 
   vmPushTempRef(vm, &string->_super);

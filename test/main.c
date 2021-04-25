@@ -18,6 +18,8 @@ void writeFunction(MSVM* vm, const char* text) {
 }
 
 void loadScriptDone(MSVM* vm, const char* path, void* user_data) {
+  // User data is the allocated source code buffer and it has to be freed
+  // manually since it wasn't allocated by the VM.
   free(user_data);
 }
 
@@ -66,6 +68,7 @@ int main(int argc, char** argv) {
   const char* source_path = argv[1];
 
   MSConfiguration config;
+  MSInitConfiguration(&config);
   config.error_fn = errorPrint;
   config.write_fn = writeFunction;
   config.load_script_fn = loadScript;

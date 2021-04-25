@@ -17,6 +17,14 @@
 // Minimum size of the stack.
 #define MIN_STACK_SIZE 128
 
+static void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
+  if (new_size == 0) {
+    free(memory);
+    return NULL;
+  }
+  return realloc(memory, new_size);
+}
+
 Fiber* newFiber(MSVM* vm) {
   Fiber* fiber = ALLOCATE(vm, Fiber);
   memset(fiber, 0, sizeof(Fiber));
@@ -26,24 +34,34 @@ Fiber* newFiber(MSVM* vm) {
 
 void* vmRealloc(MSVM* self, void* memory, size_t old_size, size_t new_size) {
 
+  // TODO: Debug trace allocations here.
+
   // Track the total allocated memory of the VM to trigger the GC.
   // if vmRealloc is called for freeing the old_size would be 0 since 
   // deallocated bytes are traced by garbage collector.
   self->bytes_allocated += new_size - old_size;
 
-  // TODO: If vm->bytes_allocated > some_value -> GC();
+  if (new_size > 0 && self->bytes_allocated > self->next_gc) {
+    vmCollectGarbage(self);
+  }
 
   if (new_size == 0) {
     free(memory);
     return NULL;
   }
 
-  return realloc(memory, new_size);
+  return self->config.realloc_fn(memory, new_size, self->config.user_data);
 }
 
 void vmInit(MSVM* self, MSConfiguration* config) {
   memset(self, 0, sizeof(MSVM));
   self->config = *config;
+
+  self->gray_list_count = 0;
+  self->gray_list_capacity = 8; // TODO: refactor the magic '8' here.
+  self->gray_list = (Object**)self->config.realloc_fn(
+    NULL, sizeof(Object*) * self->gray_list_capacity, NULL);
+  self->next_gc = 1024 * 1024 * 10; // TODO:
 
   // TODO: no need to initialize if already done by another vm.
   initializeCore(self);
@@ -51,14 +69,23 @@ void vmInit(MSVM* self, MSConfiguration* config) {
 
 void vmPushTempRef(MSVM* self, Object* obj) {
   ASSERT(obj != NULL, "Cannot reference to NULL.");
-  ASSERT(self->temp_reference_count < MAX_TEMP_REFERENCE,
-      "Too many temp references");
+  ASSERT(self->temp_reference_count < MAX_TEMP_REFERENCE, 
+         "Too many temp references");
   self->temp_reference[self->temp_reference_count++] = obj;
 }
 
 void vmPopTempRef(MSVM* self) {
   ASSERT(self->temp_reference_count > 0, "Temporary reference is empty to pop.");
   self->temp_reference_count--;
+}
+
+void vmCollectGarbage(MSVM* self) {
+
+  // Reset VM's bytes_allocated value and count it again so that we don't
+  // required to know the size of each object that'll be freeing.
+  self->bytes_allocated = 0;
+
+  TODO;
 }
 
 void vmAddStdScript(MSVM* self, Script* script) {
@@ -127,6 +154,18 @@ void vmReportError(MSVM* vm) {
   ASSERT(false, "TODO: create debug.h");
 }
 
+void MSInitConfiguration(MSConfiguration* config) {
+  config->realloc_fn = defaultRealloc;
+
+  // TODO: Handle Null functions before calling them.
+  config->error_fn = NULL;
+  config->write_fn = NULL;
+
+  config->load_script_fn = NULL;
+  config->load_script_done_fn = NULL;
+  config->user_data = NULL;
+}
+
 MSVM* msNewVM(MSConfiguration* config) {
   MSVM* vm = (MSVM*)malloc(sizeof(MSVM));
   vmInit(vm, config);
@@ -137,7 +176,8 @@ MSInterpretResult msInterpret(MSVM* vm, const char* file) {
   Script* script = compileSource(vm, file);
   if (script == NULL) return RESULT_COMPILE_ERROR;
 
-  // TODO: Check if scripts size is enough.
+  // TODO: The below assertion should be an error report.
+  ASSERT(vm->script_count + 1 < MAX_SCRIPT_CACHE, "Scripts cache out of bound.");
   vm->scripts[vm->script_count++] = script;
   return vmRunScript(vm, script);
 }
