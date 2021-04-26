@@ -40,9 +40,31 @@ const char* msAsString(MSVM* vm, Var value) {
 
 void varInitObject(Object* self, MSVM* vm, ObjectType type) {
   self->type = type;
+  self->is_marked = false;
   self->next = vm->first;
   vm->first = self;
-  // TODO: set isGray = false;
+}
+
+void markObject(Object* self, MSVM* vm) {
+  if (self == NULL || self->is_marked) return;
+  self->is_marked = true;
+
+  // Add the object to the VM's gray_list so that we can recursively mark
+  // it's referenced objects later.
+  if (vm->marked_list_count >= vm->marked_list_capacity) {
+    vm->marked_list_capacity *= 2;
+    vm->marked_list = (Object**)vm->config.realloc_fn(
+      vm->marked_list,
+      vm->marked_list_capacity * sizeof(Object*),
+      vm->config.user_data);
+  }
+
+  vm->marked_list[vm->marked_list_count++] = self;
+}
+
+void markValue(Var self, MSVM* vm) {
+  if (!IS_OBJ(self)) return;
+  markObject(AS_OBJ(self), vm);
 }
 
 #if VAR_NAN_TAGGING
@@ -134,17 +156,26 @@ Function* newFunction(MSVM* vm, const char* name, int length, Script* owner,
   Function* func = ALLOCATE(vm, Function);
   varInitObject(&func->_super, vm, OBJ_FUNC);
 
-  // Add the name in the script's function buffer.
-  String* name_ptr;
-  vmPushTempRef(vm, &func->_super);
-  functionBufferWrite(&owner->functions, vm, func);
-  nameTableAdd(&owner->function_names, vm, name, length, &name_ptr);
-  vmPopTempRef(vm);
+  if (owner == NULL) {
+    ASSERT(is_native, OOPS);
+    func->name = name;
+    func->owner = NULL;
+    func->is_native = is_native;
 
-  func->name = name_ptr->data;
-  func->owner = owner;
-  func->arity = -2; // -1 means variadic args.
-  func->is_native = is_native;
+  } else {
+    // Add the name in the script's function buffer.
+    String* name_ptr;
+    vmPushTempRef(vm, &func->_super);
+    functionBufferWrite(&owner->functions, vm, func);
+    nameTableAdd(&owner->function_names, vm, name, length, &name_ptr);
+    vmPopTempRef(vm);
+  
+    func->name = name_ptr->data;
+    func->owner = owner;
+    func->arity = -2; // -1 means variadic args.
+    func->is_native = is_native;
+  }
+
 
   if (is_native) {
     func->native = NULL;
@@ -157,6 +188,71 @@ Function* newFunction(MSVM* vm, const char* name, int length, Script* owner,
     func->fn = fn;
   }
   return func;
+}
+
+Fiber* newFiber(MSVM* vm) {
+  Fiber* fiber = ALLOCATE(vm, Fiber);
+  memset(fiber, 0, sizeof(Fiber));
+  varInitObject(&fiber->_super, vm, OBJ_FIBER);
+  return fiber;
+}
+
+void freeObject(MSVM* vm, Object* obj) {
+  // TODO: Debug trace memory here.
+
+  // First clean the object's referencs, but we're not recursively doallocating
+  // them because they're not marked and will be cleaned later.
+  // Example: List's `elements` is VarBuffer that contain a heap allocated
+  // array of `var*` which will be cleaned below but the actual `var` elements
+  // will won't be freed here instead they havent marked at all, and will be
+  // removed at the sweeping phase of the garbage collection.
+  switch (obj->type) {
+    case OBJ_STRING:
+      break;
+
+    case OBJ_LIST:
+      varBufferClear(&(((List*)obj)->elements), vm);
+      break;
+
+    case OBJ_MAP:
+      TODO;
+      break;
+
+    case OBJ_RANGE:
+      break;
+
+    case OBJ_SCRIPT: {
+      Script* scr = (Script*)obj;
+      varBufferClear(&scr->globals, vm);
+      nameTableClear(&scr->global_names, vm);
+      varBufferClear(&scr->literals, vm);
+      functionBufferClear(&scr->functions, vm);
+      nameTableClear(&scr->function_names, vm);
+      stringBufferClear(&scr->names, vm);
+
+    } break;
+
+    case OBJ_FUNC:
+    {
+      Function* func = (Function*)obj;
+      if (!func->is_native) {
+        byteBufferClear(&func->fn->opcodes, vm);
+        intBufferClear(&func->fn->oplines, vm);
+      }
+    } break;
+
+    case OBJ_FIBER:
+    {
+      Fiber* fiber = (Fiber*)obj;
+      DEALLOCATE(vm, fiber->stack);
+      DEALLOCATE(vm, fiber->frames);
+    } break;
+
+    case OBJ_USER:
+      break;
+  }
+
+  DEALLOCATE(vm, obj);
 }
 
 // Utility functions //////////////////////////////////////////////////////////

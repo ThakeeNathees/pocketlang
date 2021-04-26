@@ -14,7 +14,7 @@
 typedef struct {
   const char* name; //< Name of the function.
   int length;       //< Length of the name.
-  Function fn;      //< Native function pointer.
+  Function* fn;     //< Native function pointer.
 } _BuiltinFn;
 
 // Count of builtin function +1 for termination.
@@ -24,26 +24,23 @@ typedef struct {
 #define _AS_INTEGER(var) (int32_t)trunc(AS_NUM(var))
 
 // Array of all builtin functions.
-_BuiltinFn builtins[BUILTIN_COUNT];
+static _BuiltinFn builtins[BUILTIN_COUNT];
+static int builtins_count = 0;
 
 static void initializeBuiltinFN(MSVM* vm, _BuiltinFn* bfn, const char* name,
                                int length, int arity, MiniScriptNativeFn ptr) {
   bfn->name = name;
   bfn->length = length;
 
-  varInitObject(&bfn->fn._super, vm, OBJ_FUNC);
-  bfn->fn.name = name;
-  bfn->fn.arity = arity;
-  bfn->fn.owner = NULL;
-  bfn->fn.is_native = true;
-  bfn->fn.native = ptr;
+  bfn->fn = newFunction(vm, name, length, NULL, true);
+  bfn->fn->arity = arity;
+  bfn->fn->native = ptr;
 }
 
 int findBuiltinFunction(const char* name, int length) {
-  for (int i = 0; i < BUILTIN_COUNT; i++) {
-    if (builtins[i].name == NULL) return -1;
-
-    if (length == builtins[i].length && strncmp(name, builtins[i].name, length) == 0) {
+  for (int i = 0; i < builtins_count; i++) {
+    if (length == builtins[i].length &&
+        strncmp(name, builtins[i].name, length) == 0) {
       return i;
     }
   }
@@ -118,12 +115,12 @@ static inline bool validateIndex(MSVM* vm, int32_t index, int32_t size,
   } while (false)
 
 Function* getBuiltinFunction(int index) {
-  ASSERT(index < BUILTIN_COUNT, "Index out of bound.");
-  return &builtins[index].fn;
+  ASSERT_INDEX(index, builtins_count);
+  return builtins[index].fn;
 }
 
 const char* getBuiltinFunctionName(int index) {
-  ASSERT(index < BUILTIN_COUNT, "Index out of bound.");
+  ASSERT_INDEX(index, builtins_count);
   return builtins[index].name;
 }
 
@@ -219,16 +216,17 @@ void stdOsClock(MSVM* vm) {
 /*****************************************************************************/
 void initializeCore(MSVM* vm) {
 
-  int i = 0; //< Iterate through builtins.
+  ASSERT(builtins_count == 0, "Initialize core only once.");
 
-#define INITALIZE_BUILTIN_FN(name, fn, argc) \
-  initializeBuiltinFN(vm, &builtins[i++], name, (int)strlen(name), argc, fn);
+#define INITALIZE_BUILTIN_FN(name, fn, argc)                 \
+  initializeBuiltinFN(vm, &builtins[builtins_count++], name, \
+                      (int)strlen(name), argc, fn);
 
   // Initialize builtin functions.
   INITALIZE_BUILTIN_FN("is_null",     coreIsNull,     1);
   INITALIZE_BUILTIN_FN("is_bool",     coreIsBool,     1);
   INITALIZE_BUILTIN_FN("is_num",      coreIsNum,      1);
-
+  
   INITALIZE_BUILTIN_FN("is_string",   coreIsString,   1);
   INITALIZE_BUILTIN_FN("is_list",     coreIsList,     1);
   INITALIZE_BUILTIN_FN("is_map",      coreIsMap,      1);
@@ -236,13 +234,13 @@ void initializeCore(MSVM* vm) {
   INITALIZE_BUILTIN_FN("is_function", coreIsFunction, 1);
   INITALIZE_BUILTIN_FN("is_script",   coreIsScript,   1);
   INITALIZE_BUILTIN_FN("is_userobj",  coreIsUserObj,  1);
-
+  
   INITALIZE_BUILTIN_FN("to_string",   coreToString,   1);
   INITALIZE_BUILTIN_FN("print",       corePrint,     -1);
   INITALIZE_BUILTIN_FN("import",      coreImport,     1);
 
   // Sentinal to mark the end of the array.
-  initializeBuiltinFN(vm, &builtins[i], NULL, 0, 0, NULL);
+  //initializeBuiltinFN(vm, &builtins[i], NULL, 0, 0, NULL);
 
   // Make STD scripts.
   Script* std;  // A temporary pointer to the current std script.
@@ -273,6 +271,12 @@ void initializeCore(MSVM* vm) {
   STD_ADD_FUNCTION("clock", stdOsClock, 0);
 }
 
+void markCoreObjects(MSVM* vm) {
+  for (int i = 0; i < builtins_count; i++) {
+    markObject(&builtins[i].fn->_super, vm);
+  }
+}
+
 /*****************************************************************************/
 /* OPERATORS                                                                 */
 /*****************************************************************************/
@@ -287,7 +291,32 @@ Var varAdd(MSVM* vm, Var v1, Var v2) {
     return VAR_NULL;
   }
 
-  TODO; //string addition/ array addition etc.
+  if (IS_OBJ(v1) && IS_OBJ(v2)) {
+    Object *o1 = AS_OBJ(v1), *o2 = AS_OBJ(v2);
+    switch (o1->type) {
+
+      case OBJ_STRING:
+      {
+        if (o2->type == OBJ_STRING) {
+          TODO; // Implement String.format('@@', s1, s2);
+        }
+      } break;
+
+      case OBJ_LIST:
+      case OBJ_MAP:
+      case OBJ_RANGE:
+      case OBJ_SCRIPT:
+      case OBJ_FUNC:
+      case OBJ_FIBER:
+      case OBJ_USER:
+        TODO;
+    }
+  }
+
+
+  msSetRuntimeError(vm, "Unsupported operand types for operator '-' "
+    "%s and %s", varTypeName(v1), varTypeName(v2));
+
   return VAR_NULL;
 }
 
@@ -299,6 +328,8 @@ Var varSubtract(MSVM* vm, Var v1, Var v2) {
     }
     return VAR_NULL;
   }
+
+  TODO; // for user objects call vm.config.sub_userobj_sub(handles).
 
   msSetRuntimeError(vm, "Unsupported operand types for operator '-' "
     "%s and %s", varTypeName(v1), varTypeName(v2));

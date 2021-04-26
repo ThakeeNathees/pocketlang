@@ -19,6 +19,9 @@
 //    2. Destroy scripts buffer only when the last VM die.
 void initializeCore(MSVM* vm);
 
+// Mark the heap allocated core object at the mark phase.
+void markCoreObjects(MSVM* vm);
+
 // Find the builtin function name and returns it's index in the builtins array
 // if not found returns -1.
 int findBuiltinFunction(const char* name, int length);

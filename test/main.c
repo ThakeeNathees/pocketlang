@@ -9,7 +9,7 @@
 #include "miniscript.h"
 
 void errorPrint(MSVM* vm, MSErrorType type, const char* file, int line,
-                   const char* message) {
+                const char* message) {
   fprintf(stderr, "Error: %s\n\tat %s:%i\n", message, file, line);
 }
 
@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
   const char* source_path = argv[1];
 
   MSConfiguration config;
-  MSInitConfiguration(&config);
+  msInitConfiguration(&config);
   config.error_fn = errorPrint;
   config.write_fn = writeFunction;
   config.load_script_fn = loadScript;
@@ -76,6 +76,7 @@ int main(int argc, char** argv) {
 
   MSVM* vm = msNewVM(&config);
   MSInterpretResult result = msInterpret(vm, source_path);
+  msFreeVM(vm);
 
   return result;
 }

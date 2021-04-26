@@ -13,4 +13,6 @@ typedef struct Compiler Compiler;
 
 Script* compileSource(MSVM* vm, const char* path);
 
+void compilerMarkObjects(Compiler* compiler, MSVM* vm);
+
 #endif // COMPILER_H

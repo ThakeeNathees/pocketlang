@@ -136,7 +136,7 @@
 // Check types.
 #define IS_CONST(value) ((value & _MASK_CONST) == _MASK_CONST)
 #define IS_NULL(value)  ((value) == VAR_NULL)
-#define IS_UNDEF(value) ((value) == VAR_UNDEF)
+#define IS_UNDEF(value) ((value) == VAR_UNDEFINED)
 #define IS_FALSE(value) ((value) == VAR_FALSE)
 #define IS_TRUE(value)  ((value) == VAR_TRUE)
 #define IS_BOOL(value)  (IS_TRUE(value) || IS_FALSE(value))
@@ -210,6 +210,7 @@ typedef enum /* ObjectType */ {
 // Base struct for all heap allocated objects.
 struct Object {
   ObjectType type;  //< Type of the object in \ref var_Object_Type.
+  bool is_marked;   //< Marked when garbage collection's marking phase.
   //Class* is;      //< The class the object IS. // No OOP in MS.
 
   Object* next;     //< Next object in the heap allocated link list.
@@ -280,9 +281,58 @@ struct Function {
   };
 };
 
+typedef struct {
+  uint8_t* ip;  //< Pointer to the next instruction byte code.
+  Function* fn; //< Function of the frame.
+  Var* rbp;     //< Stack base pointer. (%rbp)
+} CallFrame;
+
+struct Fiber {
+  Object _super;
+
+  // The root function of the fiber. (For script it'll be the script's implicit
+  // body function).
+  Function* func;
+
+  // The stack of the execution holding locals and temps. A heap will be
+  // allocated and grow as needed.
+  Var* stack;
+
+  // The stack pointer (%rsp) pointing to the stack top.
+  Var* sp;
+
+  // The stack base pointer of the current frame. It'll be updated before
+  // calling a native function. (`fiber->ret` === `curr_call_frame->rbp`).
+  Var* ret;
+
+  // Size of the allocated stack.
+  int stack_size;
+
+  // Heap allocated array of call frames will grow as needed.
+  CallFrame* frames;
+
+  // Capacity of the frames array.
+  int frame_capacity;
+
+  // Number of frame entry in frames.
+  int frame_count;
+
+  // Runtime error initially NULL, heap allocated.
+  String* error;
+};
+
 // Methods ////////////////////////////////////////////////////////////////////
 
+// Initialize the object with it's default value.
 void varInitObject(Object* self, MSVM* vm, ObjectType type);
+
+// Mark the reachable objects at the mark-and-sweep phase of the garbage
+// collection.
+void markObject(Object* self, MSVM* vm);
+
+// Mark the reachable values at the mark-and-sweep phase of the garbage
+// collection.
+void markValue(Var self, MSVM* vm);
 
 // Instead use VAR_NUM(value) and AS_NUM(value)
 Var doubleToVar(double value);
@@ -301,9 +351,17 @@ Range* newRange(MSVM* vm, double from, double to);
 Script* newScript(MSVM* vm);
 
 // Allocate new Function object and return Function*. Parameter [name] should
-// be the name in the Script's nametable.
+// be the name in the Script's nametable. If the [owner] is NULL the function
+// would be builtin function. For builtin function arity and the native
+// function pointer would be initialized after calling this function.
 Function* newFunction(MSVM* vm, const char* name, int length, Script* owner,
                       bool is_native);
+
+// Allocate new Fiber object and return Fiber*.
+Fiber* newFiber(MSVM* vm);
+
+// Release all the object owned by the [obj] including itself.
+void freeObject(MSVM* vm, Object* obj);
 
 // Utility functions //////////////////////////////////////////////////////////
 

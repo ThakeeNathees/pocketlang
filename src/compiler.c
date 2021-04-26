@@ -173,7 +173,7 @@ static _Keyword _keywords[] = {
   { "continue", 8, TK_CONTINUE },
   { "return",   6, TK_RETURN },
 
-  { NULL,      (TokenType)(0) }, // Sentinal to mark the end of the array
+  { NULL,       0, (TokenType)(0) }, // Sentinal to mark the end of the array
 };
 
 typedef struct {
@@ -195,7 +195,6 @@ typedef struct {
 
 // Precedence parsing references:
 // https://en.wikipedia.org/wiki/Shunting-yard_algorithm
-// TODO: I should explicitly state wren-lang as a reference "globaly".
 
 typedef enum {
   PREC_NONE,
@@ -299,9 +298,7 @@ struct Compiler {
   int var_count;                     //< Number of locals in [variables].
   int global_count;                  //< Number of globals in [variables].
 
-  int stack_size; //< Current size including locals ind temps.
-
-  // TODO: compiler should mark Script* below not to be garbage collected.
+  int stack_size; //< Current size including locals ind temps.=
 
   Script* script;  //< Current script.
   Loop* loop;      //< Current loop.
@@ -1035,7 +1032,8 @@ static void exprName(Compiler* compiler, bool can_assign) {
       if (can_assign && matchAssignment(parser)) {
         TokenType assignment = parser->previous.type;
         if (assignment != TK_EQ) {
-          emitPushVariable(compiler, result.index, result.type == NAME_GLOBAL_VAR);
+          emitPushVariable(compiler, result.index,
+                           result.type == NAME_GLOBAL_VAR);
           compileExpression(compiler);
 
           switch (assignment) {
@@ -1799,4 +1797,18 @@ Script* compileSource(MSVM* vm, const char* path) {
 
   if (compiler.parser.has_errors) return NULL;
   return script;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+void compilerMarkObjects(Compiler* compiler, MSVM* vm) {
+  
+  // Mark the script which is currently being compiled.
+  markObject(&compiler->script->_super, vm);
+
+  // Mark the string literals (they haven't added to the script's literal
+  // buffer yet).
+  markValue(compiler->parser.current.value, vm);
+  markValue(compiler->parser.previous.value, vm);
+  markValue(compiler->parser.next.value, vm);
 }

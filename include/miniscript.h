@@ -113,7 +113,7 @@ typedef struct {
 
 // Initialize the configuration and set ALL of it's values to the defaults.
 // Call this before setting any particular field of it.
-void MSInitConfiguration(MSConfiguration* config);
+void msInitConfiguration(MSConfiguration* config);
 
 typedef enum {
   RESULT_SUCCESS = 0,
@@ -123,6 +123,9 @@ typedef enum {
 
 // Allocate initialize and returns a new VM
 MSVM* msNewVM(MSConfiguration* config);
+
+// Clean the VM and dispose all the resources allocated by the VM.
+void msFreeVM(MSVM* vm);
 
 // Compile and execut file at given path.
 MSInterpretResult msInterpret(MSVM* vm, const char* file);
