@@ -23,52 +23,22 @@ typedef enum {
   #undef OPCODE
 } Opcode;
 
-typedef struct {
-  uint8_t* ip;  //< Pointer to the next instruction byte code.
-  Function* fn; //< Function of the frame.
-  Var* rbp;     //< Stack base pointer. (%rbp)
-} CallFrame;
-
-struct Fiber {
-  Object _super;
-
-  // The root function of the fiber. (For script it'll be the script's implicit
-  // body function).
-  Function* func;
-
-  // The stack of the execution holding locals and temps. A heap  allocated
-  // Will and grow as needed.
-  Var* stack;
-
-  // The stack pointer (%rsp) pointing to the stack top.
-  Var* sp;
-
-  // The stack base pointer of the current frame. It'll be updated before
-  // calling a native function.
-  Var* ret;
-
-  // Size of the allocated stack.
-  int stack_size;
-
-  // Heap allocated array of call frames will grow as needed.
-  CallFrame* frames;
-
-  // Capacity of the frames array.
-  int frame_capacity;
-
-  // Number of frame entry in frames.
-  int frame_count;
-
-  // Runtime error initially NULL, heap allocated.
-  String* error;
-};
-
 struct MSVM {
 
   // The first object in the link list of all heap allocated objects.
   Object* first;
 
+  // The number of bytes allocated by the vm and not (yet) garbage collected.
   size_t bytes_allocated;
+
+  // The number of bytes that'll trigger the next GC.
+  size_t next_gc;
+
+  // In the tri coloring scheme gray is the working list. We recursively pop
+  // from the list color it balck and add it's referenced objects to gray_list.
+  Object** marked_list;
+  int marked_list_count;
+  int marked_list_capacity;
 
   // A stack of temporary object references to ensure that the object
   // doesn't garbage collected.
@@ -78,28 +48,23 @@ struct MSVM {
   // VM's configurations.
   MSConfiguration config;
 
-  // Current compiler reference to mark it's heap allocated objects.
+  // Current compiler reference to mark it's heap allocated objects. Note that
+  // The compiler isn't heap allocated.
   Compiler* compiler;
 
-  // Std scripts array.
+  // Std scripts array. (TODO: assert "std" scripts doesn't have global vars).
   Script* std_scripts[MAX_SCRIPT_CACHE];
-
-  // Std scripts count.
   int std_count;
 
   // Execution variables ////////////////////////////////////////////////////
 
-  // Compiled script cache.
-  Script* scripts[MAX_SCRIPT_CACHE];
-
-  // Number of script cache.
-  int script_count;
+  // The root script of the runtime and it's one of the VM's reference root.
+  // VM is responsible to manage the memory (TODO: implement handlers).
+  Script* script;
 
   // Current fiber.
   Fiber* fiber;
 };
-
-Fiber* newFiber(MSVM* vm);
 
 // A realloc wrapper which handles memory allocations of the VM.
 // - To allocate new memory pass NULL to parameter [memory] and 0 to
@@ -121,6 +86,9 @@ void vmPushTempRef(MSVM* self, Object* obj);
 
 // Pop the top most object from temporary reference stack.
 void vmPopTempRef(MSVM* self);
+
+// Trigger garbage collection manually.
+void vmCollectGarbage(MSVM* self);
 
 // Add a std script to vm when initializing core.
 void vmAddStdScript(MSVM* self, Script* script);

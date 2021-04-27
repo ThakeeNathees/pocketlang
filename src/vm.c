@@ -17,33 +17,77 @@
 // Minimum size of the stack.
 #define MIN_STACK_SIZE 128
 
-Fiber* newFiber(MSVM* vm) {
-  Fiber* fiber = ALLOCATE(vm, Fiber);
-  memset(fiber, 0, sizeof(Fiber));
-  varInitObject(&fiber->_super, vm, OBJ_FIBER);
-  return fiber;
+static void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
+  if (new_size == 0) {
+    free(memory);
+    return NULL;
+  }
+  return realloc(memory, new_size);
 }
 
 void* vmRealloc(MSVM* self, void* memory, size_t old_size, size_t new_size) {
+
+  // TODO: Debug trace allocations here.
 
   // Track the total allocated memory of the VM to trigger the GC.
   // if vmRealloc is called for freeing the old_size would be 0 since 
   // deallocated bytes are traced by garbage collector.
   self->bytes_allocated += new_size - old_size;
 
-  // TODO: If vm->bytes_allocated > some_value -> GC();
-
+  if (new_size > 0 && self->bytes_allocated > self->next_gc) {
+    vmCollectGarbage(self);
+  }
+  Function* f = (Function*)memory;
   if (new_size == 0) {
     free(memory);
     return NULL;
   }
 
-  return realloc(memory, new_size);
+  return self->config.realloc_fn(memory, new_size, self->config.user_data);
+}
+
+void msInitConfiguration(MSConfiguration* config) {
+  config->realloc_fn = defaultRealloc;
+
+  // TODO: Handle Null functions before calling them.
+  config->error_fn = NULL;
+  config->write_fn = NULL;
+
+  config->load_script_fn = NULL;
+  config->load_script_done_fn = NULL;
+  config->user_data = NULL;
+}
+
+MSVM* msNewVM(MSConfiguration* config) {
+  MSVM* vm = (MSVM*)malloc(sizeof(MSVM));
+  vmInit(vm, config);
+  return vm;
+}
+
+void msFreeVM(MSVM* self) {
+  // TODO: Check if vm already freed.
+
+  Object* obj = self->first;
+  while (obj != NULL) {
+    Object* next = obj->next;
+    freeObject(self, obj);
+    obj = next;
+  }
+
+  self->marked_list = (Object**)self->config.realloc_fn(
+    self->marked_list, 0, self->config.user_data);
+  self->config.realloc_fn(self, 0, self->config.user_data);
 }
 
 void vmInit(MSVM* self, MSConfiguration* config) {
   memset(self, 0, sizeof(MSVM));
   self->config = *config;
+
+  self->marked_list_count = 0;
+  self->marked_list_capacity = 8; // TODO: refactor the magic '8' here.
+  self->marked_list = (Object**)self->config.realloc_fn(
+    NULL, sizeof(Object*) * self->marked_list_capacity, NULL);
+  self->next_gc = 1024 * 1024 * 10; // TODO:
 
   // TODO: no need to initialize if already done by another vm.
   initializeCore(self);
@@ -51,14 +95,50 @@ void vmInit(MSVM* self, MSConfiguration* config) {
 
 void vmPushTempRef(MSVM* self, Object* obj) {
   ASSERT(obj != NULL, "Cannot reference to NULL.");
-  ASSERT(self->temp_reference_count < MAX_TEMP_REFERENCE,
-      "Too many temp references");
+  ASSERT(self->temp_reference_count < MAX_TEMP_REFERENCE, 
+         "Too many temp references");
   self->temp_reference[self->temp_reference_count++] = obj;
 }
 
 void vmPopTempRef(MSVM* self) {
   ASSERT(self->temp_reference_count > 0, "Temporary reference is empty to pop.");
   self->temp_reference_count--;
+}
+
+void vmCollectGarbage(MSVM* self) {
+
+  // Reset VM's bytes_allocated value and count it again so that we don't
+  // required to know the size of each object that'll be freeing.
+  self->bytes_allocated = 0;
+
+  // Mark core objects (mostlikely builtin functions).
+  markCoreObjects(self);
+
+  // Mark all the 'std' scripts.
+  for (int i = 0; i < self->std_count; i++) {
+    markObject(&(self->std_scripts[i]->_super), self);
+  }
+
+  // Mark temp references.
+  for (int i = 0; i < self->temp_reference_count; i++) {
+    markObject(self->temp_reference[i], self);
+  }
+
+  // Garbage collection triggered at the middle of a compilation.
+  if (self->compiler != NULL) {
+    compilerMarkObjects(self->compiler, self);
+  }
+
+  // Garbage collection triggered at the middle of runtime.
+  if (self->script != NULL) {
+    markObject(&self->script->_super, self);
+  }
+
+  if (self->fiber != NULL) {
+    markObject(&self->fiber->_super, self);
+  }
+  
+  TODO;
 }
 
 void vmAddStdScript(MSVM* self, Script* script) {
@@ -127,18 +207,11 @@ void vmReportError(MSVM* vm) {
   ASSERT(false, "TODO: create debug.h");
 }
 
-MSVM* msNewVM(MSConfiguration* config) {
-  MSVM* vm = (MSVM*)malloc(sizeof(MSVM));
-  vmInit(vm, config);
-  return vm;
-}
-
 MSInterpretResult msInterpret(MSVM* vm, const char* file) {
   Script* script = compileSource(vm, file);
   if (script == NULL) return RESULT_COMPILE_ERROR;
 
-  // TODO: Check if scripts size is enough.
-  vm->scripts[vm->script_count++] = script;
+  vm->script = script;
   return vmRunScript(vm, script);
 }
 
@@ -429,13 +502,15 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
       DISPATCH();
     }
 
-    OPCODE(JUMP): {
+    OPCODE(JUMP):
+    {
       int offset = READ_SHORT();
       ip += offset;
       DISPATCH();
     }
 
-    OPCODE(LOOP): {
+    OPCODE(LOOP):
+    {
       int offset = READ_SHORT();
       ip -= offset;
       DISPATCH();

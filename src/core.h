@@ -9,7 +9,18 @@
 #include "var.h"
 #include "common.h"
 
+// Initialize core language, builtin function and "std" scripts.
+// Note (TODO: refactore required):
+//    Since the builtin function doesn't require any allocation they're
+//    elements of a static `builtins` array but the "std" scripts are `Script`
+//    objects they required memory management and they're bound with the VM.
+//    It contradicts `initializeCore()` to be called for each VM or only once.
+//    1. Make the scripts share between VMs.
+//    2. Destroy scripts buffer only when the last VM die.
 void initializeCore(MSVM* vm);
+
+// Mark the heap allocated core object at the mark phase.
+void markCoreObjects(MSVM* vm);
 
 // Find the builtin function name and returns it's index in the builtins array
 // if not found returns -1.
