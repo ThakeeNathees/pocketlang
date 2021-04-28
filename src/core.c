@@ -298,7 +298,7 @@ Var varAdd(MSVM* vm, Var v1, Var v2) {
       case OBJ_STRING:
       {
         if (o2->type == OBJ_STRING) {
-          TODO; // Implement String.format('@@', s1, s2);
+          return stringFormat(vm, "@@", v1, v2);
         }
       } break;
 

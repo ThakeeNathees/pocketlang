@@ -96,16 +96,21 @@ double varToDouble(Var value) {
 #endif // VAR_NAN_TAGGING
 }
 
+static String* allocateString(MSVM* vm, size_t length) {
+  String* string = ALLOCATE_DYNAMIC(vm, String, length + 1, char);
+  varInitObject(&string->_super, vm, OBJ_STRING);
+  string->length = length;
+  string->data[length] = '\0';
+  return string;
+}
+
 String* newString(MSVM* vm, const char* text, uint32_t length) {
 
   ASSERT(length == 0 || text != NULL, "Unexpected NULL string.");
 
-  String* string = ALLOCATE_DYNAMIC(vm, String, length + 1, char);
-  varInitObject(&string->_super, vm, OBJ_STRING);
-  string->length = length;
+  String* string = allocateString(vm, length);
 
-  if (length != 0) memcpy(string->data, text, length);
-  string->data[length] = '\0';
+  if (length != 0 && text != NULL) memcpy(string->data, text, length);
   return string;
 }
 
@@ -362,4 +367,59 @@ bool toBool(Var v) {
   }
 
   return true;
+}
+
+Var stringFormat(MSVM* vm, const char* fmt, ...) {
+  va_list arg_list;
+
+  // Calculate the total length of the resulting string. This is required to 
+  // determine the final string size to allocate.
+  va_start(arg_list, fmt);
+  size_t total_length = 0;
+  for (const char* c = fmt; *c != '\0'; c++) {
+    switch (*c) {
+      case '$':
+        total_length += strlen(va_arg(arg_list, const char*));
+        break;
+
+      case '@':
+        total_length += AS_STRING(va_arg(arg_list, Var))->length;
+        break;
+
+      default:
+        total_length++;
+    }
+  }
+  va_end(arg_list);
+
+  // Now build the new string.
+  String* result = allocateString(vm, total_length);
+  va_start(arg_list, fmt);
+  char* buff = result->data;
+  for (const char* c = fmt; *c != '\0'; c++) {
+    switch (*c) {
+      case '$':
+      {
+        const char* string = va_arg(arg_list, const char*);
+        size_t length = strlen(string);
+        memcpy(buff, string, length);
+        buff += length;
+      } break;
+
+      case '@':
+      {
+        String* string = AS_STRING(va_arg(arg_list, Var));
+        memcpy(buff, string->data, string->length);
+        buff += string->length;
+      } break;
+
+      default:
+      {
+        *buff++ = *c;
+      } break;
+    }
+  }
+  va_end(arg_list);
+
+  return VAR_OBJ(result);
 }
