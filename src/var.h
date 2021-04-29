@@ -378,4 +378,10 @@ String* toString(MSVM* vm, Var v, bool _recursive);
 // Returns the truthy value of the var.
 bool toBool(Var v);
 
+// Creates a new string from the arguments. This is intented to used internal
+// usage and it has 2 formated characters (just like wren does).
+// $ - a C string
+// @ - a String object
+Var stringFormat(MSVM* vm, const char* fmt, ...);
+
 #endif // VAR_H
