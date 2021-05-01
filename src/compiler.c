@@ -1804,11 +1804,11 @@ Script* compileSource(MSVM* vm, const char* path) {
 void compilerMarkObjects(Compiler* compiler, MSVM* vm) {
   
   // Mark the script which is currently being compiled.
-  markObject(&compiler->script->_super, vm);
+  grayObject(&compiler->script->_super, vm);
 
   // Mark the string literals (they haven't added to the script's literal
   // buffer yet).
-  markValue(compiler->parser.current.value, vm);
-  markValue(compiler->parser.previous.value, vm);
-  markValue(compiler->parser.next.value, vm);
+  grayValue(compiler->parser.current.value, vm);
+  grayValue(compiler->parser.previous.value, vm);
+  grayValue(compiler->parser.next.value, vm);
 }

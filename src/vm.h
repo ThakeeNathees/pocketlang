@@ -36,9 +36,9 @@ struct MSVM {
 
   // In the tri coloring scheme gray is the working list. We recursively pop
   // from the list color it balck and add it's referenced objects to gray_list.
-  Object** marked_list;
-  int marked_list_count;
-  int marked_list_capacity;
+  Object** gray_list;
+  int gray_list_count;
+  int gray_list_capacity;
 
   // A stack of temporary object references to ensure that the object
   // doesn't garbage collected.

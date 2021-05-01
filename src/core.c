@@ -273,7 +273,7 @@ void initializeCore(MSVM* vm) {
 
 void markCoreObjects(MSVM* vm) {
   for (int i = 0; i < builtins_count; i++) {
-    markObject(&builtins[i].fn->_super, vm);
+    grayObject(&builtins[i].fn->_super, vm);
   }
 }
 

@@ -195,6 +195,7 @@ typedef enum /* ObjectType */ {
 
   OBJ_FIBER,
 
+  // TODO: remove OBJ_USER and implement handlers for that.
   OBJ_USER,
 } ObjectType;
 
@@ -245,10 +246,13 @@ struct Script {
   // One of the below is null and other one is not. Since "std" script names
   // are hardcoded and user script names are constructed.
   const char* name;   //< Std script's name. Null for user script.
-  String* path;       //< Absolute path of the script. Null for std scripts.
 
-  ID imports[MAX_IMPORT_SCRIPTS]; //< Imported script IDs.
-  int import_count;               //< Number of import in imports.
+  // TODO:
+  //   String* path;   //< Absolute path of the script. Null for std scripts.
+
+  // TODO: maybe imported scripts are stored in var buffer and not here.
+  //   ID imports[MAX_IMPORT_SCRIPTS]; //< Imported script IDs.
+  //   int import_count;               //< Number of import in imports.
 
   VarBuffer globals;         //< Script level global variables.
   NameTable global_names;    //< Name map to index in globals.
@@ -328,11 +332,31 @@ void varInitObject(Object* self, MSVM* vm, ObjectType type);
 
 // Mark the reachable objects at the mark-and-sweep phase of the garbage
 // collection.
-void markObject(Object* self, MSVM* vm);
+void grayObject(Object* self, MSVM* vm);
 
 // Mark the reachable values at the mark-and-sweep phase of the garbage
 // collection.
-void markValue(Var self, MSVM* vm);
+void grayValue(Var self, MSVM* vm);
+
+// Mark the elements of the buffer as reachable at the mark-and-sweep pahse of
+// the garbage collection.
+void grayVarBuffer(VarBuffer* self, MSVM* vm);
+
+// Mark the elements of the buffer as reachable at the mark-and-sweep pahse of
+// the garbage collection.
+void grayStringBuffer(StringBuffer* self, MSVM* vm);
+
+// Mark the elements of the buffer as reachable at the mark-and-sweep pahse of
+// the garbage collection.
+void grayFunctionBuffer(FunctionBuffer* self, MSVM* vm);
+
+// Mark the elements of the name table as reachable at the mark-and-sweep pahse
+// of the garbage collection.
+void grayNameTable(NameTable* self, MSVM* vm);
+
+// Pop objects from the gray list and add it's referenced objects to the
+// working list to traverse and update the vm's [bytes_allocated] value.
+void blackenObjects(MSVM* vm);
 
 // Instead use VAR_NUM(value) and AS_NUM(value)
 Var doubleToVar(double value);
