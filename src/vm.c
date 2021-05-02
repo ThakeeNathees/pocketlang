@@ -74,8 +74,8 @@ void msFreeVM(MSVM* self) {
     obj = next;
   }
 
-  self->marked_list = (Object**)self->config.realloc_fn(
-    self->marked_list, 0, self->config.user_data);
+  self->gray_list = (Object**)self->config.realloc_fn(
+    self->gray_list, 0, self->config.user_data);
   self->config.realloc_fn(self, 0, self->config.user_data);
 }
 
@@ -83,10 +83,10 @@ void vmInit(MSVM* self, MSConfiguration* config) {
   memset(self, 0, sizeof(MSVM));
   self->config = *config;
 
-  self->marked_list_count = 0;
-  self->marked_list_capacity = 8; // TODO: refactor the magic '8' here.
-  self->marked_list = (Object**)self->config.realloc_fn(
-    NULL, sizeof(Object*) * self->marked_list_capacity, NULL);
+  self->gray_list_count = 0;
+  self->gray_list_capacity = 8; // TODO: refactor the magic '8' here.
+  self->gray_list = (Object**)self->config.realloc_fn(
+    NULL, sizeof(Object*) * self->gray_list_capacity, NULL);
   self->next_gc = 1024 * 1024 * 10; // TODO:
 
   // TODO: no need to initialize if already done by another vm.
@@ -116,12 +116,12 @@ void vmCollectGarbage(MSVM* self) {
 
   // Mark all the 'std' scripts.
   for (int i = 0; i < self->std_count; i++) {
-    markObject(&(self->std_scripts[i]->_super), self);
+    grayObject(&(self->std_scripts[i]->_super), self);
   }
 
   // Mark temp references.
   for (int i = 0; i < self->temp_reference_count; i++) {
-    markObject(self->temp_reference[i], self);
+    grayObject(self->temp_reference[i], self);
   }
 
   // Garbage collection triggered at the middle of a compilation.
@@ -131,14 +131,16 @@ void vmCollectGarbage(MSVM* self) {
 
   // Garbage collection triggered at the middle of runtime.
   if (self->script != NULL) {
-    markObject(&self->script->_super, self);
+    grayObject(&self->script->_super, self);
   }
 
   if (self->fiber != NULL) {
-    markObject(&self->fiber->_super, self);
+    grayObject(&self->fiber->_super, self);
   }
   
-  TODO;
+  blackenObjects(self);
+
+  TODO; // Sweep.
 }
 
 void vmAddStdScript(MSVM* self, Script* script) {

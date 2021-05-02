@@ -45,26 +45,155 @@ void varInitObject(Object* self, MSVM* vm, ObjectType type) {
   vm->first = self;
 }
 
-void markObject(Object* self, MSVM* vm) {
+void grayObject(Object* self, MSVM* vm) {
   if (self == NULL || self->is_marked) return;
   self->is_marked = true;
 
   // Add the object to the VM's gray_list so that we can recursively mark
   // it's referenced objects later.
-  if (vm->marked_list_count >= vm->marked_list_capacity) {
-    vm->marked_list_capacity *= 2;
-    vm->marked_list = (Object**)vm->config.realloc_fn(
-      vm->marked_list,
-      vm->marked_list_capacity * sizeof(Object*),
+  if (vm->gray_list_count >= vm->gray_list_capacity) {
+    vm->gray_list_capacity *= 2;
+    vm->gray_list = (Object**)vm->config.realloc_fn(
+      vm->gray_list,
+      vm->gray_list_capacity * sizeof(Object*),
       vm->config.user_data);
   }
 
-  vm->marked_list[vm->marked_list_count++] = self;
+  vm->gray_list[vm->gray_list_count++] = self;
 }
 
-void markValue(Var self, MSVM* vm) {
+void grayValue(Var self, MSVM* vm) {
   if (!IS_OBJ(self)) return;
-  markObject(AS_OBJ(self), vm);
+  grayObject(AS_OBJ(self), vm);
+}
+
+void grayVarBuffer(VarBuffer* self, MSVM* vm) {
+  for (int i = 0; i < self->count; i++) {
+    grayValue(self->data[i], vm);
+  }
+}
+
+void grayStringBuffer(StringBuffer* self, MSVM* vm) {
+  for (int i = 0; i < self->count; i++) {
+    grayObject((Object*)self->data[i], vm);
+  }
+}
+
+void grayFunctionBuffer(FunctionBuffer* self, MSVM* vm) {
+  for (int i = 0; i < self->count; i++) {
+    grayObject((Object*)self->data[i], vm);
+  }
+}
+
+void grayNameTable(NameTable* self, MSVM* vm) {
+  for (int i = 0; i < self->count; i++) {
+    grayObject((Object*)self->data[i], vm);
+  }
+}
+
+static void blackenObject(Object* obj, MSVM* vm) {
+  // TODO: trace here.
+
+  switch (obj->type) {
+    case OBJ_STRING: {
+      vm->bytes_allocated += sizeof(String);
+      vm->bytes_allocated += (size_t)(((String*)obj)->length + 1);
+    } break;
+
+    case OBJ_LIST: {
+      List* list = (List*)obj;
+      grayVarBuffer(&list->elements, vm);
+      vm->bytes_allocated += sizeof(List);
+      vm->bytes_allocated += sizeof(Var) * list->elements.capacity;
+    } break;
+
+    case OBJ_MAP: {
+      TODO;
+    } break;
+
+    case OBJ_RANGE: {
+      vm->bytes_allocated += sizeof(Range);
+    } break;
+
+    case OBJ_SCRIPT:
+    {
+      Script* script = (Script*)obj;
+      vm->bytes_allocated += sizeof(Script);
+
+      const int NT_ELEM_SIZE = sizeof(*script->global_names.data);
+
+      grayVarBuffer(&script->globals, vm);
+      vm->bytes_allocated += sizeof(Var) * script->globals.capacity;
+
+      grayNameTable(&script->global_names, vm);
+      vm->bytes_allocated += NT_ELEM_SIZE * script->global_names.capacity;
+
+      grayVarBuffer(&script->literals, vm);
+      vm->bytes_allocated += sizeof(Var) * script->literals.capacity;
+
+      grayFunctionBuffer(&script->functions, vm);
+      vm->bytes_allocated += sizeof(Function*) * script->functions.capacity;
+
+      grayNameTable(&script->function_names, vm);
+      vm->bytes_allocated += NT_ELEM_SIZE * script->function_names.capacity;
+
+      grayStringBuffer(&script->names, vm);
+      vm->bytes_allocated += sizeof(String*) * script->names.capacity;
+
+      grayObject((Object*)script->body, vm);
+    } break;
+
+    case OBJ_FUNC:
+    {
+      Function* func = (Function*)obj;
+      vm->bytes_allocated += sizeof(Function);
+
+      grayObject((Object*)func->owner, vm);
+
+      if (!func->is_native) {
+        Fn* fn = func->fn;
+        vm->bytes_allocated += sizeof(uint8_t)* fn->opcodes.capacity;
+        vm->bytes_allocated += sizeof(int) * fn->oplines.capacity;
+      }
+    } break;
+
+    case OBJ_FIBER:
+    {
+      Fiber* fiber = (Fiber*)obj;
+      vm->bytes_allocated += sizeof(Fiber);
+
+      grayObject((Object*)fiber->func, vm);
+
+      // Blacken the stack.
+      for (Var* local = fiber->stack; local < fiber->sp; local++) {
+        grayValue(*local, vm);
+      }
+      vm->bytes_allocated += sizeof(Var) * fiber->stack_size;
+
+      // Blacken call frames.
+      for (int i = 0; i < fiber->frame_count; i++) {
+        grayObject((Object*)fiber->frames[i].fn, vm);
+        grayObject((Object*)fiber->frames[i].fn->owner, vm);
+      }
+      vm->bytes_allocated += sizeof(CallFrame) * fiber->frame_capacity;
+
+      grayObject((Object*)fiber->error, vm);
+
+    } break;
+
+    case OBJ_USER:
+      TODO;
+      break;
+  }
+}
+
+
+void blackenObjects(MSVM* vm) {
+  while (vm->gray_list_count > 0) {
+    // Pop the gray object from the list.
+    Object* gray = vm->gray_list[--vm->gray_list_count];
+    blackenObject(gray, vm);
+  }
 }
 
 #if VAR_NAN_TAGGING
@@ -99,7 +228,7 @@ double varToDouble(Var value) {
 static String* allocateString(MSVM* vm, size_t length) {
   String* string = ALLOCATE_DYNAMIC(vm, String, length + 1, char);
   varInitObject(&string->_super, vm, OBJ_STRING);
-  string->length = length;
+  string->length = (uint32_t)length;
   string->data[length] = '\0';
   return string;
 }
@@ -138,7 +267,7 @@ Script* newScript(MSVM* vm) {
   varInitObject(&script->_super, vm, OBJ_SCRIPT);
 
   script->name = NULL;
-  script->path = NULL;
+  // TODO: script->path = NULL;
 
   varBufferInit(&script->globals);
   nameTableInit(&script->global_names);
