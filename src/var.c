@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 
+#include "utils.h"
 #include "var.h"
 #include "vm.h"
 
@@ -38,6 +39,16 @@ const char* msAsString(MSVM* vm, Var value) {
 // Number of maximum digits for to_string buffer.
 #define TO_STRING_BUFF_SIZE 128
 
+// The maximum percentage of the map entries that can be filled before the map
+// is grown. A lower percentage reduce collision which makes looks up faster
+// but take more memory.
+#define MAP_FILL_PERCENT (75 / 100)
+
+// The factor a collection would grow by when it's exceeds the current capacity.
+// The new capacity will be calculated by multiplying it's old capacity by the
+// GROW_FACTOR.
+#define GROW_FACTOR 2
+
 void varInitObject(Object* self, MSVM* vm, ObjectType type) {
   self->type = type;
   self->is_marked = false;
@@ -67,39 +78,26 @@ void markValue(Var self, MSVM* vm) {
   markObject(AS_OBJ(self), vm);
 }
 
-#if VAR_NAN_TAGGING
-// A union to reinterpret a double as raw bits and back.
-typedef union {
-  uint64_t bits64;
-  uint32_t bits32[2];
-  double num;
-} _DoubleBitsConv;
-#endif
-
 Var doubleToVar(double value) {
 #if VAR_NAN_TAGGING
-  _DoubleBitsConv bits;
-  bits.num = value;
-  return bits.bits64;
+  return utilDoubleToBits(value);
 #else
-  // TODO:
+#error TODO:
 #endif // VAR_NAN_TAGGING
 }
 
 double varToDouble(Var value) {
 #if VAR_NAN_TAGGING
-  _DoubleBitsConv bits;
-  bits.bits64 = value;
-  return bits.num;
+  return utilDoubleFromBits(value);
 #else
-  // TODO:
+  #error TODO:
 #endif // VAR_NAN_TAGGING
 }
 
 static String* allocateString(MSVM* vm, size_t length) {
   String* string = ALLOCATE_DYNAMIC(vm, String, length + 1, char);
   varInitObject(&string->_super, vm, OBJ_STRING);
-  string->length = length;
+  string->length = (uint32_t)length;
   string->data[length] = '\0';
   return string;
 }
@@ -123,6 +121,15 @@ List* newList(MSVM* vm, uint32_t size) {
     list->elements.count = 0;
   }
   return list;
+}
+
+Map* newMap(MSVM* vm) {
+  Map* map = ALLOCATE(vm, Map);
+  varInitObject(&map->_super, vm, OBJ_MAP);
+  map->capacity = 0;
+  map->count = 0;
+  map->entries = NULL;
+  return map;
 }
 
 Range* newRange(MSVM* vm, double from, double to) {
@@ -200,6 +207,106 @@ Fiber* newFiber(MSVM* vm) {
   memset(fiber, 0, sizeof(Fiber));
   varInitObject(&fiber->_super, vm, OBJ_FIBER);
   return fiber;
+}
+
+void listInsert(List* self, MSVM* vm, uint32_t index, Var value) {
+
+  // Add an empty slot at the end of the buffer.
+  if (IS_OBJ(value)) vmPushTempRef(vm, AS_OBJ(value));
+  varBufferWrite(&self->elements, vm, VAR_NULL);
+  if (IS_OBJ(value)) vmPopTempRef(vm);
+
+  // Shift the existing elements down.
+  for (int i = self->elements.count - 1; i > index; i--) {
+    self->elements.data[i] = self->elements.data[i - 1];
+  }
+
+  // Insert the new element.
+  self->elements.data[index] = value;
+}
+
+Var listRemoveAt(List* self, MSVM* vm, uint32_t index) {
+  Var removed = self->elements.data[index];
+  if (IS_OBJ(removed)) vmPushTempRef(vm, AS_OBJ(removed));
+
+  // Shift the rest of the elements up.
+  for (int i = index; i < self->elements.count - 1; i++) {
+    self->elements.data[i] = self->elements.data[i + 1];
+  }
+
+  // Shrink the size if it's too much excess.
+  if (self->elements.capacity / GROW_FACTOR >= self->elements.count) {
+    self->elements.data = (Var*)vmRealloc(vm, self->elements.data,
+      sizeof(Var) * self->elements.capacity,
+      sizeof(Var) * self->elements.capacity / GROW_FACTOR);
+    self->elements.capacity /= GROW_FACTOR;
+  }
+
+  if (IS_OBJ(removed)) vmPopTempRef(vm);
+
+  self->elements.count--;
+  return removed;
+}
+
+// Return a has value for the object.
+static uint32_t _hashObject(Object* obj) {
+  switch (obj->type) {
+
+    case OBJ_STRING:
+      // TODO: add hash as a property to string MAYBE.
+      return utilHashString(((String*)obj)->data);
+
+    case OBJ_LIST:
+    case OBJ_MAP:
+      goto L_unhashable;
+
+    case OBJ_RANGE:
+    {
+      Range* range = (Range*)obj;
+      return utilHashNumber(range->from) ^ utilHashNumber(range->to);
+    }
+
+    case OBJ_SCRIPT:
+    case OBJ_FUNC:
+    case OBJ_FIBER:
+    case OBJ_USER:
+      TODO;
+
+    default:
+    L_unhashable:
+      ASSERT(false, "Only immutable objects are hashable.");
+      break;
+  }
+}
+
+static uint32_t _hashVar(Var value) {
+  if (IS_OBJ(value)) return _hashObject(AS_OBJ(value));
+
+#if VAR_NAN_TAGGING
+  return utilHashBits(value);
+#else
+  #error TODO:
+#endif
+}
+
+Var mapGet(Map* self, Var key) {
+  TODO;
+}
+
+void mapSet(Map* self, MSVM* vm, Var key, Var value) {
+
+  if (self->count + 1 > self->capacity * MAP_FILL_PERCENT) {
+    TODO;
+  }
+  TODO;
+}
+
+void mapClear(Map* self, MSVM* vm) {
+  TODO;
+}
+
+Var mapRemoveKey(Map* self, MSVM* vm, Var key) {
+  TODO;
 }
 
 void freeObject(MSVM* vm, Object* obj) {
@@ -287,7 +394,7 @@ bool isVauesSame(Var v1, Var v2) {
   // Bit representation of each values are unique so just compare the bits.
   return v1 == v2;
 #else
-#error TODO:
+  #error TODO:
 #endif
 }
 

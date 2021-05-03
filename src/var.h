@@ -230,7 +230,18 @@ struct List {
   VarBuffer elements; //< Elements of the array.
 };
 
-// TODO: struct Map here.
+typedef struct {
+  Var key;   //< The entry's key or VAR_UNDEFINED of the entry is not in use.
+  Var value; //< The entry's value (TODO: see wren for tombstone).
+} MapEntry;
+
+struct Map {
+  Object _super;
+
+  uint32_t capacity; //< Allocated entry's count.
+  uint32_t count;    //< Number of entries in the map.
+  MapEntry* entries; //< Pointer to the contiguous array.
+};
 
 struct Range {
   Object _super;
@@ -344,6 +355,9 @@ String* newString(MSVM* vm, const char* text, uint32_t length);
 // Allocate new List and return List*.
 List* newList(MSVM* vm, uint32_t size);
 
+// Allocate new Map and return Map*.
+Map* newMap(MSVM* vm);
+
 // Allocate new Range object and return Range*.
 Range* newRange(MSVM* vm, double from, double to);
 
@@ -359,6 +373,27 @@ Function* newFunction(MSVM* vm, const char* name, int length, Script* owner,
 
 // Allocate new Fiber object and return Fiber*.
 Fiber* newFiber(MSVM* vm);
+
+// Insert [value] to the list at [index] and shift down the rest of the
+// elements.
+void listInsert(List* self, MSVM* vm, uint32_t index, Var value);
+
+// Remove and return element at [index].
+Var listRemoveAt(List* self, MSVM* vm, uint32_t index);
+
+// Returns the value for the [key] in the mape. If key not exists return
+// VAR_UNDEFINED.
+Var mapGet(Map* self, Var key);
+
+// Add the [key], [value] entry to the map.
+void mapSet(Map* self, MSVM* vm, Var key, Var value);
+
+// Remove all the entries from the map.
+void mapClear(Map* self, MSVM* vm);
+
+// Remove the [key] from the map. If the key exists return it's value
+// otherwise return VAR_NULL.
+Var mapRemoveKey(Map* self, MSVM* vm, Var key);
 
 // Release all the object owned by the [obj] including itself.
 void freeObject(MSVM* vm, Object* obj);

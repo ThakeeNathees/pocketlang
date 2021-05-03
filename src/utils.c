@@ -25,14 +25,51 @@ bool utilIsDigit(char c) {
   return ('0' <= c && c <= '9');
 }
 
+uint64_t utilDoubleToBits(double value) {
+  _DoubleBitsConv bits;
+  bits.num = value;
+  return bits.bits64;
+}
+
+double utilDoubleFromBits(uint64_t value) {
+  _DoubleBitsConv bits;
+  bits.bits64 = value;
+  return bits.num;
+}
+
+uint32_t utilHashBits(uint64_t hash) {
+  // From v8's ComputeLongHash() which in turn cites:
+  // Thomas Wang, Integer Hash Functions.
+  // http://www.concentric.net/~Ttwang/tech/inthash.htm
+  hash = ~hash + (hash << 18);
+  hash = hash ^ (hash >> 31);
+  hash = hash * 21;
+  hash = hash ^ (hash >> 11);
+  hash = hash + (hash << 6);
+  hash = hash ^ (hash >> 22);
+  return (uint32_t)(hash & 0x3fffffff);
+}
+
+uint32_t utilHashNumber(double num) {
+  // Hash the raw bits of the value.
+  return utilHashBits(utilDoubleToBits(num));
+}
+
+uint32_t utilHashString(const char* string) {
+  // FNV-1a hash. See: http://www.isthe.com/chongo/tech/comp/fnv/
+  uint32_t hash = 2166136261u;
+
+  for (const char* c = string; *c != '\0'; c++) {
+    hash ^= *c;
+    hash *= 16777619;
+  }
+
+  return hash;
+}
+
 /****************************************************************************
  * UTF8                                                                     *
  ****************************************************************************/
-
-#define B1(first) 0b##first
-#define B2(first, last) 0b##first##last
-#define B3(first, second, last) 0b##first##second##last
-#define B4(first, second, third, last) 0b##first##second##third##last
 
 int utf8_encodeBytesCount(int value) {
   if (value <= 0x7f) return 1;
@@ -66,17 +103,17 @@ int utf8_encodeValue(int value, uint8_t* bytes) {
   // 2 byte character 110xxxxx 10xxxxxx -> last 6 bits write to 2nd byte and
   // first 5 bit write to first byte
   if (value <= 0x7ff) {
-    *(bytes++) = B2(110, 00000) | ((value & B2(11111, 000000)) >> 6);
-    *(bytes) = B2(10, 000000) | ((value & B1(111111)));
+    *(bytes++) = 0b11000000 | ((value & 0b11111000000) >> 6);
+    *(bytes) = 0b10000000 | ((value & 111111));
     return 2;
   }
 
   // 3 byte character 1110xxxx 10xxxxxx 10xxxxxx -> from last, 6 bits write
   // to  3rd byte, next 6 bits write to 2nd byte, and 4 bits to first byte.
   if (value <= 0xffff) {
-    *(bytes++) = B2(1110, 0000) | ((value & B3(1111, 000000, 000000)) >> 12);
-    *(bytes++) = B2(10, 000000) | ((value & B2(111111, 000000)) >> 6);
-    *(bytes) = B2(10, 000000) | ((value & B1(111111)));
+    *(bytes++) = 0b11100000 | ((value & 0b1111000000000000) >> 12);
+    *(bytes++) = 0b10000000 | ((value & 0b111111000000) >> 6);
+    *(bytes) = 0b10000000 | ((value & 0b111111));
     return 3;
   }
 
@@ -84,10 +121,10 @@ int utf8_encodeValue(int value, uint8_t* bytes) {
   // to 4th byte, next 6 bits to 3rd byte, next 6 bits to 2nd byte, 3 bits
   // first byte.
   if (value <= 0x10ffff) {
-    *(bytes++) = B2(11110, 000) | ((value & B4(111, 000000, 000000, 000000)) >> 18);
-    *(bytes++) = B2(10, 000000) | ((value & B3(111111, 000000, 000000)) >> 12);
-    *(bytes++) = B2(10, 000000) | ((value & B2(111111, 000000)) >> 6);
-    *(bytes) = B2(10, 000000) | ((value & B1(111111)));
+    *(bytes++) = 0b11110000 | ((value & 0b111000000000000000000) >> 18);
+    *(bytes++) = 0b10000000 | ((value & 0b111111000000000000) >> 12);
+    *(bytes++) = 0b10000000 | ((value & 0b111111000000) >> 6);
+    *(bytes)   = 0b10000000 | ((value & 0b111111));
     return 4;
   }
 
@@ -100,24 +137,24 @@ int utf8_decodeBytes(uint8_t* bytes, int* value) {
   int byte_count = 1;
   int _value = 0;
 
-  if ((*bytes & B2(11, 000000)) == B2(10, 000000)) {
+  if ((*bytes & 0b11000000) == 0b10000000) {
     *value = *bytes;
     return byte_count;
   }
 
-  else if ((*bytes & B2(111, 00000)) == B2(110, 00000)) {
+  else if ((*bytes & 0b11100000) == 0b11000000) {
     continue_bytes = 1;
-    _value = (*bytes & B1(11111));
+    _value = (*bytes & 0b11111);
   }
 
-  else if ((*bytes & B2(1111, 0000)) == B2(1110, 0000)) {
+  else if ((*bytes & 0b11110000) == 0b11100000) {
     continue_bytes = 2;
-    _value = (*bytes & B1(1111));
+    _value = (*bytes & 0b1111);
   }
 
-  else if ((*bytes & B2(11111, 000)) == B2(11110, 000)) {
+  else if ((*bytes & 0b11111000) == 0b11110000) {
     continue_bytes = 3;
-    _value = (*bytes & B1(111));
+    _value = (*bytes & 0b111);
   }
 
   else {
@@ -129,16 +166,11 @@ int utf8_decodeBytes(uint8_t* bytes, int* value) {
   while (continue_bytes--) {
     bytes++, byte_count++;
 
-    if ((*bytes & B2(11, 000000)) != B2(10, 000000)) return -1;
+    if ((*bytes & 0b11000000) != 0b10000000) return -1;
 
-    _value = (_value << 6) | (*bytes & B2(00, 111111));
+    _value = (_value << 6) | (*bytes & 0b00111111);
   }
 
   *value = _value;
   return byte_count;
 }
-
-#undef B1
-#undef B2
-#undef B3
-#undef B4
