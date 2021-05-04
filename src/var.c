@@ -42,7 +42,7 @@ const char* msAsString(MSVM* vm, Var value) {
 // The maximum percentage of the map entries that can be filled before the map
 // is grown. A lower percentage reduce collision which makes looks up faster
 // but take more memory.
-#define MAP_FILL_PERCENT (75 / 100)
+#define MAP_LOAD_PERCENT (75 / 100)
 
 // The factor a collection would grow by when it's exceeds the current capacity.
 // The new capacity will be calculated by multiplying it's old capacity by the
@@ -94,7 +94,7 @@ double varToDouble(Var value) {
 #endif // VAR_NAN_TAGGING
 }
 
-static String* allocateString(MSVM* vm, size_t length) {
+static String* _allocateString(MSVM* vm, size_t length) {
   String* string = ALLOCATE_DYNAMIC(vm, String, length + 1, char);
   varInitObject(&string->_super, vm, OBJ_STRING);
   string->length = (uint32_t)length;
@@ -106,9 +106,11 @@ String* newString(MSVM* vm, const char* text, uint32_t length) {
 
   ASSERT(length == 0 || text != NULL, "Unexpected NULL string.");
 
-  String* string = allocateString(vm, length);
+  String* string = _allocateString(vm, length);
 
   if (length != 0 && text != NULL) memcpy(string->data, text, length);
+  string->hash = utilHashString(string->data);
+
   return string;
 }
 
@@ -217,7 +219,7 @@ void listInsert(List* self, MSVM* vm, uint32_t index, Var value) {
   if (IS_OBJ(value)) vmPopTempRef(vm);
 
   // Shift the existing elements down.
-  for (int i = self->elements.count - 1; i > index; i--) {
+  for (uint32_t i = self->elements.count - 1; i > index; i--) {
     self->elements.data[i] = self->elements.data[i - 1];
   }
 
@@ -230,7 +232,7 @@ Var listRemoveAt(List* self, MSVM* vm, uint32_t index) {
   if (IS_OBJ(removed)) vmPushTempRef(vm, AS_OBJ(removed));
 
   // Shift the rest of the elements up.
-  for (int i = index; i < self->elements.count - 1; i++) {
+  for (uint32_t i = index; i < self->elements.count - 1; i++) {
     self->elements.data[i] = self->elements.data[i + 1];
   }
 
@@ -289,24 +291,160 @@ static uint32_t _hashVar(Var value) {
 #endif
 }
 
+// Find the entry with the [key]. Returns true if found and set [result] to
+// point to the entry, return false otherwise and points [result] to where
+// the entry should be inserted.
+static bool _mapFindEntry(Map* self, Var key, MapEntry** result) {
+
+  // An empty map won't contain the key.
+  if (self->capacity == 0) return false;
+
+  // The [start_index] is where the entry supposed to be if there wasn't any
+  // collision occured. It'll be the start index for the linear probing.
+  uint32_t start_index = _hashVar(key) % self->capacity;
+  uint32_t index = start_index;
+
+  // Keep track of the first tombstone after the [start_index] if we don't find
+  // the key anywhere. The tombstone would be the entry at where we will have
+  // to insert the key/value pair.
+  MapEntry* tombstone = NULL;
+
+  do {
+    MapEntry* entry = &self->entries[index];
+
+    if (IS_UNDEF(entry->key)) {
+      ASSERT(IS_BOOL(entry->value), OOPS);
+
+      if (IS_TRUE(entry->value)) {
+
+        // We've found a tombstone, if we haven't found one [tombstone] should
+        // be updated. We still need to keep search for if the key exists.
+        if (tombstone == NULL) tombstone = entry;
+
+      } else {
+        // We've found a new empty slot and the key isn't found. If we've
+        // found a tombstone along the sequence we could use that entry
+        // otherwise the entry at the current index.
+
+        *result = (tombstone != NULL) ? tombstone : entry;
+        return false;
+      }
+
+    } else if (isValuesEqual(entry->key, key)) {
+      // We've found the key.
+      *result = entry;
+      return true;
+    }
+    
+    index = (index + 1) % self->capacity;
+
+  } while (index != start_index);
+
+  // If we reach here means the map is filled with tombstone. Set the first
+  // tombstone as result for the next insertion and return false.
+  ASSERT(tombstone != NULL, OOPS);
+  *result = tombstone;
+  return false;
+}
+
+// Add the key, value pair to the entries array of the map. Returns true if 
+// the entry added for the first time and false for replaced vlaue.
+static bool _mapInsertEntry(Map* self, Var key, Var value) {
+
+  ASSERT(self->capacity != 0, "Should ensure the capacity before inserting.");
+
+  MapEntry* result;
+  if (_mapFindEntry(self, key, &result)) {
+    // Key already found, just replace the value.
+    result->value = value;
+    return false;
+  } else {
+    result->key = key;
+    result->value = value;
+    return true;
+  }
+}
+
+// Resize the map's size to the given [capacity].
+static void _mapResize(Map* self, MSVM* vm, uint32_t capacity) {
+
+  MapEntry* old_entries = self->entries;
+  uint32_t old_capacity = self->capacity;
+
+  self->entries = ALLOCATE_ARRAY(vm, MapEntry, capacity);
+  self->capacity = capacity;
+  for (uint32_t i = 0; i < capacity; i++) {
+    self->entries->key = VAR_UNDEFINED;
+    self->entries->value = VAR_FALSE;
+  }
+
+  // Insert the old entries to the new entries.
+  for (uint32_t i = 0; i < old_capacity; i++) {
+    // Skip the empty entries or tombstones.
+    if (IS_UNDEF(old_entries[i].key)) continue;
+
+    _mapInsertEntry(self, old_entries[i].key, old_entries[i].value);
+  }
+
+  DEALLOCATE(vm, old_entries);
+}
+
 Var mapGet(Map* self, Var key) {
-  TODO;
+  MapEntry* entry;
+  if (_mapFindEntry(self, key, &entry)) return entry->value;
+  return VAR_UNDEFINED;
 }
 
 void mapSet(Map* self, MSVM* vm, Var key, Var value) {
 
-  if (self->count + 1 > self->capacity * MAP_FILL_PERCENT) {
-    TODO;
+  // If map is about to fill, resize it first.
+  if (self->count + 1 > self->capacity * MAP_LOAD_PERCENT) {
+    uint32_t capacity = self->capacity * GROW_FACTOR;
+    if (capacity < MIN_CAPACITY) capacity = MIN_CAPACITY;
+    _mapResize(self, vm, capacity);
   }
-  TODO;
+
+  if (_mapInsertEntry(self, key, value)) {
+    self->count++; //< A new key added.
+  }
 }
 
 void mapClear(Map* self, MSVM* vm) {
-  TODO;
+  DEALLOCATE(vm, self->entries);
+  self->entries = NULL;
+  self->capacity = 0;
+  self->count = 0;
 }
 
 Var mapRemoveKey(Map* self, MSVM* vm, Var key) {
-  TODO;
+  MapEntry* entry;
+  if (!_mapFindEntry(self, key, &entry)) return VAR_NULL;
+
+  // Set the key as VAR_UNDEFINED to mark is as an available slow and set it's
+  // value to VAR_TRUE for tombstone.
+  Var value = entry->value;
+  entry->key = VAR_UNDEFINED;
+  entry->value = VAR_TRUE;
+
+  self->count--;
+
+  if (IS_OBJ(value)) vmPushTempRef(vm, AS_OBJ(value));
+
+  if (self->count == 0) {
+    // Clear the map if it's empty.
+    mapClear(self, vm);
+
+  } else if (self->capacity > MIN_CAPACITY &&
+             self->capacity / GROW_FACTOR > self->count / MAP_LOAD_PERCENT) {
+    uint32_t capacity = self->capacity / GROW_FACTOR;
+    if (capacity < MIN_CAPACITY) capacity = MIN_CAPACITY;
+
+    _mapResize(self, vm, capacity);
+  }
+
+  if (IS_OBJ(value)) vmPopTempRef(vm);
+
+  return value;
 }
 
 void freeObject(MSVM* vm, Object* obj) {
@@ -372,7 +510,7 @@ void freeObject(MSVM* vm, Object* obj) {
 const char* varTypeName(Var v) {
   if (IS_NULL(v)) return "null";
   if (IS_BOOL(v)) return "bool";
-  if (IS_NUM(v)) return "number";
+  if (IS_NUM(v))  return "number";
 
   ASSERT(IS_OBJ(v), OOPS);
   Object* obj = AS_OBJ(v);
@@ -389,13 +527,39 @@ const char* varTypeName(Var v) {
   }
 }
 
-bool isVauesSame(Var v1, Var v2) {
+bool isValuesSame(Var v1, Var v2) {
 #if VAR_NAN_TAGGING
   // Bit representation of each values are unique so just compare the bits.
   return v1 == v2;
 #else
   #error TODO:
 #endif
+}
+
+bool isValuesEqual(Var v1, Var v2) {
+  if (isValuesSame(v1, v2)) return true;
+
+  // If we reach here only heap allocated objects could be compared.
+  if (!IS_OBJ(v1) || !IS_OBJ(v2)) return false;
+
+  Object* o1 = AS_OBJ(v1), *o2 = AS_OBJ(v2);
+  if (o1->type != o2->type) return false;
+
+  switch (o1->type) {
+    case OBJ_RANGE:
+      return ((Range*)o1)->from == ((Range*)o2)->from &&
+             ((Range*)o1)->to   == ((Range*)o2)->to;
+
+    case OBJ_STRING: {
+      String* s1 = (String*)o1, *s2 = (String*)o2;
+      return s1->hash == s2->hash &&
+             s1->length == s2->length &&
+             memcmp(s1->data, s2->data, s1->length) == 0;
+    }
+
+    default:
+      return false;
+  }
 }
 
 String* toString(MSVM* vm, Var v, bool recursive) {
@@ -421,7 +585,7 @@ String* toString(MSVM* vm, Var v, bool recursive) {
     switch (obj->type) {
       case OBJ_STRING:
       {
-        // If recursive return with quotes (ex: [42, "hello", 0..10])
+        // If recursive return with quotes (ex: [42, "hello", 0..10]).
         if (!recursive)
           return newString(vm, ((String*)obj)->data, ((String*)obj)->length);
         TODO; //< Add quotes around the string.
@@ -500,7 +664,7 @@ Var stringFormat(MSVM* vm, const char* fmt, ...) {
   va_end(arg_list);
 
   // Now build the new string.
-  String* result = allocateString(vm, total_length);
+  String* result = _allocateString(vm, total_length);
   va_start(arg_list, fmt);
   char* buff = result->data;
   for (const char* c = fmt; *c != '\0'; c++) {
@@ -528,5 +692,6 @@ Var stringFormat(MSVM* vm, const char* fmt, ...) {
   }
   va_end(arg_list);
 
+  result->hash = utilHashString(result->data);
   return VAR_OBJ(result);
 }

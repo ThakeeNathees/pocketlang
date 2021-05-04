@@ -35,7 +35,7 @@ const char* nameTableGet(NameTable* self, int index) {
   return self->data[index]->data;
 }
 
-int nameTableFind(NameTable* self, const char* name, size_t length) {
+uint32_t nameTableFind(NameTable* self, const char* name, size_t length) {
 
   for (int i = 0; i < self->count; i++) {
     if (self->data[i]->length == length &&

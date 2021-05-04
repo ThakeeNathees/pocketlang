@@ -219,6 +219,7 @@ struct Object {
 struct String {
   Object _super;
 
+  uint32_t hash;      //< Hash value of the string.
   uint32_t length;    //< Length of the string in \ref data.
   uint32_t capacity;  //< Size of allocated \ref data.
   char data[DYNAMIC_TAIL_ARRAY];
@@ -231,8 +232,12 @@ struct List {
 };
 
 typedef struct {
+  // If the key is VAR_UNDEFINED it's an empty slot and if the value is false
+  // the entry is new and available, if true it's a tumbstone - the entry
+  // previously used but then deleted.
+
   Var key;   //< The entry's key or VAR_UNDEFINED of the entry is not in use.
-  Var value; //< The entry's value (TODO: see wren for tombstone).
+  Var value; //< The entry's value.
 } MapEntry;
 
 struct Map {
@@ -403,8 +408,11 @@ void freeObject(MSVM* vm, Object* obj);
 // Returns the type name of the var [v].
 const char* varTypeName(Var v);
 
-// Returns true if both variables are the same.
-bool isVauesSame(Var v1, Var v2);
+// Returns true if both variables are the same (ie v1 is v2).
+bool isValuesSame(Var v1, Var v2);
+
+// Returns true if both variables are equal (ie v1 == v2).
+bool isValuesEqual(Var v1, Var v2);
 
 // Returns the string version of the value. Note: pass false as [_recursive]
 // It's for internal use (or may be I could make a wrapper around).

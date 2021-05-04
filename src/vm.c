@@ -30,7 +30,7 @@ void* vmRealloc(MSVM* self, void* memory, size_t old_size, size_t new_size) {
   // TODO: Debug trace allocations here.
 
   // Track the total allocated memory of the VM to trigger the GC.
-  // if vmRealloc is called for freeing the old_size would be 0 since 
+  // if vmRealloc is called for freeing, the old_size would be 0 since 
   // deallocated bytes are traced by garbage collector.
   self->bytes_allocated += new_size - old_size;
 

@@ -43,7 +43,7 @@ static void _dumpValue(MSVM* vm, Var value, bool recursive) {
         printf("[...]");
       } else {
         printf("[");
-        for (int i = 0; i < list->elements.count; i++) {
+        for (uint32_t i = 0; i < list->elements.count; i++) {
           if (i != 0) printf(", ");
           _dumpValue(vm, list->elements.data[i], true);
         }
@@ -82,7 +82,7 @@ void dumpValue(MSVM* vm, Var value) {
 void dumpInstructions(MSVM* vm, Function* func) {  
 
 
-  int i = 0;
+  uint32_t i = 0;
   uint8_t* opcodes = func->fn->opcodes.data;
   int* lines = func->fn->oplines.data;
   int line = 1, last_line = 0;
@@ -115,7 +115,7 @@ void dumpInstructions(MSVM* vm, Function* func) {
       {
         int index = READ_SHORT();
         printf("%5d ", index);
-        ASSERT_INDEX(index, func->owner->literals.count);
+        ASSERT_INDEX((uint32_t)index, func->owner->literals.count);
         Var value = func->owner->literals.data[index];
         dumpValue(vm, value);
         printf("\n");
