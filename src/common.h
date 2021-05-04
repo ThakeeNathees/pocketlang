@@ -121,6 +121,7 @@
 typedef struct Object Object;
 typedef struct String String;
 typedef struct List List;
+typedef struct Map Map;
 typedef struct Range Range;
 
 typedef struct Script Script;

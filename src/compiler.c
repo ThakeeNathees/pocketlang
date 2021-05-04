@@ -1310,8 +1310,8 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
 static int compilerAddConstant(Compiler* compiler, Var value) {
   VarBuffer* literals = &compiler->script->literals;
 
-  for (int i = 0; i < literals->count; i++) {
-    if (isVauesSame(literals->data[i], value)) {
+  for (uint32_t i = 0; i < literals->count; i++) {
+    if (isValuesSame(literals->data[i], value)) {
       return i;
     }
   }

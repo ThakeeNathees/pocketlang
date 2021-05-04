@@ -435,7 +435,7 @@ Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
       Script* scr = (Script*)obj;
 
       // Search in functions.
-      int index = nameTableFind(&scr->function_names, attrib->data,
+      uint32_t index = nameTableFind(&scr->function_names, attrib->data,
                                 attrib->length);
       if (index != -1) {
         ASSERT_INDEX(index, scr->functions.count);
@@ -501,7 +501,7 @@ do {                                                             \
       // TODO: check globals HERE.
 
       // Check function.
-      int index = nameTableFind(&scr->function_names, attrib->data,
+      uint32_t index = nameTableFind(&scr->function_names, attrib->data,
         attrib->length);
       if (index != -1) {
         ASSERT_INDEX(index, scr->functions.count);
@@ -644,7 +644,7 @@ bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value) {
 
   Object* obj = AS_OBJ(seq);
 
-  int32_t iter = 0; //< Nth iteration.
+  uint32_t iter = 0; //< Nth iteration.
   if (IS_NUM(*iterator)) {
     iter = _AS_INTEGER(*iterator);
   }
@@ -653,7 +653,7 @@ bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value) {
     case OBJ_STRING: {
       // TODO: // Need to consider utf8.
       String* str = ((String*)obj);
-      if (iter < 0 || iter >= (int)str->length) {
+      if (iter < 0 || iter >= str->length) {
         return false; //< Stop iteration.
       }
       // TODO: Or I could add char as a type for efficiency.
