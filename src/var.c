@@ -42,7 +42,7 @@ const char* msAsString(MSVM* vm, Var value) {
 // The maximum percentage of the map entries that can be filled before the map
 // is grown. A lower percentage reduce collision which makes looks up faster
 // but take more memory.
-#define MAP_LOAD_PERCENT (75 / 100)
+#define MAP_LOAD_PERCENT 75
 
 // The factor a collection would grow by when it's exceeds the current capacity.
 // The new capacity will be calculated by multiplying it's old capacity by the
@@ -79,25 +79,25 @@ void grayValue(Var self, MSVM* vm) {
 }
 
 void grayVarBuffer(VarBuffer* self, MSVM* vm) {
-  for (int i = 0; i < self->count; i++) {
+  for (uint32_t i = 0; i < self->count; i++) {
     grayValue(self->data[i], vm);
   }
 }
 
 void grayStringBuffer(StringBuffer* self, MSVM* vm) {
-  for (int i = 0; i < self->count; i++) {
+  for (uint32_t i = 0; i < self->count; i++) {
     grayObject((Object*)self->data[i], vm);
   }
 }
 
 void grayFunctionBuffer(FunctionBuffer* self, MSVM* vm) {
-  for (int i = 0; i < self->count; i++) {
+  for (uint32_t i = 0; i < self->count; i++) {
     grayObject((Object*)self->data[i], vm);
   }
 }
 
 void grayNameTable(NameTable* self, MSVM* vm) {
-  for (int i = 0; i < self->count; i++) {
+  for (uint32_t i = 0; i < self->count; i++) {
     grayObject((Object*)self->data[i], vm);
   }
 }
@@ -119,7 +119,14 @@ static void blackenObject(Object* obj, MSVM* vm) {
     } break;
 
     case OBJ_MAP: {
-      TODO;
+      Map* map = (Map*)obj;
+      for (uint32_t i = 0; i < map->count; i++) {
+        if (IS_UNDEF(map->entries[i].key)) continue;
+        grayObject((Object*)map->entries[i].key, vm);
+        grayObject((Object*)map->entries[i].value, vm);
+      }
+      vm->bytes_allocated += sizeof(Map);
+      vm->bytes_allocated += sizeof(MapEntry) * map->capacity;
     } break;
 
     case OBJ_RANGE: {
@@ -384,8 +391,7 @@ static uint32_t _hashObject(Object* obj) {
   switch (obj->type) {
 
     case OBJ_STRING:
-      // TODO: add hash as a property to string MAYBE.
-      return utilHashString(((String*)obj)->data);
+      return ((String*)obj)->hash;
 
     case OBJ_LIST:
     case OBJ_MAP:
@@ -527,7 +533,7 @@ Var mapGet(Map* self, Var key) {
 void mapSet(Map* self, MSVM* vm, Var key, Var value) {
 
   // If map is about to fill, resize it first.
-  if (self->count + 1 > self->capacity * MAP_LOAD_PERCENT) {
+  if (self->count + 1 > self->capacity * MAP_LOAD_PERCENT / 100) {
     uint32_t capacity = self->capacity * GROW_FACTOR;
     if (capacity < MIN_CAPACITY) capacity = MIN_CAPACITY;
     _mapResize(self, vm, capacity);
@@ -564,7 +570,7 @@ Var mapRemoveKey(Map* self, MSVM* vm, Var key) {
     mapClear(self, vm);
 
   } else if (self->capacity > MIN_CAPACITY &&
-             self->capacity / GROW_FACTOR > self->count / MAP_LOAD_PERCENT) {
+             self->capacity / GROW_FACTOR > self->count / MAP_LOAD_PERCENT * 100) {
     uint32_t capacity = self->capacity / GROW_FACTOR;
     if (capacity < MIN_CAPACITY) capacity = MIN_CAPACITY;
 
@@ -594,7 +600,7 @@ void freeObject(MSVM* vm, Object* obj) {
       break;
 
     case OBJ_MAP:
-      TODO;
+      DEALLOCATE(vm, ((Map*)obj)->entries);
       break;
 
     case OBJ_RANGE:
@@ -608,11 +614,9 @@ void freeObject(MSVM* vm, Object* obj) {
       functionBufferClear(&scr->functions, vm);
       nameTableClear(&scr->function_names, vm);
       stringBufferClear(&scr->names, vm);
-
     } break;
 
-    case OBJ_FUNC:
-    {
+    case OBJ_FUNC: {
       Function* func = (Function*)obj;
       if (!func->is_native) {
         byteBufferClear(&func->fn->opcodes, vm);
@@ -620,14 +624,14 @@ void freeObject(MSVM* vm, Object* obj) {
       }
     } break;
 
-    case OBJ_FIBER:
-    {
+    case OBJ_FIBER: {
       Fiber* fiber = (Fiber*)obj;
       DEALLOCATE(vm, fiber->stack);
       DEALLOCATE(vm, fiber->frames);
     } break;
 
     case OBJ_USER:
+      TODO; // Remove OBJ_USER.
       break;
   }
 
@@ -715,13 +719,26 @@ String* toString(MSVM* vm, Var v, bool recursive) {
       case OBJ_STRING:
       {
         // If recursive return with quotes (ex: [42, "hello", 0..10]).
-        if (!recursive)
-          return newString(vm, ((String*)obj)->data, ((String*)obj)->length);
-        TODO; //< Add quotes around the string.
-        break;
+        String* string = newString(vm, ((String*)obj)->data, ((String*)obj)->length);
+        if (!recursive) return string;
+        else return (String*)AS_OBJ(stringFormat(vm, "\"@\"", string));
       }
 
-      case OBJ_LIST:   return newString(vm, "[Array]",   7); // TODO;
+      case OBJ_LIST: {
+        List* list = (List*)obj;
+        String* result = newString(vm, "[", 1);
+
+        for (uint32_t i = 0; i < list->elements.count; i++) {
+          const char* fmt = (i != 0) ? "@, @" : "@@";
+
+          vmPushTempRef(vm, &result->_super);
+          result = (String*)AS_OBJ(stringFormat(vm, fmt,
+            result, toString(vm, list->elements.data[i], true)));
+          vmPopTempRef(vm);
+        }
+        return (String*)AS_OBJ(stringFormat(vm, "@]", result));
+      }
+
       case OBJ_MAP:    return newString(vm, "[Map]",     5); // TODO;
       case OBJ_RANGE:  return newString(vm, "[Range]",   7); // TODO;
       case OBJ_SCRIPT: return newString(vm, "[Script]",  8); // TODO;
@@ -744,21 +761,19 @@ String* toString(MSVM* vm, Var v, bool recursive) {
 }
 
 bool toBool(Var v) {
+
   if (IS_BOOL(v)) return AS_BOOL(v);
   if (IS_NULL(v)) return false;
-  if (IS_NUM(v)) {
-    return AS_NUM(v) != 0;
-  }
+  if (IS_NUM(v)) return AS_NUM(v) != 0;
 
   ASSERT(IS_OBJ(v), OOPS);
   Object* o = AS_OBJ(v);
   switch (o->type) {
     case OBJ_STRING: return ((String*)o)->length != 0;
-
     case OBJ_LIST:   return ((List*)o)->elements.count != 0;
-    case OBJ_MAP:    TODO;
-    case OBJ_RANGE:  TODO; // Nout sure.
-    case OBJ_SCRIPT: // [[FALLTHROUGH]]
+    case OBJ_MAP:    return ((Map*)o)->count != 0;
+    case OBJ_RANGE: // [[FALLTHROUGH]]
+    case OBJ_SCRIPT:
     case OBJ_FUNC:
     case OBJ_USER:
       return true;

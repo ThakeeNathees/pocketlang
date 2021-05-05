@@ -270,6 +270,20 @@ struct Script {
   //   ID imports[MAX_IMPORT_SCRIPTS]; //< Imported script IDs.
   //   int import_count;               //< Number of import in imports.
 
+  /*
+  TODO: Move all the strings in global_names, function_names to names and 
+  replace them with the index. (see below)
+
+  names:          ["x", "fn1", "y", "fn2", ...]
+                    0    1      2    3
+
+  function_names: [      1,         3 ] <-- function name
+                         0          1   <-- it's index
+
+  functions:      [      fn1,       fn2 ]
+                         0          1
+  */
+
   VarBuffer globals;         //< Script level global variables.
   NameTable global_names;    //< Name map to index in globals.
   VarBuffer literals;        //< Script literal constant values.

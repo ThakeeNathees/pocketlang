@@ -1020,6 +1020,8 @@ static void exprName(Compiler* compiler, bool can_assign) {
         compiler->new_local = true; 
       }
     } else {
+      // TODO: The name could be a function which hasn't been defined at this point.
+      //       Implement opcode to push a named variable.
       parseError(parser, "Name \"%.*s\" is not defined.", name_len, name_start);
     }
     return;
@@ -1044,8 +1046,8 @@ static void exprName(Compiler* compiler, bool can_assign) {
             default:
               UNREACHABLE();
               break;
-
           }
+
         } else {
           compileExpression(compiler);
         }
