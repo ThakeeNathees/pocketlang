@@ -9,7 +9,7 @@ ROOT = str(SCRIPT_PATH.parent)
 
 GEN_LIST = [
 	## name       type
-	('Int',       'int'),
+	('Uint',      'uint32_t'),
 	('Byte',      'uint8_t'),
 	('Var',       'Var'),
 	('String',    'String*'),

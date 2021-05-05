@@ -33,9 +33,9 @@
 #include "common.h"
 #include "types/gen/byte_buffer.h"
 #include "types/gen/function_buffer.h"
-#include "types/gen/int_buffer.h"
+#include "types/gen/uint_buffer.h"
 #include "types/gen/var_buffer.h"
-#include "types/name_table.h"
+#include "types/gen/string_buffer.h"
 
 // To use dynamic variably-sized struct with a tail array add an array at the
 // end of the struct with size \ref DYNAMIC_TAIL_ARRAY. This method was a
@@ -271,24 +271,21 @@ struct Script {
   //   int import_count;               //< Number of import in imports.
 
   /*
-  TODO: Move all the strings in global_names, function_names to names and 
-  replace them with the index. (see below)
+  names:     ["v1", "fn1", "v2", "fn2", ...]
+               0     1      2     3
 
-  names:          ["x", "fn1", "y", "fn2", ...]
-                    0    1      2    3
+  fn_names:  [      1,         3 ] <-- function name
+                    0          1   <-- it's index
 
-  function_names: [      1,         3 ] <-- function name
-                         0          1   <-- it's index
-
-  functions:      [      fn1,       fn2 ]
-                         0          1
+  functions: [      fn1,       fn2 ]
+                    0          1
   */
 
   VarBuffer globals;         //< Script level global variables.
-  NameTable global_names;    //< Name map to index in globals.
+  UintBuffer global_names;   //< Name map to index in globals.
   VarBuffer literals;        //< Script literal constant values.
   FunctionBuffer functions;  //< Script level functions.
-  NameTable function_names;  //< Name map to index in functions.
+  UintBuffer function_names; //< Name map to index in functions.
   StringBuffer names;        //< Name literals, attribute names, etc.
 
   Function* body;            //< Script body is an anonymous function.
@@ -297,7 +294,7 @@ struct Script {
 // Script function pointer.
 typedef struct {
   ByteBuffer opcodes;  //< Buffer of opcodes.
-  IntBuffer oplines;   //< Line number of opcodes for debug (1 based).
+  UintBuffer oplines;  //< Line number of opcodes for debug (1 based).
   int stack_size;      //< Maximum size of stack required.
 } Fn;
 
@@ -380,10 +377,6 @@ void grayStringBuffer(StringBuffer* self, MSVM* vm);
 // the garbage collection.
 void grayFunctionBuffer(FunctionBuffer* self, MSVM* vm);
 
-// Mark the elements of the name table as reachable at the mark-and-sweep pahse
-// of the garbage collection.
-void grayNameTable(NameTable* self, MSVM* vm);
-
 // Pop objects from the gray list and add it's referenced objects to the
 // working list to traverse and update the vm's [bytes_allocated] value.
 void blackenObjects(MSVM* vm);
@@ -464,5 +457,18 @@ bool toBool(Var v);
 // $ - a C string
 // @ - a String object
 Var stringFormat(MSVM* vm, const char* fmt, ...);
+
+// Add the name (string literal) to the string buffer if not already exists and
+// return it's index in the buffer.
+uint32_t scriptAddName(Script* self, MSVM* vm, const char* name,
+                       uint32_t length);
+
+// Search for the function name in the script and return it's index in it's
+// [functions] buffer. If not found returns -1.
+int scriptSearchFunc(Script* script, const char* name, uint32_t length);
+
+// Search for the global variable name in the script and return it's index in
+// it's [globals] buffer. If not found returns -1.
+int scriptSearchGlobals(Script* script, const char* name, uint32_t length);
 
 #endif // VAR_H

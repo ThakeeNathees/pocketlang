@@ -96,12 +96,6 @@ void grayFunctionBuffer(FunctionBuffer* self, MSVM* vm) {
   }
 }
 
-void grayNameTable(NameTable* self, MSVM* vm) {
-  for (uint32_t i = 0; i < self->count; i++) {
-    grayObject((Object*)self->data[i], vm);
-  }
-}
-
 static void blackenObject(Object* obj, MSVM* vm) {
   // TODO: trace here.
 
@@ -138,13 +132,11 @@ static void blackenObject(Object* obj, MSVM* vm) {
       Script* script = (Script*)obj;
       vm->bytes_allocated += sizeof(Script);
 
-      const int NT_ELEM_SIZE = sizeof(*script->global_names.data);
-
       grayVarBuffer(&script->globals, vm);
       vm->bytes_allocated += sizeof(Var) * script->globals.capacity;
 
-      grayNameTable(&script->global_names, vm);
-      vm->bytes_allocated += NT_ELEM_SIZE * script->global_names.capacity;
+      // Integer buffer have no gray call.
+      vm->bytes_allocated += sizeof(uint32_t) * script->global_names.capacity;
 
       grayVarBuffer(&script->literals, vm);
       vm->bytes_allocated += sizeof(Var) * script->literals.capacity;
@@ -152,8 +144,8 @@ static void blackenObject(Object* obj, MSVM* vm) {
       grayFunctionBuffer(&script->functions, vm);
       vm->bytes_allocated += sizeof(Function*) * script->functions.capacity;
 
-      grayNameTable(&script->function_names, vm);
-      vm->bytes_allocated += NT_ELEM_SIZE * script->function_names.capacity;
+      // Integer buffer have no gray call.
+      vm->bytes_allocated += sizeof(uint32_t) * script->function_names.capacity;
 
       grayStringBuffer(&script->names, vm);
       vm->bytes_allocated += sizeof(String*) * script->names.capacity;
@@ -286,10 +278,10 @@ Script* newScript(MSVM* vm) {
   // TODO: script->path = NULL;
 
   varBufferInit(&script->globals);
-  nameTableInit(&script->global_names);
+  uintBufferInit(&script->global_names);
   varBufferInit(&script->literals);
   functionBufferInit(&script->functions);
-  nameTableInit(&script->function_names);
+  uintBufferInit(&script->function_names);
   stringBufferInit(&script->names);
 
   vmPushTempRef(vm, &script->_super);
@@ -314,13 +306,13 @@ Function* newFunction(MSVM* vm, const char* name, int length, Script* owner,
 
   } else {
     // Add the name in the script's function buffer.
-    String* name_ptr;
     vmPushTempRef(vm, &func->_super);
     functionBufferWrite(&owner->functions, vm, func);
-    nameTableAdd(&owner->function_names, vm, name, length, &name_ptr);
+    uint32_t name_index = scriptAddName(owner, vm, name, length);
+    uintBufferWrite(&owner->function_names, vm, name_index);
     vmPopTempRef(vm);
   
-    func->name = name_ptr->data;
+    func->name = owner->names.data[name_index]->data;
     func->owner = owner;
     func->arity = -2; // -1 means variadic args.
     func->is_native = is_native;
@@ -333,7 +325,7 @@ Function* newFunction(MSVM* vm, const char* name, int length, Script* owner,
     Fn* fn = ALLOCATE(vm, Fn);
 
     byteBufferInit(&fn->opcodes);
-    intBufferInit(&fn->oplines);
+    uintBufferInit(&fn->oplines);
     fn->stack_size = 0;
     func->fn = fn;
   }
@@ -609,10 +601,10 @@ void freeObject(MSVM* vm, Object* obj) {
     case OBJ_SCRIPT: {
       Script* scr = (Script*)obj;
       varBufferClear(&scr->globals, vm);
-      nameTableClear(&scr->global_names, vm);
+      uintBufferClear(&scr->global_names, vm);
       varBufferClear(&scr->literals, vm);
       functionBufferClear(&scr->functions, vm);
-      nameTableClear(&scr->function_names, vm);
+      uintBufferClear(&scr->function_names, vm);
       stringBufferClear(&scr->names, vm);
     } break;
 
@@ -620,7 +612,7 @@ void freeObject(MSVM* vm, Object* obj) {
       Function* func = (Function*)obj;
       if (!func->is_native) {
         byteBufferClear(&func->fn->opcodes, vm);
-        intBufferClear(&func->fn->oplines, vm);
+        uintBufferClear(&func->fn->oplines, vm);
       }
     } break;
 
@@ -838,4 +830,47 @@ Var stringFormat(MSVM* vm, const char* fmt, ...) {
 
   result->hash = utilHashString(result->data);
   return VAR_OBJ(result);
+}
+
+uint32_t scriptAddName(Script* self, MSVM* vm, const char* name,
+  uint32_t length) {
+
+  for (uint32_t i = 0; i < self->names.count; i++) {
+    String* _name = self->names.data[i];
+    if (_name->length == length && strncmp(_name->data, name, length) == 0) {
+      // Name already exists in the buffer.
+      return i;
+    }
+  }
+
+  // If we reach here the name doesn't exists in the buffer, so add it and
+  // return the index.
+  String* new_name = newString(vm, name, length);
+  vmPushTempRef(vm, &new_name->_super);
+  stringBufferWrite(&self->names, vm, new_name);
+  vmPopTempRef(vm);
+  return self->names.count - 1;
+}
+
+int scriptSearchFunc(Script* script, const char* name, uint32_t length) {
+  for (uint32_t i = 0; i < script->function_names.count; i++) {
+    uint32_t name_index = script->function_names.data[i];
+    String* fn_name = script->names.data[name_index];
+    if (fn_name->length == length &&
+      strncmp(fn_name->data, name, length) == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+int scriptSearchGlobals(Script* script, const char* name, uint32_t length) {
+  for (uint32_t i = 0; i < script->global_names.count; i++) {
+    uint32_t name_index = script->global_names.data[i];
+    String* g_name = script->names.data[name_index];
+    if (g_name->length == length && strncmp(g_name->data, name, length) == 0) {
+      return i;
+    }
+  }
+  return -1;
 }

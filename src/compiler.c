@@ -9,7 +9,6 @@
 #include <string.h>
 
 #include "core.h"
-#include "types/name_table.h"
 #include "types/gen/byte_buffer.h"
 #include "utils.h"
 #include "vm.h"
@@ -787,7 +786,7 @@ typedef struct {
 
 // Will check if the name already defined.
 static NameSearchResult compilerSearchName(Compiler* compiler,
-  const char* name, int length) {
+  const char* name, uint32_t length) {
 
   NameSearchResult result;
   result.type = NAME_NOT_DEFINED;
@@ -826,7 +825,7 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
   }
 
   // Search through functions.
-  index = nameTableFind(&compiler->script->function_names, name, length);
+  index = scriptSearchFunc(compiler->script, name, length);
   if (index != -1) {
     result.type = NAME_FUNCTION;
     result.index = index;
@@ -1014,6 +1013,12 @@ static void exprName(Compiler* compiler, bool can_assign) {
       compileExpression(compiler);
       if (compiler->scope_depth == DEPTH_GLOBAL) {
         emitStoreVariable(compiler, index, true);
+
+        // Add the name to the script's global names.
+        uint32_t index = scriptAddName(compiler->script, compiler->vm,
+                                            name_start, name_len);
+        uintBufferWrite(&compiler->script->global_names, compiler->vm, index);
+
       } else {
         // This will prevent the assignment from poped out from the stack
         // since the assigned value itself is the local and not a temp.
@@ -1354,7 +1359,7 @@ static int emitByte(Compiler* compiler, int byte) {
 
   byteBufferWrite(&_FN->opcodes, compiler->vm,
                     (uint8_t)byte);
-  intBufferWrite(&_FN->oplines, compiler->vm,
+  uintBufferWrite(&_FN->oplines, compiler->vm,
                    compiler->parser.previous.line);
   return (int)_FN->opcodes.count - 1;
 }

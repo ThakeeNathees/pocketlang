@@ -84,8 +84,8 @@ void dumpInstructions(MSVM* vm, Function* func) {
 
   uint32_t i = 0;
   uint8_t* opcodes = func->fn->opcodes.data;
-  int* lines = func->fn->oplines.data;
-  int line = 1, last_line = 0;
+  uint32_t* lines = func->fn->oplines.data;
+  uint32_t line = 1, last_line = 0;
 
   printf("Instruction Dump of function '%s'\n", func->name);
 #define READ_BYTE() (opcodes[i++])

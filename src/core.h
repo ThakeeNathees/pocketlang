@@ -24,7 +24,7 @@ void markCoreObjects(MSVM* vm);
 
 // Find the builtin function name and returns it's index in the builtins array
 // if not found returns -1.
-int findBuiltinFunction(const char* name, int length);
+int findBuiltinFunction(const char* name, uint32_t length);
 
 // Returns the builtin function at index [index].
 Function* getBuiltinFunction(int index);
