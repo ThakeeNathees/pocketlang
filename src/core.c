@@ -37,7 +37,7 @@ static void initializeBuiltinFN(MSVM* vm, _BuiltinFn* bfn, const char* name,
   bfn->fn->native = ptr;
 }
 
-int findBuiltinFunction(const char* name, int length) {
+int findBuiltinFunction(const char* name, uint32_t length) {
   for (int i = 0; i < builtins_count; i++) {
     if (length == builtins[i].length &&
         strncmp(name, builtins[i].name, length) == 0) {
@@ -408,11 +408,10 @@ Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
       if (IS_ATTRIB("length")) {
         size_t length = ((String*)obj)->length;
         return VAR_NUM((double)length);
-      } else {
-        ERR_NO_ATTRIB();
-        return VAR_NULL;
       }
-      UNREACHABLE();
+
+      ERR_NO_ATTRIB();
+      return VAR_NULL;
     }
 
     case OBJ_LIST:
@@ -420,11 +419,10 @@ Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
       if (IS_ATTRIB("length")) {
         size_t length = ((List*)obj)->elements.count;
         return VAR_NUM((double)length);
-      } else {
-        ERR_NO_ATTRIB();
-        return VAR_NULL;
       }
-      UNREACHABLE();
+
+      ERR_NO_ATTRIB();
+      return VAR_NULL;
     }
 
     case OBJ_MAP:
@@ -435,14 +433,21 @@ Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
       Script* scr = (Script*)obj;
 
       // Search in functions.
-      uint32_t index = nameTableFind(&scr->function_names, attrib->data,
-                                attrib->length);
+      uint32_t index = scriptSearchFunc(scr, attrib->data, attrib->length);
       if (index != -1) {
         ASSERT_INDEX(index, scr->functions.count);
         return VAR_OBJ(scr->functions.data[index]);
       }
 
-      TODO; // Search in global variables.
+      // Search in globals.
+      index = scriptSearchGlobals(scr, attrib->data, attrib->length);
+      if (index != -1) {
+        ASSERT_INDEX(index, scr->globals.count);
+        return scr->globals.data[index];
+      }
+
+      ERR_NO_ATTRIB();
+      return VAR_NULL;
     }
 
     case OBJ_FUNC:
@@ -498,11 +503,16 @@ do {                                                             \
     case OBJ_SCRIPT: {
       Script* scr = (Script*)obj;
 
-      // TODO: check globals HERE.
+      // Check globals.
+      uint32_t index = scriptSearchGlobals(scr, attrib->data, attrib->length);
+      if (index != -1) {
+        ASSERT_INDEX(index, scr->globals.count);
+        scr->globals.data[index] = value;
+        return;
+      }
 
-      // Check function.
-      uint32_t index = nameTableFind(&scr->function_names, attrib->data,
-        attrib->length);
+      // Check function (Functions are immutable).
+      index = scriptSearchFunc(scr, attrib->data, attrib->length);
       if (index != -1) {
         ASSERT_INDEX(index, scr->functions.count);
         ATTRIB_IMMUTABLE(scr->functions.data[index]->name);

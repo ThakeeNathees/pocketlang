@@ -12,7 +12,7 @@
 
 // The maximum number of temporary object reference to protect them from being
 // garbage collected.
-#define MAX_TEMP_REFERENCE 8
+#define MAX_TEMP_REFERENCE 16
 
 // The maximum number of script cache can vm hold at once.
 #define MAX_SCRIPT_CACHE 128

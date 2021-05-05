@@ -338,7 +338,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 
     OPCODE(CONSTANT):
     {
-      int index = READ_SHORT();
+      uint16_t index = READ_SHORT();
       ASSERT_INDEX(index, script->literals.count);
       PUSH(script->literals.data[index]);
       DISPATCH();
@@ -388,7 +388,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     }
     OPCODE(PUSH_LOCAL_N):
     {
-      int index = READ_SHORT();
+      uint16_t index = READ_SHORT();
       PUSH(rbp[index + 1]);  // +1: rbp[0] is return value.
       DISPATCH();
     }
@@ -409,14 +409,14 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     }
     OPCODE(STORE_LOCAL_N):
     {
-      int index = READ_SHORT();
+      uint16_t index = READ_SHORT();
       rbp[index + 1] = PEEK();  // +1: rbp[0] is return value.
       DISPATCH();
     }
 
     OPCODE(PUSH_GLOBAL):
     {
-      int index = READ_SHORT();
+      uint16_t index = READ_SHORT();
       ASSERT(index < script->globals.count, OOPS);
       PUSH(script->globals.data[index]);
       DISPATCH();
@@ -424,7 +424,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 
     OPCODE(STORE_GLOBAL):
     {
-      int index = READ_SHORT();
+      uint16_t index = READ_SHORT();
       ASSERT(index < script->globals.count, OOPS);
       script->globals.data[index] = PEEK();
       DISPATCH();
@@ -432,7 +432,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 
     OPCODE(PUSH_FN):
     {
-      int index = READ_SHORT();
+      uint16_t index = READ_SHORT();
       ASSERT(index < script->functions.count, OOPS);
       Function* fn = script->functions.data[index];
       PUSH(VAR_OBJ(&fn->_super));
@@ -452,7 +452,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 
     OPCODE(CALL):
     {
-      int argc = READ_SHORT();
+      uint16_t argc = READ_SHORT();
       Var* callable = vm->fiber->sp - argc - 1;
 
       if (IS_OBJ(*callable) && AS_OBJ(*callable)->type == OBJ_FUNC) {
@@ -494,7 +494,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
       Var* iter_value = (vm->fiber->sp - 1);
       Var* iterator   = (vm->fiber->sp - 2);
       Var* container  = (vm->fiber->sp - 3);
-      int jump_offset = READ_SHORT();
+      uint16_t jump_offset = READ_SHORT();
       if (!varIterate(vm, *container, iterator, iter_value)) {
         DROP(); //< Iter value.
         DROP(); //< Iterator.
@@ -506,14 +506,14 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 
     OPCODE(JUMP):
     {
-      int offset = READ_SHORT();
+      uint16_t offset = READ_SHORT();
       ip += offset;
       DISPATCH();
     }
 
     OPCODE(LOOP):
     {
-      int offset = READ_SHORT();
+      uint16_t offset = READ_SHORT();
       ip -= offset;
       DISPATCH();
     }
@@ -522,7 +522,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(JUMP_IF):
     {
       Var cond = POP();
-      int offset = READ_SHORT();
+      uint16_t offset = READ_SHORT();
       if (toBool(cond)) {
         ip += offset;
       }
@@ -532,7 +532,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(JUMP_IF_NOT):
     {
       Var cond = POP();
-      int offset = READ_SHORT();
+      uint16_t offset = READ_SHORT();
       if (!toBool(cond)) {
         ip += offset;
       }
