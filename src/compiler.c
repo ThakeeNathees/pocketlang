@@ -1139,12 +1139,13 @@ static void exprList(Compiler* compiler, bool can_assign) {
   int size = 0;
   do {
     skipNewLines(&compiler->parser);
-    if (peek(&compiler->parser) == TK_COMMA) break;
+    if (peek(&compiler->parser) == TK_RBRACKET) break;
 
     compileExpression(compiler);
     emitOpcode(compiler, OP_LIST_APPEND);
     size++;
 
+    skipNewLines(&compiler->parser);
   } while (match(&compiler->parser, TK_COMMA));
 
   skipNewLines(&compiler->parser);
@@ -1154,7 +1155,25 @@ static void exprList(Compiler* compiler, bool can_assign) {
   _FN->opcodes.data[size_index + 1] = size & 0xff;
 }
 
-static void exprMap(Compiler* compiler, bool can_assign) { TODO; }
+static void exprMap(Compiler* compiler, bool can_assign) {
+  emitOpcode(compiler, OP_PUSH_MAP);
+
+  do {
+    skipNewLines(&compiler->parser);
+    if (peek(&compiler->parser) == TK_RBRACE) break;
+
+    compileExpression(compiler);
+    consume(&compiler->parser, TK_COLLON, "Expected ':' after map's key.");
+    compileExpression(compiler);
+
+    emitOpcode(compiler, OP_MAP_INSERT);
+
+    skipNewLines(&compiler->parser);
+  } while (match(&compiler->parser, TK_COMMA));
+
+  skipNewLines(&compiler->parser);
+  consume(&compiler->parser, TK_RBRACE, "Expected '}' after map elements.");
+}
 
 static void exprCall(Compiler* compiler, bool can_assign) {
 
@@ -1495,13 +1514,12 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
 
   if (fn_type != FN_NATIVE) {
     compileBlockBody(compiler, BLOCK_FUNC);
-  }
+    consume(parser, TK_END, "Expected 'end' after function definition end.");
   
-  consume(parser, TK_END, "Expected 'end' after function definition end.");
-
-  emitOpcode(compiler,  OP_PUSH_NULL);
-  emitOpcode(compiler, OP_RETURN);
-  emitOpcode(compiler, OP_END);
+    emitOpcode(compiler,  OP_PUSH_NULL);
+    emitOpcode(compiler, OP_RETURN);
+    emitOpcode(compiler, OP_END);
+  }
 
   compilerExitBlock(compiler); // Parameter depth.
 

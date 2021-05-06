@@ -33,9 +33,16 @@ OPCODE(PUSH_FALSE, 0, 1)
 // param: 2 bytes list size (defalt is 0).
 OPCODE(PUSH_LIST, 2, 1)
 
+// Push a new map to construct from literal.
+OPCODE(PUSH_MAP, 0, 1)
+
 // Pop the value on the stack the next stack top would be a list. Append the
 // value to the list. Used in literal array construction.
 OPCODE(LIST_APPEND, 0, -1)
+
+// Pop the top 2 values from the stack, the next stack top would be the map.
+// Insert the key value pairs to the map. Used in literal map construction.
+OPCODE(MAP_INSERT, 0, -2)
 
 // Push stack local on top of the stack. Locals at 0 to 8 marked explicitly
 // since it's performance criticle.
@@ -147,7 +154,7 @@ OPCODE(SET_ATTRIB, 2, -1)
 OPCODE(GET_SUBSCRIPT, 0, -1)
 
 // Get subscript to perform assignment operation before store it, so it won't 
-// pop the var and the key.
+// pop the var and the key. (ex: map[key] += value).
 OPCODE(GET_SUBSCRIPT_AOP, 0, 1)
 
 // Pop var, key, value set and push value back.

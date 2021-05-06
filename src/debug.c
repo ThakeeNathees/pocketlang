@@ -129,11 +129,11 @@ void dumpInstructions(MSVM* vm, Function* func) {
         NO_ARGS();
         break;
 
-      case OP_PUSH_LIST:
-        SHORT_ARG();
-        break;
+      case OP_PUSH_LIST:   SHORT_ARG(); break;
+      case OP_PUSH_MAP:    NO_ARGS();   break;
+      case OP_LIST_APPEND: NO_ARGS();   break;
+      case OP_MAP_INSERT:  NO_ARGS();   break;
 
-      case OP_LIST_APPEND: NO_ARGS(); break;
 
       case OP_PUSH_LOCAL_0:
       case OP_PUSH_LOCAL_1:

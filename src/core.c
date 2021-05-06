@@ -298,7 +298,7 @@ Var varAdd(MSVM* vm, Var v1, Var v2) {
       case OBJ_STRING:
       {
         if (o2->type == OBJ_STRING) {
-          return stringFormat(vm, "@@", v1, v2);
+          return VAR_OBJ(stringFormat(vm, "@@", v1, v2));
         }
       } break;
 
@@ -426,6 +426,15 @@ Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
     }
 
     case OBJ_MAP:
+    {
+      Var value = mapGet((Map*)obj, VAR_OBJ(&attrib->_super));
+      if (IS_UNDEF(value)) {
+        msSetRuntimeError(vm, "Key (\"%s\") not exists.", attrib->data);
+        return VAR_NULL;
+      }
+      return value;
+    }
+
     case OBJ_RANGE:
       TODO;
 
@@ -578,6 +587,18 @@ Var varGetSubscript(MSVM* vm, Var on, Var key) {
     }
 
     case OBJ_MAP:
+    {
+      Var value = mapGet((Map*)obj, key);
+      if (IS_UNDEF(value)) {
+        String* key_str = toString(vm, key, true);
+        vmPushTempRef(vm, &key_str->_super);
+        msSetRuntimeError(vm, "Key (%s) not exists.", key_str->data);
+        vmPopTempRef(vm);
+        return VAR_NULL;
+      }
+      return value;
+    }
+
     case OBJ_RANGE:
     case OBJ_SCRIPT:
     case OBJ_FUNC:
@@ -601,7 +622,9 @@ void varsetSubscript(MSVM* vm, Var on, Var key, Var value) {
 
   Object* obj = AS_OBJ(on);
   switch (obj->type) {
-    case OBJ_STRING: TODO;
+    case OBJ_STRING:
+      msSetRuntimeError(vm, "String objects are immutable.");
+      return;
 
     case OBJ_LIST:
     {
@@ -614,6 +637,15 @@ void varsetSubscript(MSVM* vm, Var on, Var key, Var value) {
     }
 
     case OBJ_MAP:
+    {
+      if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
+        msSetRuntimeError(vm, "%s type is not hashable.", varTypeName(key));
+      } else {
+        mapSet((Map*)obj, vm, key, value);
+      }
+      return;
+    }
+
     case OBJ_RANGE:
     case OBJ_SCRIPT:
     case OBJ_FUNC:
@@ -663,7 +695,7 @@ bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value) {
     case OBJ_STRING: {
       // TODO: // Need to consider utf8.
       String* str = ((String*)obj);
-      if (iter < 0 || iter >= str->length) {
+      if (iter >= str->length) {
         return false; //< Stop iteration.
       }
       // TODO: Or I could add char as a type for efficiency.
@@ -674,7 +706,7 @@ bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value) {
 
     case OBJ_LIST: {
       VarBuffer* elems = &((List*)obj)->elements;
-      if (iter < 0 || iter >= elems->count) {
+      if (iter >= elems->count) {
         return false; //< Stop iteration.
       }
       *value = elems->data[iter];
@@ -682,8 +714,23 @@ bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value) {
       return true;
     }
 
-    case OBJ_MAP:
-      TODO;
+    case OBJ_MAP: {
+      Map* map = (Map*)obj;
+
+      // Find the next valid key.
+      for (; iter < map->capacity; iter++) {
+        if (!IS_UNDEF(map->entries[iter].key)) {
+          break;
+        }
+      }
+      if (iter >= map->capacity) {
+        return false; //< Stop iteration.
+      }
+
+      *value = map->entries[iter].key;
+      *iterator = VAR_NUM((double)iter + 1);
+      return true;
+    }
 
     case OBJ_RANGE: {
       double from = ((Range*)obj)->from;

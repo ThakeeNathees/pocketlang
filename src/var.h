@@ -445,6 +445,9 @@ bool isValuesSame(Var v1, Var v2);
 // Returns true if both variables are equal (ie v1 == v2).
 bool isValuesEqual(Var v1, Var v2);
 
+// Return true if the object type is hashable.
+bool isObjectHashable(ObjectType type);
+
 // Returns the string version of the value. Note: pass false as [_recursive]
 // It's for internal use (or may be I could make a wrapper around).
 String* toString(MSVM* vm, Var v, bool _recursive);
@@ -456,7 +459,7 @@ bool toBool(Var v);
 // usage and it has 2 formated characters (just like wren does).
 // $ - a C string
 // @ - a String object
-Var stringFormat(MSVM* vm, const char* fmt, ...);
+String* stringFormat(MSVM* vm, const char* fmt, ...);
 
 // Add the name (string literal) to the string buffer if not already exists and
 // return it's index in the buffer.

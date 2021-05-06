@@ -380,6 +380,10 @@ Var listRemoveAt(List* self, MSVM* vm, uint32_t index) {
 
 // Return a has value for the object.
 static uint32_t _hashObject(Object* obj) {
+  
+  ASSERT(isObjectHashable(obj->type),
+         "Check if it's hashable before calling this method.");
+
   switch (obj->type) {
 
     case OBJ_STRING:
@@ -403,7 +407,7 @@ static uint32_t _hashObject(Object* obj) {
 
     default:
     L_unhashable:
-      ASSERT(false, "Only immutable objects are hashable.");
+      UNREACHABLE();
       break;
   }
 }
@@ -501,8 +505,8 @@ static void _mapResize(Map* self, MSVM* vm, uint32_t capacity) {
   self->entries = ALLOCATE_ARRAY(vm, MapEntry, capacity);
   self->capacity = capacity;
   for (uint32_t i = 0; i < capacity; i++) {
-    self->entries->key = VAR_UNDEFINED;
-    self->entries->value = VAR_FALSE;
+    self->entries[i].key = VAR_UNDEFINED;
+    self->entries[i].value = VAR_FALSE;
   }
 
   // Insert the old entries to the new entries.
@@ -687,6 +691,11 @@ bool isValuesEqual(Var v1, Var v2) {
   }
 }
 
+bool isObjectHashable(ObjectType type) {
+  // Only list and map are un-hashable.
+  return type != OBJ_LIST && type != OBJ_MAP;
+}
+
 String* toString(MSVM* vm, Var v, bool recursive) {
 
   if (IS_NULL(v)) {
@@ -713,7 +722,7 @@ String* toString(MSVM* vm, Var v, bool recursive) {
         // If recursive return with quotes (ex: [42, "hello", 0..10]).
         String* string = newString(vm, ((String*)obj)->data, ((String*)obj)->length);
         if (!recursive) return string;
-        else return (String*)AS_OBJ(stringFormat(vm, "\"@\"", string));
+        else return stringFormat(vm, "\"@\"", string);
       }
 
       case OBJ_LIST: {
@@ -724,14 +733,47 @@ String* toString(MSVM* vm, Var v, bool recursive) {
           const char* fmt = (i != 0) ? "@, @" : "@@";
 
           vmPushTempRef(vm, &result->_super);
-          result = (String*)AS_OBJ(stringFormat(vm, fmt,
-            result, toString(vm, list->elements.data[i], true)));
+          result = stringFormat(vm, fmt, result,
+            toString(vm, list->elements.data[i], true));
           vmPopTempRef(vm);
         }
-        return (String*)AS_OBJ(stringFormat(vm, "@]", result));
+        return stringFormat(vm, "@]", result);
       }
 
-      case OBJ_MAP:    return newString(vm, "[Map]",     5); // TODO;
+      case OBJ_MAP:
+      {
+        Map* map = (Map*)obj;
+        String* result = newString(vm, "{", 1);
+
+        uint32_t i = 0;
+        bool _first = true; // For first element no ',' required.
+        do {
+
+          // Get the next valid key index.
+          bool _done = false; //< To break from inner loop.
+          while (IS_UNDEF(map->entries[i].key)) {
+            i++;
+            if (i >= map->capacity) {
+              _done = true;
+              break;
+            }
+          }
+          if (_done) break;
+
+          const char* fmt = (!_first) ? "@, @:@" : "@@:@";
+          vmPushTempRef(vm, &result->_super);
+          result = stringFormat(vm, fmt, result,
+            toString(vm, map->entries[i].key, true),
+            toString(vm, map->entries[i].value, true));
+          vmPopTempRef(vm);
+
+          _first = false;
+          i++;
+        } while (i < map->capacity);
+
+        return stringFormat(vm, "@}", result);
+      }
+
       case OBJ_RANGE:  return newString(vm, "[Range]",   7); // TODO;
       case OBJ_SCRIPT: return newString(vm, "[Script]",  8); // TODO;
       case OBJ_FUNC: {
@@ -776,7 +818,7 @@ bool toBool(Var v) {
   return true;
 }
 
-Var stringFormat(MSVM* vm, const char* fmt, ...) {
+String* stringFormat(MSVM* vm, const char* fmt, ...) {
   va_list arg_list;
 
   // Calculate the total length of the resulting string. This is required to 
@@ -829,7 +871,7 @@ Var stringFormat(MSVM* vm, const char* fmt, ...) {
   va_end(arg_list);
 
   result->hash = utilHashString(result->data);
-  return VAR_OBJ(result);
+  return result;
 }
 
 uint32_t scriptAddName(Script* self, MSVM* vm, const char* name,
