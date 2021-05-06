@@ -50,10 +50,10 @@ typedef struct MSVM MSVM;
 //
 // - To free an allocated memory pass [memory] and 0 to [new_size]. The
 //   function will return NULL.
-typedef void* (*MiniScriptReallocFn)(void* memory, size_t new_size, void* user_data);
+typedef void* (*msReallocFn)(void* memory, size_t new_size, void* user_data);
 
 // C function pointer which is callable from MiniScript.
-typedef void (*MiniScriptNativeFn)(MSVM* vm);
+typedef void (*msNativeFn)(MSVM* vm);
 
 typedef enum {
 
@@ -69,51 +69,60 @@ typedef enum {
 
 // Error callback function pointer. for runtime error it'll call first with
 // MS_ERROR_RUNTIME followed by multiple callbacks with MS_ERROR_STACKTRACE.
-typedef void (*MiniScriptErrorFn) (MSVM* vm, MSErrorType type,
-                                   const char* file, int line,
-                                   const char* message);
+typedef void (*msErrorFn) (MSVM* vm, MSErrorType type,
+                           const char* file, int line,
+                           const char* message);
 
 // A function callback used by `print()` statement.
-typedef void (*MiniScriptWriteFn) (MSVM* vm, const char* text);
+typedef void (*msWriteFn) (MSVM* vm, const char* text);
+
+typedef struct msStringResult msStringResult;
+
+// A function callback symbol for clean/free the msStringResult.
+typedef void (*msResultDoneFn) (MSVM* vm, msStringResult result);
 
 // Result of the MiniScriptLoadScriptFn function.
-typedef struct {
-  bool is_failed;
-  const char* source;
-  void* user_data;
-} MSLoadScriptResult;
+struct msStringResult {
+  bool success;           //< State of the result.
+  const char* string;     //< The string result.
+  void* user_data;        //< User related data.
+  msResultDoneFn on_done; //< Called once vm done with the string.
+};
+
+// A function callback to resolve the import script name from the [from] path
+// to an absolute (or relative to the cwd). This is required to solve same
+// script imported with different relative path.
+typedef msStringResult (*msResolvePathFn) (MSVM* vm, const char* from,
+                                        const char* name);
 
 // Load and return the script. Called by the compiler to fetch initial source
 // code and source for import statements.
-typedef MSLoadScriptResult (*MiniScriptLoadScriptFn)(MSVM* vm,
-                                                     const char* path);
+typedef msStringResult (*msLoadScriptFn) (MSVM* vm, const char* path);
 
-// This function will be called once it done with the loaded script.
-// [user_data] would be be the one returned in MiniScriptLoadScriptFn
-// which is useful to free the source memory if needed.
-typedef void (*MiniScriptLoadScriptDoneFn) (MSVM* vm, const char* path,
-                                            void* user_data);
+// This function will be called once it done with the loaded script only if
+// it's corresponding MSLoadScriptResult is succeeded (ie. is_failed = false).
+//typedef void (*msLoadDoneFn) (MSVM* vm, msStringResult result);
 
 typedef struct {
 
   // The callback used to allocate, reallocate, and free. If the function
   // pointer is NULL it defaults to the VM's realloc(), free() wrappers.
-  MiniScriptReallocFn realloc_fn;
+  msReallocFn realloc_fn;
 
-  MiniScriptErrorFn error_fn;
-  MiniScriptWriteFn write_fn;
+  msErrorFn error_fn;
+  msWriteFn write_fn;
 
-  MiniScriptLoadScriptFn load_script_fn;
-  MiniScriptLoadScriptDoneFn load_script_done_fn;
+  msResolvePathFn resolve_path_fn;
+  msLoadScriptFn load_script_fn;
 
   // User defined data associated with VM.
   void* user_data;
 
-} MSConfiguration;
+} msConfiguration;
 
 // Initialize the configuration and set ALL of it's values to the defaults.
 // Call this before setting any particular field of it.
-void msInitConfiguration(MSConfiguration* config);
+void msInitConfiguration(msConfiguration* config);
 
 typedef enum {
   RESULT_SUCCESS = 0,
@@ -122,7 +131,7 @@ typedef enum {
 } MSInterpretResult;
 
 // Allocate initialize and returns a new VM
-MSVM* msNewVM(MSConfiguration* config);
+MSVM* msNewVM(msConfiguration* config);
 
 // Clean the VM and dispose all the resources allocated by the VM.
 void msFreeVM(MSVM* vm);

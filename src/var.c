@@ -19,7 +19,7 @@ Var msVarNumber(MSVM* vm, double value) {
 }
 
 Var msVarString(MSVM* vm, const char* value) {
-  return VAR_OBJ(newString(vm, value, (uint32_t)strlen(value)));
+  return VAR_OBJ(newStringLength(vm, value, (uint32_t)strlen(value)));
 }
 
 bool msAsBool(MSVM* vm, Var value) {
@@ -230,7 +230,7 @@ static String* _allocateString(MSVM* vm, size_t length) {
   return string;
 }
 
-String* newString(MSVM* vm, const char* text, uint32_t length) {
+String* newStringLength(MSVM* vm, const char* text, uint32_t length) {
 
   ASSERT(length == 0 || text != NULL, "Unexpected NULL string.");
 
@@ -699,20 +699,20 @@ bool isObjectHashable(ObjectType type) {
 String* toString(MSVM* vm, Var v, bool recursive) {
 
   if (IS_NULL(v)) {
-    return newString(vm, "null", 4);
+    return newStringLength(vm, "null", 4);
 
   } else if (IS_BOOL(v)) {
     if (AS_BOOL(v)) {
-      return newString(vm, "true", 4);
+      return newStringLength(vm, "true", 4);
     } else {
-      return newString(vm, "false", 5);
+      return newStringLength(vm, "false", 5);
     }
 
   } else if (IS_NUM(v)) {
     char buff[TO_STRING_BUFF_SIZE];
     int length = sprintf(buff, "%.14g", AS_NUM(v));
     ASSERT(length < TO_STRING_BUFF_SIZE, "Buffer overflowed.");
-    return newString(vm, buff, length);
+    return newStringLength(vm, buff, length);
 
   } else if (IS_OBJ(v)) {
     Object* obj = AS_OBJ(v);
@@ -720,14 +720,14 @@ String* toString(MSVM* vm, Var v, bool recursive) {
       case OBJ_STRING:
       {
         // If recursive return with quotes (ex: [42, "hello", 0..10]).
-        String* string = newString(vm, ((String*)obj)->data, ((String*)obj)->length);
+        String* string = newStringLength(vm, ((String*)obj)->data, ((String*)obj)->length);
         if (!recursive) return string;
         else return stringFormat(vm, "\"@\"", string);
       }
 
       case OBJ_LIST: {
         List* list = (List*)obj;
-        String* result = newString(vm, "[", 1);
+        String* result = newStringLength(vm, "[", 1);
 
         for (uint32_t i = 0; i < list->elements.count; i++) {
           const char* fmt = (i != 0) ? "@, @" : "@@";
@@ -743,7 +743,7 @@ String* toString(MSVM* vm, Var v, bool recursive) {
       case OBJ_MAP:
       {
         Map* map = (Map*)obj;
-        String* result = newString(vm, "{", 1);
+        String* result = newStringLength(vm, "{", 1);
 
         uint32_t i = 0;
         bool _first = true; // For first element no ',' required.
@@ -774,8 +774,8 @@ String* toString(MSVM* vm, Var v, bool recursive) {
         return stringFormat(vm, "@}", result);
       }
 
-      case OBJ_RANGE:  return newString(vm, "[Range]",   7); // TODO;
-      case OBJ_SCRIPT: return newString(vm, "[Script]",  8); // TODO;
+      case OBJ_RANGE:  return newStringLength(vm, "[Range]",   7); // TODO;
+      case OBJ_SCRIPT: return newStringLength(vm, "[Script]",  8); // TODO;
       case OBJ_FUNC: {
         const char* name = ((Function*)obj)->name;
         int length = (int)strlen(name); // TODO: Assert length.
@@ -783,9 +783,9 @@ String* toString(MSVM* vm, Var v, bool recursive) {
         memcpy(buff, "[Func:", 6);
         memcpy(buff + 6, name, length);
         buff[6 + length] = ']';
-        return newString(vm, buff, 6 + length + 1);
+        return newStringLength(vm, buff, 6 + length + 1);
       }
-      case OBJ_USER:   return newString(vm, "[UserObj]", 9); // TODO;
+      case OBJ_USER:   return newStringLength(vm, "[UserObj]", 9); // TODO;
         break;
     }
 
@@ -887,7 +887,7 @@ uint32_t scriptAddName(Script* self, MSVM* vm, const char* name,
 
   // If we reach here the name doesn't exists in the buffer, so add it and
   // return the index.
-  String* new_name = newString(vm, name, length);
+  String* new_name = newStringLength(vm, name, length);
   vmPushTempRef(vm, &new_name->_super);
   stringBufferWrite(&self->names, vm, new_name);
   vmPopTempRef(vm);

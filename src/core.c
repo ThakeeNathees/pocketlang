@@ -28,7 +28,7 @@ static _BuiltinFn builtins[BUILTIN_COUNT];
 static int builtins_count = 0;
 
 static void initializeBuiltinFN(MSVM* vm, _BuiltinFn* bfn, const char* name,
-                               int length, int arity, MiniScriptNativeFn ptr) {
+                               int length, int arity, msNativeFn ptr) {
   bfn->name = name;
   bfn->length = length;
 
@@ -68,7 +68,7 @@ static inline bool isNumeric(Var var, double* value) {
 static inline bool validateNumeric(MSVM* vm, Var var, double* value,
   const char* name) {
   if (isNumeric(var, value)) return true;
-  msSetRuntimeError(vm, "%s must be a numeric value.", name);
+  vm->fiber->error = stringFormat(vm, "$ must be a numeric value.", name);
   return false;
 }
 
@@ -84,14 +84,14 @@ static inline bool validateIngeger(MSVM* vm, Var var, int32_t* value,
     }
   }
 
-  msSetRuntimeError(vm, "%s must be an integer.", name);
+  vm->fiber->error = stringFormat(vm, "$ must be an integer.", name);
   return false;
 }
 
 static inline bool validateIndex(MSVM* vm, int32_t index, int32_t size,
   const char* container) {
   if (index < 0 || size <= index) {
-    msSetRuntimeError(vm, "%s index out of range.", container);
+    vm->fiber->error = stringFormat(vm, "$ index out of range.", container);
     return false;
   }
   return true;
@@ -174,21 +174,21 @@ void corePrint(MSVM* vm) {
   vm->config.write_fn(vm, "\n");
 }
 
-void coreImport(MSVM* vm) {
-  Var arg1 = vm->fiber->ret[1];
-  if (!IS_OBJ(arg1) || AS_OBJ(arg1)->type != OBJ_STRING) {
-    msSetRuntimeError(vm, "Expected a String argument.");
-  }
-
-  String* path = (String*)AS_OBJ(arg1);
-  if (path->length > 4 && strncmp(path->data, "std:", 4) == 0) {
-    Script* scr = vmGetStdScript(vm, path->data + 4);
-    ASSERT(scr != NULL, OOPS);
-    RET(VAR_OBJ(scr));
-  }
-
-  TODO;
-}
+//void coreImport(MSVM* vm) {
+//  Var arg1 = vm->fiber->ret[1];
+//  if (!IS_OBJ(arg1) || AS_OBJ(arg1)->type != OBJ_STRING) {
+//    msSetRuntimeError(vm, "Expected a String argument.");
+//  }
+//
+//  String* path = (String*)AS_OBJ(arg1);
+//  if (path->length > 4 && strncmp(path->data, "std:", 4) == 0) {
+//    Script* scr = vmGetStdScript(vm, path->data + 4);
+//    ASSERT(scr != NULL, OOPS);
+//    RET(VAR_OBJ(scr));
+//  }
+//
+//  TODO;
+//}
 
 /*****************************************************************************/
 /* STD METHODS                                                               */
@@ -198,7 +198,7 @@ void coreImport(MSVM* vm) {
 void stdListSort(MSVM* vm) {
   Var list = ARG(1);
   if (!IS_OBJ(list) || AS_OBJ(list)->type != OBJ_LIST) {
-    msSetRuntimeError(vm, "Expected a list at argument 1.");
+    vm->fiber->error = newString(vm, "Expected a list at argument 1.");
   }
 
   // TODO: sort.
@@ -237,15 +237,14 @@ void initializeCore(MSVM* vm) {
   
   INITALIZE_BUILTIN_FN("to_string",   coreToString,   1);
   INITALIZE_BUILTIN_FN("print",       corePrint,     -1);
-  INITALIZE_BUILTIN_FN("import",      coreImport,     1);
+  //INITALIZE_BUILTIN_FN("import",      coreImport,     1);
 
   // Sentinal to mark the end of the array.
   //initializeBuiltinFN(vm, &builtins[i], NULL, 0, 0, NULL);
 
   // Make STD scripts.
-  Script* std;  // A temporary pointer to the current std script.
-  Function* fn; // A temporary pointer to the allocated function function.  
-
+  //Script* std;  // A temporary pointer to the current std script.
+  //Function* fn; // A temporary pointer to the allocated function function.  
 #define STD_NEW_SCRIPT(_name)              \
   do {                                     \
     std = newScript(vm);                   \
@@ -261,14 +260,13 @@ void initializeCore(MSVM* vm) {
     fn->native = fptr;                                          \
     fn->arity = _arity;                                         \
   } while (false)
-
-  // std:list script.
-  STD_NEW_SCRIPT("std:list");
-  STD_ADD_FUNCTION("sort", stdListSort, 1);
-
-  // std:os script.
-  STD_NEW_SCRIPT("std:os");
-  STD_ADD_FUNCTION("clock", stdOsClock, 0);
+  // TODO: add std scripts to vm.
+//  STD_NEW_SCRIPT("std:list");
+//  STD_ADD_FUNCTION("sort", stdListSort, 1);
+//
+//  // std:os script.
+//  STD_NEW_SCRIPT("std:os");
+//  STD_ADD_FUNCTION("clock", stdOsClock, 0);
 }
 
 void markCoreObjects(MSVM* vm) {
@@ -314,8 +312,8 @@ Var varAdd(MSVM* vm, Var v1, Var v2) {
   }
 
 
-  msSetRuntimeError(vm, "Unsupported operand types for operator '-' "
-    "%s and %s", varTypeName(v1), varTypeName(v2));
+  vm->fiber->error = stringFormat(vm, "Unsupported operand types for operator '-' "
+    "$ and $", varTypeName(v1), varTypeName(v2));
 
   return VAR_NULL;
 }
@@ -331,8 +329,8 @@ Var varSubtract(MSVM* vm, Var v1, Var v2) {
 
   TODO; // for user objects call vm.config.sub_userobj_sub(handles).
 
-  msSetRuntimeError(vm, "Unsupported operand types for operator '-' "
-    "%s and %s", varTypeName(v1), varTypeName(v2));
+  vm->fiber->error = stringFormat(vm, "Unsupported operand types for operator '-' "
+    "$ and $", varTypeName(v1), varTypeName(v2));
 
   return VAR_NULL;
 }
@@ -347,8 +345,8 @@ Var varMultiply(MSVM* vm, Var v1, Var v2) {
     return VAR_NULL;
   }
 
-  msSetRuntimeError(vm, "Unsupported operand types for operator '*' "
-    "%s and %s", varTypeName(v1), varTypeName(v2));
+  vm->fiber->error = stringFormat(vm, "Unsupported operand types for operator "
+    "'*' $ and $", varTypeName(v1), varTypeName(v2));
   return VAR_NULL;
 }
 
@@ -361,8 +359,8 @@ Var varDivide(MSVM* vm, Var v1, Var v2) {
     return VAR_NULL;
   }
 
-  msSetRuntimeError(vm, "Unsupported operand types for operator '/' "
-    "%s and %s", varTypeName(v1), varTypeName(v2));
+  vm->fiber->error = stringFormat(vm, "Unsupported operand types for operator "
+    "'/' $ and $", varTypeName(v1), varTypeName(v2));
   return VAR_NULL;
 }
 
@@ -390,14 +388,16 @@ bool varLesser(MSVM* vm, Var v1, Var v2) {
 #define IS_ATTRIB(name) \
   (attrib->length == strlen(name) && strcmp(name, attrib->data) == 0)
 
-#define ERR_NO_ATTRIB()                                             \
-  msSetRuntimeError(vm, "'%s' objects has no attribute named '%s'", \
-    varTypeName(on), attrib->data);
+#define ERR_NO_ATTRIB()                                               \
+  vm->fiber->error = stringFormat(vm, "'$' objects has no attribute " \
+                                       "named '$'",                   \
+                                  varTypeName(on), attrib->data);
 
 Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
 
   if (!IS_OBJ(on)) {
-    msSetRuntimeError(vm, "%s type is not subscriptable.", varTypeName(on));
+    vm->fiber->error = stringFormat(vm, "$ type is not subscriptable.",
+                                    varTypeName(on));
     return VAR_NULL;
   }
 
@@ -429,7 +429,7 @@ Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
     {
       Var value = mapGet((Map*)obj, VAR_OBJ(&attrib->_super));
       if (IS_UNDEF(value)) {
-        msSetRuntimeError(vm, "Key (\"%s\") not exists.", attrib->data);
+        vm->fiber->error = stringFormat(vm, "Key (\"@\") not exists.", attrib);
         return VAR_NULL;
       }
       return value;
@@ -475,16 +475,17 @@ Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
 
 void varSetAttrib(MSVM* vm, Var on, String* attrib, Var value) {
 
-#define ATTRIB_IMMUTABLE(prop)                                   \
-do {                                                             \
-  if (IS_ATTRIB(prop)) {                                         \
-    msSetRuntimeError(vm, "'%s' attribute is immutable.", prop); \
-    return;                                                      \
-  }                                                              \
+#define ATTRIB_IMMUTABLE(prop)                                                \
+do {                                                                          \
+  if (IS_ATTRIB(prop)) {                                                      \
+    vm->fiber->error = stringFormat(vm, "'$' attribute is immutable.", prop); \
+    return;                                                                   \
+  }                                                                           \
 } while (false)
 
   if (!IS_OBJ(on)) {
-    msSetRuntimeError(vm, "%s type is not subscriptable.", varTypeName(on));
+    vm->fiber->error = stringFormat(vm, "$ type is not subscriptable.",
+                                    varTypeName(on));
     return;
   }
 
@@ -553,7 +554,8 @@ do {                                                             \
 
 Var varGetSubscript(MSVM* vm, Var on, Var key) {
   if (!IS_OBJ(on)) {
-    msSetRuntimeError(vm, "%s type is not subscriptable.", varTypeName(on));
+    vm->fiber->error = stringFormat(vm, "$ type is not subscriptable.",
+                                    varTypeName(on));
     return VAR_NULL;
   }
 
@@ -569,7 +571,7 @@ Var varGetSubscript(MSVM* vm, Var on, Var key) {
       if (!validateIndex(vm, index, str->length, "String")) {
         return VAR_NULL;
       }
-      String* c = newString(vm, str->data + index, 1);
+      String* c = newStringLength(vm, str->data + index, 1);
       return VAR_OBJ(c);
     }
 
@@ -591,9 +593,11 @@ Var varGetSubscript(MSVM* vm, Var on, Var key) {
       Var value = mapGet((Map*)obj, key);
       if (IS_UNDEF(value)) {
         String* key_str = toString(vm, key, true);
+
         vmPushTempRef(vm, &key_str->_super);
-        msSetRuntimeError(vm, "Key (%s) not exists.", key_str->data);
+        vm->fiber->error = stringFormat(vm, "Key (@) not exists", key_str);
         vmPopTempRef(vm);
+
         return VAR_NULL;
       }
       return value;
@@ -616,14 +620,14 @@ Var varGetSubscript(MSVM* vm, Var on, Var key) {
 
 void varsetSubscript(MSVM* vm, Var on, Var key, Var value) {
   if (!IS_OBJ(on)) {
-    msSetRuntimeError(vm, "%s type is not subscriptable.", varTypeName(on));
+    vm->fiber->error = stringFormat(vm, "$ type is not subscriptable.", varTypeName(on));
     return;
   }
 
   Object* obj = AS_OBJ(on);
   switch (obj->type) {
     case OBJ_STRING:
-      msSetRuntimeError(vm, "String objects are immutable.");
+      vm->fiber->error = newString(vm, "String objects are immutable.");
       return;
 
     case OBJ_LIST:
@@ -639,7 +643,7 @@ void varsetSubscript(MSVM* vm, Var on, Var key, Var value) {
     case OBJ_MAP:
     {
       if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
-        msSetRuntimeError(vm, "%s type is not hashable.", varTypeName(key));
+        vm->fiber->error = stringFormat(vm, "$ type is not hashable.", varTypeName(key));
       } else {
         mapSet((Map*)obj, vm, key, value);
       }
@@ -672,11 +676,11 @@ bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value) {
   // Primitive types are not iterable.
   if (!IS_OBJ(seq)) {
     if (IS_NULL(seq)) {
-      msSetRuntimeError(vm, "Null is not iterable.");
+      vm->fiber->error = newString(vm, "Null is not iterable.");
     } else if (IS_BOOL(seq)) {
-      msSetRuntimeError(vm, "Boolenan is not iterable.");
+      vm->fiber->error = newString(vm, "Boolenan is not iterable.");
     } else if (IS_NUM(seq)) {
-      msSetRuntimeError(vm, "Number is not iterable.");
+      vm->fiber->error = newString(vm, "Number is not iterable.");
     } else {
       UNREACHABLE();
     }
@@ -699,7 +703,7 @@ bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value) {
         return false; //< Stop iteration.
       }
       // TODO: Or I could add char as a type for efficiency.
-      *value = VAR_OBJ(newString(vm, str->data + iter, 1));
+      *value = VAR_OBJ(newStringLength(vm, str->data + iter, 1));
       *iterator = VAR_NUM((double)iter + 1);
       return true;
     }

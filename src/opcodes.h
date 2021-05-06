@@ -99,6 +99,11 @@ OPCODE(POP, 0, -1)
 // marked explicitly since it's performance criticle.
 // params: n bytes argc.
 
+// Pop the path from the stack, import the module at the path and push the
+// script in the script. If the script is imported for the first time (not
+// cached) the script's body will be executed.
+OPCODE(IMPORT, 0, 0)
+
 // TODO: may be later.
 //OPCODE(CALL_0, 0,  0) //< Push null call null will be the return value.
 //OPCODE(CALL_1, 0, -1) //< Push null and arg1. arg1 will be popped.

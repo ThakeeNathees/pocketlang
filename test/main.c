@@ -17,20 +17,30 @@ void writeFunction(MSVM* vm, const char* text) {
   fprintf(stdout, "%s", text);
 }
 
-void loadScriptDone(MSVM* vm, const char* path, void* user_data) {
-  // User data is the allocated source code buffer and it has to be freed
+void onResultDone(MSVM* vm, msStringResult result) {
+  // The result.string is the allocated buffer and it has to be freed
   // manually since it wasn't allocated by the VM.
-  free(user_data);
+  free((void*)result.string);
 }
 
-MSLoadScriptResult loadScript(MSVM* vm, const char* path) {
-  MSLoadScriptResult result;
-  result.is_failed = false;
+msStringResult resolvePath(MSVM* vm, const char* from, const char* name) {
+  msStringResult result;
+  result.success = true;
+  result.on_done = onResultDone;
+
+  __debugbreak();
+  return result;
+}
+
+msStringResult loadScript(MSVM* vm, const char* path) {
+  msStringResult result;
+  result.success = true;
+  result.on_done = onResultDone;
 
   // Open the file.
   FILE* file = fopen(path, "r");
   if (file == NULL) {
-    result.is_failed = true;
+    result.success = true;
     return result;
   }
 
@@ -47,8 +57,7 @@ MSLoadScriptResult loadScript(MSVM* vm, const char* path) {
   buff[read] = '\0';
   fclose(file);
 
-  result.source = buff;
-  result.user_data = (void*)buff;
+  result.string = buff;
   return result;
 }
 
@@ -67,12 +76,11 @@ int main(int argc, char** argv) {
 
   const char* source_path = argv[1];
 
-  MSConfiguration config;
+  msConfiguration config;
   msInitConfiguration(&config);
   config.error_fn = errorPrint;
   config.write_fn = writeFunction;
   config.load_script_fn = loadScript;
-  config.load_script_done_fn = loadScriptDone;
 
   MSVM* vm = msNewVM(&config);
   MSInterpretResult result = msInterpret(vm, source_path);

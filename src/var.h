@@ -307,7 +307,7 @@ struct Function {
 
   bool is_native;      //< True if Native function.
   union {
-    MiniScriptNativeFn native;  //< Native function pointer.
+    msNativeFn native;  //< Native function pointer.
     Fn* fn;                     //< Script function pointer.
   };
 };
@@ -386,7 +386,10 @@ Var doubleToVar(double value);
 double varToDouble(Var value);
 
 // Allocate new String object and return String*.
-String* newString(MSVM* vm, const char* text, uint32_t length);
+String* newStringLength(MSVM* vm, const char* text, uint32_t length);
+static inline String* newString(MSVM* vm, const char* text) {
+  return newStringLength(vm, text, (uint32_t)strlen(text));
+}
 
 // Allocate new List and return List*.
 List* newList(MSVM* vm, uint32_t size);

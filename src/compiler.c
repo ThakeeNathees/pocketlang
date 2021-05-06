@@ -91,6 +91,7 @@ typedef enum {
   //TK_XOREQ,    // ^=
 
   // Keywords.
+  TK_IMPORT,     // import
   TK_DEF,        // def
   TK_NATIVE,     // native   (C function declaration)
   TK_FUNCTION,   // function (literal function)
@@ -150,6 +151,7 @@ typedef struct {
 
 // List of keywords mapped into their identifiers.
 static _Keyword _keywords[] = {
+  { "import",   6, TK_IMPORT },
   { "def",      3, TK_DEF },
   { "native",   6, TK_NATIVE },
   { "function", 8, TK_FUNCTION },
@@ -409,7 +411,7 @@ static void eatString(Parser* parser, bool single_quote) {
   }
 
   // '\0' will be added by varNewSring();
-  Var string = VAR_OBJ(&newString(parser->vm, (const char*)buff.data,
+  Var string = VAR_OBJ(&newStringLength(parser->vm, (const char*)buff.data,
     (uint32_t)buff.count)->_super);
 
   byteBufferClear(&buff, parser->vm);
@@ -863,6 +865,7 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence);
 static void compileExpression(Compiler* compiler);
 
 static void exprLiteral(Compiler* compiler, bool can_assign);
+static void exprImport(Compiler* compiler, bool can_assign);
 static void exprFunc(Compiler* compiler, bool can_assign);
 static void exprName(Compiler* compiler, bool can_assign);
 
@@ -922,9 +925,10 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_DIVEQ      */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
   /* TK_SRIGHT     */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_SLEFT      */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
+  /* TK_IMPORT     */ { exprImport,    NULL,             NO_INFIX },
   /* TK_DEF        */   NO_RULE,
   /* TK_EXTERN     */   NO_RULE,
-  /* TK_FUNCTION   */ { exprFunc,      NULL,            NO_INFIX },
+  /* TK_FUNCTION   */ { exprFunc,      NULL,             NO_INFIX },
   /* TK_END        */   NO_RULE,
   /* TK_NULL       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_SELF       */ { exprValue,     NULL,             NO_INFIX },
@@ -988,6 +992,17 @@ static void exprLiteral(Compiler* compiler, bool can_assign) {
   int index = compilerAddConstant(compiler, value->value);
   emitOpcode(compiler, OP_CONSTANT);
   emitShort(compiler, index);
+}
+
+static void exprImport(Compiler* compiler, bool can_assign) {
+
+  consume(&compiler->parser, TK_LPARAN, "Expected '(' after import.");
+  skipNewLines(&compiler->parser);
+  compileExpression(compiler);
+  skipNewLines(&compiler->parser);
+  consume(&compiler->parser, TK_RPARAN, "Expected ')' after parameter list.");
+
+  emitOpcode(compiler, OP_IMPORT);
 }
 
 static void exprFunc(Compiler* compiler, bool can_assign) {
@@ -1200,7 +1215,7 @@ static void exprAttrib(Compiler* compiler, bool can_assign) {
   int length = parser->previous.length;
 
   // Store the name in script's names.
-  String* string = newString(compiler->vm, name, length);
+  String* string = newStringLength(compiler->vm, name, length);
   vmPushTempRef(compiler->vm, &string->_super);
   stringBufferWrite(&compiler->script->names, compiler->vm, string);
   vmPopTempRef(compiler->vm);
@@ -1756,11 +1771,11 @@ static void compileStatement(Compiler* compiler) {
 
 Script* compileSource(MSVM* vm, const char* path) {
 
-  MSLoadScriptResult res = vm->config.load_script_fn(vm, path);
-  if (res.is_failed) // FIXME:
+  msStringResult res = vm->config.load_script_fn(vm, path);
+  if (!res.success) // FIXME:
     vm->config.error_fn(vm, MS_ERROR_COMPILE, NULL, -1,
       "file load source failed.");
-  const char* source = res.source;
+  const char* source = res.string;
 
   // Skip utf8 BOM if there is any.
   if (strncmp(source, "\xEF\xBB\xBF", 3) == 0) source += 3;
@@ -1805,8 +1820,7 @@ Script* compileSource(MSVM* vm, const char* path) {
   emitOpcode(&compiler, OP_END);
 
   // Source done callback.
-  if (vm->config.load_script_done_fn != NULL)
-    vm->config.load_script_done_fn(vm, path, res.user_data);
+  if (res.on_done != NULL) res.on_done(vm, res);
 
   // Create script globals.
   for (int i = 0; i < compiler.var_count; i++) {
