@@ -363,12 +363,30 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
       DISPATCH();
     }
 
+    OPCODE(PUSH_MAP):
+    {
+      Map* map = newMap(vm);
+      PUSH(VAR_OBJ(&map->_super));
+      DISPATCH();
+    }
+
     OPCODE(LIST_APPEND):
     {
       Var elem = POP();
-      Var list = *(vm->fiber->sp - 1);
+      Var list = PEEK();
       ASSERT(IS_OBJ(list) && AS_OBJ(list)->type == OBJ_LIST, OOPS);
       varBufferWrite(&((List*)AS_OBJ(list))->elements, vm, elem);
+      DISPATCH();
+    }
+
+    OPCODE(MAP_INSERT):
+    {
+      Var value = POP();
+      Var key = POP();
+      Var on = PEEK();
+
+      varsetSubscript(vm, on, key, value);
+      CHECK_ERROR();
       DISPATCH();
     }
 
