@@ -181,9 +181,8 @@ void dumpInstructions(MSVM* vm, Function* func) {
       }
         
 
-      case OP_POP:
-        NO_ARGS();
-        break;
+      case OP_POP:    NO_ARGS(); break;
+      case OP_IMPORT: NO_ARGS(); break;
 
       case OP_CALL:
         printf("%5d (argc)\n", READ_SHORT());

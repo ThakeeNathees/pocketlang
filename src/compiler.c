@@ -91,6 +91,7 @@ typedef enum {
   //TK_XOREQ,    // ^=
 
   // Keywords.
+  TK_IMPORT,     // import
   TK_DEF,        // def
   TK_NATIVE,     // native   (C function declaration)
   TK_FUNCTION,   // function (literal function)
@@ -150,6 +151,7 @@ typedef struct {
 
 // List of keywords mapped into their identifiers.
 static _Keyword _keywords[] = {
+  { "import",   6, TK_IMPORT },
   { "def",      3, TK_DEF },
   { "native",   6, TK_NATIVE },
   { "function", 8, TK_FUNCTION },
@@ -178,8 +180,8 @@ static _Keyword _keywords[] = {
 typedef struct {
   MSVM* vm;           //< Owner of the parser (for reporting errors, etc).
 
-  const char* source; //< Currently compiled source.
-  const char* path;   //< Path of the source.
+  const char* source; //< Currently compiled source (Weak pointer).
+  Script* script;     //< Currently compiled script (Weak pointer).
 
   const char* token_start;  //< Start of the currently parsed token.
   const char* current_char; //< Current char position in the source.
@@ -299,7 +301,7 @@ struct Compiler {
 
   int stack_size; //< Current size including locals ind temps.=
 
-  Script* script;  //< Current script.
+  Script* script;  //< Current script (a weak pointer).
   Loop* loop;      //< Current loop.
   Func* func;      //< Current function.
 
@@ -340,7 +342,8 @@ static void reportError(Parser* parser, const char* file, int line,
 static void lexError(Parser* parser, const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  reportError(parser, parser->path, parser->current_line, fmt, args);
+  const char* path = parser->script->name->data;
+  reportError(parser, path, parser->current_line, fmt, args);
   va_end(args);
 }
 
@@ -355,7 +358,8 @@ static void parseError(Parser* parser, const char* fmt, ...) {
 
   va_list args;
   va_start(args, fmt);
-  reportError(parser, parser->path, token->line, fmt, args);
+  const char* path = parser->script->name->data;
+  reportError(parser, path, token->line, fmt, args);
   va_end(args);
 }
 
@@ -409,7 +413,7 @@ static void eatString(Parser* parser, bool single_quote) {
   }
 
   // '\0' will be added by varNewSring();
-  Var string = VAR_OBJ(&newString(parser->vm, (const char*)buff.data,
+  Var string = VAR_OBJ(&newStringLength(parser->vm, (const char*)buff.data,
     (uint32_t)buff.count)->_super);
 
   byteBufferClear(&buff, parser->vm);
@@ -650,10 +654,10 @@ static void lexToken(Parser* parser) {
 
  // Initialize the parser.
 static void parserInit(Parser* self, MSVM* vm, const char* source,
-                       const char* path) {
+                       Script* script) {
   self->vm = vm;
   self->source = source;
-  self->path = path;
+  self->script = script;
   self->token_start = source;
   self->current_char = source;
   self->current_line = 1;
@@ -863,6 +867,7 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence);
 static void compileExpression(Compiler* compiler);
 
 static void exprLiteral(Compiler* compiler, bool can_assign);
+static void exprImport(Compiler* compiler, bool can_assign);
 static void exprFunc(Compiler* compiler, bool can_assign);
 static void exprName(Compiler* compiler, bool can_assign);
 
@@ -922,9 +927,10 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_DIVEQ      */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
   /* TK_SRIGHT     */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_SLEFT      */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
+  /* TK_IMPORT     */ { exprImport,    NULL,             NO_INFIX },
   /* TK_DEF        */   NO_RULE,
   /* TK_EXTERN     */   NO_RULE,
-  /* TK_FUNCTION   */ { exprFunc,      NULL,            NO_INFIX },
+  /* TK_FUNCTION   */ { exprFunc,      NULL,             NO_INFIX },
   /* TK_END        */   NO_RULE,
   /* TK_NULL       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_SELF       */ { exprValue,     NULL,             NO_INFIX },
@@ -988,6 +994,17 @@ static void exprLiteral(Compiler* compiler, bool can_assign) {
   int index = compilerAddConstant(compiler, value->value);
   emitOpcode(compiler, OP_CONSTANT);
   emitShort(compiler, index);
+}
+
+static void exprImport(Compiler* compiler, bool can_assign) {
+
+  consume(&compiler->parser, TK_LPARAN, "Expected '(' after import.");
+  skipNewLines(&compiler->parser);
+  compileExpression(compiler);
+  skipNewLines(&compiler->parser);
+  consume(&compiler->parser, TK_RPARAN, "Expected ')' after parameter list.");
+
+  emitOpcode(compiler, OP_IMPORT);
 }
 
 static void exprFunc(Compiler* compiler, bool can_assign) {
@@ -1200,7 +1217,7 @@ static void exprAttrib(Compiler* compiler, bool can_assign) {
   int length = parser->previous.length;
 
   // Store the name in script's names.
-  String* string = newString(compiler->vm, name, length);
+  String* string = newStringLength(compiler->vm, name, length);
   vmPushTempRef(compiler->vm, &string->_super);
   stringBufferWrite(&compiler->script->names, compiler->vm, string);
   vmPopTempRef(compiler->vm);
@@ -1305,14 +1322,15 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
  *****************************************************************************/
 
 static void compilerInit(Compiler* compiler, MSVM* vm, const char* source,
-                         const char* path) {
-  parserInit(&compiler->parser, vm, source, path);
+                         Script* script) {
+  parserInit(&compiler->parser, vm, source, script);
   compiler->vm = vm;
   vm->compiler = compiler;
   compiler->scope_depth = DEPTH_GLOBAL;
   compiler->var_count = 0;
   compiler->global_count = 0;
   compiler->stack_size = 0;
+  compiler->script = script;
   compiler->loop = NULL;
   compiler->func = NULL;
   compiler->script = NULL;
@@ -1754,21 +1772,13 @@ static void compileStatement(Compiler* compiler) {
   }
 }
 
-Script* compileSource(MSVM* vm, const char* path) {
-
-  MSLoadScriptResult res = vm->config.load_script_fn(vm, path);
-  if (res.is_failed) // FIXME:
-    vm->config.error_fn(vm, MS_ERROR_COMPILE, NULL, -1,
-      "file load source failed.");
-  const char* source = res.source;
+bool compile(MSVM* vm, Script* script, const char* source) {
 
   // Skip utf8 BOM if there is any.
   if (strncmp(source, "\xEF\xBB\xBF", 3) == 0) source += 3;
 
   Compiler compiler;
-  compilerInit(&compiler, vm, source, path);
-
-  Script* script = newScript(vm);
+  compilerInit(&compiler, vm, source, script);
   compiler.script = script;
 
   Func curr_fn;
@@ -1804,10 +1814,6 @@ Script* compileSource(MSVM* vm, const char* path) {
   emitOpcode(&compiler, OP_RETURN);
   emitOpcode(&compiler, OP_END);
 
-  // Source done callback.
-  if (vm->config.load_script_done_fn != NULL)
-    vm->config.load_script_done_fn(vm, path, res.user_data);
-
   // Create script globals.
   for (int i = 0; i < compiler.var_count; i++) {
     ASSERT(compiler.variables[i].depth == (int)DEPTH_GLOBAL, OOPS);
@@ -1820,8 +1826,8 @@ Script* compileSource(MSVM* vm, const char* path) {
   dumpInstructions(vm, script->body);
 #endif
 
-  if (compiler.parser.has_errors) return NULL;
-  return script;
+  // Return true if success.
+  return !(compiler.parser.has_errors);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

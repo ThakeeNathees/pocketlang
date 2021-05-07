@@ -14,9 +14,6 @@
 // garbage collected.
 #define MAX_TEMP_REFERENCE 16
 
-// The maximum number of script cache can vm hold at once.
-#define MAX_SCRIPT_CACHE 128
-
 typedef enum {
   #define OPCODE(name, _, __) OP_##name,
   #include "opcodes.h"
@@ -46,15 +43,15 @@ struct MSVM {
   int temp_reference_count;
 
   // VM's configurations.
-  MSConfiguration config;
+  msConfiguration config;
 
   // Current compiler reference to mark it's heap allocated objects. Note that
   // The compiler isn't heap allocated.
   Compiler* compiler;
 
-  // Std scripts array. (TODO: assert "std" scripts doesn't have global vars).
-  Script* std_scripts[MAX_SCRIPT_CACHE];
-  int std_count;
+  // A cache of the compiled scripts with their path as key and the Scrpit
+  // object as the value.
+  Map* scripts;
 
   // Execution variables ////////////////////////////////////////////////////
 
@@ -77,10 +74,6 @@ struct MSVM {
 // going to track deallocated bytes, instead use garbage collector to do it.
 void* vmRealloc(MSVM* self, void* memory, size_t old_size, size_t new_size);
 
-// Initialize the vm and update the configuration. If config is NULL it'll use
-// the default configuration.
-void vmInit(MSVM* self, MSConfiguration* config);
-
 // Push the object to temporary references stack.
 void vmPushTempRef(MSVM* self, Object* obj);
 
@@ -89,14 +82,6 @@ void vmPopTempRef(MSVM* self);
 
 // Trigger garbage collection manually.
 void vmCollectGarbage(MSVM* self);
-
-// Add a std script to vm when initializing core.
-void vmAddStdScript(MSVM* self, Script* script);
-
-// Returns the std script with the name [name]. Note that the name shouldn't
-// be start with "std:" but the actual name of the script. If not found
-// returns NULL.
-Script* vmGetStdScript(MSVM* self, const char* name);
 
 // Runs the script and return result.
 MSInterpretResult vmRunScript(MSVM* vm, Script* script);

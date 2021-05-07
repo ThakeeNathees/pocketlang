@@ -259,16 +259,9 @@ struct Range {
 struct Script {
   Object _super;
 
-  // One of the below is null and other one is not. Since "std" script names
-  // are hardcoded and user script names are constructed.
-  const char* name;   //< Std script's name. Null for user script.
-
-  // TODO:
-  //   String* path;   //< Absolute path of the script. Null for std scripts.
-
-  // TODO: maybe imported scripts are stored in var buffer and not here.
-  //   ID imports[MAX_IMPORT_SCRIPTS]; //< Imported script IDs.
-  //   int import_count;               //< Number of import in imports.
+  // The path of the script and it's the key in the vm's scripts cache for the
+  // script.
+  String* name;
 
   /*
   names:     ["v1", "fn1", "v2", "fn2", ...]
@@ -280,7 +273,6 @@ struct Script {
   functions: [      fn1,       fn2 ]
                     0          1
   */
-
   VarBuffer globals;         //< Script level global variables.
   UintBuffer global_names;   //< Name map to index in globals.
   VarBuffer literals;        //< Script literal constant values.
@@ -301,13 +293,13 @@ typedef struct {
 struct Function {
   Object _super;
 
-  const char* name;    //< Name in the script [owner].
+  const char* name;    //< Name in the script [owner] or C literal.
   Script* owner;       //< Owner script of the function.
   int arity;           //< Number of argument the function expects.
 
   bool is_native;      //< True if Native function.
   union {
-    MiniScriptNativeFn native;  //< Native function pointer.
+    msNativeFn native;  //< Native function pointer.
     Fn* fn;                     //< Script function pointer.
   };
 };
@@ -386,7 +378,10 @@ Var doubleToVar(double value);
 double varToDouble(Var value);
 
 // Allocate new String object and return String*.
-String* newString(MSVM* vm, const char* text, uint32_t length);
+String* newStringLength(MSVM* vm, const char* text, uint32_t length);
+static inline String* newString(MSVM* vm, const char* text) {
+  return newStringLength(vm, text, (uint32_t)strlen(text));
+}
 
 // Allocate new List and return List*.
 List* newList(MSVM* vm, uint32_t size);
@@ -398,7 +393,7 @@ Map* newMap(MSVM* vm);
 Range* newRange(MSVM* vm, double from, double to);
 
 // Allocate new Script object and return Script*.
-Script* newScript(MSVM* vm);
+Script* newScript(MSVM* vm, String* name);
 
 // Allocate new Function object and return Function*. Parameter [name] should
 // be the name in the Script's nametable. If the [owner] is NULL the function

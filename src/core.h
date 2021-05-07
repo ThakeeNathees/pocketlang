@@ -32,6 +32,10 @@ Function* getBuiltinFunction(int index);
 // Returns the builtin function's name at index [index].
 const char* getBuiltinFunctionName(int index);
 
+// Return the core library with the [name] if exists in the core libs,
+// otherwise returns NULL.
+Script* getCoreLib(String* name);
+
 // Operators //////////////////////////////////////////////////////////////////
 
 Var varAdd(MSVM* vm, Var v1, Var v2);

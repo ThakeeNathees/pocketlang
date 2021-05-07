@@ -46,7 +46,7 @@ void* vmRealloc(MSVM* self, void* memory, size_t old_size, size_t new_size) {
   return self->config.realloc_fn(memory, new_size, self->config.user_data);
 }
 
-void msInitConfiguration(MSConfiguration* config) {
+void msInitConfiguration(msConfiguration* config) {
   config->realloc_fn = defaultRealloc;
 
   // TODO: Handle Null functions before calling them.
@@ -54,18 +54,37 @@ void msInitConfiguration(MSConfiguration* config) {
   config->write_fn = NULL;
 
   config->load_script_fn = NULL;
-  config->load_script_done_fn = NULL;
+  config->resolve_path_fn = NULL;
   config->user_data = NULL;
 }
 
-MSVM* msNewVM(MSConfiguration* config) {
-  MSVM* vm = (MSVM*)malloc(sizeof(MSVM));
-  vmInit(vm, config);
+MSVM* msNewVM(msConfiguration* config) {
+
+  msReallocFn realloc_fn = defaultRealloc;
+  void* user_data = NULL;
+  if (config != NULL) {
+    realloc_fn = config->realloc_fn;
+    user_data = config->user_data;
+  }
+  MSVM* vm = (MSVM*)realloc_fn(NULL, sizeof(MSVM), user_data);
+  memset(vm, 0, sizeof(MSVM));
+
+  vm->config = *config;
+  vm->gray_list_count = 0;
+  vm->gray_list_capacity = MIN_CAPACITY;
+  vm->gray_list = (Object**)vm->config.realloc_fn(
+    NULL, sizeof(Object*) * vm->gray_list_capacity, NULL);
+  vm->next_gc = 1024 * 1024 * 10; // TODO:
+
+  vm->scripts = newMap(vm);
+
+  // TODO: no need to initialize if already done by another vm.
+  initializeCore(vm);
+
   return vm;
 }
 
 void msFreeVM(MSVM* self) {
-  // TODO: Check if vm already freed.
 
   Object* obj = self->first;
   while (obj != NULL) {
@@ -76,21 +95,8 @@ void msFreeVM(MSVM* self) {
 
   self->gray_list = (Object**)self->config.realloc_fn(
     self->gray_list, 0, self->config.user_data);
-  self->config.realloc_fn(self, 0, self->config.user_data);
-}
 
-void vmInit(MSVM* self, MSConfiguration* config) {
-  memset(self, 0, sizeof(MSVM));
-  self->config = *config;
-
-  self->gray_list_count = 0;
-  self->gray_list_capacity = 8; // TODO: refactor the magic '8' here.
-  self->gray_list = (Object**)self->config.realloc_fn(
-    NULL, sizeof(Object*) * self->gray_list_capacity, NULL);
-  self->next_gc = 1024 * 1024 * 10; // TODO:
-
-  // TODO: no need to initialize if already done by another vm.
-  initializeCore(self);
+  DEALLOCATE(self, self);
 }
 
 void vmPushTempRef(MSVM* self, Object* obj) {
@@ -114,10 +120,8 @@ void vmCollectGarbage(MSVM* self) {
   // Mark core objects (mostlikely builtin functions).
   markCoreObjects(self);
 
-  // Mark all the 'std' scripts.
-  for (int i = 0; i < self->std_count; i++) {
-    grayObject(&(self->std_scripts[i]->_super), self);
-  }
+  // Mark the scripts cache.
+  grayObject(&self->scripts->_super, self);
 
   // Mark temp references.
   for (int i = 0; i < self->temp_reference_count; i++) {
@@ -143,22 +147,6 @@ void vmCollectGarbage(MSVM* self) {
   TODO; // Sweep.
 }
 
-void vmAddStdScript(MSVM* self, Script* script) {
-  ASSERT(self->std_count < MAX_SCRIPT_CACHE, OOPS);
-  self->std_scripts[self->std_count++] = script;
-}
-
-Script* vmGetStdScript(MSVM* self, const char* name) {
-  for (int i = 0; i < self->std_count; i++) {
-    Script* scr = self->std_scripts[i];
-    // +4 to skip "std:".
-    if (strcmp(name, scr->name + 4) == 0) {
-      return scr;
-    }
-  }
-  return NULL;
-}
-
 void* msGetUserData(MSVM* vm) {
   return vm->config.user_data;
 }
@@ -167,9 +155,101 @@ void msSetUserData(MSVM* vm, void* user_data) {
   vm->config.user_data = user_data;
 }
 
+static Script* getScript(MSVM* vm, String* name) {
+  Var scr = mapGet(vm->scripts, VAR_OBJ(&name->_super));
+  if (IS_UNDEF(scr)) return NULL;
+  ASSERT(AS_OBJ(scr)->type == OBJ_SCRIPT, OOPS);
+  return (Script*)AS_OBJ(scr);
+}
+
 /******************************************************************************
  * RUNTIME                                                                    *
  *****************************************************************************/
+
+// If failed to resolve it'll return false. Parameter [resolved] will be
+// updated with a resolved path.
+static bool resolveScriptPath(MSVM* vm, String** resolved) {
+  if (vm->config.resolve_path_fn == NULL) return true;
+
+  msStringResult result;
+  const char* path = (*resolved)->data;
+
+  Fiber* fiber = vm->fiber;
+  if (fiber == NULL || fiber->frame_count <= 0) {
+    // fiber == NULL => vm haven't started yet and it's a root script.
+    result = vm->config.resolve_path_fn(vm, NULL, path);
+  } else {
+    Function* fn = fiber->frames[fiber->frame_count - 1].fn;
+    result = vm->config.resolve_path_fn(vm, fn->owner->name->data, path);
+  }
+  if (!result.success) return false;
+
+  // If the resolved string is the SAME as [path] don't allocate a new string.
+  if (result.string != path) *resolved = newString(vm, result.string);
+  if (result.on_done != NULL) result.on_done(vm, result);
+
+  return true;
+}
+
+// Import and return Script object as Var. If the script is imported and
+// compiled here it'll set [is_new_script] to true oterwise (using the cached
+// script) set to false.
+static Var importScript(MSVM* vm, String* name, bool* is_new_script) {
+
+  // Check core libs first.
+  Script* core_lib = getCoreLib(name);
+  if (core_lib != NULL) {
+    *is_new_script = false;
+    return VAR_OBJ(&core_lib->_super);
+  }
+
+  if (!resolveScriptPath(vm, &name)) {
+    vm->fiber->error = stringFormat(vm, "Failed to resolve script @ from @",
+                                    name, vm->fiber->func->owner->name);
+    return VAR_NULL;
+  }
+  vmPushTempRef(vm, &name->_super);
+
+  // Check if the script is already cached (then use it).
+  Var scr = mapGet(vm->scripts, VAR_OBJ(&name->_super));
+  if (!IS_UNDEF(scr)) {
+    ASSERT(AS_OBJ(scr)->type == OBJ_SCRIPT, OOPS);
+    *is_new_script = false;
+    return scr;
+  }
+  *is_new_script = true;
+
+  msStringResult result = { false, NULL, NULL };
+  if (vm->config.load_script_fn != NULL)
+    result = vm->config.load_script_fn(vm, name->data);
+
+  if (!result.success) {
+    vmPopTempRef(vm); // name
+
+    String* err_msg = stringFormat(vm, "Cannot import script '@'", name);
+    vm->fiber->error = err_msg; //< Set the error msg.
+
+    return VAR_NULL;
+  }
+
+  Script* script = newScript(vm, name);
+  vmPushTempRef(vm, &script->_super);
+  mapSet(vm->scripts, vm, VAR_OBJ(&name->_super), VAR_OBJ(&script->_super));
+  vmPopTempRef(vm);
+
+  vmPopTempRef(vm); // name
+
+  bool success = compile(vm, script, result.string);
+  if (result.on_done) result.on_done(vm, result);
+
+  if (!success) {
+    vm->fiber->error = stringFormat(vm, "Compilation of script '@' failed.",
+                                    name);
+    return VAR_NULL;
+  }
+
+  return VAR_OBJ(&script->_super);
+}
 
 static void ensureStackSize(MSVM* vm, int size) {
   if (vm->fiber->stack_size > size) return;
@@ -200,8 +280,8 @@ static inline void pushCallFrame(MSVM* vm, Function* fn) {
 }
 
 void msSetRuntimeError(MSVM* vm, const char* format, ...) {
-  vm->fiber->error = newString(vm, "TODO:", 5);
-  TODO;
+  vm->fiber->error = newString(vm, "TODO:");
+  TODO; // Construct String and set to vm->fiber->error.
 }
 
 void vmReportError(MSVM* vm) {
@@ -210,11 +290,43 @@ void vmReportError(MSVM* vm) {
 }
 
 MSInterpretResult msInterpret(MSVM* vm, const char* file) {
-  Script* script = compileSource(vm, file);
-  if (script == NULL) return RESULT_COMPILE_ERROR;
 
-  vm->script = script;
-  return vmRunScript(vm, script);
+  // Resolve file path.
+  String* name = newString(vm, file);
+  vmPushTempRef(vm, &name->_super);
+
+  if (!resolveScriptPath(vm, &name)) {
+    vm->config.error_fn(vm, MS_ERROR_COMPILE, NULL, -1,
+      stringFormat(vm, "Failed to resolve path '$'.", file)->data);
+    return RESULT_COMPILE_ERROR;
+  }
+
+  // Load the script source.
+  msStringResult res = vm->config.load_script_fn(vm, name->data);
+  if (!res.success) {
+    vm->config.error_fn(vm, MS_ERROR_COMPILE, NULL, -1,
+      stringFormat(vm, "Failed to load script '@'.", name)->data);
+    return RESULT_COMPILE_ERROR;
+  }
+
+  // Load a new script to the vm's scripts cache.
+  Script* scr = getScript(vm, name);
+  if (scr == NULL) {
+    scr = newScript(vm, name);
+    vmPushTempRef(vm, &scr->_super);
+    mapSet(vm->scripts, vm, VAR_OBJ(&name->_super), VAR_OBJ(&scr->_super));
+    vmPopTempRef(vm);
+  }
+  vmPopTempRef(vm); // name
+
+  // Compile the source.
+  bool success = compile(vm, scr, res.string);
+  if (res.on_done) res.on_done(vm, res);
+
+  if (!success) return RESULT_COMPILE_ERROR;
+  vm->script = scr;
+
+  return vmRunScript(vm, scr);
 }
 
 #ifdef DEBUG
@@ -467,6 +579,24 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
     OPCODE(POP):
       DROP();
       DISPATCH();
+
+    OPCODE(IMPORT) :
+    {
+      Var path = POP();
+      if (!IS_OBJ(path) || AS_OBJ(path)->type != OBJ_STRING) {
+        RUNTIME_ERROR("Expected a string argument for import statement.");
+      }
+
+      bool is_new_script = false;
+      PUSH(importScript(vm, (String*)AS_OBJ(path), &is_new_script));
+      CHECK_ERROR();
+
+      if (is_new_script) {
+        TODO; // Execute the script.
+      }
+
+      DISPATCH();
+    }
 
     OPCODE(CALL):
     {
