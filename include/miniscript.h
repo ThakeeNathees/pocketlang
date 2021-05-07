@@ -92,6 +92,7 @@ struct msStringResult {
 // A function callback to resolve the import script name from the [from] path
 // to an absolute (or relative to the cwd). This is required to solve same
 // script imported with different relative path.
+// Note: If the name is the root script [from] would be NULL.
 typedef msStringResult (*msResolvePathFn) (MSVM* vm, const char* from,
                                         const char* name);
 

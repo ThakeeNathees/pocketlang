@@ -259,16 +259,9 @@ struct Range {
 struct Script {
   Object _super;
 
-  // One of the below is null and other one is not. Since "std" script names
-  // are hardcoded and user script names are constructed.
-  const char* name;   //< Std script's name. Null for user script.
-
-  // TODO:
-  //   String* path;   //< Absolute path of the script. Null for std scripts.
-
-  // TODO: maybe imported scripts are stored in var buffer and not here.
-  //   ID imports[MAX_IMPORT_SCRIPTS]; //< Imported script IDs.
-  //   int import_count;               //< Number of import in imports.
+  // The path of the script and it's the key in the vm's scripts cache for the
+  // script.
+  String* name;
 
   /*
   names:     ["v1", "fn1", "v2", "fn2", ...]
@@ -280,7 +273,6 @@ struct Script {
   functions: [      fn1,       fn2 ]
                     0          1
   */
-
   VarBuffer globals;         //< Script level global variables.
   UintBuffer global_names;   //< Name map to index in globals.
   VarBuffer literals;        //< Script literal constant values.

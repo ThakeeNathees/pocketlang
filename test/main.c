@@ -17,18 +17,23 @@ void writeFunction(MSVM* vm, const char* text) {
   fprintf(stdout, "%s", text);
 }
 
+// FIXME:
 void onResultDone(MSVM* vm, msStringResult result) {
-  // The result.string is the allocated buffer and it has to be freed
-  // manually since it wasn't allocated by the VM.
-  free((void*)result.string);
+  //   // The result.string is the allocated buffer and it has to be freed
+  //   // manually since it wasn't allocated by the VM.
+  //   free((void*)result.string);
 }
 
+// FIXME:
 msStringResult resolvePath(MSVM* vm, const char* from, const char* name) {
+  if (from == NULL) {
+    // TODO: name is the complete path.
+  }
+
   msStringResult result;
   result.success = true;
   result.on_done = onResultDone;
-
-  __debugbreak();
+  result.string = name;
   return result;
 }
 

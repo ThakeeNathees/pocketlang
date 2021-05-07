@@ -154,18 +154,49 @@ void msSetUserData(MSVM* vm, void* user_data) {
   vm->config.user_data = user_data;
 }
 
+static Script* getScript(MSVM* vm, String* name) {
+  Var scr = mapGet(vm->scripts, VAR_OBJ(&name->_super));
+  if (IS_UNDEF(scr)) return NULL;
+  ASSERT(AS_OBJ(scr)->type == OBJ_SCRIPT, OOPS);
+  return (Script*)AS_OBJ(scr);
+}
+
 /******************************************************************************
  * RUNTIME                                                                    *
  *****************************************************************************/
 
-static String* resolveScriptPath(MSVM* vm, String* name) {
-  TODO;
-  return NULL;
+// If failed to resolve it'll return false. Parameter [name] is the resolved 
+// path.
+static bool resolveScriptPath(MSVM* vm, const char* path, String** name) {
+  if (vm->config.resolve_path_fn == NULL) {
+    *name = newString(vm, path);
+    return true;
+  }
+
+  Fiber* fiber = vm->fiber;
+  Function* fn = fiber->frames[fiber->frame_count - 1].fn;
+  msStringResult result = vm->config.resolve_path_fn(vm, fn->owner->name->data,
+                                                     path);
+  if (!result.success) return false;
+
+  // If the resolved string is the SAME as [path] don't allocate a new string.
+  if (result.string != path) *name = newString(vm, result.string);
+  if (result.on_done != NULL) result.on_done(vm, result);
+
+  return true;
 }
 
+// Import and return Script object as Var. If the script is imported and
+// compiled here it'll set [is_new_script] to true oterwise (using the cached
+// script) set to false.
 static Var importScript(MSVM* vm, String* name, bool* is_new_script) {
 
-  name = resolveScriptPath(vm, name);
+  if (!resolveScriptPath(vm, name->data, &name)) {
+    vm->fiber->error = stringFormat(vm, "Failed to resolve script @ from @",
+                                    name, vm->fiber->func->owner->name);
+    return VAR_NULL;
+  }
+  vmPushTempRef(vm, &name->_super);
 
   // Check if the script is already cached (then use it).
   Var scr = mapGet(vm->scripts, VAR_OBJ(&name->_super));
@@ -175,8 +206,6 @@ static Var importScript(MSVM* vm, String* name, bool* is_new_script) {
     return scr;
   }
   *is_new_script = true;
-
-  vmPushTempRef(vm, &name->_super);
 
   msStringResult result = { false, NULL, NULL };
   if (vm->config.load_script_fn != NULL)
@@ -190,11 +219,23 @@ static Var importScript(MSVM* vm, String* name, bool* is_new_script) {
 
     return VAR_NULL;
   }
-
   vmPopTempRef(vm); // name
 
+  Script* script = newScript(vm);
+  vmPushTempRef(vm, &script->_super);
+  mapSet(vm->scripts, vm, VAR_OBJ(&name->_super), VAR_OBJ(&script->_super));
+  vmPopTempRef(vm);
 
-  TODO; // Compile the script and ...
+  bool success = compile(vm, script, result.string);
+  if (result.on_done) result.on_done(vm, result);
+
+  if (!success) {
+    vm->fiber->error = stringFormat(vm, "Compilation of script '@' failed.",
+                                    name);
+    return VAR_NULL;
+  }
+
+  return VAR_OBJ(&script->_super);
 }
 
 static void ensureStackSize(MSVM* vm, int size) {
@@ -236,11 +277,42 @@ void vmReportError(MSVM* vm) {
 }
 
 MSInterpretResult msInterpret(MSVM* vm, const char* file) {
-  Script* script = compileSource(vm, file);
-  if (script == NULL) return RESULT_COMPILE_ERROR;
 
-  vm->script = script;
-  return vmRunScript(vm, script);
+  // Resolve file path.
+  String* name;
+  if (!resolveScriptPath(vm, file, &name)) {
+    vm->config.error_fn(vm, MS_ERROR_COMPILE, NULL, -1,
+      stringFormat(vm, "Failed to resolve path '$'.", file)->data);
+    return RESULT_COMPILE_ERROR;
+  }
+  vmPushTempRef(vm, &name->_super);
+
+  // Load the script source.
+  msStringResult res = vm->config.load_script_fn(vm, name->data);
+  if (!res.success) {
+    vm->config.error_fn(vm, MS_ERROR_COMPILE, NULL, -1,
+      stringFormat(vm, "Failed to load script '@'.", name)->data);
+    return RESULT_COMPILE_ERROR;
+  }
+
+  // Load a new script to the vm's scripts cache.
+  Script* scr = getScript(vm, name);
+  if (scr == NULL) {
+    scr = newScript(vm);
+    vmPushTempRef(vm, &scr->_super);
+    mapSet(vm->scripts, vm, VAR_OBJ(&name->_super), VAR_OBJ(&scr->_super));
+    vmPopTempRef(vm);
+  }
+  vmPopTempRef(vm); // name
+
+  // Compile the source.
+  bool success = compile(vm, scr, res.string);
+  if (res.on_done) res.on_done(vm, res);
+
+  if (!success) return RESULT_COMPILE_ERROR;
+  vm->script = scr;
+
+  return vmRunScript(vm, scr);
 }
 
 #ifdef DEBUG

@@ -275,7 +275,6 @@ Script* newScript(MSVM* vm) {
   varInitObject(&script->_super, vm, OBJ_SCRIPT);
 
   script->name = NULL;
-  // TODO: script->path = NULL;
 
   varBufferInit(&script->globals);
   uintBufferInit(&script->global_names);

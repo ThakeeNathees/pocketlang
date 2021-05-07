@@ -11,7 +11,7 @@
 
 typedef struct Compiler Compiler;
 
-Script* compileSource(MSVM* vm, const char* path);
+bool compile(MSVM* vm, Script* script, const char* source);
 
 void compilerMarkObjects(Compiler* compiler, MSVM* vm);
 
