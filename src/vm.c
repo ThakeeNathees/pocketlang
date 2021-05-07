@@ -54,6 +54,7 @@ void msInitConfiguration(msConfiguration* config) {
   config->write_fn = NULL;
 
   config->load_script_fn = NULL;
+  config->resolve_path_fn = NULL;
   config->user_data = NULL;
 }
 
@@ -165,22 +166,26 @@ static Script* getScript(MSVM* vm, String* name) {
  * RUNTIME                                                                    *
  *****************************************************************************/
 
-// If failed to resolve it'll return false. Parameter [name] is the resolved 
-// path.
-static bool resolveScriptPath(MSVM* vm, const char* path, String** name) {
-  if (vm->config.resolve_path_fn == NULL) {
-    *name = newString(vm, path);
-    return true;
-  }
+// If failed to resolve it'll return false. Parameter [resolved] will be
+// updated with a resolved path.
+static bool resolveScriptPath(MSVM* vm, String** resolved) {
+  if (vm->config.resolve_path_fn == NULL) return true;
+
+  msStringResult result;
+  const char* path = (*resolved)->data;
 
   Fiber* fiber = vm->fiber;
-  Function* fn = fiber->frames[fiber->frame_count - 1].fn;
-  msStringResult result = vm->config.resolve_path_fn(vm, fn->owner->name->data,
-                                                     path);
+  if (fiber == NULL || fiber->frame_count <= 0) {
+    // fiber == NULL => vm haven't started yet and it's a root script.
+    result = vm->config.resolve_path_fn(vm, NULL, path);
+  } else {
+    Function* fn = fiber->frames[fiber->frame_count - 1].fn;
+    result = vm->config.resolve_path_fn(vm, fn->owner->name->data, path);
+  }
   if (!result.success) return false;
 
   // If the resolved string is the SAME as [path] don't allocate a new string.
-  if (result.string != path) *name = newString(vm, result.string);
+  if (result.string != path) *resolved = newString(vm, result.string);
   if (result.on_done != NULL) result.on_done(vm, result);
 
   return true;
@@ -191,7 +196,14 @@ static bool resolveScriptPath(MSVM* vm, const char* path, String** name) {
 // script) set to false.
 static Var importScript(MSVM* vm, String* name, bool* is_new_script) {
 
-  if (!resolveScriptPath(vm, name->data, &name)) {
+  // Check core libs first.
+  Script* core_lib = getCoreLib(name);
+  if (core_lib != NULL) {
+    *is_new_script = false;
+    return VAR_OBJ(&core_lib->_super);
+  }
+
+  if (!resolveScriptPath(vm, &name)) {
     vm->fiber->error = stringFormat(vm, "Failed to resolve script @ from @",
                                     name, vm->fiber->func->owner->name);
     return VAR_NULL;
@@ -219,12 +231,13 @@ static Var importScript(MSVM* vm, String* name, bool* is_new_script) {
 
     return VAR_NULL;
   }
-  vmPopTempRef(vm); // name
 
-  Script* script = newScript(vm);
+  Script* script = newScript(vm, name);
   vmPushTempRef(vm, &script->_super);
   mapSet(vm->scripts, vm, VAR_OBJ(&name->_super), VAR_OBJ(&script->_super));
   vmPopTempRef(vm);
+
+  vmPopTempRef(vm); // name
 
   bool success = compile(vm, script, result.string);
   if (result.on_done) result.on_done(vm, result);
@@ -279,13 +292,14 @@ void vmReportError(MSVM* vm) {
 MSInterpretResult msInterpret(MSVM* vm, const char* file) {
 
   // Resolve file path.
-  String* name;
-  if (!resolveScriptPath(vm, file, &name)) {
+  String* name = newString(vm, file);
+  vmPushTempRef(vm, &name->_super);
+
+  if (!resolveScriptPath(vm, &name)) {
     vm->config.error_fn(vm, MS_ERROR_COMPILE, NULL, -1,
       stringFormat(vm, "Failed to resolve path '$'.", file)->data);
     return RESULT_COMPILE_ERROR;
   }
-  vmPushTempRef(vm, &name->_super);
 
   // Load the script source.
   msStringResult res = vm->config.load_script_fn(vm, name->data);
@@ -298,7 +312,7 @@ MSInterpretResult msInterpret(MSVM* vm, const char* file) {
   // Load a new script to the vm's scripts cache.
   Script* scr = getScript(vm, name);
   if (scr == NULL) {
-    scr = newScript(vm);
+    scr = newScript(vm, name);
     vmPushTempRef(vm, &scr->_super);
     mapSet(vm->scripts, vm, VAR_OBJ(&name->_super), VAR_OBJ(&scr->_super));
     vmPopTempRef(vm);

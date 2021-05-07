@@ -293,7 +293,7 @@ typedef struct {
 struct Function {
   Object _super;
 
-  const char* name;    //< Name in the script [owner].
+  const char* name;    //< Name in the script [owner] or C literal.
   Script* owner;       //< Owner script of the function.
   int arity;           //< Number of argument the function expects.
 
@@ -393,7 +393,7 @@ Map* newMap(MSVM* vm);
 Range* newRange(MSVM* vm, double from, double to);
 
 // Allocate new Script object and return Script*.
-Script* newScript(MSVM* vm);
+Script* newScript(MSVM* vm, String* name);
 
 // Allocate new Function object and return Function*. Parameter [name] should
 // be the name in the Script's nametable. If the [owner] is NULL the function

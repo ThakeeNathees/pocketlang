@@ -45,7 +45,7 @@ msStringResult loadScript(MSVM* vm, const char* path) {
   // Open the file.
   FILE* file = fopen(path, "r");
   if (file == NULL) {
-    result.success = true;
+    result.success = false;
     return result;
   }
 
@@ -78,7 +78,7 @@ int main(int argc, char** argv) {
     printf("%s\n%s", notice, help);
     return 0;
   }
-
+  
   const char* source_path = argv[1];
 
   msConfiguration config;
@@ -86,6 +86,7 @@ int main(int argc, char** argv) {
   config.error_fn = errorPrint;
   config.write_fn = writeFunction;
   config.load_script_fn = loadScript;
+  config.resolve_path_fn = resolvePath;
 
   MSVM* vm = msNewVM(&config);
   MSInterpretResult result = msInterpret(vm, source_path);

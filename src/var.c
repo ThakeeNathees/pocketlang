@@ -86,13 +86,13 @@ void grayVarBuffer(VarBuffer* self, MSVM* vm) {
 
 void grayStringBuffer(StringBuffer* self, MSVM* vm) {
   for (uint32_t i = 0; i < self->count; i++) {
-    grayObject((Object*)self->data[i], vm);
+    grayObject(&self->data[i]->_super, vm);
   }
 }
 
 void grayFunctionBuffer(FunctionBuffer* self, MSVM* vm) {
   for (uint32_t i = 0; i < self->count; i++) {
-    grayObject((Object*)self->data[i], vm);
+    grayObject(&self->data[i]->_super, vm);
   }
 }
 
@@ -114,10 +114,10 @@ static void blackenObject(Object* obj, MSVM* vm) {
 
     case OBJ_MAP: {
       Map* map = (Map*)obj;
-      for (uint32_t i = 0; i < map->count; i++) {
+      for (uint32_t i = 0; i < map->capacity; i++) {
         if (IS_UNDEF(map->entries[i].key)) continue;
-        grayObject((Object*)map->entries[i].key, vm);
-        grayObject((Object*)map->entries[i].value, vm);
+        grayObject(AS_OBJ(map->entries[i].key), vm);
+        grayObject(AS_OBJ(map->entries[i].value), vm);
       }
       vm->bytes_allocated += sizeof(Map);
       vm->bytes_allocated += sizeof(MapEntry) * map->capacity;
@@ -131,6 +131,8 @@ static void blackenObject(Object* obj, MSVM* vm) {
     {
       Script* script = (Script*)obj;
       vm->bytes_allocated += sizeof(Script);
+
+      grayObject(&script->name->_super, vm);
 
       grayVarBuffer(&script->globals, vm);
       vm->bytes_allocated += sizeof(Var) * script->globals.capacity;
@@ -150,7 +152,7 @@ static void blackenObject(Object* obj, MSVM* vm) {
       grayStringBuffer(&script->names, vm);
       vm->bytes_allocated += sizeof(String*) * script->names.capacity;
 
-      grayObject((Object*)script->body, vm);
+      grayObject(&script->body->_super, vm);
     } break;
 
     case OBJ_FUNC:
@@ -158,7 +160,7 @@ static void blackenObject(Object* obj, MSVM* vm) {
       Function* func = (Function*)obj;
       vm->bytes_allocated += sizeof(Function);
 
-      grayObject((Object*)func->owner, vm);
+      grayObject(&func->owner->_super, vm);
 
       if (!func->is_native) {
         Fn* fn = func->fn;
@@ -172,7 +174,7 @@ static void blackenObject(Object* obj, MSVM* vm) {
       Fiber* fiber = (Fiber*)obj;
       vm->bytes_allocated += sizeof(Fiber);
 
-      grayObject((Object*)fiber->func, vm);
+      grayObject(&fiber->func->_super, vm);
 
       // Blacken the stack.
       for (Var* local = fiber->stack; local < fiber->sp; local++) {
@@ -182,12 +184,12 @@ static void blackenObject(Object* obj, MSVM* vm) {
 
       // Blacken call frames.
       for (int i = 0; i < fiber->frame_count; i++) {
-        grayObject((Object*)fiber->frames[i].fn, vm);
-        grayObject((Object*)fiber->frames[i].fn->owner, vm);
+        grayObject(&fiber->frames[i].fn->_super, vm);
+        grayObject(&fiber->frames[i].fn->owner->_super, vm);
       }
       vm->bytes_allocated += sizeof(CallFrame) * fiber->frame_capacity;
 
-      grayObject((Object*)fiber->error, vm);
+      grayObject(&fiber->error->_super, vm);
 
     } break;
 
@@ -270,11 +272,11 @@ Range* newRange(MSVM* vm, double from, double to) {
   return range;
 }
 
-Script* newScript(MSVM* vm) {
+Script* newScript(MSVM* vm, String* name) {
   Script* script = ALLOCATE(vm, Script);
   varInitObject(&script->_super, vm, OBJ_SCRIPT);
 
-  script->name = NULL;
+  script->name = name;
 
   varBufferInit(&script->globals);
   uintBufferInit(&script->global_names);

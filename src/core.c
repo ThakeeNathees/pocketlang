@@ -27,6 +27,9 @@ typedef struct {
 static _BuiltinFn builtins[BUILTIN_COUNT];
 static int builtins_count = 0;
 
+// Core libraries.
+static Map* core_libs;
+
 static void initializeBuiltinFN(MSVM* vm, _BuiltinFn* bfn, const char* name,
                                int length, int arity, msNativeFn ptr) {
   bfn->name = name;
@@ -122,6 +125,13 @@ Function* getBuiltinFunction(int index) {
 const char* getBuiltinFunctionName(int index) {
   ASSERT_INDEX(index, builtins_count);
   return builtins[index].name;
+}
+
+Script* getCoreLib(String* name) {
+  Var lib = mapGet(core_libs, VAR_OBJ(&name->_super));
+  if (IS_UNDEF(lib)) return NULL;
+  ASSERT(IS_OBJ(lib) && AS_OBJ(lib)->type == OBJ_SCRIPT, OOPS);
+  return (Script*)AS_OBJ(lib);
 }
 
 #define FN_IS_PRIMITE_TYPE(name, check)       \
@@ -222,6 +232,8 @@ void initializeCore(MSVM* vm) {
   initializeBuiltinFN(vm, &builtins[builtins_count++], name, \
                       (int)strlen(name), argc, fn);
 
+  core_libs = newMap(vm);
+
   // Initialize builtin functions.
   INITALIZE_BUILTIN_FN("is_null",     coreIsNull,     1);
   INITALIZE_BUILTIN_FN("is_bool",     coreIsBool,     1);
@@ -243,15 +255,19 @@ void initializeCore(MSVM* vm) {
   //initializeBuiltinFN(vm, &builtins[i], NULL, 0, 0, NULL);
 
   // Make STD scripts.
-  //Script* std;  // A temporary pointer to the current std script.
-  //Function* fn; // A temporary pointer to the allocated function function.  
-#define STD_NEW_SCRIPT(_name)              \
-  do {                                     \
-    std = newScript(vm);                   \
-    std->name = _name;                     \
-    vmPushTempRef(vm, &std->_super);       \
-    vmAddStdScript(vm, std);               \
-    vmPopTempRef(vm);                      \
+  Script* std;  // A temporary pointer to the current std script.
+  Function* fn; // A temporary pointer to the allocated function function.
+#define STD_NEW_SCRIPT(_name)                                                \
+  do {                                                                       \
+    /* Create a new Script. */                                               \
+    String* name = newString(vm, _name);                                     \
+    vmPushTempRef(vm, &name->_super);                                        \
+    std = newScript(vm, name);                                               \
+    vmPopTempRef(vm);                                                        \
+    /* Add the script to core_libs. */                                       \
+    vmPushTempRef(vm, &std->_super);                                         \
+    mapSet(core_libs, vm, VAR_OBJ(&name->_super), VAR_OBJ(&std->_super));    \
+    vmPopTempRef(vm);                                                        \
   } while (false)
 
 #define STD_ADD_FUNCTION(_name, fptr, _arity)                   \
@@ -260,16 +276,21 @@ void initializeCore(MSVM* vm) {
     fn->native = fptr;                                          \
     fn->arity = _arity;                                         \
   } while (false)
-  // TODO: add std scripts to vm.
-//  STD_NEW_SCRIPT("std:list");
-//  STD_ADD_FUNCTION("sort", stdListSort, 1);
-//
-//  // std:os script.
-//  STD_NEW_SCRIPT("std:os");
-//  STD_ADD_FUNCTION("clock", stdOsClock, 0);
+
+  // list
+  STD_NEW_SCRIPT("list");
+  STD_ADD_FUNCTION("sort", stdListSort, 1);
+
+  // os
+  STD_NEW_SCRIPT("os");
+  STD_ADD_FUNCTION("clock", stdOsClock, 0);
 }
 
 void markCoreObjects(MSVM* vm) {
+  // Core libraries.
+  grayObject(&core_libs->_super, vm);
+
+  // Builtin functions.
   for (int i = 0; i < builtins_count; i++) {
     grayObject(&builtins[i].fn->_super, vm);
   }
@@ -401,7 +422,7 @@ Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
     return VAR_NULL;
   }
 
-  Object* obj = (Object*)AS_OBJ(on);
+  Object* obj = AS_OBJ(on);
   switch (obj->type) {
     case OBJ_STRING:
     {
@@ -489,7 +510,7 @@ do {                                                                          \
     return;
   }
 
-  Object* obj = (Object*)AS_OBJ(on);
+  Object* obj = AS_OBJ(on);
   switch (obj->type) {
     case OBJ_STRING:
       ATTRIB_IMMUTABLE("length");
