@@ -94,9 +94,9 @@ goto :END
 
 :START
 
-if not exist "bin" md "./bin"
+if not exist "..\build\" md "..\build\"
 
-set ADDNL_INCLUDE=/I..\include
+set ADDNL_INCLUDE=/I..\src\include
 set ADDNL_CPPFLAGS=/EHsc /MDd
 
 if "%BUILD_DLL%" neq "true" goto :COMPILE
@@ -110,31 +110,31 @@ set object_files=
 :: Recursively loop all files in '.' matching *.c and compile.
 for /r "..\src" %%f in (*.c) do (
 	for %%i in ("%%f") do (
-		call set "object_files=%%object_files%% bin\%%~ni.obj"
-		cl /nologo /c %ADDNL_INCLUDE% %ADDNL_DEFINES% %ADDNL_CPPFLAGS% "%%f" /Fobin\%%~ni.obj
+		call set "object_files=%%object_files%% ..\build\%%~ni.obj"
+		cl /nologo /c %ADDNL_INCLUDE% %ADDNL_DEFINES% %ADDNL_CPPFLAGS% "%%f" /Fo..\build\%%~ni.obj
 		if errorlevel 1 goto :FAIL
 	)
 )
 
 if "%BUILD_DLL%"=="true" goto :LINK_DLL
 
-call :ColorText 0a "pocket.lib"
+call :ColorText 0d "..\build\pocket.lib"
 echo.
-lib /nologo /OUT:bin\pocket.lib %object_files%
+lib /nologo /OUT:..\build\pocket.lib %object_files%
 if errorlevel 1 goto :FAIL
 
-call :ColorText 0a "pocket.exe"
+call :ColorText 0d "..\build\pocket.exe"
 echo.
 
-cl /nologo %ADDNL_CPPFLAGS% %ADDNL_INCLUDE% %object_files%  /Febin\pocket.exe
+cl /nologo %ADDNL_CPPFLAGS% %ADDNL_INCLUDE% %object_files%  /Fe..\build\pocket.exe
 if errorlevel 1 goto :FAIL
 
 goto :CLEAN
 
 :LINK_DLL
-call :ColorText 0a "pocket.dll"
+call :ColorText 0d "pocket.dll"
 echo.
-link /nologo /dll /out:bin\pocket.dll /implib:bin\pocket.lib %object_files%
+link /nologo /dll /out:..\build\pocket.dll /implib:..\build\pocket.lib %object_files%
 
 :CLEAN
 
