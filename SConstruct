@@ -1,12 +1,6 @@
 #!python
 import os, subprocess, sys
 
-def get_variant_dir(env):
-	ret = 'build/' + env['platform'] + '/' + env['target'] + '/'
-	if env['platform'] == 'windows':
-		return ret + env['bits'] + '/'
-	return ret
-
 opts = Variables([], ARGUMENTS)
 ## Define our options
 opts.Add(EnumVariable('platform', "Compilation platform", '', ['', 'windows', 'x11', 'linux', 'osx']))
@@ -16,9 +10,9 @@ opts.Add(BoolVariable('use_llvm', "Use the LLVM / Clang compiler", False))
 opts.Add(BoolVariable('use_mingw', "Use Mingw compiler", False))
 
 opts.Add(BoolVariable('vsproj', "make a visual studio project", False))
-opts.Add(BoolVariable('verbose', "use verbose build command", False))
+opts.Add(BoolVariable('verbose', "use verbose build command", True))
 
-opts.Add(BoolVariable('libs', "include unit tests in main", False))
+opts.Add(BoolVariable('lib_shared', "Compile as a shared library (only).", False))
 
 ## Setup the Environment
 DefaultEnvironment(tools=[]) ## not using any tools
@@ -145,7 +139,8 @@ if not env['verbose']:
 	no_verbose(sys, env)
 	
 Export('env')
-env['variant_dir'] = get_variant_dir(env)
+env['variant_dir'] = 'build/' + env['target'] + '/'
+env['bin_suffix'] = '' ## TODO: Maybe '.%s.%s' % (env['platform'], env['bits'])
 SConscript('SConscript', variant_dir=env['variant_dir'], duplicate=0)
 
 ## --------------------------------------------------------------------------------

@@ -60,6 +60,8 @@ void msInitConfiguration(msConfiguration* config) {
 
 MSVM* msNewVM(msConfiguration* config) {
 
+  // TODO: If the [config] is NULL, initialize a default one.
+
   msReallocFn realloc_fn = defaultRealloc;
   void* user_data = NULL;
   if (config != NULL) {

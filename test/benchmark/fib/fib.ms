@@ -10,5 +10,5 @@ start = os.clock()
 for i in 0..10
   print(fib(28))
 end
-print('elapsed: ', os.clock() - start, 's')
+print('elapsed:', os.clock() - start, 's')
 

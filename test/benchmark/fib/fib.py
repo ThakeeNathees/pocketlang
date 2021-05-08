@@ -7,4 +7,4 @@ def fib(n):
 start = time.process_time()
 for i in range(0, 10):
   print(fib(28))
-print("elapsed: " + str(time.process_time() - start), 's')
+print("elapsed: " + str(time.process_time() - start), ' s')

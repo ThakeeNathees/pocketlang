@@ -50,9 +50,9 @@ def _gen():
 
 	header = ''
 	source = ''
-	with open('buffer.template.h', 'r') as f:
+	with open('buffer.c.template', 'r') as f:
 		header = f.read()
-	with open('buffer.template.c', 'r') as f:
+	with open('buffer.h.template', 'r') as f:
 		source = f.read()
 
 	for _data in GEN_LIST:
