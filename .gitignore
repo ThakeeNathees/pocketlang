@@ -1,21 +1,20 @@
 
-# MiniScript ignore list
+# PocketLang ignore list
+
 build/
-MiniScript/test/
-src/test/
-MiniScript/.import/
-release/
-debug/
+bin/
+test/bin/
+[Rr]elease/
+[Dd]ebug/
 *__pycache__/
 .vs/
 .vscode/
+x64/
 
-build.py
-config.json
-run.bat
 *.dblite
 *.idb
 *.pdb
+*.exp
 *.sln
 *.vcxproj
 *.vcxproj.filters

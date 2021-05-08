@@ -322,18 +322,20 @@ Var varAdd(MSVM* vm, Var v1, Var v2) {
       } break;
 
       case OBJ_LIST:
+        TODO;
+
       case OBJ_MAP:
       case OBJ_RANGE:
       case OBJ_SCRIPT:
       case OBJ_FUNC:
       case OBJ_FIBER:
       case OBJ_USER:
-        TODO;
+        break;
     }
   }
 
 
-  vm->fiber->error = stringFormat(vm, "Unsupported operand types for operator '-' "
+  vm->fiber->error = stringFormat(vm, "Unsupported operand types for operator '+' "
     "$ and $", varTypeName(v1), varTypeName(v2));
 
   return VAR_NULL;

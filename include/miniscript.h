@@ -21,6 +21,30 @@ extern "C" {
 // String representation of the value.
 #define MS_VERSION_STRING "0.1.0"
 
+// miniscript visibility macros. define MS_DLL for using miniscript as a 
+// shared library and define MS_COMPILE to export symbols.
+
+#ifdef _MSC_VER
+  #define _MS_EXPORT __declspec(dllexport)
+  #define _MS_IMPORT __declspec(dllimport)
+#elif defined(__GNUC__)
+  #define _MS_EXPORT __attribute__((visibility ("default")))
+  #define _MS_IMPORT
+#else
+  #define _MS_EXPORT
+  #define _MS_IMPORT
+#endif
+
+#ifdef MS_DLL
+  #ifdef MS_COMPILE
+    #define MS_PUBLIC _MS_EXPORT
+  #else
+    #define MS_PUBLIC _MS_IMPORT
+  #endif
+#else
+  #define MS_PUBLIC
+#endif
+
 // MiniScript Virtual Machine.
 // it'll contain the state of the execution, stack, heap, and manage memory
 // allocations.
@@ -123,7 +147,7 @@ typedef struct {
 
 // Initialize the configuration and set ALL of it's values to the defaults.
 // Call this before setting any particular field of it.
-void msInitConfiguration(msConfiguration* config);
+MS_PUBLIC void msInitConfiguration(msConfiguration* config);
 
 typedef enum {
   RESULT_SUCCESS = 0,
@@ -132,34 +156,34 @@ typedef enum {
 } MSInterpretResult;
 
 // Allocate initialize and returns a new VM
-MSVM* msNewVM(msConfiguration* config);
+MS_PUBLIC MSVM* msNewVM(msConfiguration* config);
 
 // Clean the VM and dispose all the resources allocated by the VM.
-void msFreeVM(MSVM* vm);
+MS_PUBLIC void msFreeVM(MSVM* vm);
 
 // Compile and execut file at given path.
-MSInterpretResult msInterpret(MSVM* vm, const char* file);
+MS_PUBLIC MSInterpretResult msInterpret(MSVM* vm, const char* file);
 
 // Set a runtime error to vm.
-void msSetRuntimeError(MSVM* vm, const char* format, ...);
+MS_PUBLIC void msSetRuntimeError(MSVM* vm, const char* format, ...);
 
 // Returns the associated user data.
-void* msGetUserData(MSVM* vm);
+MS_PUBLIC void* msGetUserData(MSVM* vm);
 
 // Update the user data of the vm.
-void msSetUserData(MSVM* vm, void* user_data);
+MS_PUBLIC void msSetUserData(MSVM* vm, void* user_data);
 
 // Encode types to var.
 // TODO: user need to use vmPushTempRoot() for strings.
-Var msVarBool(MSVM* vm, bool value);
-Var msVarNumber(MSVM* vm, double value);
-Var msVarString(MSVM* vm, const char* value);
+MS_PUBLIC Var msVarBool(MSVM* vm, bool value);
+MS_PUBLIC Var msVarNumber(MSVM* vm, double value);
+MS_PUBLIC Var msVarString(MSVM* vm, const char* value);
 
 // Decode var types.
 // TODO: const char* should be copied otherwise it'll become dangling pointer.
-bool msAsBool(MSVM* vm, Var value);
-double msAsNumber(MSVM* vm, Var value);
-const char* msAsString(MSVM* vm, Var value);
+MS_PUBLIC bool msAsBool(MSVM* vm, Var value);
+MS_PUBLIC double msAsNumber(MSVM* vm, Var value);
+MS_PUBLIC const char* msAsString(MSVM* vm, Var value);
 
 #ifdef __cplusplus
 } // extern "C"
