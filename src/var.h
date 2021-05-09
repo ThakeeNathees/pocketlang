@@ -31,11 +31,7 @@
 #include <string.h>
 
 #include "common.h"
-#include "types/gen/byte_buffer.h"
-#include "types/gen/function_buffer.h"
-#include "types/gen/uint_buffer.h"
-#include "types/gen/var_buffer.h"
-#include "types/gen/string_buffer.h"
+#include "buffers/buffers.h"
 
 // To use dynamic variably-sized struct with a tail array add an array at the
 // end of the struct with size \ref DYNAMIC_TAIL_ARRAY. This method was a

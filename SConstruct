@@ -1,6 +1,54 @@
 #!python
 import os, subprocess, sys
 
+def CONFIGURE_ENV(env):
+	root_dir = env['variant_dir']
+	assert(root_dir.endswith('/'))
+	
+	env.PROJECT_NAME = "pocketlang"
+	env.RUN_TARGET = root_dir + 'bin/pocket'
+	
+	## PocketLang source files
+	SOURCES = [
+		Glob(root_dir + '*.c'),
+		Glob(root_dir + 'buffers/*.c'),
+	]
+	
+	target_dir = root_dir + '../bin/'
+	
+	if env['lib_shared']:
+		## Compile pocketlang dynamic lib.
+		dll = env.SharedLibrary(
+			target     = target_dir + 'pocket' + env['bin_suffix'],
+			source     = SOURCES,
+			CPPPATH    = [root_dir + 'include/'],
+			CPPDEFINES = [env['CPPDEFINES'], 'MS_DLL', 'MS_COMPILE'],
+		)
+	else:
+		## Compile pocketlang static lib.
+		lib = env.Library(
+			target  = target_dir + 'pocket' + env['bin_suffix'],
+			source  = SOURCES,
+			CPPPATH = [root_dir + 'include/'],
+		)
+	
+		## Test executable
+		test = env.Program(
+			target  = target_dir + 'pocket' + env['bin_suffix'],
+			source  = [root_dir + 'main/main.c'],
+			CPPPATH = [root_dir + 'include/'],
+			LIBPATH = target_dir,
+			LIBS    = 'pocket' + env['bin_suffix'],
+		)
+		Requires(test, lib)
+		
+	env.Append(CPPPATH=['src/include/'])
+	
+
+## -----------------------------------------------------------------------------
+##                                END OF CONFIGURATION
+## -----------------------------------------------------------------------------
+
 opts = Variables([], ARGUMENTS)
 ## Define our options
 opts.Add(EnumVariable('platform', "Compilation platform", '', ['', 'windows', 'x11', 'linux', 'osx']))
@@ -14,6 +62,12 @@ opts.Add(BoolVariable('verbose', "use verbose build command", True))
 
 opts.Add(BoolVariable('lib_shared', "Compile as a shared library (only).", False))
 
+## VariantDir
+_build_target = ARGUMENTS.get('target', 'debug')
+if _build_target in ('debug', 'release'): ## Otherwise error below.
+	_build_target = 'build/' + _build_target + '/src/'
+	VariantDir(_build_target, 'src', duplicate=0)
+	
 ## Setup the Environment
 DefaultEnvironment(tools=[]) ## not using any tools
 env = Environment()
@@ -101,29 +155,21 @@ def no_verbose(sys, env):
 	colors["end"] = "\033[0m"	  if sys.stdout.isatty() else ""
 
 	compile_source_message = "{}Compiling {}==> {}$SOURCE{}".format(
-		colors["blue"], colors["purple"], colors["yellow"], colors["end"]
-	)
+		colors["blue"], colors["purple"], colors["yellow"], colors["end"])
 	java_compile_source_message = "{}Compiling {}==> {}$SOURCE{}".format(
-		colors["blue"], colors["purple"], colors["yellow"], colors["end"]
-	)
+		colors["blue"], colors["purple"], colors["yellow"], colors["end"])
 	compile_shared_source_message = "{}Compiling shared {}==> {}$SOURCE{}".format(
-		colors["blue"], colors["purple"], colors["yellow"], colors["end"]
-	)
+		colors["blue"], colors["purple"], colors["yellow"], colors["end"])
 	link_program_message = "{}Linking Program {}==> {}$TARGET{}".format(
-		colors["red"], colors["purple"], colors["yellow"], colors["end"]
-	)
+		colors["red"], colors["purple"], colors["yellow"], colors["end"])
 	link_library_message = "{}Linking Static Library {}==> {}$TARGET{}".format(
-		colors["red"], colors["purple"], colors["yellow"], colors["end"]
-	)
+		colors["red"], colors["purple"], colors["yellow"], colors["end"])
 	ranlib_library_message = "{}Ranlib Library {}==> {}$TARGET{}".format(
-		colors["red"], colors["purple"], colors["yellow"], colors["end"]
-	)
+		colors["red"], colors["purple"], colors["yellow"], colors["end"])
 	link_shared_library_message = "{}Linking Shared Library {}==> {}$TARGET{}".format(
-		colors["red"], colors["purple"], colors["yellow"], colors["end"]
-	)
+		colors["red"], colors["purple"], colors["yellow"], colors["end"])
 	java_library_message = "{}Creating Java Archive {}==> {}$TARGET{}".format(
-		colors["red"], colors["purple"], colors["yellow"], colors["end"]
-	)
+		colors["red"], colors["purple"], colors["yellow"], colors["end"])
 	env.Append(CXXCOMSTR=[compile_source_message])
 	env.Append(CCCOMSTR=[compile_source_message])
 	env.Append(SHCCCOMSTR=[compile_shared_source_message])
@@ -139,9 +185,9 @@ if not env['verbose']:
 	no_verbose(sys, env)
 	
 Export('env')
-env['variant_dir'] = 'build/' + env['target'] + '/'
+env['variant_dir'] = _build_target
 env['bin_suffix'] = '' ## TODO: Maybe '.%s.%s' % (env['platform'], env['bits'])
-SConscript('SConscript', variant_dir=env['variant_dir'], duplicate=0)
+CONFIGURE_ENV(env)
 
 ## --------------------------------------------------------------------------------
 

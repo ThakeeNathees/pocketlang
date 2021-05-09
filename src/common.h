@@ -70,6 +70,8 @@
 
 #define STRINGIFY(x) TOSTRING(x)
 #define TOSTRING(x) #x
+#define M_CONC(a, b) M_CONC_(a, b)
+#define M_CONC_(a, b) a##b
 
 // The factor by which a buffer will grow when it's capacity reached.
 #define GROW_FACTOR 2
