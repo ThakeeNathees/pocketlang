@@ -17,7 +17,7 @@ static const char* op_name[] = {
 };
 
 
-static void _dumpValue(MSVM* vm, Var value, bool recursive) {
+static void _dumpValue(PKVM* vm, Var value, bool recursive) {
   if (IS_NULL(value)) {
     printf("null");
     return;
@@ -75,11 +75,11 @@ static void _dumpValue(MSVM* vm, Var value, bool recursive) {
   }
 }
 
-void dumpValue(MSVM* vm, Var value) {
+void dumpValue(PKVM* vm, Var value) {
   _dumpValue(vm, value, false);
 }
 
-void dumpInstructions(MSVM* vm, Function* func) {  
+void dumpInstructions(PKVM* vm, Function* func) {  
 
 
   uint32_t i = 0;
@@ -253,11 +253,11 @@ void dumpInstructions(MSVM* vm, Function* func) {
   }
 }
 
-void reportStackTrace(MSVM* vm) {
+void reportStackTrace(PKVM* vm) {
   Fiber* fiber = vm->fiber;
   Script* script = fiber->func->owner;
 
-  //vm->config.error_fn(vm, MS_ERROR_RUNTIME, NULL, -1, fiber->error )
+  //vm->config.error_fn(vm, PK_ERROR_RUNTIME, NULL, -1, fiber->error )
   //
   //// TODO: I'm not confident about this approach.
   //if (script->path != NULL) { // User script.

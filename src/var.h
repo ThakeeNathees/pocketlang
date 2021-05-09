@@ -208,7 +208,7 @@ typedef enum /* ObjectType */ {
 struct Object {
   ObjectType type;  //< Type of the object in \ref var_Object_Type.
   bool is_marked;   //< Marked when garbage collection's marking phase.
-  //Class* is;      //< The class the object IS. // No OOP in MS.
+  //Class* is;      //< The class the object IS. // No OOP in PK (yet?).
 
   Object* next;     //< Next object in the heap allocated link list.
 };
@@ -295,7 +295,7 @@ struct Function {
 
   bool is_native;      //< True if Native function.
   union {
-    msNativeFn native;  //< Native function pointer.
+    pkNativeFn native;  //< Native function pointer.
     Fn* fn;                     //< Script function pointer.
   };
 };
@@ -343,87 +343,87 @@ struct Fiber {
 // Methods ////////////////////////////////////////////////////////////////////
 
 // Initialize the object with it's default value.
-void varInitObject(Object* self, MSVM* vm, ObjectType type);
+void varInitObject(Object* self, PKVM* vm, ObjectType type);
 
 // Mark the reachable objects at the mark-and-sweep phase of the garbage
 // collection.
-void grayObject(Object* self, MSVM* vm);
+void grayObject(Object* self, PKVM* vm);
 
 // Mark the reachable values at the mark-and-sweep phase of the garbage
 // collection.
-void grayValue(Var self, MSVM* vm);
+void grayValue(Var self, PKVM* vm);
 
 // Mark the elements of the buffer as reachable at the mark-and-sweep pahse of
 // the garbage collection.
-void grayVarBuffer(VarBuffer* self, MSVM* vm);
+void grayVarBuffer(VarBuffer* self, PKVM* vm);
 
 // Mark the elements of the buffer as reachable at the mark-and-sweep pahse of
 // the garbage collection.
-void grayStringBuffer(StringBuffer* self, MSVM* vm);
+void grayStringBuffer(StringBuffer* self, PKVM* vm);
 
 // Mark the elements of the buffer as reachable at the mark-and-sweep pahse of
 // the garbage collection.
-void grayFunctionBuffer(FunctionBuffer* self, MSVM* vm);
+void grayFunctionBuffer(FunctionBuffer* self, PKVM* vm);
 
 // Pop objects from the gray list and add it's referenced objects to the
 // working list to traverse and update the vm's [bytes_allocated] value.
-void blackenObjects(MSVM* vm);
+void blackenObjects(PKVM* vm);
 
 // Instead use VAR_NUM(value) and AS_NUM(value)
 Var doubleToVar(double value);
 double varToDouble(Var value);
 
 // Allocate new String object and return String*.
-String* newStringLength(MSVM* vm, const char* text, uint32_t length);
-static inline String* newString(MSVM* vm, const char* text) {
+String* newStringLength(PKVM* vm, const char* text, uint32_t length);
+static inline String* newString(PKVM* vm, const char* text) {
   return newStringLength(vm, text, (uint32_t)strlen(text));
 }
 
 // Allocate new List and return List*.
-List* newList(MSVM* vm, uint32_t size);
+List* newList(PKVM* vm, uint32_t size);
 
 // Allocate new Map and return Map*.
-Map* newMap(MSVM* vm);
+Map* newMap(PKVM* vm);
 
 // Allocate new Range object and return Range*.
-Range* newRange(MSVM* vm, double from, double to);
+Range* newRange(PKVM* vm, double from, double to);
 
 // Allocate new Script object and return Script*.
-Script* newScript(MSVM* vm, String* name);
+Script* newScript(PKVM* vm, String* name);
 
 // Allocate new Function object and return Function*. Parameter [name] should
 // be the name in the Script's nametable. If the [owner] is NULL the function
 // would be builtin function. For builtin function arity and the native
 // function pointer would be initialized after calling this function.
-Function* newFunction(MSVM* vm, const char* name, int length, Script* owner,
+Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
                       bool is_native);
 
 // Allocate new Fiber object and return Fiber*.
-Fiber* newFiber(MSVM* vm);
+Fiber* newFiber(PKVM* vm);
 
 // Insert [value] to the list at [index] and shift down the rest of the
 // elements.
-void listInsert(List* self, MSVM* vm, uint32_t index, Var value);
+void listInsert(List* self, PKVM* vm, uint32_t index, Var value);
 
 // Remove and return element at [index].
-Var listRemoveAt(List* self, MSVM* vm, uint32_t index);
+Var listRemoveAt(List* self, PKVM* vm, uint32_t index);
 
 // Returns the value for the [key] in the mape. If key not exists return
 // VAR_UNDEFINED.
 Var mapGet(Map* self, Var key);
 
 // Add the [key], [value] entry to the map.
-void mapSet(Map* self, MSVM* vm, Var key, Var value);
+void mapSet(Map* self, PKVM* vm, Var key, Var value);
 
 // Remove all the entries from the map.
-void mapClear(Map* self, MSVM* vm);
+void mapClear(Map* self, PKVM* vm);
 
 // Remove the [key] from the map. If the key exists return it's value
 // otherwise return VAR_NULL.
-Var mapRemoveKey(Map* self, MSVM* vm, Var key);
+Var mapRemoveKey(Map* self, PKVM* vm, Var key);
 
 // Release all the object owned by the [obj] including itself.
-void freeObject(MSVM* vm, Object* obj);
+void freeObject(PKVM* vm, Object* obj);
 
 // Utility functions //////////////////////////////////////////////////////////
 
@@ -441,7 +441,7 @@ bool isObjectHashable(ObjectType type);
 
 // Returns the string version of the value. Note: pass false as [_recursive]
 // It's for internal use (or may be I could make a wrapper around).
-String* toString(MSVM* vm, Var v, bool _recursive);
+String* toString(PKVM* vm, Var v, bool _recursive);
 
 // Returns the truthy value of the var.
 bool toBool(Var v);
@@ -450,11 +450,11 @@ bool toBool(Var v);
 // usage and it has 2 formated characters (just like wren does).
 // $ - a C string
 // @ - a String object
-String* stringFormat(MSVM* vm, const char* fmt, ...);
+String* stringFormat(PKVM* vm, const char* fmt, ...);
 
 // Add the name (string literal) to the string buffer if not already exists and
 // return it's index in the buffer.
-uint32_t scriptAddName(Script* self, MSVM* vm, const char* name,
+uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
                        uint32_t length);
 
 // Search for the function name in the script and return it's index in it's

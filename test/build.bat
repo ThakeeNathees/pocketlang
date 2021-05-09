@@ -100,7 +100,7 @@ set ADDNL_INCLUDE=/I..\src\include
 set ADDNL_CPPFLAGS=/EHsc /MDd
 
 if "%BUILD_DLL%" neq "true" goto :COMPILE
-set ADDNL_DEFINES=/DMS_DLL /DMS_COMPILE
+set ADDNL_DEFINES=/DPK_DLL /DPK_COMPILE
 
 :COMPILE
 call :ColorText 0f "Building porcess started"

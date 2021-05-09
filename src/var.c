@@ -10,27 +10,27 @@
 #include "vm.h"
 
 // Public Api /////////////////////////////////////////////////////////////////
-Var msVarBool(MSVM* vm, bool value) {
+Var pkVarBool(PKVM* vm, bool value) {
   return VAR_BOOL(value);
 }
 
-Var msVarNumber(MSVM* vm, double value) {
+Var pkVarNumber(PKVM* vm, double value) {
   return VAR_NUM(value);
 }
 
-Var msVarString(MSVM* vm, const char* value) {
+Var pkVarString(PKVM* vm, const char* value) {
   return VAR_OBJ(newStringLength(vm, value, (uint32_t)strlen(value)));
 }
 
-bool msAsBool(MSVM* vm, Var value) {
+bool pkAsBool(PKVM* vm, Var value) {
   return AS_BOOL(value);
 }
 
-double msAsNumber(MSVM* vm, Var value) {
+double pkAsNumber(PKVM* vm, Var value) {
   return AS_NUM(value);
 }
 
-const char* msAsString(MSVM* vm, Var value) {
+const char* pkAsString(PKVM* vm, Var value) {
   return AS_STRING(value)->data;
 }
 
@@ -49,14 +49,14 @@ const char* msAsString(MSVM* vm, Var value) {
 // GROW_FACTOR.
 #define GROW_FACTOR 2
 
-void varInitObject(Object* self, MSVM* vm, ObjectType type) {
+void varInitObject(Object* self, PKVM* vm, ObjectType type) {
   self->type = type;
   self->is_marked = false;
   self->next = vm->first;
   vm->first = self;
 }
 
-void grayObject(Object* self, MSVM* vm) {
+void grayObject(Object* self, PKVM* vm) {
   if (self == NULL || self->is_marked) return;
   self->is_marked = true;
 
@@ -73,30 +73,30 @@ void grayObject(Object* self, MSVM* vm) {
   vm->gray_list[vm->gray_list_count++] = self;
 }
 
-void grayValue(Var self, MSVM* vm) {
+void grayValue(Var self, PKVM* vm) {
   if (!IS_OBJ(self)) return;
   grayObject(AS_OBJ(self), vm);
 }
 
-void grayVarBuffer(VarBuffer* self, MSVM* vm) {
+void grayVarBuffer(VarBuffer* self, PKVM* vm) {
   for (uint32_t i = 0; i < self->count; i++) {
     grayValue(self->data[i], vm);
   }
 }
 
-void grayStringBuffer(StringBuffer* self, MSVM* vm) {
+void grayStringBuffer(StringBuffer* self, PKVM* vm) {
   for (uint32_t i = 0; i < self->count; i++) {
     grayObject(&self->data[i]->_super, vm);
   }
 }
 
-void grayFunctionBuffer(FunctionBuffer* self, MSVM* vm) {
+void grayFunctionBuffer(FunctionBuffer* self, PKVM* vm) {
   for (uint32_t i = 0; i < self->count; i++) {
     grayObject(&self->data[i]->_super, vm);
   }
 }
 
-static void blackenObject(Object* obj, MSVM* vm) {
+static void blackenObject(Object* obj, PKVM* vm) {
   // TODO: trace here.
 
   switch (obj->type) {
@@ -200,7 +200,7 @@ static void blackenObject(Object* obj, MSVM* vm) {
 }
 
 
-void blackenObjects(MSVM* vm) {
+void blackenObjects(PKVM* vm) {
   while (vm->gray_list_count > 0) {
     // Pop the gray object from the list.
     Object* gray = vm->gray_list[--vm->gray_list_count];
@@ -224,7 +224,7 @@ double varToDouble(Var value) {
 #endif // VAR_NAN_TAGGING
 }
 
-static String* _allocateString(MSVM* vm, size_t length) {
+static String* _allocateString(PKVM* vm, size_t length) {
   String* string = ALLOCATE_DYNAMIC(vm, String, length + 1, char);
   varInitObject(&string->_super, vm, OBJ_STRING);
   string->length = (uint32_t)length;
@@ -232,7 +232,7 @@ static String* _allocateString(MSVM* vm, size_t length) {
   return string;
 }
 
-String* newStringLength(MSVM* vm, const char* text, uint32_t length) {
+String* newStringLength(PKVM* vm, const char* text, uint32_t length) {
 
   ASSERT(length == 0 || text != NULL, "Unexpected NULL string.");
 
@@ -244,7 +244,7 @@ String* newStringLength(MSVM* vm, const char* text, uint32_t length) {
   return string;
 }
 
-List* newList(MSVM* vm, uint32_t size) {
+List* newList(PKVM* vm, uint32_t size) {
   List* list = ALLOCATE(vm, List);
   varInitObject(&list->_super, vm, OBJ_LIST);
   varBufferInit(&list->elements);
@@ -255,7 +255,7 @@ List* newList(MSVM* vm, uint32_t size) {
   return list;
 }
 
-Map* newMap(MSVM* vm) {
+Map* newMap(PKVM* vm) {
   Map* map = ALLOCATE(vm, Map);
   varInitObject(&map->_super, vm, OBJ_MAP);
   map->capacity = 0;
@@ -264,7 +264,7 @@ Map* newMap(MSVM* vm) {
   return map;
 }
 
-Range* newRange(MSVM* vm, double from, double to) {
+Range* newRange(PKVM* vm, double from, double to) {
   Range* range = ALLOCATE(vm, Range);
   varInitObject(&range->_super, vm, OBJ_RANGE);
   range->from = from;
@@ -272,7 +272,7 @@ Range* newRange(MSVM* vm, double from, double to) {
   return range;
 }
 
-Script* newScript(MSVM* vm, String* name) {
+Script* newScript(PKVM* vm, String* name) {
   Script* script = ALLOCATE(vm, Script);
   varInitObject(&script->_super, vm, OBJ_SCRIPT);
 
@@ -293,7 +293,7 @@ Script* newScript(MSVM* vm, String* name) {
   return script;
 }
 
-Function* newFunction(MSVM* vm, const char* name, int length, Script* owner,
+Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
                       bool is_native) {
 
   Function* func = ALLOCATE(vm, Function);
@@ -333,14 +333,14 @@ Function* newFunction(MSVM* vm, const char* name, int length, Script* owner,
   return func;
 }
 
-Fiber* newFiber(MSVM* vm) {
+Fiber* newFiber(PKVM* vm) {
   Fiber* fiber = ALLOCATE(vm, Fiber);
   memset(fiber, 0, sizeof(Fiber));
   varInitObject(&fiber->_super, vm, OBJ_FIBER);
   return fiber;
 }
 
-void listInsert(List* self, MSVM* vm, uint32_t index, Var value) {
+void listInsert(List* self, PKVM* vm, uint32_t index, Var value) {
 
   // Add an empty slot at the end of the buffer.
   if (IS_OBJ(value)) vmPushTempRef(vm, AS_OBJ(value));
@@ -356,7 +356,7 @@ void listInsert(List* self, MSVM* vm, uint32_t index, Var value) {
   self->elements.data[index] = value;
 }
 
-Var listRemoveAt(List* self, MSVM* vm, uint32_t index) {
+Var listRemoveAt(List* self, PKVM* vm, uint32_t index) {
   Var removed = self->elements.data[index];
   if (IS_OBJ(removed)) vmPushTempRef(vm, AS_OBJ(removed));
 
@@ -498,7 +498,7 @@ static bool _mapInsertEntry(Map* self, Var key, Var value) {
 }
 
 // Resize the map's size to the given [capacity].
-static void _mapResize(Map* self, MSVM* vm, uint32_t capacity) {
+static void _mapResize(Map* self, PKVM* vm, uint32_t capacity) {
 
   MapEntry* old_entries = self->entries;
   uint32_t old_capacity = self->capacity;
@@ -527,7 +527,7 @@ Var mapGet(Map* self, Var key) {
   return VAR_UNDEFINED;
 }
 
-void mapSet(Map* self, MSVM* vm, Var key, Var value) {
+void mapSet(Map* self, PKVM* vm, Var key, Var value) {
 
   // If map is about to fill, resize it first.
   if (self->count + 1 > self->capacity * MAP_LOAD_PERCENT / 100) {
@@ -541,14 +541,14 @@ void mapSet(Map* self, MSVM* vm, Var key, Var value) {
   }
 }
 
-void mapClear(Map* self, MSVM* vm) {
+void mapClear(Map* self, PKVM* vm) {
   DEALLOCATE(vm, self->entries);
   self->entries = NULL;
   self->capacity = 0;
   self->count = 0;
 }
 
-Var mapRemoveKey(Map* self, MSVM* vm, Var key) {
+Var mapRemoveKey(Map* self, PKVM* vm, Var key) {
   MapEntry* entry;
   if (!_mapFindEntry(self, key, &entry)) return VAR_NULL;
 
@@ -579,7 +579,7 @@ Var mapRemoveKey(Map* self, MSVM* vm, Var key) {
   return value;
 }
 
-void freeObject(MSVM* vm, Object* obj) {
+void freeObject(PKVM* vm, Object* obj) {
   // TODO: Debug trace memory here.
 
   // First clean the object's referencs, but we're not recursively doallocating
@@ -697,7 +697,7 @@ bool isObjectHashable(ObjectType type) {
   return type != OBJ_LIST && type != OBJ_MAP;
 }
 
-String* toString(MSVM* vm, Var v, bool recursive) {
+String* toString(PKVM* vm, Var v, bool recursive) {
 
   if (IS_NULL(v)) {
     return newStringLength(vm, "null", 4);
@@ -819,7 +819,7 @@ bool toBool(Var v) {
   return true;
 }
 
-String* stringFormat(MSVM* vm, const char* fmt, ...) {
+String* stringFormat(PKVM* vm, const char* fmt, ...) {
   va_list arg_list;
 
   // Calculate the total length of the resulting string. This is required to 
@@ -875,7 +875,7 @@ String* stringFormat(MSVM* vm, const char* fmt, ...) {
   return result;
 }
 
-uint32_t scriptAddName(Script* self, MSVM* vm, const char* name,
+uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
   uint32_t length) {
 
   for (uint32_t i = 0; i < self->names.count; i++) {

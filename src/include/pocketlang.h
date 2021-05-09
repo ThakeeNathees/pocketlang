@@ -14,41 +14,41 @@ extern "C" {
 #include <stdbool.h>
 
 // The version number macros.
-#define MS_VERSION_MAJOR 0
-#define MS_VERSION_MINOR 1
-#define MS_VERSION_PATCH 0
+#define PK_VERSION_MAJOR 0
+#define PK_VERSION_MINOR 1
+#define PK_VERSION_PATCH 0
 
 // String representation of the value.
-#define MS_VERSION_STRING "0.1.0"
+#define PK_VERSION_STRING "0.1.0"
 
-// miniscript visibility macros. define MS_DLL for using miniscript as a 
-// shared library and define MS_COMPILE to export symbols.
+// miniscript visibility macros. define PK_DLL for using miniscript as a 
+// shared library and define PK_COMPILE to export symbols.
 
 #ifdef _MSC_VER
-  #define _MS_EXPORT __declspec(dllexport)
-  #define _MS_IMPORT __declspec(dllimport)
+  #define _PK_EXPORT __declspec(dllexport)
+  #define _PK_IMPORT __declspec(dllimport)
 #elif defined(__GNUC__)
-  #define _MS_EXPORT __attribute__((visibility ("default")))
-  #define _MS_IMPORT
+  #define _PK_EXPORT __attribute__((visibility ("default")))
+  #define _PK_IMPORT
 #else
-  #define _MS_EXPORT
-  #define _MS_IMPORT
+  #define _PK_EXPORT
+  #define _PK_IMPORT
 #endif
 
-#ifdef MS_DLL
-  #ifdef MS_COMPILE
-    #define MS_PUBLIC _MS_EXPORT
+#ifdef PK_DLL
+  #ifdef PK_COMPILE
+    #define PK_PUBLIC _PK_EXPORT
   #else
-    #define MS_PUBLIC _MS_IMPORT
+    #define PK_PUBLIC _PK_IMPORT
   #endif
 #else
-  #define MS_PUBLIC
+  #define PK_PUBLIC
 #endif
 
 // MiniScript Virtual Machine.
 // it'll contain the state of the execution, stack, heap, and manage memory
 // allocations.
-typedef struct MSVM MSVM;
+typedef struct PKVM PKVM;
 
 // Nan-Tagging could be disable for debugging/portability purposes only when
 // compiling the compiler. Do not change this if using the miniscript library
@@ -64,7 +64,7 @@ typedef struct MSVM MSVM;
   typedef struct Var Var;
 #endif
 
-// A function that'll be called for all the allocation calls by MSVM.
+// A function that'll be called for all the allocation calls by PKVM.
 //
 // - To allocate new memory it'll pass NULL to parameter [memory] and the
 //   required size to [new_size]. On failure the return value would be NULL.
@@ -74,116 +74,116 @@ typedef struct MSVM MSVM;
 //
 // - To free an allocated memory pass [memory] and 0 to [new_size]. The
 //   function will return NULL.
-typedef void* (*msReallocFn)(void* memory, size_t new_size, void* user_data);
+typedef void* (*pkReallocFn)(void* memory, size_t new_size, void* user_data);
 
 // C function pointer which is callable from MiniScript.
-typedef void (*msNativeFn)(MSVM* vm);
+typedef void (*pkNativeFn)(PKVM* vm);
 
 typedef enum {
 
   // Compile time errors (syntax errors, unresolved fn, etc).
-  MS_ERROR_COMPILE,
+  PK_ERROR_COMPILE,
 
   // Runtime error message.
-  MS_ERROR_RUNTIME,
+  PK_ERROR_RUNTIME,
 
   // One entry of a runtime error stack.
-  MS_ERROR_STACKTRACE,
-} MSErrorType;
+  PK_ERROR_STACKTRACE,
+} PKErrorType;
 
 // Error callback function pointer. for runtime error it'll call first with
-// MS_ERROR_RUNTIME followed by multiple callbacks with MS_ERROR_STACKTRACE.
-typedef void (*msErrorFn) (MSVM* vm, MSErrorType type,
+// PK_ERROR_RUNTIME followed by multiple callbacks with PK_ERROR_STACKTRACE.
+typedef void (*pkErrorFn) (PKVM* vm, PKErrorType type,
                            const char* file, int line,
                            const char* message);
 
 // A function callback used by `print()` statement.
-typedef void (*msWriteFn) (MSVM* vm, const char* text);
+typedef void (*pkWriteFn) (PKVM* vm, const char* text);
 
-typedef struct msStringResult msStringResult;
+typedef struct pkStringResult pkStringResult;
 
-// A function callback symbol for clean/free the msStringResult.
-typedef void (*msResultDoneFn) (MSVM* vm, msStringResult result);
+// A function callback symbol for clean/free the pkStringResult.
+typedef void (*pkResultDoneFn) (PKVM* vm, pkStringResult result);
 
 // Result of the MiniScriptLoadScriptFn function.
-struct msStringResult {
+struct pkStringResult {
   bool success;           //< State of the result.
   const char* string;     //< The string result.
   void* user_data;        //< User related data.
-  msResultDoneFn on_done; //< Called once vm done with the string.
+  pkResultDoneFn on_done; //< Called once vm done with the string.
 };
 
 // A function callback to resolve the import script name from the [from] path
 // to an absolute (or relative to the cwd). This is required to solve same
 // script imported with different relative path.
 // Note: If the name is the root script [from] would be NULL.
-typedef msStringResult (*msResolvePathFn) (MSVM* vm, const char* from,
+typedef pkStringResult (*pkResolvePathFn) (PKVM* vm, const char* from,
                                         const char* name);
 
 // Load and return the script. Called by the compiler to fetch initial source
 // code and source for import statements.
-typedef msStringResult (*msLoadScriptFn) (MSVM* vm, const char* path);
+typedef pkStringResult (*pkLoadScriptFn) (PKVM* vm, const char* path);
 
 // This function will be called once it done with the loaded script only if
 // it's corresponding MSLoadScriptResult is succeeded (ie. is_failed = false).
-//typedef void (*msLoadDoneFn) (MSVM* vm, msStringResult result);
+//typedef void (*pkLoadDoneFn) (PKVM* vm, pkStringResult result);
 
 typedef struct {
 
   // The callback used to allocate, reallocate, and free. If the function
   // pointer is NULL it defaults to the VM's realloc(), free() wrappers.
-  msReallocFn realloc_fn;
+  pkReallocFn realloc_fn;
 
-  msErrorFn error_fn;
-  msWriteFn write_fn;
+  pkErrorFn error_fn;
+  pkWriteFn write_fn;
 
-  msResolvePathFn resolve_path_fn;
-  msLoadScriptFn load_script_fn;
+  pkResolvePathFn resolve_path_fn;
+  pkLoadScriptFn load_script_fn;
 
   // User defined data associated with VM.
   void* user_data;
 
-} msConfiguration;
+} pkConfiguration;
 
 // Initialize the configuration and set ALL of it's values to the defaults.
 // Call this before setting any particular field of it.
-MS_PUBLIC void msInitConfiguration(msConfiguration* config);
+PK_PUBLIC void pkInitConfiguration(pkConfiguration* config);
 
 typedef enum {
-  RESULT_SUCCESS = 0,
-  RESULT_COMPILE_ERROR,
-  RESULT_RUNTIME_ERROR,
-} MSInterpretResult;
+  PK_RESULT_SUCCESS = 0,
+  PK_RESULT_COMPILE_ERROR,
+  PK_RESULT_RUNTIME_ERROR,
+} PKInterpretResult;
 
 // Allocate initialize and returns a new VM
-MS_PUBLIC MSVM* msNewVM(msConfiguration* config);
+PK_PUBLIC PKVM* pkNewVM(pkConfiguration* config);
 
 // Clean the VM and dispose all the resources allocated by the VM.
-MS_PUBLIC void msFreeVM(MSVM* vm);
+PK_PUBLIC void pkFreeVM(PKVM* vm);
 
 // Compile and execut file at given path.
-MS_PUBLIC MSInterpretResult msInterpret(MSVM* vm, const char* file);
+PK_PUBLIC PKInterpretResult pkInterpret(PKVM* vm, const char* file);
 
 // Set a runtime error to vm.
-MS_PUBLIC void msSetRuntimeError(MSVM* vm, const char* format, ...);
+PK_PUBLIC void pkSetRuntimeError(PKVM* vm, const char* format, ...);
 
 // Returns the associated user data.
-MS_PUBLIC void* msGetUserData(MSVM* vm);
+PK_PUBLIC void* pkGetUserData(PKVM* vm);
 
 // Update the user data of the vm.
-MS_PUBLIC void msSetUserData(MSVM* vm, void* user_data);
+PK_PUBLIC void pkSetUserData(PKVM* vm, void* user_data);
 
 // Encode types to var.
 // TODO: user need to use vmPushTempRoot() for strings.
-MS_PUBLIC Var msVarBool(MSVM* vm, bool value);
-MS_PUBLIC Var msVarNumber(MSVM* vm, double value);
-MS_PUBLIC Var msVarString(MSVM* vm, const char* value);
+PK_PUBLIC Var pkVarBool(PKVM* vm, bool value);
+PK_PUBLIC Var pkVarNumber(PKVM* vm, double value);
+PK_PUBLIC Var pkVarString(PKVM* vm, const char* value);
 
 // Decode var types.
 // TODO: const char* should be copied otherwise it'll become dangling pointer.
-MS_PUBLIC bool msAsBool(MSVM* vm, Var value);
-MS_PUBLIC double msAsNumber(MSVM* vm, Var value);
-MS_PUBLIC const char* msAsString(MSVM* vm, Var value);
+PK_PUBLIC bool pkAsBool(PKVM* vm, Var value);
+PK_PUBLIC double pkAsNumber(PKVM* vm, Var value);
+PK_PUBLIC const char* pkAsString(PKVM* vm, Var value);
 
 #ifdef __cplusplus
 } // extern "C"

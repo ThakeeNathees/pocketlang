@@ -9,12 +9,12 @@
 #include "common.h"
 
 // Dump the value of the [value] without a new line at the end.
-void dumpValue(MSVM* vm, Var value);
+void dumpValue(PKVM* vm, Var value);
 
 // Dump opcodes of the given function.
-void dumpInstructions(MSVM* vm, Function* func);
+void dumpInstructions(PKVM* vm, Function* func);
 
 // Print stack track.
-void reportStackTrace(MSVM* vm);
+void reportStackTrace(PKVM* vm);
 
 #endif // DEBUG_H

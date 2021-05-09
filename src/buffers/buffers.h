@@ -7,7 +7,7 @@
 #define BUFFERS_TEMPLATE_H
 
 #include "../common.h"
-#include "miniscript.h"
+#include "pocketlang.h"
 
 #define M__NAME Uint
 #define M__NAME_L uint
