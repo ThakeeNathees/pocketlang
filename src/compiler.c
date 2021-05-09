@@ -91,6 +91,7 @@ typedef enum {
   //TK_XOREQ,    // ^=
 
   // Keywords.
+  TK_FROM,       // from
   TK_IMPORT,     // import
   TK_AS,         // as
   TK_DEF,        // def
@@ -152,6 +153,7 @@ typedef struct {
 
 // List of keywords mapped into their identifiers.
 static _Keyword _keywords[] = {
+  { "from",     4, TK_FROM },
   { "import",   6, TK_IMPORT },
   { "as",       2, TK_AS },
   { "def",      3, TK_DEF },
@@ -928,6 +930,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_DIVEQ      */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
   /* TK_SRIGHT     */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_SLEFT      */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
+  /* TK_FROM       */   NO_RULE,
   /* TK_IMPORT     */   NO_RULE,
   /* TK_AS         */   NO_RULE,
   /* TK_DEF        */   NO_RULE,
@@ -1214,7 +1217,7 @@ static void exprAttrib(Compiler* compiler, bool can_assign) {
 
     TokenType assignment = parser->previous.type;
     if (assignment != TK_EQ) {
-      emitOpcode(compiler, OP_GET_ATTRIB_AOP);
+      emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
       emitShort(compiler, index);
       compileExpression(compiler);
 
@@ -1560,61 +1563,94 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
   compilerExitBlock(compiler);
 }
 
-static void _compilerImportEntry(Compiler* compiler, bool is_from) {
+typedef enum {
+  IMPORT_REGULAR,      //< Regular import
+  IMPORT_FROM_LIB,     //< Import the lib for `from` import.
+  IMPORT_FROM_SYMBOL,  //< Entry of a `from` import.
+  // TODO: from os import *
+} ImportEntryType;
+
+// Single entry of a comma seperated import statement. The instructions will
+// import the and assign to the corresponding variables.
+static void _compilerImportEntry(Compiler* compiler, ImportEntryType ie_type) {
 
   const char* name = NULL;
   uint32_t length = 0;
-  int lib = -1; //< Imported library variable index.
+  int entry = -1; //< Imported library variable index.
 
   if (match(&compiler->parser, TK_NAME)) {
     name = compiler->parser.previous.start;
     length = compiler->parser.previous.length;
 
     uint32_t name_line = compiler->parser.previous.line;
-    lib = compilerAddVariable(compiler, name, length, name_line);
+
+    // >> from os import clock
+    //    Here `os` is temporary don't add to variable.
+    if (ie_type != IMPORT_FROM_LIB) {
+      entry = compilerAddVariable(compiler, name, length, name_line);
+    }
 
     int index = (int)scriptAddName(compiler->script, compiler->vm,
                                    name, length);
-    emitOpcode(compiler, OP_IMPORT);
-    emitShort(compiler, index);
+
+    // >> from os import clock
+    //    Here clock is not imported but get attribute of os.
+    if (ie_type != IMPORT_FROM_SYMBOL) {
+      emitOpcode(compiler, OP_IMPORT);
+      emitShort(compiler, index); //< Name of the lib.
+    } else {
+      // Don't pop the lib since it'll be used for the next entry.
+      emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
+      emitShort(compiler, index); //< Name of the attrib.
+    }
 
   } else {
-    TODO; //?
-    //consume(&compiler->parser, TK_STRING, "Expected a name or a string literal"
-    //  " after import.");
-    //String* path = (String*)AS_OBJ(compiler->parser.previous.value);
-    //name = path->data;
-    //length = path->length;
-    //uint32_t index = compilerAddConstant(compiler, VAR_OBJ(path));
+    TODO; // import and push the lib to the stack.
   }
 
+  // >> from os import clock
+  //    Here the os is imported and not bound to any variable, just temp.
+  if (ie_type == IMPORT_FROM_LIB) return;
+
+  // Store to the variable.
   if (match(&compiler->parser, TK_AS)) {
     consume(&compiler->parser, TK_NAME, "Expected a name after as.");
-    compiler->variables[lib].name = compiler->parser.previous.start;
-    compiler->variables[lib].length = compiler->parser.previous.length;
+    // TODO: validate the name (maybe can't be predefined?).
+    compiler->variables[entry].name = compiler->parser.previous.start;
+    compiler->variables[entry].length = compiler->parser.previous.length;
     // TODO: add the name to global_names ??
   }
 
-  emitStoreVariable(compiler, lib, true);
+  emitStoreVariable(compiler, entry, true);
   emitOpcode(compiler, OP_POP);
 }
 
-/*
-  TODO: write doc below.
-  from os import clock as c, path as p
-  import os, json as j, math as m
-*/
+// The 'import' statement compilation. It's inspired by the python's import
+// statement. It could be multiple import libs comma seperated and they can
+// be aliased with 'as' keyword. Using from keyword it's possible to import
+// some of the members of the lib.
+//
+// example. import lib
+//          import lib1, lib2 as l2
+//          from lib import func1, func2 as f2
+// 
 static void compileImportStatement(Compiler* compiler, bool is_from) {
   
   if (is_from) {
-    TODO; // ?
+    _compilerImportEntry(compiler, IMPORT_FROM_LIB);
+    consume(&compiler->parser, TK_IMPORT, "Expected keyword 'import'.");
+
+    do {
+      _compilerImportEntry(compiler, IMPORT_FROM_SYMBOL);
+    } while (match(&compiler->parser, TK_COMMA));
+
+    // Done getting all the attributes, now pop the lib from the stack.
+    emitOpcode(compiler, OP_POP);
 
   } else {
-    bool skip_lines = false;
     do {
-      if (skip_lines) skipNewLines(&compiler->parser);
-      _compilerImportEntry(compiler, is_from);
-      skip_lines = true;
+      //skipNewLines(&compiler->parser);
+      _compilerImportEntry(compiler, IMPORT_REGULAR);
     } while (match(&compiler->parser, TK_COMMA));
   }
 
@@ -1853,9 +1889,8 @@ bool compile(PKVM* vm, Script* script, const char* source) {
     } else if (match(parser, TK_DEF)) {
       compileFunction(&compiler, FN_SCRIPT);
 
-    // TODO: implement from keyword.
-    //} else if (match(parser, TK_FROM)) {
-    //  compileImportStatement(&compiler, true);
+    } else if (match(parser, TK_FROM)) {
+      compileImportStatement(&compiler, true);
 
     } else if (match(parser, TK_IMPORT)) {
       compileImportStatement(&compiler, false);

@@ -184,27 +184,11 @@ void corePrint(PKVM* vm) {
   vm->config.write_fn(vm, "\n");
 }
 
-//void coreImport(PKVM* vm) {
-//  Var arg1 = vm->fiber->ret[1];
-//  if (!IS_OBJ(arg1) || AS_OBJ(arg1)->type != OBJ_STRING) {
-//    pkSetRuntimeError(vm, "Expected a String argument.");
-//  }
-//
-//  String* path = (String*)AS_OBJ(arg1);
-//  if (path->length > 4 && strncmp(path->data, "std:", 4) == 0) {
-//    Script* scr = vmGetStdScript(vm, path->data + 4);
-//    ASSERT(scr != NULL, OOPS);
-//    RET(VAR_OBJ(scr));
-//  }
-//
-//  TODO;
-//}
-
 /*****************************************************************************/
 /* STD METHODS                                                               */
 /*****************************************************************************/
 
-// std:list Methods.
+// 'list' library methods.
 void stdListSort(PKVM* vm) {
   Var list = ARG(1);
   if (!IS_OBJ(list) || AS_OBJ(list)->type != OBJ_LIST) {
@@ -216,7 +200,7 @@ void stdListSort(PKVM* vm) {
   RET(list);
 }
 
-// std:os Methods.
+// 'os' library methods.
 void stdOsClock(PKVM* vm) {
   RET(VAR_NUM((double)clock() / CLOCKS_PER_SEC));
 }
@@ -249,10 +233,6 @@ void initializeCore(PKVM* vm) {
   
   INITALIZE_BUILTIN_FN("to_string",   coreToString,   1);
   INITALIZE_BUILTIN_FN("print",       corePrint,     -1);
-  //INITALIZE_BUILTIN_FN("import",      coreImport,     1);
-
-  // Sentinal to mark the end of the array.
-  //initializeBuiltinFN(vm, &builtins[i], NULL, 0, 0, NULL);
 
   // Make STD scripts.
   Script* std;  // A temporary pointer to the current std script.
@@ -333,7 +313,6 @@ Var varAdd(PKVM* vm, Var v1, Var v2) {
         break;
     }
   }
-
 
   vm->fiber->error = stringFormat(vm, "Unsupported operand types for operator '+' "
     "$ and $", varTypeName(v1), varTypeName(v2));

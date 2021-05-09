@@ -720,9 +720,9 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       DISPATCH();
     }
 
-    OPCODE(GET_ATTRIB_AOP):
+    OPCODE(GET_ATTRIB_KEEP):
     {
-      Var on = *(vm->fiber->sp - 1);
+      Var on = PEEK();
       String* name = script->names.data[READ_SHORT()];
       PUSH(varGetAttrib(vm, on, name));
       DISPATCH();
