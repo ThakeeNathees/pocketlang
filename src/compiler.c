@@ -91,7 +91,9 @@ typedef enum {
   //TK_XOREQ,    // ^=
 
   // Keywords.
+  TK_FROM,       // from
   TK_IMPORT,     // import
+  TK_AS,         // as
   TK_DEF,        // def
   TK_NATIVE,     // native   (C function declaration)
   TK_FUNCTION,   // function (literal function)
@@ -151,7 +153,9 @@ typedef struct {
 
 // List of keywords mapped into their identifiers.
 static _Keyword _keywords[] = {
+  { "from",     4, TK_FROM },
   { "import",   6, TK_IMPORT },
+  { "as",       2, TK_AS },
   { "def",      3, TK_DEF },
   { "native",   6, TK_NATIVE },
   { "function", 8, TK_FUNCTION },
@@ -867,7 +871,6 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence);
 static void compileExpression(Compiler* compiler);
 
 static void exprLiteral(Compiler* compiler, bool can_assign);
-static void exprImport(Compiler* compiler, bool can_assign);
 static void exprFunc(Compiler* compiler, bool can_assign);
 static void exprName(Compiler* compiler, bool can_assign);
 
@@ -927,7 +930,9 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_DIVEQ      */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
   /* TK_SRIGHT     */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_SLEFT      */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
-  /* TK_IMPORT     */ { exprImport,    NULL,             NO_INFIX },
+  /* TK_FROM       */   NO_RULE,
+  /* TK_IMPORT     */   NO_RULE,
+  /* TK_AS         */   NO_RULE,
   /* TK_DEF        */   NO_RULE,
   /* TK_EXTERN     */   NO_RULE,
   /* TK_FUNCTION   */ { exprFunc,      NULL,             NO_INFIX },
@@ -996,17 +1001,6 @@ static void exprLiteral(Compiler* compiler, bool can_assign) {
   emitShort(compiler, index);
 }
 
-static void exprImport(Compiler* compiler, bool can_assign) {
-
-  consume(&compiler->parser, TK_LPARAN, "Expected '(' after import.");
-  skipNewLines(&compiler->parser);
-  compileExpression(compiler);
-  skipNewLines(&compiler->parser);
-  consume(&compiler->parser, TK_RPARAN, "Expected ')' after parameter list.");
-
-  emitOpcode(compiler, OP_IMPORT);
-}
-
 static void exprFunc(Compiler* compiler, bool can_assign) {
   int fn_index = compileFunction(compiler, FN_LITERAL);
   emitOpcode(compiler, OP_PUSH_FN);
@@ -1039,7 +1033,7 @@ static void exprName(Compiler* compiler, bool can_assign) {
       } else {
         // This will prevent the assignment from poped out from the stack
         // since the assigned value itself is the local and not a temp.
-        compiler->new_local = true; 
+        compiler->new_local = true;
       }
     } else {
       // TODO: The name could be a function which hasn't been defined at this point.
@@ -1217,18 +1211,13 @@ static void exprAttrib(Compiler* compiler, bool can_assign) {
   int length = parser->previous.length;
 
   // Store the name in script's names.
-  String* string = newStringLength(compiler->vm, name, length);
-  vmPushTempRef(compiler->vm, &string->_super);
-  stringBufferWrite(&compiler->script->names, compiler->vm, string);
-  vmPopTempRef(compiler->vm);
-
-  int index = (int)compiler->script->names.count - 1;
+  int index = scriptAddName(compiler->script, compiler->vm, name, length);
 
   if (can_assign && matchAssignment(parser)) {
 
     TokenType assignment = parser->previous.type;
     if (assignment != TK_EQ) {
-      emitOpcode(compiler, OP_GET_ATTRIB_AOP);
+      emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
       emitShort(compiler, index);
       compileExpression(compiler);
 
@@ -1574,6 +1563,102 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
   compilerExitBlock(compiler);
 }
 
+typedef enum {
+  IMPORT_REGULAR,      //< Regular import
+  IMPORT_FROM_LIB,     //< Import the lib for `from` import.
+  IMPORT_FROM_SYMBOL,  //< Entry of a `from` import.
+  // TODO: from os import *
+} ImportEntryType;
+
+// Single entry of a comma seperated import statement. The instructions will
+// import the and assign to the corresponding variables.
+static void _compilerImportEntry(Compiler* compiler, ImportEntryType ie_type) {
+
+  const char* name = NULL;
+  uint32_t length = 0;
+  int entry = -1; //< Imported library variable index.
+
+  if (match(&compiler->parser, TK_NAME)) {
+    name = compiler->parser.previous.start;
+    length = compiler->parser.previous.length;
+
+    uint32_t name_line = compiler->parser.previous.line;
+
+    // >> from os import clock
+    //    Here `os` is temporary don't add to variable.
+    if (ie_type != IMPORT_FROM_LIB) {
+      entry = compilerAddVariable(compiler, name, length, name_line);
+    }
+
+    int index = (int)scriptAddName(compiler->script, compiler->vm,
+                                   name, length);
+
+    // >> from os import clock
+    //    Here clock is not imported but get attribute of os.
+    if (ie_type != IMPORT_FROM_SYMBOL) {
+      emitOpcode(compiler, OP_IMPORT);
+      emitShort(compiler, index); //< Name of the lib.
+    } else {
+      // Don't pop the lib since it'll be used for the next entry.
+      emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
+      emitShort(compiler, index); //< Name of the attrib.
+    }
+
+  } else {
+    TODO; // import and push the lib to the stack.
+  }
+
+  // >> from os import clock
+  //    Here the os is imported and not bound to any variable, just temp.
+  if (ie_type == IMPORT_FROM_LIB) return;
+
+  // Store to the variable.
+  if (match(&compiler->parser, TK_AS)) {
+    consume(&compiler->parser, TK_NAME, "Expected a name after as.");
+    // TODO: validate the name (maybe can't be predefined?).
+    compiler->variables[entry].name = compiler->parser.previous.start;
+    compiler->variables[entry].length = compiler->parser.previous.length;
+    // TODO: add the name to global_names ??
+  }
+
+  emitStoreVariable(compiler, entry, true);
+  emitOpcode(compiler, OP_POP);
+}
+
+// The 'import' statement compilation. It's inspired by the python's import
+// statement. It could be multiple import libs comma seperated and they can
+// be aliased with 'as' keyword. Using from keyword it's possible to import
+// some of the members of the lib.
+//
+// example. import lib
+//          import lib1, lib2 as l2
+//          from lib import func1, func2 as f2
+// 
+static void compileImportStatement(Compiler* compiler, bool is_from) {
+  
+  if (is_from) {
+    _compilerImportEntry(compiler, IMPORT_FROM_LIB);
+    consume(&compiler->parser, TK_IMPORT, "Expected keyword 'import'.");
+
+    do {
+      _compilerImportEntry(compiler, IMPORT_FROM_SYMBOL);
+    } while (match(&compiler->parser, TK_COMMA));
+
+    // Done getting all the attributes, now pop the lib from the stack.
+    emitOpcode(compiler, OP_POP);
+
+  } else {
+    do {
+      //skipNewLines(&compiler->parser);
+      _compilerImportEntry(compiler, IMPORT_REGULAR);
+    } while (match(&compiler->parser, TK_COMMA));
+  }
+
+  if (peek(&compiler->parser) != TK_EOF) {
+    consume(&compiler->parser, TK_LINE, "Expected EOL after import statement.");
+  }
+}
+
 // Compiles an expression. An expression will result a value on top of the
 // stack.
 static void compileExpression(Compiler* compiler) {
@@ -1766,6 +1851,7 @@ static void compileStatement(Compiler* compiler) {
     compileExpression(compiler);
     consumeEndStatement(parser);
     if (!compiler->new_local) {
+      // Pop the temp.
       emitOpcode(compiler, OP_POP);
     }
     compiler->new_local = false;
@@ -1803,6 +1889,12 @@ bool compile(PKVM* vm, Script* script, const char* source) {
     } else if (match(parser, TK_DEF)) {
       compileFunction(&compiler, FN_SCRIPT);
 
+    } else if (match(parser, TK_FROM)) {
+      compileImportStatement(&compiler, true);
+
+    } else if (match(parser, TK_IMPORT)) {
+      compileImportStatement(&compiler, false);
+
     } else {
       compileStatement(&compiler);
     }
@@ -1818,6 +1910,7 @@ bool compile(PKVM* vm, Script* script, const char* source) {
   for (int i = 0; i < compiler.var_count; i++) {
     ASSERT(compiler.variables[i].depth == (int)DEPTH_GLOBAL, OOPS);
     varBufferWrite(&script->globals, vm, VAR_NULL);
+    // TODO: add the names to global_names table.
   }
 
   vm->compiler = NULL;

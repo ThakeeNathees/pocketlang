@@ -208,7 +208,7 @@ void dumpInstructions(PKVM* vm, Function* func) {
       case OP_RETURN: NO_ARGS(); break;
 
       case OP_GET_ATTRIB:
-      case OP_GET_ATTRIB_AOP:
+      case OP_GET_ATTRIB_KEEP:
       case OP_SET_ATTRIB:
         SHORT_ARG();
         break;

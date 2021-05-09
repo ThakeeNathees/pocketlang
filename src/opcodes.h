@@ -146,10 +146,9 @@ OPCODE(RETURN, 0, -1)
 // param: 2 byte attrib name index.
 OPCODE(GET_ATTRIB, 2, 0)
 
-// Get attribute to perform assignment operation before store it, so don't
-// pop the var.
+// It'll keep the instance on the stack and push the attribute on the stack.
 // param: 2 byte attrib name index.
-OPCODE(GET_ATTRIB_AOP, 2, 1)
+OPCODE(GET_ATTRIB_KEEP, 2, 1)
 
 // Pop var and value update the attribute push result.
 // param: 2 byte attrib name index.
