@@ -13,14 +13,14 @@ void M_CONC(M__NAME_L,BufferInit)(M_CONC(M__NAME,Buffer)* self) {
   self->capacity = 0;
 }
 
-void M_CONC(M__NAME_L,BufferClear)(M_CONC(M__NAME,Buffer)* self, MSVM* vm) {
+void M_CONC(M__NAME_L,BufferClear)(M_CONC(M__NAME,Buffer)* self, PKVM* vm) {
   vmRealloc(vm, self->data, self->capacity * sizeof(M__TYPE), 0);
   self->data = NULL;
   self->count = 0;
   self->capacity = 0;
 }
 
-void M_CONC(M__NAME_L,BufferFill)(M_CONC(M__NAME,Buffer)* self, MSVM* vm, M__TYPE data, int count) {
+void M_CONC(M__NAME_L,BufferFill)(M_CONC(M__NAME,Buffer)* self, PKVM* vm, M__TYPE data, int count) {
   
   if (self->capacity < self->count + count) {
     int capacity = utilPowerOf2Ceil((int)self->count + count);
@@ -35,6 +35,6 @@ void M_CONC(M__NAME_L,BufferFill)(M_CONC(M__NAME,Buffer)* self, MSVM* vm, M__TYP
   }
 }
 
-void M_CONC(M__NAME_L,BufferWrite)(M_CONC(M__NAME,Buffer)* self, MSVM* vm, M__TYPE data) {
+void M_CONC(M__NAME_L,BufferWrite)(M_CONC(M__NAME,Buffer)* self, PKVM* vm, M__TYPE data) {
   M_CONC(M__NAME_L,BufferFill)(self, vm, data, 1);
 }

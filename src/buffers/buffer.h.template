@@ -17,11 +17,11 @@ typedef struct {
 void M_CONC(M__NAME_L,BufferInit)(M_CONC(M__NAME, Buffer)* self);
 
 // Clears the allocated elementes from the VM's realloc function.
-void M_CONC(M__NAME_L,BufferClear)(M_CONC(M__NAME, Buffer)* self, MSVM* vm);
+void M_CONC(M__NAME_L,BufferClear)(M_CONC(M__NAME, Buffer)* self, PKVM* vm);
 
 // Fill the buffer at the end of it with provided data if the capacity isn't
 // enough using VM's realloc function.
-void M_CONC(M__NAME_L,BufferFill)(M_CONC(M__NAME, Buffer)* self, MSVM* vm, M__TYPE data, int count);
+void M_CONC(M__NAME_L,BufferFill)(M_CONC(M__NAME, Buffer)* self, PKVM* vm, M__TYPE data, int count);
 
 // Write to the buffer with provided data at the end of the buffer.
-void M_CONC(M__NAME_L,BufferWrite)(M_CONC(M__NAME, Buffer)* self, MSVM* vm, M__TYPE data);
+void M_CONC(M__NAME_L,BufferWrite)(M_CONC(M__NAME, Buffer)* self, PKVM* vm, M__TYPE data);

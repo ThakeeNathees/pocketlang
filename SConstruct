@@ -22,7 +22,7 @@ def CONFIGURE_ENV(env):
 			target     = target_dir + 'pocket' + env['bin_suffix'],
 			source     = SOURCES,
 			CPPPATH    = [root_dir + 'include/'],
-			CPPDEFINES = [env['CPPDEFINES'], 'MS_DLL', 'MS_COMPILE'],
+			CPPDEFINES = [env['CPPDEFINES'], 'PK_DLL', 'PK_COMPILE'],
 		)
 	else:
 		## Compile pocketlang static lib.

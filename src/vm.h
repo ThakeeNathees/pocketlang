@@ -20,7 +20,7 @@ typedef enum {
   #undef OPCODE
 } Opcode;
 
-struct MSVM {
+struct PKVM {
 
   // The first object in the link list of all heap allocated objects.
   Object* first;
@@ -43,7 +43,7 @@ struct MSVM {
   int temp_reference_count;
 
   // VM's configurations.
-  msConfiguration config;
+  pkConfiguration config;
 
   // Current compiler reference to mark it's heap allocated objects. Note that
   // The compiler isn't heap allocated.
@@ -72,18 +72,18 @@ struct MSVM {
 //    allocations to trigger the garbage collections.
 // If deallocating (free) using vmRealloc the old_size should be 0 as it's not
 // going to track deallocated bytes, instead use garbage collector to do it.
-void* vmRealloc(MSVM* self, void* memory, size_t old_size, size_t new_size);
+void* vmRealloc(PKVM* self, void* memory, size_t old_size, size_t new_size);
 
 // Push the object to temporary references stack.
-void vmPushTempRef(MSVM* self, Object* obj);
+void vmPushTempRef(PKVM* self, Object* obj);
 
 // Pop the top most object from temporary reference stack.
-void vmPopTempRef(MSVM* self);
+void vmPopTempRef(PKVM* self);
 
 // Trigger garbage collection manually.
-void vmCollectGarbage(MSVM* self);
+void vmCollectGarbage(PKVM* self);
 
 // Runs the script and return result.
-MSInterpretResult vmRunScript(MSVM* vm, Script* script);
+PKInterpretResult vmRunScript(PKVM* vm, Script* script);
 
 #endif // VM_H

@@ -6,39 +6,39 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "miniscript.h"
+#include "pocketlang.h"
 
-void errorPrint(MSVM* vm, MSErrorType type, const char* file, int line,
+void errorPrint(PKVM* vm, PKErrorType type, const char* file, int line,
                 const char* message) {
   fprintf(stderr, "Error: %s\n\tat %s:%i\n", message, file, line);
 }
 
-void writeFunction(MSVM* vm, const char* text) {
+void writeFunction(PKVM* vm, const char* text) {
   fprintf(stdout, "%s", text);
 }
 
 // FIXME:
-void onResultDone(MSVM* vm, msStringResult result) {
+void onResultDone(PKVM* vm, pkStringResult result) {
   //   // The result.string is the allocated buffer and it has to be freed
   //   // manually since it wasn't allocated by the VM.
   //   free((void*)result.string);
 }
 
 // FIXME:
-msStringResult resolvePath(MSVM* vm, const char* from, const char* name) {
+pkStringResult resolvePath(PKVM* vm, const char* from, const char* name) {
   if (from == NULL) {
     // TODO: name is the complete path.
   }
 
-  msStringResult result;
+  pkStringResult result;
   result.success = true;
   result.on_done = onResultDone;
   result.string = name;
   return result;
 }
 
-msStringResult loadScript(MSVM* vm, const char* path) {
-  msStringResult result;
+pkStringResult loadScript(PKVM* vm, const char* path) {
+  pkStringResult result;
   result.success = true;
   result.on_done = onResultDone;
 
@@ -69,7 +69,7 @@ msStringResult loadScript(MSVM* vm, const char* path) {
 int main(int argc, char** argv) {
 
   const char* notice =
-    "MiniScript " MS_VERSION_STRING " (https://github.com/ThakeeNathees/miniscript/)\n"
+    "MiniScript " PK_VERSION_STRING " (https://github.com/ThakeeNathees/miniscript/)\n"
     "Copyright(c) 2020 - 2021 ThakeeNathees.\n"
     "Free and open source software under the terms of the MIT license.\n";
   const char* help = "Usage: miniscript <source_path>\n";
@@ -81,16 +81,16 @@ int main(int argc, char** argv) {
   
   const char* source_path = argv[1];
 
-  msConfiguration config;
-  msInitConfiguration(&config);
+  pkConfiguration config;
+  pkInitConfiguration(&config);
   config.error_fn = errorPrint;
   config.write_fn = writeFunction;
   config.load_script_fn = loadScript;
   config.resolve_path_fn = resolvePath;
 
-  MSVM* vm = msNewVM(&config);
-  MSInterpretResult result = msInterpret(vm, source_path);
-  msFreeVM(vm);
+  PKVM* vm = pkNewVM(&config);
+  PKInterpretResult result = pkInterpret(vm, source_path);
+  pkFreeVM(vm);
 
   return result;
 }

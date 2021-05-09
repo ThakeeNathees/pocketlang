@@ -3,10 +3,10 @@
  *  Licensed under: MIT License
  */
 
-#ifndef MS_COMMON_H
-#define MS_COMMON_H
+#ifndef PK_COMMON_H
+#define PK_COMMON_H
 
-#include "miniscript.h"
+#include "pocketlang.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -111,4 +111,4 @@ typedef uint32_t ID;
 // VM's fiber type.
 typedef struct Fiber Fiber;
 
-#endif //MS_COMMON_H
+#endif //PK_COMMON_H

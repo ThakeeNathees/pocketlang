@@ -30,8 +30,8 @@ static int builtins_count = 0;
 // Core libraries.
 static Map* core_libs;
 
-static void initializeBuiltinFN(MSVM* vm, _BuiltinFn* bfn, const char* name,
-                               int length, int arity, msNativeFn ptr) {
+static void initializeBuiltinFN(PKVM* vm, _BuiltinFn* bfn, const char* name,
+                               int length, int arity, pkNativeFn ptr) {
   bfn->name = name;
   bfn->length = length;
 
@@ -68,7 +68,7 @@ static inline bool isNumeric(Var var, double* value) {
 }
 
 // Check if [var] is bool/number. If not set error and return false.
-static inline bool validateNumeric(MSVM* vm, Var var, double* value,
+static inline bool validateNumeric(PKVM* vm, Var var, double* value,
   const char* name) {
   if (isNumeric(var, value)) return true;
   vm->fiber->error = stringFormat(vm, "$ must be a numeric value.", name);
@@ -76,7 +76,7 @@ static inline bool validateNumeric(MSVM* vm, Var var, double* value,
 }
 
 // Check if [var] is integer. If not set error and return false.
-static inline bool validateIngeger(MSVM* vm, Var var, int32_t* value,
+static inline bool validateIngeger(PKVM* vm, Var var, int32_t* value,
   const char* name) {
   double number;
   if (isNumeric(var, &number)) {
@@ -91,7 +91,7 @@ static inline bool validateIngeger(MSVM* vm, Var var, int32_t* value,
   return false;
 }
 
-static inline bool validateIndex(MSVM* vm, int32_t index, int32_t size,
+static inline bool validateIndex(PKVM* vm, int32_t index, int32_t size,
   const char* container) {
   if (index < 0 || size <= index) {
     vm->fiber->error = stringFormat(vm, "$ index out of range.", container);
@@ -135,12 +135,12 @@ Script* getCoreLib(String* name) {
 }
 
 #define FN_IS_PRIMITE_TYPE(name, check)       \
-  void coreIs##name(MSVM* vm) {               \
+  void coreIs##name(PKVM* vm) {               \
     RET(VAR_BOOL(check(ARG(1))));             \
   }
 
 #define FN_IS_OBJ_TYPE(name, _enum)                     \
-  void coreIs##name(MSVM* vm) {                         \
+  void coreIs##name(PKVM* vm) {                         \
     Var arg1 = ARG(1);                                  \
     if (IS_OBJ(arg1) && AS_OBJ(arg1)->type == _enum) {  \
       RET(VAR_TRUE);                                    \
@@ -161,11 +161,11 @@ FN_IS_OBJ_TYPE(Function,  OBJ_FUNC)
 FN_IS_OBJ_TYPE(Script,  OBJ_SCRIPT)
 FN_IS_OBJ_TYPE(UserObj,  OBJ_USER)
 
-void coreToString(MSVM* vm) {
+void coreToString(PKVM* vm) {
   RET(VAR_OBJ(&toString(vm, ARG(1), false)->_super));
 }
 
-void corePrint(MSVM* vm) {
+void corePrint(PKVM* vm) {
   String* str; //< Will be cleaned by garbage collector;
 
   for (int i = 1; i <= ARGC; i++) {
@@ -184,10 +184,10 @@ void corePrint(MSVM* vm) {
   vm->config.write_fn(vm, "\n");
 }
 
-//void coreImport(MSVM* vm) {
+//void coreImport(PKVM* vm) {
 //  Var arg1 = vm->fiber->ret[1];
 //  if (!IS_OBJ(arg1) || AS_OBJ(arg1)->type != OBJ_STRING) {
-//    msSetRuntimeError(vm, "Expected a String argument.");
+//    pkSetRuntimeError(vm, "Expected a String argument.");
 //  }
 //
 //  String* path = (String*)AS_OBJ(arg1);
@@ -205,7 +205,7 @@ void corePrint(MSVM* vm) {
 /*****************************************************************************/
 
 // std:list Methods.
-void stdListSort(MSVM* vm) {
+void stdListSort(PKVM* vm) {
   Var list = ARG(1);
   if (!IS_OBJ(list) || AS_OBJ(list)->type != OBJ_LIST) {
     vm->fiber->error = newString(vm, "Expected a list at argument 1.");
@@ -217,14 +217,14 @@ void stdListSort(MSVM* vm) {
 }
 
 // std:os Methods.
-void stdOsClock(MSVM* vm) {
+void stdOsClock(PKVM* vm) {
   RET(VAR_NUM((double)clock() / CLOCKS_PER_SEC));
 }
 
 /*****************************************************************************/
 /* CORE INITIALIZATION                                                       */
 /*****************************************************************************/
-void initializeCore(MSVM* vm) {
+void initializeCore(PKVM* vm) {
 
   ASSERT(builtins_count == 0, "Initialize core only once.");
 
@@ -286,7 +286,7 @@ void initializeCore(MSVM* vm) {
   STD_ADD_FUNCTION("clock", stdOsClock, 0);
 }
 
-void markCoreObjects(MSVM* vm) {
+void markCoreObjects(PKVM* vm) {
   // Core libraries.
   grayObject(&core_libs->_super, vm);
 
@@ -300,7 +300,7 @@ void markCoreObjects(MSVM* vm) {
 /* OPERATORS                                                                 */
 /*****************************************************************************/
 
-Var varAdd(MSVM* vm, Var v1, Var v2) {
+Var varAdd(PKVM* vm, Var v1, Var v2) {
 
   double d1, d2;
   if (isNumeric(v1, &d1)) {
@@ -341,7 +341,7 @@ Var varAdd(MSVM* vm, Var v1, Var v2) {
   return VAR_NULL;
 }
 
-Var varSubtract(MSVM* vm, Var v1, Var v2) {
+Var varSubtract(PKVM* vm, Var v1, Var v2) {
   double d1, d2;
   if (isNumeric(v1, &d1)) {
     if (validateNumeric(vm, v2, &d2, "Right operand")) {
@@ -358,7 +358,7 @@ Var varSubtract(MSVM* vm, Var v1, Var v2) {
   return VAR_NULL;
 }
 
-Var varMultiply(MSVM* vm, Var v1, Var v2) {
+Var varMultiply(PKVM* vm, Var v1, Var v2) {
 
   double d1, d2;
   if (isNumeric(v1, &d1)) {
@@ -373,7 +373,7 @@ Var varMultiply(MSVM* vm, Var v1, Var v2) {
   return VAR_NULL;
 }
 
-Var varDivide(MSVM* vm, Var v1, Var v2) {
+Var varDivide(PKVM* vm, Var v1, Var v2) {
   double d1, d2;
   if (isNumeric(v1, &d1)) {
     if (validateNumeric(vm, v2, &d2, "Right operand")) {
@@ -387,7 +387,7 @@ Var varDivide(MSVM* vm, Var v1, Var v2) {
   return VAR_NULL;
 }
 
-bool varGreater(MSVM* vm, Var v1, Var v2) {
+bool varGreater(PKVM* vm, Var v1, Var v2) {
   double d1, d2;
   if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
     return d1 > d2;
@@ -397,7 +397,7 @@ bool varGreater(MSVM* vm, Var v1, Var v2) {
   return false;
 }
 
-bool varLesser(MSVM* vm, Var v1, Var v2) {
+bool varLesser(PKVM* vm, Var v1, Var v2) {
   double d1, d2;
   if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
     return d1 < d2;
@@ -416,7 +416,7 @@ bool varLesser(MSVM* vm, Var v1, Var v2) {
                                        "named '$'",                   \
                                   varTypeName(on), attrib->data);
 
-Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
+Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
   if (!IS_OBJ(on)) {
     vm->fiber->error = stringFormat(vm, "$ type is not subscriptable.",
@@ -496,7 +496,7 @@ Var varGetAttrib(MSVM* vm, Var on, String* attrib) {
   return VAR_NULL;
 }
 
-void varSetAttrib(MSVM* vm, Var on, String* attrib, Var value) {
+void varSetAttrib(PKVM* vm, Var on, String* attrib, Var value) {
 
 #define ATTRIB_IMMUTABLE(prop)                                                \
 do {                                                                          \
@@ -575,7 +575,7 @@ do {                                                                          \
   UNREACHABLE();
 }
 
-Var varGetSubscript(MSVM* vm, Var on, Var key) {
+Var varGetSubscript(PKVM* vm, Var on, Var key) {
   if (!IS_OBJ(on)) {
     vm->fiber->error = stringFormat(vm, "$ type is not subscriptable.",
                                     varTypeName(on));
@@ -641,7 +641,7 @@ Var varGetSubscript(MSVM* vm, Var on, Var key) {
   return VAR_NULL;
 }
 
-void varsetSubscript(MSVM* vm, Var on, Var key, Var value) {
+void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
   if (!IS_OBJ(on)) {
     vm->fiber->error = stringFormat(vm, "$ type is not subscriptable.", varTypeName(on));
     return;
@@ -686,7 +686,7 @@ void varsetSubscript(MSVM* vm, Var on, Var key, Var value) {
   UNREACHABLE();
 }
 
-bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value) {
+bool varIterate(PKVM* vm, Var seq, Var* iterator, Var* value) {
 
 #ifdef DEBUG
   int32_t _temp;

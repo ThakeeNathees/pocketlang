@@ -25,7 +25,7 @@ static void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
   return realloc(memory, new_size);
 }
 
-void* vmRealloc(MSVM* self, void* memory, size_t old_size, size_t new_size) {
+void* vmRealloc(PKVM* self, void* memory, size_t old_size, size_t new_size) {
 
   // TODO: Debug trace allocations here.
 
@@ -46,7 +46,7 @@ void* vmRealloc(MSVM* self, void* memory, size_t old_size, size_t new_size) {
   return self->config.realloc_fn(memory, new_size, self->config.user_data);
 }
 
-void msInitConfiguration(msConfiguration* config) {
+void pkInitConfiguration(pkConfiguration* config) {
   config->realloc_fn = defaultRealloc;
 
   // TODO: Handle Null functions before calling them.
@@ -58,18 +58,18 @@ void msInitConfiguration(msConfiguration* config) {
   config->user_data = NULL;
 }
 
-MSVM* msNewVM(msConfiguration* config) {
+PKVM* pkNewVM(pkConfiguration* config) {
 
   // TODO: If the [config] is NULL, initialize a default one.
 
-  msReallocFn realloc_fn = defaultRealloc;
+  pkReallocFn realloc_fn = defaultRealloc;
   void* user_data = NULL;
   if (config != NULL) {
     realloc_fn = config->realloc_fn;
     user_data = config->user_data;
   }
-  MSVM* vm = (MSVM*)realloc_fn(NULL, sizeof(MSVM), user_data);
-  memset(vm, 0, sizeof(MSVM));
+  PKVM* vm = (PKVM*)realloc_fn(NULL, sizeof(PKVM), user_data);
+  memset(vm, 0, sizeof(PKVM));
 
   vm->config = *config;
   vm->gray_list_count = 0;
@@ -86,7 +86,7 @@ MSVM* msNewVM(msConfiguration* config) {
   return vm;
 }
 
-void msFreeVM(MSVM* self) {
+void pkFreeVM(PKVM* self) {
 
   Object* obj = self->first;
   while (obj != NULL) {
@@ -101,19 +101,19 @@ void msFreeVM(MSVM* self) {
   DEALLOCATE(self, self);
 }
 
-void vmPushTempRef(MSVM* self, Object* obj) {
+void vmPushTempRef(PKVM* self, Object* obj) {
   ASSERT(obj != NULL, "Cannot reference to NULL.");
   ASSERT(self->temp_reference_count < MAX_TEMP_REFERENCE, 
          "Too many temp references");
   self->temp_reference[self->temp_reference_count++] = obj;
 }
 
-void vmPopTempRef(MSVM* self) {
+void vmPopTempRef(PKVM* self) {
   ASSERT(self->temp_reference_count > 0, "Temporary reference is empty to pop.");
   self->temp_reference_count--;
 }
 
-void vmCollectGarbage(MSVM* self) {
+void vmCollectGarbage(PKVM* self) {
 
   // Reset VM's bytes_allocated value and count it again so that we don't
   // required to know the size of each object that'll be freeing.
@@ -149,15 +149,15 @@ void vmCollectGarbage(MSVM* self) {
   TODO; // Sweep.
 }
 
-void* msGetUserData(MSVM* vm) {
+void* pkGetUserData(PKVM* vm) {
   return vm->config.user_data;
 }
 
-void msSetUserData(MSVM* vm, void* user_data) {
+void pkSetUserData(PKVM* vm, void* user_data) {
   vm->config.user_data = user_data;
 }
 
-static Script* getScript(MSVM* vm, String* name) {
+static Script* getScript(PKVM* vm, String* name) {
   Var scr = mapGet(vm->scripts, VAR_OBJ(&name->_super));
   if (IS_UNDEF(scr)) return NULL;
   ASSERT(AS_OBJ(scr)->type == OBJ_SCRIPT, OOPS);
@@ -170,10 +170,10 @@ static Script* getScript(MSVM* vm, String* name) {
 
 // If failed to resolve it'll return false. Parameter [resolved] will be
 // updated with a resolved path.
-static bool resolveScriptPath(MSVM* vm, String** resolved) {
+static bool resolveScriptPath(PKVM* vm, String** resolved) {
   if (vm->config.resolve_path_fn == NULL) return true;
 
-  msStringResult result;
+  pkStringResult result;
   const char* path = (*resolved)->data;
 
   Fiber* fiber = vm->fiber;
@@ -196,7 +196,7 @@ static bool resolveScriptPath(MSVM* vm, String** resolved) {
 // Import and return Script object as Var. If the script is imported and
 // compiled here it'll set [is_new_script] to true oterwise (using the cached
 // script) set to false.
-static Var importScript(MSVM* vm, String* name, bool* is_new_script) {
+static Var importScript(PKVM* vm, String* name, bool* is_new_script) {
 
   // Check core libs first.
   Script* core_lib = getCoreLib(name);
@@ -221,7 +221,7 @@ static Var importScript(MSVM* vm, String* name, bool* is_new_script) {
   }
   *is_new_script = true;
 
-  msStringResult result = { false, NULL, NULL };
+  pkStringResult result = { false, NULL, NULL };
   if (vm->config.load_script_fn != NULL)
     result = vm->config.load_script_fn(vm, name->data);
 
@@ -253,12 +253,12 @@ static Var importScript(MSVM* vm, String* name, bool* is_new_script) {
   return VAR_OBJ(&script->_super);
 }
 
-static void ensureStackSize(MSVM* vm, int size) {
+static void ensureStackSize(PKVM* vm, int size) {
   if (vm->fiber->stack_size > size) return;
   TODO;
 }
 
-static inline void pushCallFrame(MSVM* vm, Function* fn) {
+static inline void pushCallFrame(PKVM* vm, Function* fn) {
   ASSERT(!fn->is_native, "Native function shouldn't use call frames.");
 
   // Grow the stack frame if needed.
@@ -281,34 +281,34 @@ static inline void pushCallFrame(MSVM* vm, Function* fn) {
   frame->ip = fn->fn->opcodes.data;
 }
 
-void msSetRuntimeError(MSVM* vm, const char* format, ...) {
+void pkSetRuntimeError(PKVM* vm, const char* format, ...) {
   vm->fiber->error = newString(vm, "TODO:");
   TODO; // Construct String and set to vm->fiber->error.
 }
 
-void vmReportError(MSVM* vm) {
+void vmReportError(PKVM* vm) {
   ASSERT(HAS_ERROR(), "runtimeError() should be called after an error.");
   ASSERT(false, "TODO: create debug.h");
 }
 
-MSInterpretResult msInterpret(MSVM* vm, const char* file) {
+PKInterpretResult pkInterpret(PKVM* vm, const char* file) {
 
   // Resolve file path.
   String* name = newString(vm, file);
   vmPushTempRef(vm, &name->_super);
 
   if (!resolveScriptPath(vm, &name)) {
-    vm->config.error_fn(vm, MS_ERROR_COMPILE, NULL, -1,
+    vm->config.error_fn(vm, PK_ERROR_COMPILE, NULL, -1,
       stringFormat(vm, "Failed to resolve path '$'.", file)->data);
-    return RESULT_COMPILE_ERROR;
+    return PK_RESULT_COMPILE_ERROR;
   }
 
   // Load the script source.
-  msStringResult res = vm->config.load_script_fn(vm, name->data);
+  pkStringResult res = vm->config.load_script_fn(vm, name->data);
   if (!res.success) {
-    vm->config.error_fn(vm, MS_ERROR_COMPILE, NULL, -1,
+    vm->config.error_fn(vm, PK_ERROR_COMPILE, NULL, -1,
       stringFormat(vm, "Failed to load script '@'.", name)->data);
-    return RESULT_COMPILE_ERROR;
+    return PK_RESULT_COMPILE_ERROR;
   }
 
   // Load a new script to the vm's scripts cache.
@@ -325,7 +325,7 @@ MSInterpretResult msInterpret(MSVM* vm, const char* file) {
   bool success = compile(vm, scr, res.string);
   if (res.on_done) res.on_done(vm, res);
 
-  if (!success) return RESULT_COMPILE_ERROR;
+  if (!success) return PK_RESULT_COMPILE_ERROR;
   vm->script = scr;
 
   return vmRunScript(vm, scr);
@@ -335,7 +335,7 @@ MSInterpretResult msInterpret(MSVM* vm, const char* file) {
 #include <stdio.h>
 
 // FIXME: for temp debugging. (implement dump stack frames).
-void _debugRuntime(MSVM* vm) {
+void _debugRuntime(PKVM* vm) {
   return;
   system("cls");
   Fiber* fiber = vm->fiber;
@@ -359,7 +359,7 @@ void _debugRuntime(MSVM* vm) {
 
 #endif
 
-MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
+PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
   register uint8_t* ip;      //< Current instruction pointer.
   register Var* rbp;         //< Stack base pointer register.
@@ -395,21 +395,21 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 #define READ_SHORT() (ip+=2, (uint16_t)((ip[-2] << 8) | ip[-1]))
 
 // Check if any runtime error exists and if so returns RESULT_RUNTIME_ERROR.
-#define CHECK_ERROR()              \
-  do {                             \
-    if (HAS_ERROR()) {             \
-      vmReportError(vm);           \
-      return RESULT_RUNTIME_ERROR; \
-    }                              \
+#define CHECK_ERROR()                 \
+  do {                                \
+    if (HAS_ERROR()) {                \
+      vmReportError(vm);              \
+      return PK_RESULT_RUNTIME_ERROR; \
+    }                                 \
   } while (false)
 
 // Note: '##__VA_ARGS__' is not portable but most common compilers including
 // gcc, msvc, clang, tcc (c99) supports.
 #define RUNTIME_ERROR(fmt, ...)                \
   do {                                         \
-    msSetRuntimeError(vm, fmt, ##__VA_ARGS__); \
+    pkSetRuntimeError(vm, fmt, ##__VA_ARGS__); \
     vmReportError(vm);                         \
-    return RESULT_RUNTIME_ERROR;               \
+    return PK_RESULT_RUNTIME_ERROR;            \
   } while (false)
 
 // Store the current frame to vm's call frame before pushing a new frame.
@@ -701,7 +701,7 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
       if (vm->fiber->frame_count == 0) {
         vm->fiber->sp = vm->fiber->stack;
         PUSH(ret);
-        return RESULT_SUCCESS;
+        return PK_RESULT_SUCCESS;
       }
 
       // Set the return value.
@@ -857,5 +857,5 @@ MSInterpretResult vmRunScript(MSVM* vm, Script* _script) {
 
   }
 
-  return RESULT_SUCCESS;
+  return PK_RESULT_SUCCESS;
 }

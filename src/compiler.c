@@ -178,7 +178,7 @@ static _Keyword _keywords[] = {
 };
 
 typedef struct {
-  MSVM* vm;           //< Owner of the parser (for reporting errors, etc).
+  PKVM* vm;           //< Owner of the parser (for reporting errors, etc).
 
   const char* source; //< Currently compiled source (Weak pointer).
   Script* script;     //< Currently compiled script (Weak pointer).
@@ -288,7 +288,7 @@ typedef struct sFunc {
 
 struct Compiler {
 
-  MSVM* vm;
+  PKVM* vm;
   Parser parser;
 
   // Current depth the compiler in (-1 means top level) 0 means function
@@ -329,13 +329,13 @@ static OpInfo opcode_info[] = {
 
 static void reportError(Parser* parser, const char* file, int line,
                         const char* fmt, va_list args) {
-  MSVM* vm = parser->vm;
+  PKVM* vm = parser->vm;
   parser->has_errors = true;
   char message[ERROR_MESSAGE_SIZE];
   int length = vsprintf(message, fmt, args);
   ASSERT(length < ERROR_MESSAGE_SIZE, "Error message buffer should not exceed "
     "the buffer");
-  vm->config.error_fn(vm, MS_ERROR_COMPILE, file, line, message);
+  vm->config.error_fn(vm, PK_ERROR_COMPILE, file, line, message);
 }
 
 // Error caused at the middle of lexing (and TK_ERROR will be lexed insted).
@@ -653,7 +653,7 @@ static void lexToken(Parser* parser) {
  *****************************************************************************/
 
  // Initialize the parser.
-static void parserInit(Parser* self, MSVM* vm, const char* source,
+static void parserInit(Parser* self, PKVM* vm, const char* source,
                        Script* script) {
   self->vm = vm;
   self->source = source;
@@ -1321,7 +1321,7 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
  * COMPILING                                                                 *
  *****************************************************************************/
 
-static void compilerInit(Compiler* compiler, MSVM* vm, const char* source,
+static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
                          Script* script) {
   parserInit(&compiler->parser, vm, source, script);
   compiler->vm = vm;
@@ -1772,7 +1772,7 @@ static void compileStatement(Compiler* compiler) {
   }
 }
 
-bool compile(MSVM* vm, Script* script, const char* source) {
+bool compile(PKVM* vm, Script* script, const char* source) {
 
   // Skip utf8 BOM if there is any.
   if (strncmp(source, "\xEF\xBB\xBF", 3) == 0) source += 3;
@@ -1832,7 +1832,7 @@ bool compile(MSVM* vm, Script* script, const char* source) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void compilerMarkObjects(Compiler* compiler, MSVM* vm) {
+void compilerMarkObjects(Compiler* compiler, PKVM* vm) {
   
   // Mark the script which is currently being compiled.
   grayObject(&compiler->script->_super, vm);

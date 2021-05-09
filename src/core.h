@@ -17,10 +17,10 @@
 //    It contradicts `initializeCore()` to be called for each VM or only once.
 //    1. Make the scripts share between VMs.
 //    2. Destroy scripts buffer only when the last VM die.
-void initializeCore(MSVM* vm);
+void initializeCore(PKVM* vm);
 
 // Mark the heap allocated core object at the mark phase.
-void markCoreObjects(MSVM* vm);
+void markCoreObjects(PKVM* vm);
 
 // Find the builtin function name and returns it's index in the builtins array
 // if not found returns -1.
@@ -38,25 +38,25 @@ Script* getCoreLib(String* name);
 
 // Operators //////////////////////////////////////////////////////////////////
 
-Var varAdd(MSVM* vm, Var v1, Var v2);
-Var varSubtract(MSVM* vm, Var v1, Var v2);
-Var varMultiply(MSVM* vm, Var v1, Var v2);
-Var varDivide(MSVM* vm, Var v1, Var v2);
+Var varAdd(PKVM* vm, Var v1, Var v2);
+Var varSubtract(PKVM* vm, Var v1, Var v2);
+Var varMultiply(PKVM* vm, Var v1, Var v2);
+Var varDivide(PKVM* vm, Var v1, Var v2);
 
-bool varGreater(MSVM* vm, Var v1, Var v2);
-bool varLesser(MSVM* vm, Var v1, Var v2);
+bool varGreater(PKVM* vm, Var v1, Var v2);
+bool varLesser(PKVM* vm, Var v1, Var v2);
 
-Var varGetAttrib(MSVM* vm, Var on, String* attrib);
-void varSetAttrib(MSVM* vm, Var on, String* name, Var value);
+Var varGetAttrib(PKVM* vm, Var on, String* attrib);
+void varSetAttrib(PKVM* vm, Var on, String* name, Var value);
 
-Var varGetSubscript(MSVM* vm, Var on, Var key);
-void varsetSubscript(MSVM* vm, Var on, Var key, Var value);
+Var varGetSubscript(PKVM* vm, Var on, Var key);
+void varsetSubscript(PKVM* vm, Var on, Var key, Var value);
 
 // Functions //////////////////////////////////////////////////////////////////
 
 // Parameter [iterator] should be VAR_NULL before starting the iteration.
 // If an element is obtained by iteration it'll return true otherwise returns
 // false indicating that the iteration is over.
-bool varIterate(MSVM* vm, Var seq, Var* iterator, Var* value);
+bool varIterate(PKVM* vm, Var seq, Var* iterator, Var* value);
 
 #endif // CORE_H
