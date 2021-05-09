@@ -196,20 +196,28 @@ static bool resolveScriptPath(PKVM* vm, String** resolved) {
 // Import and return Script object as Var. If the script is imported and
 // compiled here it'll set [is_new_script] to true oterwise (using the cached
 // script) set to false.
-static Var importScript(PKVM* vm, String* name, bool* is_new_script) {
-
-  // Check core libs first.
-  Script* core_lib = getCoreLib(name);
-  if (core_lib != NULL) {
-    *is_new_script = false;
-    return VAR_OBJ(&core_lib->_super);
+static Var importScript(PKVM* vm, String* name, bool is_core,
+                        bool* is_new_script) {
+  if (is_core) {
+    ASSERT(is_new_script == NULL, OOPS);
+    Script* core_lib = getCoreLib(name);
+    if (core_lib != NULL) {
+      return VAR_OBJ(&core_lib->_super);
+    }
+    vm->fiber->error = stringFormat(vm, "Failed to import core library @",
+                                    name);
+    return VAR_NULL;
   }
 
+  // Relative path import.
+
+  ASSERT(is_new_script != NULL, OOPS);
   if (!resolveScriptPath(vm, &name)) {
     vm->fiber->error = stringFormat(vm, "Failed to resolve script @ from @",
                                     name, vm->fiber->func->owner->name);
     return VAR_NULL;
   }
+
   vmPushTempRef(vm, &name->_super);
 
   // Check if the script is already cached (then use it).
@@ -584,19 +592,9 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(IMPORT) :
     {
-      Var path = POP();
-      if (!IS_OBJ(path) || AS_OBJ(path)->type != OBJ_STRING) {
-        RUNTIME_ERROR("Expected a string argument for import statement.");
-      }
-
-      bool is_new_script = false;
-      PUSH(importScript(vm, (String*)AS_OBJ(path), &is_new_script));
+      String* name = script->names.data[READ_SHORT()];
+      PUSH(importScript(vm, name, true, NULL));
       CHECK_ERROR();
-
-      if (is_new_script) {
-        TODO; // Execute the script.
-      }
-
       DISPATCH();
     }
 

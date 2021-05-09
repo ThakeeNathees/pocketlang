@@ -776,16 +776,8 @@ String* toString(PKVM* vm, Var v, bool recursive) {
       }
 
       case OBJ_RANGE:  return newStringLength(vm, "[Range]",   7); // TODO;
-      case OBJ_SCRIPT: return newStringLength(vm, "[Script]",  8); // TODO;
-      case OBJ_FUNC: {
-        const char* name = ((Function*)obj)->name;
-        int length = (int)strlen(name); // TODO: Assert length.
-        char buff[TO_STRING_BUFF_SIZE];
-        memcpy(buff, "[Func:", 6);
-        memcpy(buff + 6, name, length);
-        buff[6 + length] = ']';
-        return newStringLength(vm, buff, 6 + length + 1);
-      }
+      case OBJ_SCRIPT: return stringFormat(vm, "[Lib:@]", ((Script*)obj)->name);
+      case OBJ_FUNC:   return stringFormat(vm, "[Func:$]", ((Function*)obj)->name);
       case OBJ_USER:   return newStringLength(vm, "[UserObj]", 9); // TODO;
         break;
     }

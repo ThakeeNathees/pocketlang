@@ -92,6 +92,7 @@ typedef enum {
 
   // Keywords.
   TK_IMPORT,     // import
+  TK_AS,         // as
   TK_DEF,        // def
   TK_NATIVE,     // native   (C function declaration)
   TK_FUNCTION,   // function (literal function)
@@ -152,6 +153,7 @@ typedef struct {
 // List of keywords mapped into their identifiers.
 static _Keyword _keywords[] = {
   { "import",   6, TK_IMPORT },
+  { "as",       2, TK_AS },
   { "def",      3, TK_DEF },
   { "native",   6, TK_NATIVE },
   { "function", 8, TK_FUNCTION },
@@ -867,7 +869,6 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence);
 static void compileExpression(Compiler* compiler);
 
 static void exprLiteral(Compiler* compiler, bool can_assign);
-static void exprImport(Compiler* compiler, bool can_assign);
 static void exprFunc(Compiler* compiler, bool can_assign);
 static void exprName(Compiler* compiler, bool can_assign);
 
@@ -927,7 +928,8 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_DIVEQ      */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
   /* TK_SRIGHT     */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_SLEFT      */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
-  /* TK_IMPORT     */ { exprImport,    NULL,             NO_INFIX },
+  /* TK_IMPORT     */   NO_RULE,
+  /* TK_AS         */   NO_RULE,
   /* TK_DEF        */   NO_RULE,
   /* TK_EXTERN     */   NO_RULE,
   /* TK_FUNCTION   */ { exprFunc,      NULL,             NO_INFIX },
@@ -996,17 +998,6 @@ static void exprLiteral(Compiler* compiler, bool can_assign) {
   emitShort(compiler, index);
 }
 
-static void exprImport(Compiler* compiler, bool can_assign) {
-
-  consume(&compiler->parser, TK_LPARAN, "Expected '(' after import.");
-  skipNewLines(&compiler->parser);
-  compileExpression(compiler);
-  skipNewLines(&compiler->parser);
-  consume(&compiler->parser, TK_RPARAN, "Expected ')' after parameter list.");
-
-  emitOpcode(compiler, OP_IMPORT);
-}
-
 static void exprFunc(Compiler* compiler, bool can_assign) {
   int fn_index = compileFunction(compiler, FN_LITERAL);
   emitOpcode(compiler, OP_PUSH_FN);
@@ -1039,7 +1030,7 @@ static void exprName(Compiler* compiler, bool can_assign) {
       } else {
         // This will prevent the assignment from poped out from the stack
         // since the assigned value itself is the local and not a temp.
-        compiler->new_local = true; 
+        compiler->new_local = true;
       }
     } else {
       // TODO: The name could be a function which hasn't been defined at this point.
@@ -1217,12 +1208,7 @@ static void exprAttrib(Compiler* compiler, bool can_assign) {
   int length = parser->previous.length;
 
   // Store the name in script's names.
-  String* string = newStringLength(compiler->vm, name, length);
-  vmPushTempRef(compiler->vm, &string->_super);
-  stringBufferWrite(&compiler->script->names, compiler->vm, string);
-  vmPopTempRef(compiler->vm);
-
-  int index = (int)compiler->script->names.count - 1;
+  int index = scriptAddName(compiler->script, compiler->vm, name, length);
 
   if (can_assign && matchAssignment(parser)) {
 
@@ -1574,6 +1560,69 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
   compilerExitBlock(compiler);
 }
 
+static void _compilerImportEntry(Compiler* compiler, bool is_from) {
+
+  const char* name = NULL;
+  uint32_t length = 0;
+  int lib = -1; //< Imported library variable index.
+
+  if (match(&compiler->parser, TK_NAME)) {
+    name = compiler->parser.previous.start;
+    length = compiler->parser.previous.length;
+
+    uint32_t name_line = compiler->parser.previous.line;
+    lib = compilerAddVariable(compiler, name, length, name_line);
+
+    int index = (int)scriptAddName(compiler->script, compiler->vm,
+                                   name, length);
+    emitOpcode(compiler, OP_IMPORT);
+    emitShort(compiler, index);
+
+  } else {
+    TODO; //?
+    //consume(&compiler->parser, TK_STRING, "Expected a name or a string literal"
+    //  " after import.");
+    //String* path = (String*)AS_OBJ(compiler->parser.previous.value);
+    //name = path->data;
+    //length = path->length;
+    //uint32_t index = compilerAddConstant(compiler, VAR_OBJ(path));
+  }
+
+  if (match(&compiler->parser, TK_AS)) {
+    consume(&compiler->parser, TK_NAME, "Expected a name after as.");
+    compiler->variables[lib].name = compiler->parser.previous.start;
+    compiler->variables[lib].length = compiler->parser.previous.length;
+    // TODO: add the name to global_names ??
+  }
+
+  emitStoreVariable(compiler, lib, true);
+  emitOpcode(compiler, OP_POP);
+}
+
+/*
+  TODO: write doc below.
+  from os import clock as c, path as p
+  import os, json as j, math as m
+*/
+static void compileImportStatement(Compiler* compiler, bool is_from) {
+  
+  if (is_from) {
+    TODO; // ?
+
+  } else {
+    bool skip_lines = false;
+    do {
+      if (skip_lines) skipNewLines(&compiler->parser);
+      _compilerImportEntry(compiler, is_from);
+      skip_lines = true;
+    } while (match(&compiler->parser, TK_COMMA));
+  }
+
+  if (peek(&compiler->parser) != TK_EOF) {
+    consume(&compiler->parser, TK_LINE, "Expected EOL after import statement.");
+  }
+}
+
 // Compiles an expression. An expression will result a value on top of the
 // stack.
 static void compileExpression(Compiler* compiler) {
@@ -1766,6 +1815,7 @@ static void compileStatement(Compiler* compiler) {
     compileExpression(compiler);
     consumeEndStatement(parser);
     if (!compiler->new_local) {
+      // Pop the temp.
       emitOpcode(compiler, OP_POP);
     }
     compiler->new_local = false;
@@ -1803,6 +1853,13 @@ bool compile(PKVM* vm, Script* script, const char* source) {
     } else if (match(parser, TK_DEF)) {
       compileFunction(&compiler, FN_SCRIPT);
 
+    // TODO: implement from keyword.
+    //} else if (match(parser, TK_FROM)) {
+    //  compileImportStatement(&compiler, true);
+
+    } else if (match(parser, TK_IMPORT)) {
+      compileImportStatement(&compiler, false);
+
     } else {
       compileStatement(&compiler);
     }
@@ -1818,6 +1875,7 @@ bool compile(PKVM* vm, Script* script, const char* source) {
   for (int i = 0; i < compiler.var_count; i++) {
     ASSERT(compiler.variables[i].depth == (int)DEPTH_GLOBAL, OOPS);
     varBufferWrite(&script->globals, vm, VAR_NULL);
+    // TODO: add the names to global_names table.
   }
 
   vm->compiler = NULL;
