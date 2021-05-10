@@ -1,7 +1,6 @@
 
 # PocketLang ignore list
 
-build/
 bin/
 test/bin/
 [Rr]elease/
