@@ -1,26 +1,27 @@
 
 // To implement.
 
+[ ] and/or operator implementation.
 [ ] Runtime error trace.
+[ ] Make it possible to override function names.
 [ ] VM's debug informations.
      [*] Compiled opcode dump.
      [ ] Stack trace.
 [ ] Stack reallocation.
 [ ] Garbage collection.
-[ ] VM's script cache (imported).
-[ ] Map literal.
+     [*] Mark phase.
+     [ ] Sweep phase.
 [ ] Hex, binary literals and floats like ".5".
 [ ] Relative file import.
+[ ] Union tagging alter in var.
+
+// Add more.
 [ ] Compilte core methods.
 [ ] Complete var methods.
 [ ] Complete core functions.
 [ ] Complete builtin operators.
 [ ] Complete opcodes.
-[ ] Union tagging alter in var.
-[ ] Std libs.
-
+[ ] Complete core libs.
 
 // Bugs.
-
 [ ] Update cache on each recompilation instead of making a new cache.
-[*] `function() "do" <body> end` make 'do' keyword optional here.

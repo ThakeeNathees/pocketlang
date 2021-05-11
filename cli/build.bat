@@ -106,27 +106,38 @@ set ADDNL_DEFINES=/DPK_DLL /DPK_COMPILE
 call :ColorText 0f "Building porcess started"
 echo.
 
-set object_files=
-:: Recursively loop all files in '.' matching *.c and compile.
+set src_obj_files=
+:: Recursively loop all files in '..\src' matching *.c and compile.
 for /r "..\src" %%f in (*.c) do (
 	for %%i in ("%%f") do (
-		call set "object_files=%%object_files%% ..\build\%%~ni.obj"
+		call set "src_obj_files=%%src_obj_files%% ..\build\%%~ni.obj"
 		cl /nologo /c %ADDNL_INCLUDE% %ADDNL_DEFINES% %ADDNL_CPPFLAGS% "%%f" /Fo..\build\%%~ni.obj
 		if errorlevel 1 goto :FAIL
 	)
 )
 
+
 if "%BUILD_DLL%"=="true" goto :LINK_DLL
 
 call :ColorText 0d "..\build\pocket.lib"
 echo.
-lib /nologo /OUT:..\build\pocket.lib %object_files%
+lib /nologo /OUT:..\build\pocket.lib %src_obj_files%
 if errorlevel 1 goto :FAIL
 
 call :ColorText 0d "..\build\pocket.exe"
 echo.
 
-cl /nologo %ADDNL_CPPFLAGS% %ADDNL_INCLUDE% %object_files%  /Fe..\build\pocket.exe
+set cli_obj_files=
+:: Recursively loop all files in '.' matching *.c and compile.
+for /r ".\" %%f in (*.c) do (
+	for %%i in ("%%f") do (
+		call set "cli_obj_files=%%cli_obj_files%% ..\build\%%~ni.obj"
+		cl /nologo /c %ADDNL_INCLUDE% %ADDNL_DEFINES% %ADDNL_CPPFLAGS% "%%f" /Fo..\build\%%~ni.obj
+		if errorlevel 1 goto :FAIL
+	)
+)
+
+cl /nologo %ADDNL_CPPFLAGS% %ADDNL_INCLUDE% %src_obj_files% %cli_obj_files% /Fe..\build\pocket.exe
 if errorlevel 1 goto :FAIL
 
 goto :CLEAN
@@ -134,11 +145,15 @@ goto :CLEAN
 :LINK_DLL
 call :ColorText 0d "pocket.dll"
 echo.
-link /nologo /dll /out:..\build\pocket.dll /implib:..\build\pocket.lib %object_files%
+link /nologo /dll /out:..\build\pocket.dll /implib:..\build\pocket.lib %src_obj_files%
 
 :CLEAN
 
-for %%o in (%object_files%) do (
+for %%o in (%src_obj_files%) do (
+	del "%%o"
+)
+
+for %%o in (%cli_obj_files%) do (
 	del "%%o"
 )
 

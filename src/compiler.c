@@ -95,8 +95,8 @@ typedef enum {
   TK_IMPORT,     // import
   TK_AS,         // as
   TK_DEF,        // def
-  TK_NATIVE,     // native   (C function declaration)
-  TK_FUNCTION,   // function (literal function)
+  TK_NATIVE,     // native (C function declaration)
+  TK_FUNC,       // func (literal function)
   TK_END,        // end
 
   TK_NULL,       // null
@@ -109,6 +109,7 @@ typedef enum {
   TK_FALSE,      // false
 
   TK_DO,         // do
+  TK_THEN,       // then
   TK_WHILE,      // while
   TK_FOR,        // for
   TK_IF,         // if
@@ -158,7 +159,7 @@ static _Keyword _keywords[] = {
   { "as",       2, TK_AS },
   { "def",      3, TK_DEF },
   { "native",   6, TK_NATIVE },
-  { "function", 8, TK_FUNCTION },
+  { "func",     4, TK_FUNC },
   { "end",      3, TK_END },
   { "null",     4, TK_NULL },
   { "self",     4, TK_SELF },
@@ -169,6 +170,7 @@ static _Keyword _keywords[] = {
   { "true",     4, TK_TRUE },
   { "false",    5, TK_FALSE },
   { "do",       2, TK_DO },
+  { "then",     4, TK_THEN },
   { "while",    5, TK_WHILE },
   { "for",      3, TK_FOR },
   { "if",       2, TK_IF },
@@ -498,8 +500,9 @@ static void eatNumber(Parser* parser) {
 static void skipLineComment(Parser* parser) {
   char c;
   while ((c = peekChar(parser)) != '\0') {
-    eatChar(parser);
+    // Don't eat new line it's not part of the comment.
     if (c == '\n') return;
+    eatChar(parser);
   }
 }
 
@@ -740,13 +743,15 @@ static void consumeEndStatement(Parser* parser) {
   }
 }
 
-// Match optional "do" keyword and new lines.
-static void consumeStartBlock(Parser* parser) {
+// Match optional "do" or "then" keyword and new lines.
+static void consumeStartBlock(Parser* parser, TokenType delimiter) {
   bool consumed = false;
 
-  // Match optional "do".
-  if (match(parser, TK_DO))
-    consumed = true;
+  // Match optional "do" or "then".
+  if (delimiter == TK_DO || delimiter == TK_THEN) {
+    if (match(parser, delimiter))
+      consumed = true;
+  }
 
   if (matchLine(parser))
     consumed = true;
@@ -935,7 +940,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_AS         */   NO_RULE,
   /* TK_DEF        */   NO_RULE,
   /* TK_EXTERN     */   NO_RULE,
-  /* TK_FUNCTION   */ { exprFunc,      NULL,             NO_INFIX },
+  /* TK_FUNC       */ { exprFunc,      NULL,             NO_INFIX },
   /* TK_END        */   NO_RULE,
   /* TK_NULL       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_SELF       */ { exprValue,     NULL,             NO_INFIX },
@@ -946,6 +951,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_TRUE       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_FALSE      */ { exprValue,     NULL,             NO_INFIX },
   /* TK_DO         */   NO_RULE,
+  /* TK_THEN       */   NO_RULE,
   /* TK_WHILE      */   NO_RULE,
   /* TK_FOR        */   NO_RULE,
   /* TK_IF         */   NO_RULE,
@@ -1114,6 +1120,8 @@ static void exprBinaryOp(Compiler* compiler, bool can_assign) {
     case TK_SRIGHT:  emitOpcode(compiler, OP_BIT_RSHIFT); break;
     case TK_SLEFT:   emitOpcode(compiler, OP_BIT_LSHIFT); break;
     case TK_IN:      emitOpcode(compiler, OP_IN);         break;
+
+    // TODO: it doesn't work that way.
     case TK_AND:     emitOpcode(compiler, OP_AND);        break;
     case TK_OR:      emitOpcode(compiler, OP_OR);         break;
     default:
@@ -1252,7 +1260,7 @@ static void exprSubscript(Compiler* compiler, bool can_assign) {
 
     TokenType assignment = parser->previous.type;
     if (assignment != TK_EQ) {
-      emitOpcode(compiler, OP_GET_SUBSCRIPT_AOP);
+      emitOpcode(compiler, OP_GET_SUBSCRIPT_KEEP);
       compileExpression(compiler);
 
       switch (assignment) {
@@ -1543,8 +1551,25 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
 
   compilerEnterBlock(compiler);
 
-  if (type != BLOCK_ELSE && type != BLOCK_ELIF) {
-    consumeStartBlock(&compiler->parser);
+  Parser* parser = &compiler->parser;
+  if (type == BLOCK_IF) {
+    consumeStartBlock(parser, TK_THEN);
+    skipNewLines(parser);
+
+  } else if (type == BLOCK_ELIF) {
+    // Do nothing, because this will be parsed as a new if statement.
+    // and it's condition hasn't parsed yet.
+
+  } else if (type == BLOCK_ELSE) {
+    skipNewLines(parser);
+
+  } else if (type == BLOCK_FUNC) {
+    // Function body doesn't require a 'do' or 'then' delimiter to enter.
+    skipNewLines(parser);
+
+  } else {
+    // For/While loop block body delimiter is 'do'.
+    consumeStartBlock(&compiler->parser, TK_DO);
     skipNewLines(&compiler->parser);
   }
 

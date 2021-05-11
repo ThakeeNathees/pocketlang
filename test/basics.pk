@@ -1,0 +1,22 @@
+
+## Numericals tests.
+assert(1.0 + 2.0 == 3, 'Num addition failed')
+
+## Strings tests.
+assert("'\"'" == '\'"\'', 'Mixed string escape failed.')
+assert("testing" == "test" + "ing", 'String addition failed.')
+
+## Lists test.
+l1 = [1, false, null, func print('hello') end]
+assert(is_null(l1[2]), 'List indexing failed.')
+l1[1] = true; assert(l1[1], 'List subscript set failed.')
+
+## Builtin functions tests.
+h1 = hash("testing"); h2 = hash("test" + "ing")
+assert(h1 == h2, 'Hash function failed.')
+assert(to_string(42) == '42', 'to_string() failed.')
+
+
+print("-------------------")
+print(" BASICS TEST DONE  ")
+print("-------------------")

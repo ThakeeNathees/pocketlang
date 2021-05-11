@@ -1,6 +1,9 @@
 
 # PocketLang ignore list
 
+# Docs branch cloned into the docs sub directory
+docs/
+
 build/
 bin/
 test/bin/

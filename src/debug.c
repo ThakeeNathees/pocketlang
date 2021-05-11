@@ -214,7 +214,7 @@ void dumpInstructions(PKVM* vm, Function* func) {
         break;
 
       case OP_GET_SUBSCRIPT:
-      case OP_GET_SUBSCRIPT_AOP:
+      case OP_GET_SUBSCRIPT_KEEP:
       case OP_SET_SUBSCRIPT:
         NO_ARGS();
         break;

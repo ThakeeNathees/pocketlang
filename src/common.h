@@ -18,17 +18,10 @@
 // Set this to dump compiled opcodes of each functions.
 #define DEBUG_DUMP_COMPILED_CODE 0
 
-#ifdef DEBUG
-
-#include <stdio.h>
-
-#ifdef _MSC_VER
-  #define DEBUG_BREAK() __debugbreak()
-#else
-  #define DEBUG_BREAK() __builtin_trap()
-#endif
-
-#define ASSERT(condition, message)                                   \
+#include <stdio.h> //< Only needed for ASSERT() macro and for release mode
+                   //< TODO; macro use this to print a crash report.
+// The internal assertion macro, do not use this. Use ASSERT() instead.
+#define __ASSERT(condition, message)                                 \
   do {                                                               \
     if (!(condition)) {                                              \
       fprintf(stderr, "Assertion failed: %s\n\tat %s() (%s:%i)\n",   \
@@ -37,6 +30,16 @@
       abort();                                                       \
     }                                                                \
   } while (false)
+
+#ifdef DEBUG
+
+#ifdef _MSC_VER
+  #define DEBUG_BREAK() __debugbreak()
+#else
+  #define DEBUG_BREAK() __builtin_trap()
+#endif
+
+#define ASSERT(condition, message) __ASSERT(condition, message)
 
 #define ASSERT_INDEX(index, size) \
   ASSERT(index >= 0 && index < size, "Index out of bounds.")
@@ -65,7 +68,8 @@
 
 #endif // DEBUG
 
-#define TODO ASSERT(false, "TODO")
+// Using __ASSERT() for make it crash in release binary too.
+#define TODO __ASSERT(false, "TODO: It hasn't implemented yet.")
 #define OOPS "Oops a bug!! report plese."
 
 #define STRINGIFY(x) TOSTRING(x)

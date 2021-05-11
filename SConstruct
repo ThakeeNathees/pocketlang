@@ -35,7 +35,7 @@ def CONFIGURE_ENV(env):
 		## Test executable
 		test = env.Program(
 			target  = target_dir + 'pocket' + env['bin_suffix'],
-			source  = [root_dir + 'main/main.c'],
+			source  = Glob('#cli/*.c'),
 			CPPPATH = [root_dir + 'include/'],
 			LIBPATH = target_dir,
 			LIBS    = 'pocket' + env['bin_suffix'],

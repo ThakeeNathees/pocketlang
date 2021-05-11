@@ -413,11 +413,11 @@ static uint32_t _hashObject(Object* obj) {
   }
 }
 
-static uint32_t _hashVar(Var value) {
-  if (IS_OBJ(value)) return _hashObject(AS_OBJ(value));
+uint32_t varHashValue(Var v) {
+  if (IS_OBJ(v)) return _hashObject(AS_OBJ(v));
 
 #if VAR_NAN_TAGGING
-  return utilHashBits(value);
+  return utilHashBits(v);
 #else
   #error TODO:
 #endif
@@ -433,7 +433,7 @@ static bool _mapFindEntry(Map* self, Var key, MapEntry** result) {
 
   // The [start_index] is where the entry supposed to be if there wasn't any
   // collision occured. It'll be the start index for the linear probing.
-  uint32_t start_index = _hashVar(key) % self->capacity;
+  uint32_t start_index = varHashValue(key) % self->capacity;
   uint32_t index = start_index;
 
   // Keep track of the first tombstone after the [start_index] if we don't find
@@ -775,7 +775,23 @@ String* toString(PKVM* vm, Var v, bool recursive) {
         return stringFormat(vm, "@}", result);
       }
 
-      case OBJ_RANGE:  return newStringLength(vm, "[Range]",   7); // TODO;
+      case OBJ_RANGE:
+      {
+        Range* range = (Range*)obj;
+
+        String* from = toString(vm, VAR_NUM(range->from), false);
+        vmPushTempRef(vm, &from->_super);
+
+        String* to = toString(vm, VAR_NUM(range->to), false);
+        vmPushTempRef(vm, &from->_super);
+
+        String* str = stringFormat(vm, "[Range:@..@]", from, to);
+        vmPopTempRef(vm); // to.
+        vmPopTempRef(vm); // from.
+
+        return str;
+      }
+        return newStringLength(vm, "[Range]",   7); // TODO;
       case OBJ_SCRIPT: return stringFormat(vm, "[Lib:@]", ((Script*)obj)->name);
       case OBJ_FUNC:   return stringFormat(vm, "[Func:$]", ((Function*)obj)->name);
       case OBJ_USER:   return newStringLength(vm, "[UserObj]", 9); // TODO;

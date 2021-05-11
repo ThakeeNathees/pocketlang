@@ -1,0 +1,35 @@
+
+## If statement tests.
+variable = null ## Will be changed by the control flow.
+unreachable = func assert(false, 'Unreachable') end
+
+if true then variable = 42
+else unreachable() end
+assert(variable == 42, 'If statement failed.')
+
+if false then unreachable()
+elif true then variable = null
+else unreachable() end
+assert(is_null(variable), 'Elif statement failed.')
+
+if false then unreachable()
+elif false then unreachable()
+elif false then unreachable()
+else variable = "changed" end
+assert(variable == "changed", 'Else statement failed.')
+
+if false then unreachable()
+elif true
+  if false
+    unreachable()
+  elif true
+    variable = 123
+  else
+    unreachable()
+  end
+end
+assert(variable == 123, 'Nested if statement failed.')
+
+print("-------------------")
+print(" IF TESTS DONE     ")
+print("-------------------")

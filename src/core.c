@@ -107,6 +107,11 @@ static inline bool validateIndex(PKVM* vm, int32_t index, int32_t size,
 // Argument getter (1 based).
 #define ARG(n) vm->fiber->ret[n]
 
+// Convinent macro
+#define ARG1 ARG(1)
+#define ARG2 ARG(2)
+#define ARG3 ARG(3)
+
 // Argument count used in variadic functions.
 #define ARGC ((int)(vm->fiber->sp - vm->fiber->ret) - 1)
 
@@ -136,12 +141,12 @@ Script* getCoreLib(String* name) {
 
 #define FN_IS_PRIMITE_TYPE(name, check)       \
   void coreIs##name(PKVM* vm) {               \
-    RET(VAR_BOOL(check(ARG(1))));             \
+    RET(VAR_BOOL(check(ARG1)));             \
   }
 
 #define FN_IS_OBJ_TYPE(name, _enum)                     \
   void coreIs##name(PKVM* vm) {                         \
-    Var arg1 = ARG(1);                                  \
+    Var arg1 = ARG1;                                  \
     if (IS_OBJ(arg1) && AS_OBJ(arg1)->type == _enum) {  \
       RET(VAR_TRUE);                                    \
     } else {                                            \
@@ -161,8 +166,33 @@ FN_IS_OBJ_TYPE(Function,  OBJ_FUNC)
 FN_IS_OBJ_TYPE(Script,  OBJ_SCRIPT)
 FN_IS_OBJ_TYPE(UserObj,  OBJ_USER)
 
+void coreAssert(PKVM* vm) {
+  if (!toBool(ARG1)) {
+    String* msg = NULL;
+    if (AS_OBJ(ARG2)->type != OBJ_STRING) {
+      msg = toString(vm, ARG2, false);
+    } else {
+      msg = (String*)AS_OBJ(ARG2);
+    }
+
+    vmPushTempRef(vm, &msg->_super);
+    vm->fiber->error = stringFormat(vm, "Assertion failed: @", msg);
+    vmPopTempRef(vm);
+  }
+}
+
+// Return the has value of the variable, if it's not hashable it'll return null.
+void coreHash(PKVM* vm) {
+  if (IS_OBJ(ARG1)) {
+    if (!isObjectHashable(AS_OBJ(ARG1)->type)) {
+      RET(VAR_NULL);
+    }
+  }
+  RET(VAR_NUM((double)varHashValue(ARG1)));
+}
+
 void coreToString(PKVM* vm) {
-  RET(VAR_OBJ(&toString(vm, ARG(1), false)->_super));
+  RET(VAR_OBJ(&toString(vm, ARG1, false)->_super));
 }
 
 void corePrint(PKVM* vm) {
@@ -188,16 +218,20 @@ void corePrint(PKVM* vm) {
 /* STD METHODS                                                               */
 /*****************************************************************************/
 
-// 'list' library methods.
-void stdListSort(PKVM* vm) {
-  Var list = ARG(1);
-  if (!IS_OBJ(list) || AS_OBJ(list)->type != OBJ_LIST) {
-    vm->fiber->error = newString(vm, "Expected a list at argument 1.");
+// 'path' library methods .
+//  TODO: path library should be added by the cli (or the hosting application).
+void stdPathAbspath(PKVM* vm) {
+  Var relpath = ARG1;
+  if (!IS_OBJ(relpath) || AS_OBJ(relpath)->type != OBJ_STRING) {
+    vm->fiber->error = newString(vm, "Expected a string at argument 1.");
   }
 
-  // TODO: sort.
-  
-  RET(list);
+  // TODO: abspath.
+  RET(VAR_OBJ(newString(vm, "TODO: abspath")));
+}
+
+void stdPathCurdir(PKVM* vm) {
+  RET(VAR_OBJ(newString(vm, "TODO: curdir")));
 }
 
 // 'os' library methods.
@@ -231,6 +265,8 @@ void initializeCore(PKVM* vm) {
   INITALIZE_BUILTIN_FN("is_script",   coreIsScript,   1);
   INITALIZE_BUILTIN_FN("is_userobj",  coreIsUserObj,  1);
   
+  INITALIZE_BUILTIN_FN("assert",      coreAssert,     2);
+  INITALIZE_BUILTIN_FN("hash",        coreHash,       1);
   INITALIZE_BUILTIN_FN("to_string",   coreToString,   1);
   INITALIZE_BUILTIN_FN("print",       corePrint,     -1);
 
@@ -257,9 +293,10 @@ void initializeCore(PKVM* vm) {
     fn->arity = _arity;                                         \
   } while (false)
 
-  // list
-  STD_NEW_SCRIPT("list");
-  STD_ADD_FUNCTION("sort", stdListSort, 1);
+  // path
+  STD_NEW_SCRIPT("path");
+  STD_ADD_FUNCTION("abspath", stdPathAbspath, 1);
+  STD_ADD_FUNCTION("curdir",  stdPathCurdir, 0);
 
   // os
   STD_NEW_SCRIPT("os");

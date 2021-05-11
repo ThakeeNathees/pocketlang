@@ -436,6 +436,9 @@ bool isValuesSame(Var v1, Var v2);
 // Returns true if both variables are equal (ie v1 == v2).
 bool isValuesEqual(Var v1, Var v2);
 
+// Return the hash valur of the variable. (variable should be hashable).
+uint32_t varHashValue(Var v);
+
 // Return true if the object type is hashable.
 bool isObjectHashable(ObjectType type);
 

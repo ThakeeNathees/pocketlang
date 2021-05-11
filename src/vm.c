@@ -296,7 +296,7 @@ void pkSetRuntimeError(PKVM* vm, const char* format, ...) {
 
 void vmReportError(PKVM* vm) {
   ASSERT(HAS_ERROR(), "runtimeError() should be called after an error.");
-  ASSERT(false, "TODO: create debug.h");
+  TODO; // TODO: create debug.h
 }
 
 PKInterpretResult pkInterpret(PKVM* vm, const char* file) {
@@ -640,7 +640,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       DISPATCH();
     }
 
-    OPCODE(ITER) :
+    OPCODE(ITER):
     {
       Var* iter_value = (vm->fiber->sp - 1);
       Var* iterator   = (vm->fiber->sp - 2);
@@ -729,7 +729,14 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     }
 
     OPCODE(SET_ATTRIB):
-      TODO;
+    {
+      Var value = POP();
+      Var on = POP();
+      String* name = script->names.data[READ_SHORT()];
+      varSetAttrib(vm, on, name, value);
+      PUSH(value);
+      DISPATCH();
+    }
 
     OPCODE(GET_SUBSCRIPT):
     {
@@ -740,7 +747,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       DISPATCH();
     }
 
-    OPCODE(GET_SUBSCRIPT_AOP):
+    OPCODE(GET_SUBSCRIPT_KEEP):
     {
       Var key = *(vm->fiber->sp - 1);
       Var on = *(vm->fiber->sp - 2);
@@ -809,10 +816,28 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(BIT_LSHIFT):
     OPCODE(BIT_RSHIFT):
     OPCODE(AND):
-    OPCODE(OR):
-    OPCODE(EQEQ):
-    OPCODE(NOTEQ):
       TODO;
+
+    OPCODE(OR):
+    {
+      TODO;
+      // Python like or operator.
+      //Var v1 = POP(), v2 = POP();
+      //if (toBool(v1)) {
+      //  PUSH(v1);
+      //} else {
+      //  PUSH(v2);
+      //}
+      DISPATCH();
+    }
+
+    OPCODE(EQEQ):
+      PUSH(VAR_BOOL(isValuesEqual(POP(), POP())));
+      DISPATCH();
+
+    OPCODE(NOTEQ):
+      PUSH(VAR_BOOL(!isValuesEqual(POP(), POP())));
+      DISPATCH();
 
     OPCODE(LT):
     {
@@ -822,7 +847,19 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     }
 
     OPCODE(LTEQ):
-      TODO;
+    {
+      Var l = POP(), r = POP();
+      bool lteq = varLesser(vm, l, r);
+      CHECK_ERROR();
+
+      if (!lteq) {
+        lteq = isValuesEqual(l, r);
+        CHECK_ERROR();
+      }
+
+      PUSH(VAR_BOOL(lteq));
+      DISPATCH();
+    }
 
     OPCODE(GT):
     {
@@ -832,7 +869,19 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     }
 
     OPCODE(GTEQ):
-      TODO;
+    {
+      Var l = POP(), r = POP();
+      bool gteq = varGreater(vm, l, r);
+      CHECK_ERROR();
+
+      if (!gteq) {
+        gteq = isValuesEqual(l, r);
+        CHECK_ERROR();
+      }
+
+      PUSH(VAR_BOOL(gteq));
+      DISPATCH();
+    }
 
     OPCODE(RANGE):
     {
@@ -846,6 +895,8 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     }
 
     OPCODE(IN):
+      // TODO: Implement bool varContaines(vm, on, value);
+
     OPCODE(END):
       TODO;
       break;
