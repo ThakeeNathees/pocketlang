@@ -3,16 +3,20 @@
 
 #header {
   border-bottom: 1px solid #ccc;
+  margin-top: 20px;
 }
 
 #header h1 {
-  font-size: 36px;
-  margin: 0;
-  color: #000;
-}
+    margin: 55px 0 0 0;
+    color: #000;
+
+    font-family: 'Rage Italic';
+    font-weight: normal;
+    font-size: 80px; /*42px*/
+  }
 
 #header h2 {
-  margin: 5px 0 0;
+  margin: 0 0px 30px 10px;
   font-size: 14px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -22,8 +26,10 @@
 #header_content > a {
   text-decoration: none;
   display: inline-block;
-  padding: 15px 0 0 74px;
-  margin: 0 0 15px -4px;
+  padding: 0 0 15px 110px;
+  margin: 0 0 0 15px;
+  background: url(icon.png) no-repeat;
+  background-size: 100px;
 }
 
 #main {
@@ -91,7 +97,7 @@ a:hover {
 
 ul {
   margin: 20px 0;
-  list-style: square outside;
+  list-style: circle;
 }
 
 ol {
@@ -175,25 +181,31 @@ pre {
   }
 }
 
-@media screen and (max-width: 380px) {
-  #header h1 { font-size: 30px; }
-  #header h2 {
-    font-size: 13px;
-    margin: 0;
+@media screen and (max-width: 480px) {
+  #header h1 {
+    font-size: 70px; /*30px*/
+    margin: 0 0 0 0;
   }
 
-  #header_content { padding-top: 10px; }
+  #header h2 {
+    font-size: 13px;
+    margin: 0 0 0 5px;
+  }
+
+  #header_content {
+    padding-top: 10px;
+  }
+
   #header_content > a {
     background-size: 44px 44px;
     background-position: left 10px;
-    padding: 15px 0 0 50px;
+    background: none;
+    padding: 15px 0 0 10%;
     margin: 0 0 15px -12px;
   }
-  
+
   #content-wrapper,
   #sidebar-wrapper {
-    padding:10px;
+    padding: 10px;
   }
-  
 }
-

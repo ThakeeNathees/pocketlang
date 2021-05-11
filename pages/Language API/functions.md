@@ -2,9 +2,9 @@
 # Functions
 
 ```ruby
-def f():
+def f()
 	print('test')
-	if false then puts "" end
+end
 ```
 
 ## Another title
@@ -12,9 +12,9 @@ def f():
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud 
 
 ```ruby
-def f():
-	print('test')
-	if false then puts "" end
+fn = func print('test') end
+
+f2 = func(arg) print('arg =', arg) end
 ```
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud 

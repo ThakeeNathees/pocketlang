@@ -6,7 +6,7 @@ import os, sys, shutil
 ##   to clean pages    : python generate.py (-c, --clean)
 
 TEMPLATE_PATH = 'static/template.html'
-ROOT_URL      = 'file:///C:/dev/pocketlang/'
+ROOT_URL      = 'file:///C:/dev/pocketlang/docs/'
 ROOT_URL      = 'https://thakeenathees.github.io/pocketlang/'
 
 ## Home page should be in the SOURCE_DIR.
@@ -106,10 +106,21 @@ def md2content(md_text):
 	
 	## FIXME: I should create a pygment lexer.
 	## A dirty way to inject our keyword (to ruby's).
-	addnl_keywords = [ 'from', 'import', 'as' ]
+	addnl_keywords = [
+		'null', 'from', 'import', 'as', 'func', 'native', 'elif', 'continue'
+	]
+	not_keyword = [
+		 'alias', 'begin', 'case', 'class', 'next', 'nil', 'redo', 'rescue',
+		 'retry', 'elsif', 'ensure', 'undef', 'unless', 'super', 'until', 'when',
+		  'defined',
+  ]
+
 	for kw in addnl_keywords:
-		content = content.replace(	'<span class="n">%s</span>'%kw, 
+		content = content.replace(	'<span class="n">%s</span>' % kw, 
 									'<span class="k">%s</span>' % kw)
+	for nk in not_keyword:
+		content = content.replace(	'<span class="k">%s</span>' % nk, 
+									'<span class="n">%s</span>' % nk)
 	return content
 
 if __name__ == '__main__':
