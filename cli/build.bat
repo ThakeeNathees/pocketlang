@@ -145,7 +145,7 @@ goto :CLEAN
 :LINK_DLL
 call :ColorText 0d "pocket.dll"
 echo.
-link /nologo /dll /out:..\build\pocket.dll /implib:..\build\pocket.lib %src_obj_files%
+link /nologo /dll /out:..\build\pocket.dll /implib:..\build\pocket-dll.lib %src_obj_files%
 
 :CLEAN
 
@@ -156,6 +156,13 @@ for %%o in (%src_obj_files%) do (
 for %%o in (%cli_obj_files%) do (
 	del "%%o"
 )
+
+if exist "..\build\pocket-dl.exp" (
+	del "..\build\pocket-dl.exp"
+)
+
+:: Copy the include files.
+xcopy /s /i /y ..\src\include ..\build\include
 
 echo.
 call :ColorText 0a "Compilation Success"
@@ -178,5 +185,3 @@ echo off
 findstr /v /a:%1 /R "^$" "%~2" nul
 del "%~2" > nul 2>&1
 goto :eof
-
-

@@ -317,6 +317,10 @@ void markCoreObjects(PKVM* vm) {
 /* OPERATORS                                                                 */
 /*****************************************************************************/
 
+#define UNSUPPORT_OPERAND_TYPES(op)                                    \
+  vm->fiber->error = stringFormat(vm, "Unsupported operand types for " \
+    "operator '" op "' $ and $", varTypeName(v1), varTypeName(v2))
+
 Var varAdd(PKVM* vm, Var v1, Var v2) {
 
   double d1, d2;
@@ -351,9 +355,7 @@ Var varAdd(PKVM* vm, Var v1, Var v2) {
     }
   }
 
-  vm->fiber->error = stringFormat(vm, "Unsupported operand types for operator '+' "
-    "$ and $", varTypeName(v1), varTypeName(v2));
-
+  UNSUPPORT_OPERAND_TYPES("+");
   return VAR_NULL;
 }
 
@@ -366,11 +368,7 @@ Var varSubtract(PKVM* vm, Var v1, Var v2) {
     return VAR_NULL;
   }
 
-  TODO; // for user objects call vm.config.sub_userobj_sub(handles).
-
-  vm->fiber->error = stringFormat(vm, "Unsupported operand types for operator '-' "
-    "$ and $", varTypeName(v1), varTypeName(v2));
-
+  UNSUPPORT_OPERAND_TYPES("-");
   return VAR_NULL;
 }
 
@@ -384,8 +382,7 @@ Var varMultiply(PKVM* vm, Var v1, Var v2) {
     return VAR_NULL;
   }
 
-  vm->fiber->error = stringFormat(vm, "Unsupported operand types for operator "
-    "'*' $ and $", varTypeName(v1), varTypeName(v2));
+  UNSUPPORT_OPERAND_TYPES("*");
   return VAR_NULL;
 }
 
@@ -398,8 +395,26 @@ Var varDivide(PKVM* vm, Var v1, Var v2) {
     return VAR_NULL;
   }
 
-  vm->fiber->error = stringFormat(vm, "Unsupported operand types for operator "
-    "'/' $ and $", varTypeName(v1), varTypeName(v2));
+  UNSUPPORT_OPERAND_TYPES("/");
+  return VAR_NULL;
+}
+
+Var varModulo(PKVM* vm, Var v1, Var v2) {
+
+  double d1, d2;
+  if (isNumeric(v1, &d1)) {
+    if (validateNumeric(vm, v2, &d2, "Right operand")) {
+      return VAR_NUM(fmod(d1, d2));
+    }
+    return VAR_NULL;
+  }
+
+  if (IS_OBJ(v1) && AS_OBJ(v1)->type == OBJ_STRING) {
+    String* str = (String*)AS_OBJ(v1);
+    TODO; // "fmt" % v2.
+  }
+
+  UNSUPPORT_OPERAND_TYPES("%");
   return VAR_NULL;
 }
 

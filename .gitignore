@@ -1,8 +1,8 @@
 
 # PocketLang ignore list
 
-# Docs branch cloned into the docs sub directory
-docs/
+# Docs branch cloned into the docs/build sub directory
+docs/build/
 
 build/
 bin/

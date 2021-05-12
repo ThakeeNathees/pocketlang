@@ -810,6 +810,10 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       DISPATCH();
 
     OPCODE(MOD):
+      PUSH(varModulo(vm, POP(), POP()));
+      CHECK_ERROR();
+      DISPATCH();
+
     OPCODE(BIT_AND):
     OPCODE(BIT_OR):
     OPCODE(BIT_XOR):

@@ -11,32 +11,18 @@ The language is written using [Wren Language](https://wren.io/) and their wonder
 ### What PocketLang looks like
 
 ```ruby
+# Python like import statement.
+from os import clock as now
 
-## Find and return the maximum value in the [list].
-def get_max(list)
-  ret = list[0]
-  for i in 1..list.length
-    ret = max(ret, list[i])
-  end
-  return ret
+# A recursive fibonacci function.
+def fib(n)
+  if n < 2 then return n end
+  return fib(n-1) + fib(n-2)
 end
 
-## Return a list where each element returns true with function [fn] and
-## belongs to [list].
-def filter(list, fn)
-  ret = []
-  for elem in list
-    if fn(elem)
-      list_append(ret, elem)
-    end
-  end
-  return ret
+# Prints all fibonacci from 0 to 100 exclusive.
+for i in 0..100
+  print("fib(%) ="%i, fib(i))
 end
-
-## A list of range literal, first class functions and more types.
-list = [42, null, 0..10, function() print('hello') end, [3.14]]
-nums = filter(list, is_num)
-print("Max is", get_max(nums))
-
 ```
 

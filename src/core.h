@@ -42,6 +42,7 @@ Var varAdd(PKVM* vm, Var v1, Var v2);
 Var varSubtract(PKVM* vm, Var v1, Var v2);
 Var varMultiply(PKVM* vm, Var v1, Var v2);
 Var varDivide(PKVM* vm, Var v1, Var v2);
+Var varModulo(PKVM* vm, Var v1, Var v2);
 
 bool varGreater(PKVM* vm, Var v1, Var v2);
 bool varLesser(PKVM* vm, Var v1, Var v2);
