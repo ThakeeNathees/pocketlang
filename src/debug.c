@@ -69,6 +69,11 @@ static void _dumpValue(PKVM* vm, Var value, bool recursive) {
     case OBJ_FUNC:
       printf("[Fn:%p]", obj);
       return;
+
+    case OBJ_FIBER:
+      printf("[Fn:%p]", obj);
+      return;
+
     case OBJ_USER:
       printf("[UserObj:%p]", obj);
       return;

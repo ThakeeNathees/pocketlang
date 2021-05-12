@@ -411,6 +411,9 @@ static uint32_t _hashObject(Object* obj) {
       UNREACHABLE();
       break;
   }
+
+  UNREACHABLE();
+  return -1;
 }
 
 uint32_t varHashValue(Var v) {
@@ -651,6 +654,7 @@ const char* varTypeName(Var v) {
     case OBJ_RANGE:   return "Range";
     case OBJ_SCRIPT:  return "Script";
     case OBJ_FUNC:    return "Func";
+    case OBJ_FIBER:   return "Fiber";
     case OBJ_USER:    return "UserObj";
     default:
       UNREACHABLE();
@@ -794,6 +798,7 @@ String* toString(PKVM* vm, Var v, bool recursive) {
         return newStringLength(vm, "[Range]",   7); // TODO;
       case OBJ_SCRIPT: return stringFormat(vm, "[Lib:@]", ((Script*)obj)->name);
       case OBJ_FUNC:   return stringFormat(vm, "[Func:$]", ((Function*)obj)->name);
+      case OBJ_FIBER:  return newStringLength(vm, "[Fiber]", 7); // TODO;
       case OBJ_USER:   return newStringLength(vm, "[UserObj]", 9); // TODO;
         break;
     }

@@ -1,3 +1,7 @@
+#!python
+## Copyright (c) 2021 Thakee Nathees
+## Licensed under: MIT License
+
 from markdown import markdown
 from os.path import join
 import os, sys, shutil
@@ -8,7 +12,7 @@ import os, sys, shutil
 
 TEMPLATE_PATH = 'static/template.html'
 ROOT_URL      = 'file:///C:/dev/pocketlang/docs/build/'
-#ROOT_URL     = 'https://thakeenathees.github.io/pocketlang/'
+ROOT_URL     = 'https://thakeenathees.github.io/pocketlang/'
 
 ## Home page should be in the SOURCE_DIR.
 HOME_PAGE  = 'home.md'

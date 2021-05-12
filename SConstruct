@@ -1,4 +1,8 @@
 #!python
+##  Copyright (c) 2020-2021 Thakee Nathees
+##  Licensed under: MIT License
+ 
+
 import os, subprocess, sys
 
 def CONFIGURE_ENV(env):

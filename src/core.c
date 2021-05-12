@@ -243,7 +243,6 @@ void stdOsClock(PKVM* vm) {
 /* CORE INITIALIZATION                                                       */
 /*****************************************************************************/
 void initializeCore(PKVM* vm) {
-
   ASSERT(builtins_count == 0, "Initialize core only once.");
 
 #define INITALIZE_BUILTIN_FN(name, fn, argc)                 \
