@@ -1534,7 +1534,7 @@ function createExportWrapper(name, fixedasm) {
   };
 }
 
-var wasmBinaryFile = 'try_online.wasm';
+var wasmBinaryFile = 'try_now.wasm';
 if (!isDataURI(wasmBinaryFile)) {
   wasmBinaryFile = locateFile(wasmBinaryFile);
 }
@@ -1844,13 +1844,14 @@ var ASM_CONSTS = {
     }
 
   function _js_errorPrint(message, line) {
-  		alert("Error: "+ AsciiToString(message) + line);
+  		var out = document.getElementById("output");
+  		out.innerText += "Error: "+ AsciiToString(message) + " at:" + line;
+  		//alert("Error: "+ AsciiToString(message) + line);
   	}
 
   function _js_writeFunction(message) {
-  		var out = document.getElementById("out");
+  		var out = document.getElementById("output");
   		out.innerText += AsciiToString(message)
-  		//alert("Msg: " + AsciiToString(message));
   	}
 
   function _setTempRet0($i) {

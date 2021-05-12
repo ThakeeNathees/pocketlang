@@ -1,14 +1,32 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title>Build From Source - PocketLang</title>
+	<title>Try It Now - PocketLang</title>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<link rel="stylesheet" type="text/css" href="../static/main.css">
 	<link rel="stylesheet" type="text/css" href="../static/pygments.css">
 	<link rel="stylesheet" type="text/css" href="../static/rage_font/style.css" />
 	
 	<!-- Additional javascript css files for wasm try. -->
+		<script type="text/javascript"         src="../static/codejar/codejar.js"></script>
+    <script type="text/javascript"         src="../static/codejar/linenumbers.js"></script>
+    <link rel="stylesheet" type="text/css" href="../static/codejar/style.css" />
+    
+    <script type="text/javascript"         src="../static/prism/prism.js"></script>
+    <link rel="stylesheet" type="text/css" href="../static/prism/prism.css" />
 	
+	<script type = "text/javascript">
+		var runSource;
+		window.onload = function() { // called after index.html is loaded -> Module is defined.
+			runSource = Module.cwrap('runSource', 'number', ['string']);
+			document.getElementById("run-button").onclick = function() {
+				document.getElementById('output').innerText = '';
+				const source = document.querySelector('.editor').textContent;
+				runSource(source);
+			}
+		}
+    </script>
+
 
 </head>
 	
@@ -32,12 +50,39 @@
 	
 		<div id="content-wrapper">
 		<div id="content">
-			<h1>Build From Source</h1>
-<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
-<h2>Platform 1</h2>
-<p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
-<h2>Platform 2</h2>
-<p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+			<main id="code-editor">
+
+	<div id="try-title">
+	<p>code editor</p> <a id="run-button">run</a>
+	</div>
+	
+	<div class="editor language-ruby" id="code-area">print('hello world!')</div>
+	
+	<p>output</p>
+	<pre><div id="output">...</div></pre>
+</main>
+	
+<script type="module">
+	const editor = document.querySelector('.editor')
+	
+	const highlight = editor => {
+		// highlight.js does not trim old tags,
+		// let's do it by this hack.
+		editor.textContent = editor.textContent;
+		editor.innerHTML = Prism.highlight(editor.textContent, Prism.languages.ruby, 'ruby');
+	}
+	
+	const jar = CodeJar(editor, withLineNumbers(highlight), {
+		indentOn: /[(\[{]$/
+	})
+	
+	jar.updateCode(localStorage.getItem('code'))
+	jar.onUpdate(code => {
+		localStorage.setItem('code', code)
+	})
+</script>
+
+<script async type="text/javascript" src="../static/try_now.js"></script>
 		</div>
 		</div>
 

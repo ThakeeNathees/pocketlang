@@ -86,9 +86,27 @@
   color: #111;
 }
 
+
+#try-title {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 5px 0;
+}
+
+#run-button {
+	margin: 30px 5px 0 0;
+	font-size: 26px;
+}
+
+#code-editor p {
+  color : #9b9ea1;
+  margin-top: 30px;
+}
+
 a {
   color: hsl(200, 60%, 50%);
   text-decoration: none;
+  cursor: pointer;
 }
 
 a:hover {

@@ -6,6 +6,9 @@
 	<link rel="stylesheet" type="text/css" href="{{ STATIC_DIR }}main.css">
 	<link rel="stylesheet" type="text/css" href="{{ STATIC_DIR }}pygments.css">
 	<link rel="stylesheet" type="text/css" href="{{ STATIC_DIR }}rage_font/style.css" />
+	
+	<!-- Additional javascript css files for wasm try. -->
+	{{ WASM_SOURCE_FILES }}
 
 </head>
 	
@@ -15,7 +18,7 @@
 	<div class="container">
 	<div id="header">
 		<div id="header_content" class="container">
-		<a href="{{ ROOT_URL }}">
+		<a href="{{ HOME_URL }}">
 		<h1>pocketlang</h1>
 		<h2>A small and fast language</h2>
 		</a>
