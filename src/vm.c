@@ -290,6 +290,7 @@ static inline void pushCallFrame(PKVM* vm, Function* fn) {
 }
 
 void pkSetRuntimeError(PKVM* vm, const char* format, ...) {
+
   vm->fiber->error = newString(vm, "TODO:");
   TODO; // Construct String and set to vm->fiber->error.
 }
@@ -297,6 +298,28 @@ void pkSetRuntimeError(PKVM* vm, const char* format, ...) {
 void vmReportError(PKVM* vm) {
   ASSERT(HAS_ERROR(), "runtimeError() should be called after an error.");
   TODO; // TODO: create debug.h
+}
+
+// FIXME: temp.
+PKInterpretResult pkInterpretSource(PKVM* vm, const char* source) {
+  String* name = newString(vm, "@module");
+  vmPushTempRef(vm, &name->_super);
+
+  Script* scr = newScript(vm, name);
+  vmPushTempRef(vm, &scr->_super);
+  mapSet(vm->scripts, vm, VAR_OBJ(&name->_super), VAR_OBJ(&scr->_super));
+  vmPopTempRef(vm);
+
+  vmPopTempRef(vm); // name
+
+  // Compile the source.
+  bool success = compile(vm, scr, source);
+  //if (res.on_done) res.on_done(vm, res);
+
+  if (!success) return PK_RESULT_COMPILE_ERROR;
+  vm->script = scr;
+
+  return vmRunScript(vm, scr);
 }
 
 PKInterpretResult pkInterpret(PKVM* vm, const char* file) {
@@ -789,30 +812,48 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(BIT_NOT):
       TODO;
 
+    // Do not ever use PUSH(binaryOp(vm, POP(), POP()));
+    // Function parameters are not evaluated in a defined order in C.
+
     OPCODE(ADD):
-      PUSH(varAdd(vm, POP(), POP()));
+    {
+      Var r = POP(), l = POP();
+      PUSH(varAdd(vm, l, r));
       CHECK_ERROR();
       DISPATCH();
+    }
 
     OPCODE(SUBTRACT):
-      PUSH(varSubtract(vm, POP(), POP()));
+    {
+      Var r = POP(), l = POP();
+      PUSH(varSubtract(vm, l, r));
       CHECK_ERROR();
       DISPATCH();
+    }
 
     OPCODE(MULTIPLY):
-      PUSH(varMultiply(vm, POP(), POP()));
+    {
+      Var r = POP(), l = POP();
+      PUSH(varMultiply(vm, l, r));
       CHECK_ERROR();
       DISPATCH();
+    }
 
     OPCODE(DIVIDE):
-      PUSH(varDivide(vm, POP(), POP()));
+    {
+      Var r = POP(), l = POP();
+      PUSH(varDivide(vm, l, r));
       CHECK_ERROR();
       DISPATCH();
+    }
 
     OPCODE(MOD):
-      PUSH(varModulo(vm, POP(), POP()));
+    {
+      Var r = POP(), l = POP();
+      PUSH(varModulo(vm, r, l));
       CHECK_ERROR();
       DISPATCH();
+    }
 
     OPCODE(BIT_AND):
     OPCODE(BIT_OR):
@@ -835,24 +876,31 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       DISPATCH();
     }
 
-    OPCODE(EQEQ):
-      PUSH(VAR_BOOL(isValuesEqual(POP(), POP())));
+    OPCODE(EQEQ) :
+    {
+      Var r = POP(), l = POP();
+      PUSH(VAR_BOOL(isValuesEqual(l, r)));
       DISPATCH();
+    }
 
     OPCODE(NOTEQ):
-      PUSH(VAR_BOOL(!isValuesEqual(POP(), POP())));
+    {
+      Var r = POP(), l = POP();
+      PUSH(VAR_BOOL(!isValuesEqual(l, r)));
       DISPATCH();
+    }
 
     OPCODE(LT):
     {
-      PUSH(VAR_BOOL(varLesser(vm, POP(), POP())));
+      Var r = POP(), l = POP();
+      PUSH(VAR_BOOL(varLesser(vm, l, r)));
       CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(LTEQ):
     {
-      Var l = POP(), r = POP();
+      Var r = POP(), l = POP();
       bool lteq = varLesser(vm, l, r);
       CHECK_ERROR();
 
@@ -867,14 +915,15 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(GT):
     {
-      PUSH(VAR_BOOL(varGreater(vm, POP(), POP())));
+      Var r = POP(), l = POP();
+      PUSH(VAR_BOOL(varGreater(vm, l, r)));
       CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(GTEQ):
     {
-      Var l = POP(), r = POP();
+      Var r = POP(), l = POP();
       bool gteq = varGreater(vm, l, r);
       CHECK_ERROR();
 

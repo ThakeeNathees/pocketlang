@@ -12,6 +12,7 @@ extern "C" {
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
 // The version number macros.
 #define PK_VERSION_MAJOR 0
@@ -160,6 +161,11 @@ PK_PUBLIC PKVM* pkNewVM(pkConfiguration* config);
 
 // Clean the VM and dispose all the resources allocated by the VM.
 PK_PUBLIC void pkFreeVM(PKVM* vm);
+
+// FIXME: Refactor this
+// Interpret the source and return the result. This is a temporary code to test
+// try_online.
+PK_PUBLIC PKInterpretResult pkInterpretSource(PKVM* vm, const char* source);
 
 // Compile and execut file at given path.
 PK_PUBLIC PKInterpretResult pkInterpret(PKVM* vm, const char* file);
