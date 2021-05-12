@@ -11,11 +11,12 @@ mergeInto(LibraryManager.library, {
 	/** js_func_name : function() {...} */
 	
 	js_errorPrint : function(message, line) {
-		alert("Error: "+ AsciiToString(message) + line);
+		var out = document.getElementById("output");
+		out.innerText += "Error: "+ AsciiToString(message) + " at:" + line + '\n';
 	},
 	
 	js_writeFunction : function(message) {
-		var out = document.getElementById("out");
+		var out = document.getElementById("output");
 		out.innerText += AsciiToString(message)
 	},
 });

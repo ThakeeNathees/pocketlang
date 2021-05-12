@@ -3,7 +3,6 @@
 
 # Docs branch cloned into the docs/build sub directory
 docs/build/
-docs/try/build/
 
 build/
 bin/

@@ -10,8 +10,8 @@ from os.path import join
 
 SRC_DIR     = '../../src/'
 JS_API_PATH = './js_api.js'
-TARGET_DIR  = 'build/'
-TARGET_NAME = 'try_online.html'
+TARGET_DIR  = '../static/'
+TARGET_NAME = 'try_now.html'
 
 def main():
   sources = ' '.join(collect_source_files())

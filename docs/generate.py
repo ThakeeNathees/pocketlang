@@ -6,19 +6,68 @@ from markdown import markdown
 from os.path import join
 import os, sys, shutil
 
+## TODO: This is a quick and dirty script to generate html
+##       from markdown. Refactor this file in the future.
+
 ## Usage:
 ##   to generate pages : python generate.py
 ##   to clean pages    : python generate.py (-c, --clean)
 
 TEMPLATE_PATH = 'static/template.html'
-ROOT_URL      = 'file:///C:/dev/pocketlang/docs/build/'
-ROOT_URL     = 'https://thakeenathees.github.io/pocketlang/'
+ROOT_URL      = 'http://localhost:8000/'
+ROOT_URL      = 'https://thakeenathees.github.io/pocketlang/'
 
 ## Home page should be in the SOURCE_DIR.
 HOME_PAGE  = 'home.md'
+TRY_PAGE   = 'try it now.html'
 SOURCE_DIR = 'pages/'
 TARGET_DIR = 'build/'
 STATIC_DIR = 'static/'
+
+## Additional source files of wasm try online page.
+WASM_SOURCE_FILES = '''\
+	<script type="text/javascript"         src="{{ STATIC_DIR }}codejar/codejar.js"></script>
+    <script type="text/javascript"         src="{{ STATIC_DIR }}codejar/linenumbers.js"></script>
+    <link rel="stylesheet" type="text/css" href="{{ STATIC_DIR }}codejar/style.css" />
+    
+    <script type="text/javascript"         src="{{ STATIC_DIR }}prism/prism.js"></script>
+    <link rel="stylesheet" type="text/css" href="{{ STATIC_DIR }}prism/prism.css" />
+	
+	<script type = "text/javascript">
+		var runSource;
+		window.onload = function() { // called after index.html is loaded -> Module is defined.
+			runSource = Module.cwrap('runSource', 'number', ['string']);
+			document.getElementById("run-button").onclick = function() {
+				document.getElementById('output').innerText = '';
+				const source = document.querySelector('.editor').textContent;
+				runSource(source);
+			}
+		}
+    </script>
+'''
+
+## Navigation pages in order. Should match the path names.
+PAGES = [
+	('Getting Started', [
+		TRY_PAGE,
+		'build from source.md',
+		'contributing.md',
+	]),
+	
+	('Language API', [
+		'variables.md',
+		'functions.md',
+	]),
+]
+
+def new_context():
+	return {
+		'{{ TITLE }}'      : '',
+		'{{ NAVIGAION }}'  : '',
+		'{{ CONTENT }}'    : '',
+		'{{ HOME_URL }}'   : '',
+		'{{ STATIC_DIR }}' : '',
+	}
 
 def main():
 	
@@ -31,8 +80,7 @@ def main():
 				shutil.rmtree(join(TARGET_DIR, _dir))
 			else:
 				os.remove(join(TARGET_DIR, _dir))
-	
-	#shutil.rmtree(TARGET_DIR, ignore_errors=True)
+
 	shutil.copytree(STATIC_DIR, join(TARGET_DIR, STATIC_DIR))
 	open(join(TARGET_DIR, '.nojekyll'), 'w').close()
 	
@@ -43,87 +91,100 @@ def main():
 		template = f.read()
 		
 	## Generate the home page.
-	generate_page(join(SOURCE_DIR, HOME_PAGE),
-		          join(TARGET_DIR, 'index.html'),
-		          template, navigation)
+	index_html = join(TARGET_DIR, 'index.html')
+	ctx = generate_page_context(join(SOURCE_DIR, HOME_PAGE), index_html, navigation)
+	write_page(ctx, template, index_html)
 	
-	## Generate the content pages.
-	for _dir in os.listdir(SOURCE_DIR):
-		if os.path.isfile(join(SOURCE_DIR, _dir)):
-			if _dir == HOME_PAGE: continue
+	for entry in PAGES:
+		_dir = entry[0]
+		for file in entry[1]:
+			ext = get_validated_ext(file)
+			path = join(SOURCE_DIR, _dir, file)
 			
-			path = join(SOURCE_DIR, _dir)
-			dst  = join(TARGET_DIR, _dir)
-			generate_page(path, dst, template, navigation)
-		else:
-			for file in os.listdir(join(SOURCE_DIR,_dir)):
-				assert(file.endswith('.md'))
-				path = join(SOURCE_DIR, _dir, file)
-				dst  = join(TARGET_DIR, _dir, file.replace('.md', '.html'))
-				generate_page(path, dst, template, navigation)
+			dst = ''
+			if ext == '.md' : dst = join(TARGET_DIR, _dir, file.replace('.md', '.html'))
+			else: dst = join(TARGET_DIR, _dir, file)
+			ctx = generate_page_context(path, dst, navigation)
+			
+			_template = template
+			if file == TRY_PAGE:
+				_template = template.replace('{{ WASM_SOURCE_FILES }}', WASM_SOURCE_FILES)
+			
+			write_page(ctx, _template, dst)
 	pass
 
 def generate_navigation():
 	navigation = ''
-	for _dir in os.listdir(SOURCE_DIR):
-		if os.path.isfile(join(SOURCE_DIR, _dir)):
-			if _dir == HOME_PAGE: continue
-			assert() ## TODO:
-		else:
-			navigation += '<div class="navigation">\n'
-			navigation += '<h3><strong>%s</strong></h3>\n' % (_dir)
-			navigation += '<ul class="menu">\n'
+	for entry in PAGES:
+		_dir = entry[0]
+		navigation += '<div class="navigation">\n'
+		navigation += '<h3><strong>%s</strong></h3>\n' % (_dir)
+		navigation += '<ul class="menu">\n'
+		
+		for file in entry[1]:
+			ext = get_validated_ext(file)
 			
-			for file in os.listdir(join(SOURCE_DIR, _dir)):
-				assert(file.endswith('.md'))
-				
-				link = join(ROOT_URL, _dir, file.replace('.md', '.html'))
-				title = file.replace('.md', '')
-				navigation += '<li><a href="%s">%s</a></li>\n' % (link, title)
-			navigation += '</ul>\n'
-			navigation += '</div>\n'
+			link = '' ## Assuming that file name don't contain '.md' at the middle.
+			if ext == '.md': link = join(ROOT_URL, _dir, file.replace('.md', '.html'))
+			else: link = join(ROOT_URL, _dir, file)
+			link = link.replace('\\', '/')
 			
+			title = file.replace(ext, '')
+			navigation += '<li><a href="%s">%s</a></li>\n' % (link, title)
+			
+		navigation += '</ul>\n'
+		navigation += '</div>\n'
 	return navigation
-
-def generate_page(src, dst, template, navigation):
-	assert(src.endswith('.md'))
 	
-	_dir = os.path.dirname(dst)
-	if _dir not in ('.', './', '') and not os.path.exists(_dir):
-		os.makedirs(os.path.dirname(dst))
 
-	## get the title.
-	title = os.path.basename(src).replace('.md', '').title()
+def generate_page_context(src, dst, navigation):
+	title = path_to_title(src)
+	static_dir = relative_static_dir(dst)
+	content = path_to_content(src)
+	ctx = new_context()
+	ctx[ '{{ TITLE }}'     ]   = title
+	ctx[ '{{ NAVIGAION }}' ]   = navigation
+	ctx[ '{{ CONTENT }}'   ]   = content
+	ctx[ '{{ HOME_URL }}'  ]   = ROOT_URL + 'index.html'
+	ctx[ '{{ STATIC_DIR }}']   = static_dir
+	return ctx;
+
+def get_validated_ext(path)	:
+	ext = ''
+	if path.endswith('.md'): ext = '.md'
+	elif path.endswith('.html'): ext = '.html'
+	else: raise Exception('Expected .md / .html file.')
+	return ext
+
+## Get the title from the src path.
+def path_to_title(path):
+	ext = get_validated_ext(path)
+	title = os.path.basename(path).replace(ext, '').title()
 	title += ' - PocketLang'
+	return title
 
-	## get the relative static dir.
-	static_dir = os.path.relpath(join(TARGET_DIR,STATIC_DIR), _dir)
+## Return the static dir relative path.
+def relative_static_dir(dst):
+	_dir = os.path.dirname(dst)
+	static_dir = os.path.relpath(join(TARGET_DIR, STATIC_DIR), _dir)
 	static_dir = static_dir.replace('\\', '/')
 	if static_dir[-1] != '/':
 		static_dir += '/'
+	return static_dir
 
-	content = ''
-	with open(src, 'r') as home_md:
-		content = md2content(home_md.read())
-		
-	ctx = {
-		'{{ TITLE }}'     : title,
-		'{{ NAVIGAION }}' : navigation,
-		'{{ CONTENT }}'   : content,
-		
-		'{{ ROOT_URL }}'  : ROOT_URL + 'index.html',
-		'{{ STATIC_DIR }}': static_dir,
-	}
+## Generate html content from the markdown source path.
+## If the path is an .html file return it's content.
+def path_to_content(src):
 	
-	page = template
-	for key, value in ctx.items():
-		page = page.replace(key, value)
+	text = ''
+	with open(src, 'r') as home_md:
+		text = home_md.read()
 		
-	with open(dst, 'w') as f:
-		f.write(page)
-
-def md2content(md_text):
-	content = markdown(md_text, extensions=['codehilite', 'fenced_code'])
+	## If html file we're done.
+	if get_validated_ext(src) == '.html':
+		return text
+	
+	content = markdown(text, extensions=['codehilite', 'fenced_code'])
 	
 	## FIXME: I should create a pygment lexer.
 	## A dirty way to inject our keyword (to ruby's).
@@ -134,15 +195,30 @@ def md2content(md_text):
 		 'alias', 'begin', 'case', 'class', 'next', 'nil', 'redo', 'rescue',
 		 'retry', 'elsif', 'ensure', 'undef', 'unless', 'super', 'until', 'when',
 		  'defined',
-  ]
+	]
 
 	for kw in addnl_keywords:
-		content = content.replace(	'<span class="n">%s</span>' % kw, 
-									'<span class="k">%s</span>' % kw)
+		content = content.replace('<span class="n">%s</span>' % kw, 
+								   '<span class="k">%s</span>' % kw)
 	for nk in not_keyword:
-		content = content.replace(	'<span class="k">%s</span>' % nk, 
-									'<span class="n">%s</span>' % nk)
+		content = content.replace('<span class="k">%s</span>' % nk, 
+								  '<span class="n">%s</span>' % nk)
 	return content
+
+def write_page(ctx, template, dst):
+	_dir = os.path.dirname(dst)
+	if _dir not in ('.', './', '') and not os.path.exists(_dir):
+		os.makedirs(os.path.dirname(dst))
+		
+	page = template
+	for key, value in ctx.items():
+		page = page.replace(key, value)
+		
+	page = page.replace('{{ WASM_SOURCE_FILES }}', '')
+		
+	with open(dst, 'w') as f:
+		f.write(page)
+	
 
 if __name__ == '__main__':
 	main()
