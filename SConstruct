@@ -14,18 +14,18 @@ def CONFIGURE_ENV(env):
 	
 	## PocketLang source files
 	SOURCES = [
-		Glob(root_dir + '*.c'),
-		Glob(root_dir + 'buffers/*.c'),
+		Glob(root_dir + 'src/*.c'),
+		Glob(root_dir + 'src/buffers/*.c'),
 	]
 	
-	target_dir = root_dir + '../bin/'
+	target_dir = root_dir + 'bin/'
 	
 	if env['lib_shared']:
 		## Compile pocketlang dynamic lib.
 		dll = env.SharedLibrary(
 			target     = target_dir + 'pocket' + env['bin_suffix'],
 			source     = SOURCES,
-			CPPPATH    = [root_dir + 'include/'],
+			CPPPATH    = [root_dir + 'src/include/'],
 			CPPDEFINES = [env['CPPDEFINES'], 'PK_DLL', 'PK_COMPILE'],
 		)
 	else:
@@ -33,14 +33,14 @@ def CONFIGURE_ENV(env):
 		lib = env.Library(
 			target  = target_dir + 'pocket' + env['bin_suffix'],
 			source  = SOURCES,
-			CPPPATH = [root_dir + 'include/'],
+			CPPPATH = [root_dir + 'src/include/'],
 		)
 	
 		## Test executable
 		test = env.Program(
 			target  = target_dir + 'pocket' + env['bin_suffix'],
-			source  = Glob('#cli/*.c'),
-			CPPPATH = [root_dir + 'include/'],
+			source  = Glob(root_dir + 'cli/*.c'),
+			CPPPATH = [root_dir + 'src/include/'],
 			LIBPATH = target_dir,
 			LIBS    = 'pocket' + env['bin_suffix'],
 		)
@@ -69,8 +69,8 @@ opts.Add(BoolVariable('lib_shared', "Compile as a shared library (only).", False
 ## VariantDir
 _build_target = ARGUMENTS.get('target', 'debug')
 if _build_target in ('debug', 'release'): ## Otherwise error below.
-	_build_target = 'build/' + _build_target + '/src/'
-	VariantDir(_build_target, 'src', duplicate=0)
+	_build_target = 'build/' + _build_target + '/'
+	VariantDir(_build_target, './', duplicate=0)
 	
 ## Setup the Environment
 DefaultEnvironment(tools=[]) ## not using any tools

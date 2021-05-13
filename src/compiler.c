@@ -272,6 +272,10 @@ typedef struct sLoop {
   // current loop context.
   struct sLoop* outer_loop;
 
+  // Depth of the loop, required to pop all the locals in that loop when it
+  // met a break/continue statement inside.
+  int depth;
+
 } Loop;
 
 typedef struct sFunc {
@@ -1040,6 +1044,7 @@ static void exprName(Compiler* compiler, bool can_assign) {
         // This will prevent the assignment from poped out from the stack
         // since the assigned value itself is the local and not a temp.
         compiler->new_local = true;
+        emitStoreVariable(compiler, (index - compiler->global_count), false);
       }
     } else {
       // TODO: The name could be a function which hasn't been defined at this point.
@@ -1372,15 +1377,25 @@ static void compilerEnterBlock(Compiler* compiler) {
   compiler->scope_depth++;
 }
 
+// Pop all the locals at the [depth] or highter.
+static void compilerPopLocals(Compiler* compiler, int depth) {
+  ASSERT(depth > (int)DEPTH_GLOBAL, "Cannot pop global variables.");
+
+  int local = compiler->var_count - 1;
+  while (local >= 0 && compiler->variables[local].depth >= depth) {
+    emitOpcode(compiler, OP_POP);
+    compiler->var_count--;
+    compiler->stack_size--;
+    local--;
+  }
+}
+
 // Exits a block.
 static void compilerExitBlock(Compiler* compiler) {
   ASSERT(compiler->scope_depth > (int)DEPTH_GLOBAL, "Cannot exit toplevel.");
 
-  while (compiler->var_count > 0 && compiler->variables[
-      compiler->var_count - 1].depth >= compiler->scope_depth) {
-    compiler->var_count--;
-    compiler->stack_size--;
-  }
+  // Discard all the locals at the current scope.
+  compilerPopLocals(compiler, compiler->scope_depth);
   compiler->scope_depth--;
 }
 
@@ -1743,6 +1758,7 @@ static void compileWhileStatement(Compiler* compiler) {
   loop.start = (int)_FN->opcodes.count;
   loop.patch_count = 0;
   loop.outer_loop = compiler->loop;
+  loop.depth = compiler->scope_depth;
   compiler->loop = &loop;
 
   compileExpression(compiler); //< Condition.
@@ -1797,6 +1813,7 @@ static void compileForStatement(Compiler* compiler) {
   loop.start = (int)_FN->opcodes.count;
   loop.patch_count = 0;
   loop.outer_loop = compiler->loop;
+  loop.depth = compiler->scope_depth;
   compiler->loop = &loop;
 
   // Compile next iteration.
@@ -1834,6 +1851,9 @@ static void compileStatement(Compiler* compiler) {
       "Too many break statements (" STRINGIFY(MAX_BREAK_PATCH) ")." );
 
     consumeEndStatement(parser);
+    // Pop all the locals at the loop's body depth.
+    compilerPopLocals(compiler, compiler->loop->depth + 1);
+
     emitOpcode(compiler, OP_JUMP);
     int patch = emitByte(compiler, 0xffff); //< Will be patched.
     compiler->loop->patches[compiler->loop->patch_count++] = patch;
@@ -1845,6 +1865,9 @@ static void compileStatement(Compiler* compiler) {
     }
 
     consumeEndStatement(parser);
+    // Pop all the locals at the loop's body depth.
+    compilerPopLocals(compiler, compiler->loop->depth + 1);
+
     emitLoopJump(compiler);
 
   } else if (match(parser, TK_RETURN)) {

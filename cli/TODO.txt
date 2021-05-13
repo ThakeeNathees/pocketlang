@@ -1,6 +1,8 @@
 
 // To implement.
 
+[ ] Builtin functions buffer refactor.
+[ ] Remove resolve path for the root module.
 [ ] and/or operator implementation.
 [ ] Runtime error trace.
 [ ] Make it possible to override function names.
@@ -11,8 +13,8 @@
 [ ] Garbage collection.
      [*] Mark phase.
      [ ] Sweep phase.
-[ ] Hex, binary literals and floats like ".5".
 [ ] Relative file import.
+[ ] Hex, binary literals and floats like ".5".
 [ ] Union tagging alter in var.
 
 // Add more.
@@ -22,6 +24,9 @@
 [ ] Complete builtin operators.
 [ ] Complete opcodes.
 [ ] Complete core libs.
+[ ] Complete the docs.
+[ ] More Tests.
 
 // Bugs.
-[ ] Update cache on each recompilation instead of making a new cache.
+It's at pre-alpha and every thing is left to
+implement, and nothing would be work as expected.
