@@ -7,7 +7,3 @@ from os import clock
 from os import clock as c
 from path import abspath, curdir
 from path import abspath as ap, curdir as cd
-
-print("-------------------")
-print(" IMPORT TESTS DONE ")
-print("-------------------")

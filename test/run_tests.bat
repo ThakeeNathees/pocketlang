@@ -1,7 +1,31 @@
 @echo off
 
-pocket basics.pk
-pocket import.pk
-pocket if.pk
+set files=(           ^
+	lang\basics.pk    ^
+	lang\import.pk    ^
+	lang\if.pk        ^
+	lang\locals.pk    ^
+	                  ^
+	examples\prime.pk ^
+)
 
-pause
+set errorlevel=0
+
+for %%f in %files% do (
+	echo Testing %%f
+	pocket %%f
+	if  %errorlevel% neq 0 goto :FAILED
+)
+goto :SUCCESS
+
+:FAILED
+echo.
+echo Test failed.
+goto :END
+
+:SUCCESS
+echo.
+echo All tests were passed.
+goto :END
+
+:END

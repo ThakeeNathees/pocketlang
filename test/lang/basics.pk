@@ -15,8 +15,3 @@ l1[1] = true; assert(l1[1], 'List subscript set failed.')
 h1 = hash("testing"); h2 = hash("test" + "ing")
 assert(h1 == h2, 'Hash function failed.')
 assert(to_string(42) == '42', 'to_string() failed.')
-
-
-print("-------------------")
-print(" BASICS TEST DONE  ")
-print("-------------------")

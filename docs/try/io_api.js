@@ -12,7 +12,7 @@ mergeInto(LibraryManager.library, {
 	
 	js_errorPrint : function(message, line) {
 		var out = document.getElementById("output");
-		out.innerText += "Error: "+ AsciiToString(message) + " at:" + line + '\n';
+		out.innerText += `[Error at:${line}]: ${AsciiToString(message)} \n`;
 	},
 	
 	js_writeFunction : function(message) {

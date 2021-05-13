@@ -13,9 +13,9 @@ def fib(n)
   return fib(n-1) + fib(n-2)
 end
 
-# Print all fibonacci from 0 to 100 exclusive.
-for i in 0..100
-  print("fib(%) ="%i, fib(i))
+# Print all fibonacci from 0 to 5 exclusive.
+for i in 0..5
+  print(fib(i))
 end
 ```
 

@@ -9,9 +9,10 @@ import os, shutil
 from os.path import join
 
 SRC_DIR     = '../../src/'
-JS_API_PATH = './js_api.js'
+JS_API_PATH = './io_api.js'
 TARGET_DIR  = '../static/'
-TARGET_NAME = 'try_now.html'
+TARGET_NAME = 'pocketlang.html'
+JS_SCRIPT   = 'try_now.js'
 
 def main():
   sources = ' '.join(collect_source_files())
@@ -26,7 +27,7 @@ def main():
   print(cmd)
   os.system(cmd)
   
-  ## TODO: copy output to static dir.
+  shutil.copyfile(JS_SCRIPT, join(TARGET_DIR,JS_SCRIPT))
   os.remove(output) ## Not using the generated html file.
   
   

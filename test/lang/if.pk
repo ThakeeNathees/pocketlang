@@ -30,6 +30,3 @@ elif true
 end
 assert(variable == 123, 'Nested if statement failed.')
 
-print("-------------------")
-print(" IF TESTS DONE     ")
-print("-------------------")

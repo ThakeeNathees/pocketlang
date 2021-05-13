@@ -14,7 +14,6 @@ import os, sys, shutil
 ##   to clean pages    : python generate.py (-c, --clean)
 
 TEMPLATE_PATH = 'static/template.html'
-ROOT_URL      = 'http://localhost:8000/'
 ROOT_URL      = 'https://thakeenathees.github.io/pocketlang/'
 
 ## Home page should be in the SOURCE_DIR.
@@ -33,17 +32,7 @@ WASM_SOURCE_FILES = '''\
     <script type="text/javascript"         src="{{ STATIC_DIR }}prism/prism.js"></script>
     <link rel="stylesheet" type="text/css" href="{{ STATIC_DIR }}prism/prism.css" />
 	
-	<script type = "text/javascript">
-		var runSource;
-		window.onload = function() { // called after index.html is loaded -> Module is defined.
-			runSource = Module.cwrap('runSource', 'number', ['string']);
-			document.getElementById("run-button").onclick = function() {
-				document.getElementById('output').innerText = '';
-				const source = document.querySelector('.editor').textContent;
-				runSource(source);
-			}
-		}
-    </script>
+	<script type="text/javascript"         src="{{ STATIC_DIR }}try_now.js"></script>
 '''
 
 ## Navigation pages in order. Should match the path names.
@@ -221,6 +210,19 @@ def write_page(ctx, template, dst):
 	
 
 if __name__ == '__main__':
+	_local = False
+	if len(sys.argv) >= 2:
+		if sys.argv[1] == 'local':
+			ROOT_URL = 'http://localhost:8000/'
+			_local = True
+			
 	main()
-	print('Static pages generated.')
+	
+	## Write a batch file to start the server in windows.
+	if _local and os.name == 'nt':
+		with open(join(TARGET_DIR, 'server.bat'), 'w') as f:
+			f.write('python -m http.server 8000')
+			
+	print('Static pages generated' +\
+	      ('for localhost:8000.' if _local else '.'))
 

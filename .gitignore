@@ -1,11 +1,6 @@
 
 # PocketLang ignore list
 
-# Docs branch cloned into the docs/build sub directory
-docs/build/
-docs/static/try_now.js
-docs/static/try_now.wasm
-
 build/
 bin/
 test/bin/

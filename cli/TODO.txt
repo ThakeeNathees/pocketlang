@@ -16,6 +16,7 @@
 [ ] Relative file import.
 [ ] Hex, binary literals and floats like ".5".
 [ ] Union tagging alter in var.
+[ ] Add a make file/and more? (not every one has scons).
 
 // Add more.
 [ ] Compilte core methods.
