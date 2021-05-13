@@ -167,17 +167,27 @@ FN_IS_OBJ_TYPE(Script,  OBJ_SCRIPT)
 FN_IS_OBJ_TYPE(UserObj,  OBJ_USER)
 
 void coreAssert(PKVM* vm) {
+  int argc = ARGC;
+  if (argc != 1 && argc != 2) {
+    vm->fiber->error = newString(vm, "Invalid argument count.");
+    return;
+  }
+
   if (!toBool(ARG1)) {
     String* msg = NULL;
-    if (AS_OBJ(ARG2)->type != OBJ_STRING) {
-      msg = toString(vm, ARG2, false);
-    } else {
-      msg = (String*)AS_OBJ(ARG2);
-    }
 
-    vmPushTempRef(vm, &msg->_super);
-    vm->fiber->error = stringFormat(vm, "Assertion failed: @", msg);
-    vmPopTempRef(vm);
+    if (argc == 2) {
+      if (AS_OBJ(ARG2)->type != OBJ_STRING) {
+        msg = toString(vm, ARG2, false);
+      } else {
+        msg = (String*)AS_OBJ(ARG2);
+      }
+      vmPushTempRef(vm, &msg->_super);
+      vm->fiber->error = stringFormat(vm, "Assertion failed: @.", msg);
+      vmPopTempRef(vm);
+    } else {
+      vm->fiber->error = newString(vm, "Assertion failed.");
+    }
   }
 }
 
@@ -264,7 +274,7 @@ void initializeCore(PKVM* vm) {
   INITALIZE_BUILTIN_FN("is_script",   coreIsScript,   1);
   INITALIZE_BUILTIN_FN("is_userobj",  coreIsUserObj,  1);
   
-  INITALIZE_BUILTIN_FN("assert",      coreAssert,     2);
+  INITALIZE_BUILTIN_FN("assert",      coreAssert,    -1);
   INITALIZE_BUILTIN_FN("hash",        coreHash,       1);
   INITALIZE_BUILTIN_FN("to_string",   coreToString,   1);
   INITALIZE_BUILTIN_FN("print",       corePrint,     -1);

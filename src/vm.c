@@ -289,10 +289,8 @@ static inline void pushCallFrame(PKVM* vm, Function* fn) {
   frame->ip = fn->fn->opcodes.data;
 }
 
-void pkSetRuntimeError(PKVM* vm, const char* format, ...) {
-
-  vm->fiber->error = newString(vm, "TODO:");
-  TODO; // Construct String and set to vm->fiber->error.
+void pkSetRuntimeError(PKVM* vm, const char* message) {
+  vm->fiber->error = stringFormat(vm, "$", message);
 }
 
 void vmReportError(PKVM* vm) {
@@ -434,11 +432,10 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     }                                 \
   } while (false)
 
-// Note: '##__VA_ARGS__' is not portable but most common compilers including
-// gcc, msvc, clang, tcc (c99) supports.
-#define RUNTIME_ERROR(fmt, ...)                \
+// [err_msg] must be of type String.
+#define RUNTIME_ERROR(err_msg)                 \
   do {                                         \
-    pkSetRuntimeError(vm, fmt, ##__VA_ARGS__); \
+    vm->fiber->error = err_msg;                \
     vmReportError(vm);                         \
     return PK_RESULT_RUNTIME_ERROR;            \
   } while (false)
@@ -529,6 +526,14 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var value = POP();
       Var key = POP();
       Var on = PEEK();
+
+      ASSERT(IS_OBJ(on) && AS_OBJ(on)->type == OBJ_MAP, OOPS);
+
+      if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
+        RUNTIME_ERROR(stringFormat(vm, "$ type is not hashable.", varTypeName(key)));
+      } else {
+        mapSet((Map*)AS_OBJ(on), vm, key, value);
+      }
 
       varsetSubscript(vm, on, key, value);
       CHECK_ERROR();
@@ -632,7 +637,12 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
         // -1 argument means multiple number of args.
         if (fn->arity != -1 && fn->arity != argc) {
-          RUNTIME_ERROR("Expected excatly %d argument(s).", fn->arity);
+          String* arg_str = toString(vm, VAR_NUM(fn->arity), false);
+          vmPushTempRef(vm, &arg_str->_super);
+          String* msg = stringFormat(vm, "Expected excatly @ argument(s).",
+                                     arg_str);
+          vmPopTempRef(vm); // arg_str.
+          RUNTIME_ERROR(msg);
         }
 
         // Now the function will never needed in the stack and it'll
@@ -644,7 +654,8 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
         if (fn->is_native) {
           if (fn->native == NULL) {
-            RUNTIME_ERROR("Native function pointer of %s was NULL.", fn->name);
+            RUNTIME_ERROR(stringFormat(vm,
+              "Native function pointer of $ was NULL.", fn->name));
           }
           fn->native(vm);
           // Pop function arguments except for the return value.
@@ -658,7 +669,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
         }
 
       } else {
-        RUNTIME_ERROR("Expected a function in call.");
+        RUNTIME_ERROR(newString(vm, "Expected a function in call."));
       }
       DISPATCH();
     }
@@ -669,7 +680,10 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var* iterator   = (vm->fiber->sp - 2);
       Var* container  = (vm->fiber->sp - 3);
       uint16_t jump_offset = READ_SHORT();
-      if (!varIterate(vm, *container, iterator, iter_value)) {
+      
+      bool is_done = varIterate(vm, *container, iterator, iter_value);
+      CHECK_ERROR();
+      if (!is_done) {
         DROP(); //< Iter value.
         DROP(); //< Iterator.
         DROP(); //< Container.
@@ -796,7 +810,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     {
       Var num = POP();
       if (!IS_NUM(num)) {
-        RUNTIME_ERROR("Cannot negate a non numeric value.");
+        RUNTIME_ERROR(newString(vm, "Cannot negate a non numeric value."));
       }
       PUSH(VAR_NUM(-AS_NUM(num)));
       DISPATCH();
@@ -941,7 +955,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var to = POP();
       Var from = POP();
       if (!IS_NUM(from) || !IS_NUM(to)) {
-        RUNTIME_ERROR("Range arguments must be number.");
+        RUNTIME_ERROR(newString(vm, "Range arguments must be number."));
       }
       PUSH(VAR_OBJ(newRange(vm, AS_NUM(from), AS_NUM(to))));
       DISPATCH();

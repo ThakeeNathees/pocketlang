@@ -171,7 +171,7 @@ PK_PUBLIC PKInterpretResult pkInterpretSource(PKVM* vm, const char* source);
 PK_PUBLIC PKInterpretResult pkInterpret(PKVM* vm, const char* file);
 
 // Set a runtime error to vm.
-PK_PUBLIC void pkSetRuntimeError(PKVM* vm, const char* format, ...);
+PK_PUBLIC void pkSetRuntimeError(PKVM* vm, const char* message);
 
 // Returns the associated user data.
 PK_PUBLIC void* pkGetUserData(PKVM* vm);
