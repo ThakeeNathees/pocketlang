@@ -681,12 +681,9 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var* container  = (vm->fiber->sp - 3);
       uint16_t jump_offset = READ_SHORT();
       
-      bool is_done = varIterate(vm, *container, iterator, iter_value);
+      bool iterated = varIterate(vm, *container, iterator, iter_value);
       CHECK_ERROR();
-      if (!is_done) {
-        DROP(); //< Iter value.
-        DROP(); //< Iterator.
-        DROP(); //< Container.
+      if (!iterated) {
         ip += jump_offset;
       }
       DISPATCH();
@@ -864,7 +861,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(MOD):
     {
       Var r = POP(), l = POP();
-      PUSH(varModulo(vm, r, l));
+      PUSH(varModulo(vm, l, r));
       CHECK_ERROR();
       DISPATCH();
     }

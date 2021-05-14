@@ -1,3 +1,8 @@
+
+## Prime numbers.
+
+res = ''
+
 def is_prime(n)
   if n < 2 then return false end  
   for i in 2..n
@@ -6,11 +11,13 @@ def is_prime(n)
   return true
 end
 
-def print_all_primes(n)
+def get_all_primes(n)
   for i in 0..n
-    if is_prime(i) then print(i) end
+    if is_prime(i)
+		res += to_string(i) + ' '
+	end
   end
 end
 
-
-print_all_primes(10)
+get_all_primes(20)
+assert(res == '2 3 5 7 11 13 17 19 ')
