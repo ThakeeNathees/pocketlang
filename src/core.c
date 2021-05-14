@@ -206,6 +206,10 @@ void coreToString(PKVM* vm) {
 }
 
 void corePrint(PKVM* vm) {
+  // If the host appliaction donesn't provide any write function, discard the
+  // output.
+  if (vm->config.write_fn == NULL) return;
+
   String* str; //< Will be cleaned by garbage collector;
 
   for (int i = 1; i <= ARGC; i++) {

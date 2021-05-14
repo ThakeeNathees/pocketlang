@@ -83,7 +83,7 @@ typedef void (*pkNativeFn)(PKVM* vm);
 typedef enum {
 
   // Compile time errors (syntax errors, unresolved fn, etc).
-  PK_ERROR_COMPILE,
+  PK_ERROR_COMPILE = 0,
 
   // Runtime error message.
   PK_ERROR_RUNTIME,

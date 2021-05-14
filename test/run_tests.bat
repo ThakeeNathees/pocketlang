@@ -4,8 +4,8 @@ set files=(           ^
 	lang\basics.pk    ^
 	lang\import.pk    ^
 	lang\if.pk        ^
-	lang\locals.pk    ^
 	                  ^
+	examples\fib.pk   ^
 	examples\prime.pk ^
 )
 

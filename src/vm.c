@@ -230,8 +230,9 @@ static Var importScript(PKVM* vm, String* name, bool is_core,
   *is_new_script = true;
 
   pkStringResult result = { false, NULL, NULL };
-  if (vm->config.load_script_fn != NULL)
+  if (vm->config.load_script_fn != NULL) {
     result = vm->config.load_script_fn(vm, name->data);
+  }
 
   if (!result.success) {
     vmPopTempRef(vm); // name
@@ -290,12 +291,15 @@ static inline void pushCallFrame(PKVM* vm, Function* fn) {
 }
 
 void pkSetRuntimeError(PKVM* vm, const char* message) {
-  vm->fiber->error = stringFormat(vm, "$", message);
+  vm->fiber->error = newString(vm, message);
 }
 
 void vmReportError(PKVM* vm) {
   ASSERT(HAS_ERROR(), "runtimeError() should be called after an error.");
-  TODO; // TODO: create debug.h
+
+  // TODO: pass the error to the caller of the fiber.
+
+  reportStackTrace(vm);
 }
 
 // FIXME: temp.
@@ -327,16 +331,20 @@ PKInterpretResult pkInterpret(PKVM* vm, const char* file) {
   vmPushTempRef(vm, &name->_super);
 
   if (!resolveScriptPath(vm, &name)) {
-    vm->config.error_fn(vm, PK_ERROR_COMPILE, NULL, -1,
-      stringFormat(vm, "Failed to resolve path '$'.", file)->data);
+    if (vm->config.error_fn != NULL) {
+      vm->config.error_fn(vm, PK_ERROR_COMPILE, NULL, -1,
+        stringFormat(vm, "Failed to resolve path '$'.", file)->data);
+    }
     return PK_RESULT_COMPILE_ERROR;
   }
 
   // Load the script source.
   pkStringResult res = vm->config.load_script_fn(vm, name->data);
   if (!res.success) {
-    vm->config.error_fn(vm, PK_ERROR_COMPILE, NULL, -1,
-      stringFormat(vm, "Failed to load script '@'.", name)->data);
+    if (vm->config.error_fn != NULL) {
+      vm->config.error_fn(vm, PK_ERROR_COMPILE, NULL, -1,
+        stringFormat(vm, "Failed to load script '@'.", name)->data);
+    }
     return PK_RESULT_COMPILE_ERROR;
   }
 
@@ -390,7 +398,10 @@ void _debugRuntime(PKVM* vm) {
 
 PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
-  register uint8_t* ip;      //< Current instruction pointer.
+  // Reference to the instruction pointer in the call frame.
+  register uint8_t** ip;
+#define IP (*ip) // Convinent macro to the instruction pointer.
+
   register Var* rbp;         //< Stack base pointer register.
   register CallFrame* frame; //< Current call frame.
   register Script* script;   //< Currently executing script.
@@ -420,8 +431,8 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 #define POP()        (*(--vm->fiber->sp))
 #define DROP()       (--vm->fiber->sp)
 #define PEEK()       (*(vm->fiber->sp - 1))
-#define READ_BYTE()  (*ip++)
-#define READ_SHORT() (ip+=2, (uint16_t)((ip[-2] << 8) | ip[-1]))
+#define READ_BYTE()  (*IP++)
+#define READ_SHORT() (IP+=2, (uint16_t)((IP[-2] << 8) | IP[-1]))
 
 // Check if any runtime error exists and if so returns RESULT_RUNTIME_ERROR.
 #define CHECK_ERROR()                 \
@@ -440,16 +451,12 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     return PK_RESULT_RUNTIME_ERROR;            \
   } while (false)
 
-// Store the current frame to vm's call frame before pushing a new frame.
-// Frames rbp will set once it created and will never change.
-#define STORE_FRAME() frame->ip = ip
-
-// Update the call frame and ip once vm's call frame pushed or popped.
-// fuction call, return or done running imported script.
+// Load the last call frame to vm's execution variables to resume/run the
+// function.
 #define LOAD_FRAME()                                       \
   do {                                                     \
     frame = &vm->fiber->frames[vm->fiber->frame_count-1];  \
-    ip = frame->ip;                                        \
+    ip = &(frame->ip);                                     \
     rbp = frame->rbp;                                      \
     script = frame->fn->owner;                             \
   } while (false)
@@ -663,9 +670,8 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
           CHECK_ERROR();
 
         } else {
-          STORE_FRAME();
           pushCallFrame(vm, fn);
-          LOAD_FRAME();
+          LOAD_FRAME(); //< Load the top frame to vm's execution variables.
         }
 
       } else {
@@ -681,13 +687,10 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var* container  = (vm->fiber->sp - 3);
       uint16_t jump_offset = READ_SHORT();
       
-      bool is_done = varIterate(vm, *container, iterator, iter_value);
+      bool iterated = varIterate(vm, *container, iterator, iter_value);
       CHECK_ERROR();
-      if (!is_done) {
-        DROP(); //< Iter value.
-        DROP(); //< Iterator.
-        DROP(); //< Container.
-        ip += jump_offset;
+      if (!iterated) {
+        IP += jump_offset;
       }
       DISPATCH();
     }
@@ -695,14 +698,14 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(JUMP):
     {
       uint16_t offset = READ_SHORT();
-      ip += offset;
+      IP += offset;
       DISPATCH();
     }
 
     OPCODE(LOOP):
     {
       uint16_t offset = READ_SHORT();
-      ip -= offset;
+      IP -= offset;
       DISPATCH();
     }
 
@@ -712,7 +715,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var cond = POP();
       uint16_t offset = READ_SHORT();
       if (toBool(cond)) {
-        ip += offset;
+        IP += offset;
       }
       DISPATCH();
     }
@@ -722,14 +725,18 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var cond = POP();
       uint16_t offset = READ_SHORT();
       if (!toBool(cond)) {
-        ip += offset;
+        IP += offset;
       }
       DISPATCH();
     }
 
     OPCODE(RETURN):
     {
+      // TODO: handle caller fiber.
+
       Var ret = POP();
+
+      // Pop the last frame.
       vm->fiber->frame_count--;
 
       // If no more call frames. We're done.
@@ -754,6 +761,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var on = POP();
       String* name = script->names.data[READ_SHORT()];
       PUSH(varGetAttrib(vm, on, name));
+      CHECK_ERROR();
       DISPATCH();
     }
 
@@ -762,6 +770,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var on = PEEK();
       String* name = script->names.data[READ_SHORT()];
       PUSH(varGetAttrib(vm, on, name));
+      CHECK_ERROR();
       DISPATCH();
     }
 
@@ -772,6 +781,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       String* name = script->names.data[READ_SHORT()];
       varSetAttrib(vm, on, name, value);
       PUSH(value);
+      CHECK_ERROR();
       DISPATCH();
     }
 
@@ -864,7 +874,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(MOD):
     {
       Var r = POP(), l = POP();
-      PUSH(varModulo(vm, r, l));
+      PUSH(varModulo(vm, l, r));
       CHECK_ERROR();
       DISPATCH();
     }

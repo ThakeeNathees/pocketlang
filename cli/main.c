@@ -10,7 +10,13 @@
 
 void errorPrint(PKVM* vm, PKErrorType type, const char* file, int line,
                 const char* message) {
-  fprintf(stderr, "Error: %s\n\tat %s:%i\n", message, file, line);
+  if (type == PK_ERROR_COMPILE) {
+    fprintf(stderr, "Error: %s\n\tat %s:%i\n", message, file, line);
+  } else if (type == PK_ERROR_RUNTIME) {
+    fprintf(stderr, "Error: %s\n", message);
+  } else if (type == PK_ERROR_STACKTRACE) {
+    fprintf(stderr, "  [%s:%i] %s()\n", file, line, message);
+  }
 }
 
 void writeFunction(PKVM* vm, const char* text) {
