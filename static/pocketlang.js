@@ -1843,9 +1843,19 @@ var ASM_CONSTS = {
       return 0;
     }
 
-  function _js_errorPrint(message, line) {
+  function _js_errorPrint(type, line, message) {
+  		var err_text = ''
+  		const msg = AsciiToString(message);
+  		if (type == 0 /*PK_ERROR_COMPILE*/) {
+  			err_text = `[Error at:${line}] ${msg}`;
+  		} else if (type == 1 /*PK_ERROR_RUNTIME*/) {
+  			err_text = `Error: ${msg}`;
+  		} else if (type == 2 /*PK_ERROR_STACKTRACE*/) {
+  			err_text = `  [at:${line}] ${msg}`;
+  		}
+    
   		var out = document.getElementById("output");
-  		out.innerText += `[Error at:${line}]: ${AsciiToString(message)} \n`;
+  		out.innerText += err_text + '\n';
   	}
 
   function _js_writeFunction(message) {
