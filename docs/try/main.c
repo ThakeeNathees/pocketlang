@@ -10,13 +10,15 @@
 #include <emscripten.h>
 #include "pocketlang.h"
 
-extern void js_errorPrint(const char* message, int line);
+extern void js_errorPrint(int type, int line, const char* message);
 extern void js_writeFunction(const char* message);
 extern const char* js_loadScript();
 
 void errorPrint(PKVM* vm, PKErrorType type, const char* file, int line,
                 const char* message) {
-  js_errorPrint(message, line);
+  // No need to pass file (since there is only script that'll ever run on the 
+  // browser.
+  js_errorPrint((int)type, line, message);
 }
 
 void writeFunction(PKVM* vm, const char* text) {

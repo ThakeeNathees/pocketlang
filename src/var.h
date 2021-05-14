@@ -336,6 +336,9 @@ struct Fiber {
   // Number of frame entry in frames.
   int frame_count;
 
+  // Caller of this fiber if it has one, NULL otherwise.
+  Fiber* caller;
+
   // Runtime error initially NULL, heap allocated.
   String* error;
 };

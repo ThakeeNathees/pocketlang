@@ -189,6 +189,7 @@ static void blackenObject(Object* obj, PKVM* vm) {
       }
       vm->bytes_allocated += sizeof(CallFrame) * fiber->frame_capacity;
 
+      grayObject(&fiber->caller->_super, vm);
       grayObject(&fiber->error->_super, vm);
 
     } break;
@@ -286,7 +287,7 @@ Script* newScript(PKVM* vm, String* name) {
   stringBufferInit(&script->names);
 
   vmPushTempRef(vm, &script->_super);
-  const char* fn_name = "@(ScriptLevel)";
+  const char* fn_name = "$(SourceBody)";
   script->body = newFunction(vm, fn_name, (int)strlen(fn_name), script, false);
   vmPopTempRef(vm);
 

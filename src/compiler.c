@@ -345,6 +345,8 @@ static void reportError(Parser* parser, const char* file, int line,
   int length = vsprintf(message, fmt, args);
   ASSERT(length < ERROR_MESSAGE_SIZE, "Error message buffer should not exceed "
     "the buffer");
+
+  if (vm->config.error_fn == NULL) return;
   vm->config.error_fn(vm, PK_ERROR_COMPILE, file, line, message);
 }
 

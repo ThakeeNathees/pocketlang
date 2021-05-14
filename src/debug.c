@@ -259,18 +259,18 @@ void dumpInstructions(PKVM* vm, Function* func) {
 }
 
 void reportStackTrace(PKVM* vm) {
-  Fiber* fiber = vm->fiber;
-  Script* script = fiber->func->owner;
+  if (vm->config.error_fn == NULL) return;
 
-  //vm->config.error_fn(vm, PK_ERROR_RUNTIME, NULL, -1, fiber->error )
-  //
-  //// TODO: I'm not confident about this approach.
-  //if (script->path != NULL) { // User script.
-  //
-  //
-  //} else { // "std" script.
-  //
-  //}
-  
+  Fiber* fiber = vm->fiber;
+
+  vm->config.error_fn(vm, PK_ERROR_RUNTIME, NULL, -1, fiber->error->data);
+
+  for (int i = fiber->frame_count - 1; i >= 0; i--) {
+    CallFrame* frame = &fiber->frames[i];
+    Function* fn = frame->fn;
+    ASSERT(!fn->is_native, OOPS);
+    int line = fn->fn->oplines.data[frame->ip - fn->fn->opcodes.data - 1];
+    vm->config.error_fn(vm, PK_ERROR_STACKTRACE, fn->owner->name->data, line, fn->name);
+  }
 }
 
