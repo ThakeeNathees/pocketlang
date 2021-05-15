@@ -171,7 +171,7 @@ void coreAssert(PKVM* vm) {
         msg = (String*)AS_OBJ(ARG2);
       }
       vmPushTempRef(vm, &msg->_super);
-      vm->fiber->error = stringFormat(vm, "Assertion failed: @.", msg);
+      vm->fiber->error = stringFormat(vm, "Assertion failed: '@'.", msg);
       vmPopTempRef(vm);
     } else {
       vm->fiber->error = newString(vm, "Assertion failed.");
