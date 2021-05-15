@@ -20,6 +20,14 @@
 // The allocated size the'll trigger the first GC. (~10MB).
 #define INITIAL_GC_SIZE (1024 * 1024 * 10)
 
+// The heap size might shrink if the remaining allocated bytes after a GC 
+// is less than the one before the last GC. So we need a minimum size.
+#define MIN_HEAP_SIZE (1024 * 1024)
+
+// The heap size for the next GC will be calculated as the bytes we have
+// allocated so far plus the fill factor of it.
+#define HEAP_FILL_PERCENT 50
+
 static void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
   if (new_size == 0) {
     free(memory);
@@ -40,11 +48,6 @@ void* vmRealloc(PKVM* self, void* memory, size_t old_size, size_t new_size) {
   if (new_size > 0 && self->bytes_allocated > self->next_gc) {
     vmCollectGarbage(self);
   }
-  Function* f = (Function*)memory;
-  if (new_size == 0) {
-    free(memory);
-    return NULL;
-  }
 
   return self->config.realloc_fn(memory, new_size, self->config.user_data);
 }
@@ -52,7 +55,6 @@ void* vmRealloc(PKVM* self, void* memory, size_t old_size, size_t new_size) {
 void pkInitConfiguration(pkConfiguration* config) {
   config->realloc_fn = defaultRealloc;
 
-  // TODO: Handle Null functions before calling them.
   config->error_fn = NULL;
   config->write_fn = NULL;
 
@@ -80,6 +82,8 @@ PKVM* pkNewVM(pkConfiguration* config) {
   vm->gray_list = (Object**)vm->config.realloc_fn(
     NULL, sizeof(Object*) * vm->gray_list_capacity, NULL);
   vm->next_gc = INITIAL_GC_SIZE;
+  vm->min_heap_size = MIN_HEAP_SIZE;
+  vm->heap_fill_percent = HEAP_FILL_PERCENT;
 
   vm->scripts = newMap(vm);
   vm->core_libs = newMap(vm);
@@ -152,7 +156,33 @@ void vmCollectGarbage(PKVM* self) {
   
   blackenObjects(self);
 
-  TODO; // Sweep.
+  // Now sweep all the un-marked objects in then link list and remove them
+  // from the chain.
+
+  // [ptr] is an Object* reference that should be equal to the next
+  // non-garbage Object*.
+  Object** ptr = &self->first;
+  while (*ptr != NULL) {
+
+    // If the object the pointer points to wasn't marked it's unreachable.
+    // Clean it. And update the pointer points to the next object.
+    if (!(*ptr)->is_marked) {
+      Object* garbage = *ptr;
+      *ptr = garbage->next;
+      freeObject(self, garbage);
+
+    } else {
+      // Unmark the object for the next garbage collection.
+      (*ptr)->is_marked = false;
+      ptr = &(*ptr)->next;
+    }
+  }
+
+  // Next GC heap size will be change depends on the byte we've left with now,
+  // and the [heap_fill_percent].
+  self->next_gc = self->bytes_allocated + (
+                 (self->bytes_allocated * self->heap_fill_percent) / 100);
+  if (self->next_gc < self->min_heap_size) self->next_gc = self->min_heap_size;
 }
 
 void* pkGetUserData(PKVM* vm) {
@@ -210,7 +240,7 @@ static Var importScript(PKVM* vm, String* name, bool is_core,
     if (core_lib != NULL) {
       return VAR_OBJ(&core_lib->_super);
     }
-    vm->fiber->error = stringFormat(vm, "Failed to import core library @",
+    vm->fiber->error = stringFormat(vm, "Failed to import core library '@'",
                                     name);
     return VAR_NULL;
   }
@@ -219,7 +249,7 @@ static Var importScript(PKVM* vm, String* name, bool is_core,
 
   ASSERT(is_new_script != NULL, OOPS);
   if (!resolveScriptPath(vm, &name)) {
-    vm->fiber->error = stringFormat(vm, "Failed to resolve script @ from @",
+    vm->fiber->error = stringFormat(vm, "Failed to resolve script '@' from '@'",
                                     name, vm->fiber->func->owner->name);
     return VAR_NULL;
   }
@@ -269,8 +299,50 @@ static Var importScript(PKVM* vm, String* name, bool is_core,
 }
 
 static void ensureStackSize(PKVM* vm, int size) {
-  if (vm->fiber->stack_size > size) return;
-  TODO;
+  Fiber* fiber = vm->fiber;
+
+  if (fiber->stack_size > size) return;
+  int new_size = utilPowerOf2Ceil(size);
+
+  Var* old_rbp = fiber->stack; //< Old stack base pointer.
+
+  fiber->stack = (Var*)vmRealloc(vm, fiber->stack,
+                                 sizeof(Var) * fiber->stack_size,
+                                 sizeof(Var) * new_size);
+  fiber->stack_size = new_size;
+  
+  // If the old stack base pointer is the same as the current, that means the
+  // stack hasn't been moved by the reallocation. In that case we're done.
+  if (old_rbp == fiber->stack) return;
+
+  // If we reached here that means the stack is moved by the reallocation and
+  // we have to update all the pointers that pointing to the old stack slots.
+
+  /*
+                                         '        '
+                 '        '              '        '
+                 '        '              |        | <new_rsp
+        old_rsp> |        |              |        |
+                 |        |       .----> | value  | <new_ptr
+                 |        |       |      |        |
+        old_ptr> | value  | ------'      |________| <new_rbp
+                 |        | ^            new stack
+        old_rbp> |________| | height
+                 old stack
+
+                new_ptr = new_rbp      + height
+                        = fiber->stack + ( old_ptr  - old_rbp )  */
+#define MAP_PTR(old_ptr) (fiber->stack + ((old_ptr) - old_rbp))
+
+  // Update the stack top pointer.
+  fiber->sp = MAP_PTR(fiber->sp);
+
+  // Update the stack base pointer of the call frames.
+  for (int i = 0; i < fiber->frame_capacity; i++) {
+    CallFrame* frame = fiber->frames + i;
+    frame->rbp = MAP_PTR(frame->rbp);
+  }
+
 }
 
 static inline void pushCallFrame(PKVM* vm, Function* fn) {
@@ -288,6 +360,7 @@ static inline void pushCallFrame(PKVM* vm, Function* fn) {
   // Grow the stack if needed.
   int stack_size = (int)(vm->fiber->sp - vm->fiber->stack);
   int needed = stack_size + fn->fn->stack_size;
+  // TODO: set stack overflow maybe?.
   ensureStackSize(vm, needed);
 
   CallFrame* frame = &vm->fiber->frames[vm->fiber->frame_count++];
@@ -374,34 +447,6 @@ PKInterpretResult pkInterpret(PKVM* vm, const char* file) {
   return vmRunScript(vm, scr);
 }
 
-#ifdef DEBUG
-#include <stdio.h>
-
-// FIXME: for temp debugging. (implement dump stack frames).
-void _debugRuntime(PKVM* vm) {
-  return;
-  system("cls");
-  Fiber* fiber = vm->fiber;
-
-  for (int i = fiber->frame_count - 1; i >= 0; i--) {
-    CallFrame frame = fiber->frames[i];
-
-    Var* top = fiber->sp - 1;
-    if (i != fiber->frame_count - 1) {
-      top = fiber->frames[i + 1].rbp - 1;
-    }
-
-    for (; top >= frame.rbp; top--) {
-      printf("[*]: ");
-      dumpValue(vm, *top); printf("\n");
-    }
-
-    printf("----------------\n");
-  }
-}
-
-#endif
-
 PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
   // Reference to the instruction pointer in the call frame.
@@ -473,16 +518,8 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
   #error "OPCODE" should not be deifined here.
 #endif
 
-#if DEBUG
-  #define DEBUG_INSTRUCTION() _debugRuntime(vm)
-#else
-  #define DEBUG_INSTRUCTION() do { } while (false)
-#endif
-
-
 #define SWITCH(code)                 \
   L_vm_main_loop:                    \
-  DEBUG_INSTRUCTION();               \
   switch (code = (Opcode)READ_BYTE())
 #define OPCODE(code) case OP_##code
 #define DISPATCH()   goto L_vm_main_loop
@@ -633,7 +670,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       DROP();
       DISPATCH();
 
-    OPCODE(IMPORT) :
+    OPCODE(IMPORT):
     {
       String* name = script->names.data[READ_SHORT()];
       PUSH(importScript(vm, name, true, NULL));

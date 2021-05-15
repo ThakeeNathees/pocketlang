@@ -10,12 +10,11 @@ def CONFIGURE_ENV(env):
 	assert(root_dir.endswith('/'))
 	
 	env.PROJECT_NAME = "pocketlang"
-	env.RUN_TARGET = root_dir + '../bin/pocket'
+	env.RUN_TARGET = root_dir + 'bin/pocket'
 	
 	## PocketLang source files
 	SOURCES = [
 		Glob(root_dir + 'src/*.c'),
-		Glob(root_dir + 'src/buffers/*.c'),
 	]
 	
 	target_dir = root_dir + 'bin/'

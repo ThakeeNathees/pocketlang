@@ -1,10 +1,6 @@
 
 // To implement.
 
-[ ] Garbage collection.
-     [*] Mark phase.
-     [ ] Sweep phase.
-[ ] Stack reallocation.
 [ ] and/or operator implementation.
 [ ] Relative file import.
 [ ] Remove resolve path for the root module.
