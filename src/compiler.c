@@ -852,7 +852,7 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
   }
 
   // Search through builtin functions.
-  index = findBuiltinFunction(name, length);
+  index = findBuiltinFunction(compiler->vm, name, length);
   if (index != -1) {
     result.type = NAME_BUILTIN;
     result.index = index;

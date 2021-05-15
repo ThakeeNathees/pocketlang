@@ -17,6 +17,9 @@
 // Minimum size of the stack.
 #define MIN_STACK_SIZE 128
 
+// The allocated size the'll trigger the first GC. (~10MB).
+#define INITIAL_GC_SIZE (1024 * 1024 * 10)
+
 static void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
   if (new_size == 0) {
     free(memory);
@@ -76,13 +79,13 @@ PKVM* pkNewVM(pkConfiguration* config) {
   vm->gray_list_capacity = MIN_CAPACITY;
   vm->gray_list = (Object**)vm->config.realloc_fn(
     NULL, sizeof(Object*) * vm->gray_list_capacity, NULL);
-  vm->next_gc = 1024 * 1024 * 10; // TODO:
+  vm->next_gc = INITIAL_GC_SIZE;
 
   vm->scripts = newMap(vm);
+  vm->core_libs = newMap(vm);
+  vm->builtins_count = 0;
 
-  // TODO: no need to initialize if already done by another vm.
   initializeCore(vm);
-
   return vm;
 }
 
@@ -119,8 +122,11 @@ void vmCollectGarbage(PKVM* self) {
   // required to know the size of each object that'll be freeing.
   self->bytes_allocated = 0;
 
-  // Mark core objects (mostlikely builtin functions).
-  markCoreObjects(self);
+  // Mark the core libs and builtin functions.
+  grayObject(&self->core_libs->_super, self);
+  for (int i = 0; i < self->builtins_count; i++) {
+    grayObject(&self->builtins[i].fn->_super, self);
+  }
 
   // Mark the scripts cache.
   grayObject(&self->scripts->_super, self);
@@ -200,7 +206,7 @@ static Var importScript(PKVM* vm, String* name, bool is_core,
                         bool* is_new_script) {
   if (is_core) {
     ASSERT(is_new_script == NULL, OOPS);
-    Script* core_lib = getCoreLib(name);
+    Script* core_lib = getCoreLib(vm, name);
     if (core_lib != NULL) {
       return VAR_OBJ(&core_lib->_super);
     }
@@ -405,6 +411,8 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
   register Var* rbp;         //< Stack base pointer register.
   register CallFrame* frame; //< Current call frame.
   register Script* script;   //< Currently executing script.
+
+  // TODO: implement fiber from script body.
 
   vm->fiber = newFiber(vm);
   vm->fiber->func = _script->body;
@@ -616,7 +624,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(PUSH_BUILTIN_FN):
     {
-      Function* fn = getBuiltinFunction(READ_SHORT());
+      Function* fn = getBuiltinFunction(vm, READ_SHORT());
       PUSH(VAR_OBJ(&fn->_super));
       DISPATCH();
     }
@@ -973,6 +981,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(IN):
       // TODO: Implement bool varContaines(vm, on, value);
+      TODO;
 
     OPCODE(END):
       TODO;

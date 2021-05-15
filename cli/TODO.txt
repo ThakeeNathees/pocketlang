@@ -1,22 +1,25 @@
 
 // To implement.
 
-[ ] Builtin functions buffer refactor.
-[ ] Remove resolve path for the root module.
-[ ] and/or operator implementation.
-[ ] Runtime error trace.
-[ ] Make it possible to override function names.
-[ ] VM's debug informations.
-     [*] Compiled opcode dump.
-     [ ] Stack trace.
-[ ] Stack reallocation.
 [ ] Garbage collection.
      [*] Mark phase.
      [ ] Sweep phase.
+[ ] Stack reallocation.
+[ ] and/or operator implementation.
 [ ] Relative file import.
+[ ] Remove resolve path for the root module.
+
+[ ] Implement fiber from script body and vm run fibers (not scripts).
+    Then remove vm's root script.
+[ ] C Integration api (including add core lib from host application).
+[ ] REPL.
+    [ ] compile expression for a script.
+[ ] Var handler implement.
+[ ] Make it possible to override function names.
 [ ] Hex, binary literals and floats like ".5".
 [ ] Union tagging alter in var.
 [ ] Add a make file/and more? (not every one has scons).
+[ ] (future) add structs and maybe enums.
 
 // Add more.
 [ ] Compilte core methods.
