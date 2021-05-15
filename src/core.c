@@ -11,26 +11,10 @@
 #include "var.h"
 #include "vm.h"
 
-typedef struct {
-  const char* name; //< Name of the function.
-  int length;       //< Length of the name.
-  Function* fn;     //< Native function pointer.
-} _BuiltinFn;
-
-// Count of builtin function +1 for termination.
-#define BUILTIN_COUNT 50
-
 // Convert number var as int32_t. Check if it's number before using it.
 #define _AS_INTEGER(var) (int32_t)trunc(AS_NUM(var))
 
-// Array of all builtin functions.
-static _BuiltinFn builtins[BUILTIN_COUNT];
-static int builtins_count = 0;
-
-// Core libraries.
-static Map* core_libs;
-
-static void initializeBuiltinFN(PKVM* vm, _BuiltinFn* bfn, const char* name,
+static void initializeBuiltinFN(PKVM* vm, BuiltinFn* bfn, const char* name,
                                int length, int arity, pkNativeFn ptr) {
   bfn->name = name;
   bfn->length = length;
@@ -40,10 +24,10 @@ static void initializeBuiltinFN(PKVM* vm, _BuiltinFn* bfn, const char* name,
   bfn->fn->native = ptr;
 }
 
-int findBuiltinFunction(const char* name, uint32_t length) {
-  for (int i = 0; i < builtins_count; i++) {
-    if (length == builtins[i].length &&
-        strncmp(name, builtins[i].name, length) == 0) {
+int findBuiltinFunction(PKVM* vm, const char* name, uint32_t length) {
+  for (int i = 0; i < vm->builtins_count; i++) {
+    if (length == vm->builtins[i].length &&
+        strncmp(name, vm->builtins[i].name, length) == 0) {
       return i;
     }
   }
@@ -122,18 +106,18 @@ static inline bool validateIndex(PKVM* vm, int32_t index, int32_t size,
     return;                    \
   } while (false)
 
-Function* getBuiltinFunction(int index) {
-  ASSERT_INDEX(index, builtins_count);
-  return builtins[index].fn;
+Function* getBuiltinFunction(PKVM* vm, int index) {
+  ASSERT_INDEX(index, vm->builtins_count);
+  return vm->builtins[index].fn;
 }
 
-const char* getBuiltinFunctionName(int index) {
-  ASSERT_INDEX(index, builtins_count);
-  return builtins[index].name;
+const char* getBuiltinFunctionName(PKVM* vm, int index) {
+  ASSERT_INDEX(index, vm->builtins_count);
+  return vm->builtins[index].name;
 }
 
-Script* getCoreLib(String* name) {
-  Var lib = mapGet(core_libs, VAR_OBJ(&name->_super));
+Script* getCoreLib(PKVM* vm, String* name) {
+  Var lib = mapGet(vm->core_libs, VAR_OBJ(&name->_super));
   if (IS_UNDEF(lib)) return NULL;
   ASSERT(IS_OBJ(lib) && AS_OBJ(lib)->type == OBJ_SCRIPT, OOPS);
   return (Script*)AS_OBJ(lib);
@@ -141,12 +125,12 @@ Script* getCoreLib(String* name) {
 
 #define FN_IS_PRIMITE_TYPE(name, check)       \
   void coreIs##name(PKVM* vm) {               \
-    RET(VAR_BOOL(check(ARG1)));             \
+    RET(VAR_BOOL(check(ARG1)));               \
   }
 
 #define FN_IS_OBJ_TYPE(name, _enum)                     \
   void coreIs##name(PKVM* vm) {                         \
-    Var arg1 = ARG1;                                  \
+    Var arg1 = ARG1;                                    \
     if (IS_OBJ(arg1) && AS_OBJ(arg1)->type == _enum) {  \
       RET(VAR_TRUE);                                    \
     } else {                                            \
@@ -257,13 +241,10 @@ void stdOsClock(PKVM* vm) {
 /* CORE INITIALIZATION                                                       */
 /*****************************************************************************/
 void initializeCore(PKVM* vm) {
-  ASSERT(builtins_count == 0, "Initialize core only once.");
 
-#define INITALIZE_BUILTIN_FN(name, fn, argc)                 \
-  initializeBuiltinFN(vm, &builtins[builtins_count++], name, \
+#define INITALIZE_BUILTIN_FN(name, fn, argc)                         \
+  initializeBuiltinFN(vm, &vm->builtins[vm->builtins_count++], name, \
                       (int)strlen(name), argc, fn);
-
-  core_libs = newMap(vm);
 
   // Initialize builtin functions.
   INITALIZE_BUILTIN_FN("is_null",     coreIsNull,     1);
@@ -286,17 +267,17 @@ void initializeCore(PKVM* vm) {
   // Make STD scripts.
   Script* std;  // A temporary pointer to the current std script.
   Function* fn; // A temporary pointer to the allocated function function.
-#define STD_NEW_SCRIPT(_name)                                                \
-  do {                                                                       \
-    /* Create a new Script. */                                               \
-    String* name = newString(vm, _name);                                     \
-    vmPushTempRef(vm, &name->_super);                                        \
-    std = newScript(vm, name);                                               \
-    vmPopTempRef(vm);                                                        \
-    /* Add the script to core_libs. */                                       \
-    vmPushTempRef(vm, &std->_super);                                         \
-    mapSet(core_libs, vm, VAR_OBJ(&name->_super), VAR_OBJ(&std->_super));    \
-    vmPopTempRef(vm);                                                        \
+#define STD_NEW_SCRIPT(_name)                                                 \
+  do {                                                                        \
+    /* Create a new Script. */                                                \
+    String* name = newString(vm, _name);                                      \
+    vmPushTempRef(vm, &name->_super);                                         \
+    std = newScript(vm, name);                                                \
+    vmPopTempRef(vm);                                                         \
+    /* Add the script to core_libs. */                                        \
+    vmPushTempRef(vm, &std->_super);                                          \
+    mapSet(vm->core_libs, vm, VAR_OBJ(&name->_super), VAR_OBJ(&std->_super)); \
+    vmPopTempRef(vm);                                                         \
   } while (false)
 
 #define STD_ADD_FUNCTION(_name, fptr, _arity)                   \
@@ -314,16 +295,6 @@ void initializeCore(PKVM* vm) {
   // os
   STD_NEW_SCRIPT("os");
   STD_ADD_FUNCTION("clock", stdOsClock, 0);
-}
-
-void markCoreObjects(PKVM* vm) {
-  // Core libraries.
-  grayObject(&core_libs->_super, vm);
-
-  // Builtin functions.
-  for (int i = 0; i < builtins_count; i++) {
-    grayObject(&builtins[i].fn->_super, vm);
-  }
 }
 
 /*****************************************************************************/

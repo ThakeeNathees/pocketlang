@@ -25,7 +25,6 @@ def CONFIGURE_ENV(env):
 		dll = env.SharedLibrary(
 			target     = target_dir + 'pocket' + env['bin_suffix'],
 			source     = SOURCES,
-			CPPPATH    = [root_dir + 'src/include/'],
 			CPPDEFINES = [env['CPPDEFINES'], 'PK_DLL', 'PK_COMPILE'],
 		)
 	else:
@@ -33,19 +32,16 @@ def CONFIGURE_ENV(env):
 		lib = env.Library(
 			target  = target_dir + 'pocket' + env['bin_suffix'],
 			source  = SOURCES,
-			CPPPATH = [root_dir + 'src/include/'],
 		)
 	
 		## Test executable
 		test = env.Program(
 			target  = target_dir + 'pocket' + env['bin_suffix'],
 			source  = Glob(root_dir + 'cli/*.c'),
-			CPPPATH = [root_dir + 'src/include/'],
 			LIBPATH = target_dir,
 			LIBS    = 'pocket' + env['bin_suffix'],
 		)
-		Requires(test, lib)
-		
+		Requires(test, lib)	
 	env.Append(CPPPATH=['src/include/'])
 	
 

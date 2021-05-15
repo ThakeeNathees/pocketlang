@@ -6,7 +6,7 @@
 #ifndef PK_COMMON_H
 #define PK_COMMON_H
 
-#include "pocketlang.h"
+#include "include/pocketlang.h"
 
 #include <assert.h>
 #include <errno.h>

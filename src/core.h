@@ -9,32 +9,22 @@
 #include "var.h"
 #include "common.h"
 
-// Initialize core language, builtin function and "std" scripts.
-// Note (TODO: refactore required):
-//    Since the builtin function doesn't require any allocation they're
-//    elements of a static `builtins` array but the "std" scripts are `Script`
-//    objects they required memory management and they're bound with the VM.
-//    It contradicts `initializeCore()` to be called for each VM or only once.
-//    1. Make the scripts share between VMs.
-//    2. Destroy scripts buffer only when the last VM die.
+// Initialize core language, builtin function and core libs.
 void initializeCore(PKVM* vm);
-
-// Mark the heap allocated core object at the mark phase.
-void markCoreObjects(PKVM* vm);
 
 // Find the builtin function name and returns it's index in the builtins array
 // if not found returns -1.
-int findBuiltinFunction(const char* name, uint32_t length);
+int findBuiltinFunction(PKVM* vm, const char* name, uint32_t length);
 
 // Returns the builtin function at index [index].
-Function* getBuiltinFunction(int index);
+Function* getBuiltinFunction(PKVM* vm, int index);
 
 // Returns the builtin function's name at index [index].
-const char* getBuiltinFunctionName(int index);
+const char* getBuiltinFunctionName(PKVM* vm, int index);
 
 // Return the core library with the [name] if exists in the core libs,
 // otherwise returns NULL.
-Script* getCoreLib(String* name);
+Script* getCoreLib(PKVM* vm, String* name);
 
 // Operators //////////////////////////////////////////////////////////////////
 

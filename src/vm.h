@@ -14,11 +14,23 @@
 // garbage collected.
 #define MAX_TEMP_REFERENCE 16
 
+// The capacity of the builtin function array in the VM.
+#define BUILTIN_FN_CAPACITY 50
+
 typedef enum {
   #define OPCODE(name, _, __) OP_##name,
   #include "opcodes.h"
   #undef OPCODE
 } Opcode;
+
+// Builtin functions are stored in an array in the VM (unlike script functions
+// they're member of function buffer of the script) and this struct is a single
+// entry of the array.
+typedef struct {
+  const char* name; //< Name of the function.
+  int length;       //< Length of the name.
+  Function* fn;     //< Native function pointer.
+} BuiltinFn;
 
 struct PKVM {
 
@@ -52,6 +64,14 @@ struct PKVM {
   // A cache of the compiled scripts with their path as key and the Scrpit
   // object as the value.
   Map* scripts;
+
+  // A map of core libraries with their name as the key and the Script object
+  // as the value.
+  Map* core_libs;
+
+  // Array of all builtin functions.
+  BuiltinFn builtins[BUILTIN_FN_CAPACITY];
+  int builtins_count;
 
   // Execution variables ////////////////////////////////////////////////////
 

@@ -181,7 +181,7 @@ void dumpInstructions(PKVM* vm, Function* func) {
       case OP_PUSH_BUILTIN_FN:
       {
         int index = READ_SHORT();
-        printf("%5d [Fn:%s]\n", index, getBuiltinFunctionName(index));
+        printf("%5d [Fn:%s]\n", index, getBuiltinFunctionName(vm, index));
         break;
       }
         

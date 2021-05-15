@@ -49,10 +49,8 @@ int runSource(const char* source) {
 
   PKVM* vm = pkNewVM(&config);
   PKInterpretResult result = pkInterpretSource(vm, source);
-  
-  // Fix Core multiple initialization and gc sweep()
-  // to fix this.
-  //pkFreeVM(vm);
+
+  pkFreeVM(vm);
 
   return (int)result;
 }
