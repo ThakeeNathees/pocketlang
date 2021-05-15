@@ -31,7 +31,7 @@
 #include <string.h>
 
 #include "common.h"
-#include "buffers/buffers.h"
+#include "buffers.h"
 
 // To use dynamic variably-sized struct with a tail array add an array at the
 // end of the struct with size \ref DYNAMIC_TAIL_ARRAY. This method was a
@@ -321,7 +321,9 @@ struct Fiber {
   Var* sp;
 
   // The stack base pointer of the current frame. It'll be updated before
-  // calling a native function. (`fiber->ret` === `curr_call_frame->rbp`).
+  // calling a native function. (`fiber->ret` === `curr_call_frame->rbp`). And
+  // also updated if the stack is reallocated (that's when it's about to get
+  // overflowed.
   Var* ret;
 
   // Size of the allocated stack.

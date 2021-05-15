@@ -9,7 +9,7 @@
 #include <string.h>
 
 #include "core.h"
-#include "buffers/buffers.h"
+#include "buffers.h"
 #include "utils.h"
 #include "vm.h"
 

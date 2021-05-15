@@ -85,7 +85,7 @@ static inline bool validateIndex(PKVM* vm, int32_t index, int32_t size,
 }
 
 /*****************************************************************************/
-/* BUILTIN FUNCTIONS                                                         */
+/* BUILTIN FUNCTIONS API                                                     */
 /*****************************************************************************/
 
 // Argument getter (1 based).
@@ -122,6 +122,10 @@ Script* getCoreLib(PKVM* vm, String* name) {
   ASSERT(IS_OBJ(lib) && AS_OBJ(lib)->type == OBJ_SCRIPT, OOPS);
   return (Script*)AS_OBJ(lib);
 }
+
+/*****************************************************************************/
+/* CORE BUILTIN FUNCTIONS                                                    */
+/*****************************************************************************/
 
 #define FN_IS_PRIMITE_TYPE(name, check)       \
   void coreIs##name(PKVM* vm) {               \
@@ -213,10 +217,12 @@ void corePrint(PKVM* vm) {
 }
 
 /*****************************************************************************/
-/* STD METHODS                                                               */
+/* CORE LIBRARY METHODS                                                      */
 /*****************************************************************************/
 
-// 'path' library methods .
+// 'path' library methods.
+// -----------------------
+
 //  TODO: path library should be added by the cli (or the hosting application).
 void stdPathAbspath(PKVM* vm) {
   Var relpath = ARG1;
@@ -232,9 +238,42 @@ void stdPathCurdir(PKVM* vm) {
   RET(VAR_OBJ(newString(vm, "TODO: curdir")));
 }
 
-// 'os' library methods.
-void stdOsClock(PKVM* vm) {
+// 'lang' library methods.
+// -----------------------
+
+// Returns the number of seconds since the application started.
+void stdLangClock(PKVM* vm) {
   RET(VAR_NUM((double)clock() / CLOCKS_PER_SEC));
+}
+
+// Trigger garbage collection and return the ammount of bytes cleaned.
+void stdLangGC(PKVM* vm) {
+  size_t bytes_before = vm->bytes_allocated;
+  vmCollectGarbage(vm);
+  size_t garbage = bytes_before - vm->bytes_allocated;
+  RET(VAR_NUM((double)garbage));
+}
+
+// Write function, just like print function but it wont put space between args
+// and write a new line at the end.
+void stdLangWrite(PKVM* vm) {
+  // If the host appliaction donesn't provide any write function, discard the
+  // output.
+  if (vm->config.write_fn == NULL) return;
+
+  String* str; //< Will be cleaned by garbage collector;
+
+  for (int i = 1; i <= ARGC; i++) {
+    Var arg = ARG(i);
+    // If it's already a string don't allocate a new string instead use it.
+    if (IS_OBJ(arg) && AS_OBJ(arg)->type == OBJ_STRING) {
+      str = (String*)AS_OBJ(arg);
+    } else {
+      str = toString(vm, arg, false);
+    }
+
+    vm->config.write_fn(vm, str->data);
+  }
 }
 
 /*****************************************************************************/
@@ -290,11 +329,13 @@ void initializeCore(PKVM* vm) {
   // path
   STD_NEW_SCRIPT("path");
   STD_ADD_FUNCTION("abspath", stdPathAbspath, 1);
-  STD_ADD_FUNCTION("curdir",  stdPathCurdir, 0);
+  STD_ADD_FUNCTION("curdir",  stdPathCurdir,  0);
 
-  // os
-  STD_NEW_SCRIPT("os");
-  STD_ADD_FUNCTION("clock", stdOsClock, 0);
+  // lang
+  STD_NEW_SCRIPT("lang");
+  STD_ADD_FUNCTION("clock", stdLangClock,  0);
+  STD_ADD_FUNCTION("gc",    stdLangGC,     0);
+  STD_ADD_FUNCTION("write", stdLangWrite, -1);
 }
 
 /*****************************************************************************/

@@ -43,6 +43,13 @@ struct PKVM {
   // The number of bytes that'll trigger the next GC.
   size_t next_gc;
 
+  // Minimum size the heap could get.
+  size_t min_heap_size;
+
+  // The heap size for the next GC will be calculated as the bytes we have
+  // allocated so far plus the fill factor of it.
+  int heap_fill_percent;
+
   // In the tri coloring scheme gray is the working list. We recursively pop
   // from the list color it balck and add it's referenced objects to gray_list.
   Object** gray_list;
