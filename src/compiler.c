@@ -763,7 +763,10 @@ static void consumeStartBlock(Parser* parser, TokenType delimiter) {
     consumed = true;
 
   if (!consumed) {
-    parseError(parser, "Expected enter block with newline or 'do'.");
+    const char* msg;
+    if (delimiter == TK_DO) msg = "Expected enter block with newline or 'do'.";
+    else msg = "Expected enter block with newline or 'then'.";
+    parseError(parser, msg);
   }
 }
 
@@ -870,6 +873,7 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
 static void emitOpcode(Compiler* compiler, Opcode opcode);
 static int emitByte(Compiler* compiler, int byte);
 static int emitShort(Compiler* compiler, int arg);
+static void patchJump(Compiler* compiler, int addr_index);
 static int compilerAddConstant(Compiler* compiler, Var value);
 
 static int compilerAddVariable(Compiler* compiler, const char* name,
@@ -884,6 +888,9 @@ static void compileExpression(Compiler* compiler);
 static void exprLiteral(Compiler* compiler, bool can_assign);
 static void exprFunc(Compiler* compiler, bool can_assign);
 static void exprName(Compiler* compiler, bool can_assign);
+
+static void exprOr(Compiler* compiler, bool can_assign);
+static void exprAnd(Compiler* compiler, bool can_assign);
 
 static void exprBinaryOp(Compiler* compiler, bool can_assign);
 static void exprUnaryOp(Compiler* compiler, bool can_assign);
@@ -951,8 +958,8 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_NULL       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_SELF       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_IN         */ { NULL,          exprBinaryOp,     PREC_IN },
-  /* TK_AND        */ { NULL,          exprBinaryOp,     PREC_LOGICAL_AND },
-  /* TK_OR         */ { NULL,          exprBinaryOp,     PREC_LOGICAL_OR },
+  /* TK_AND        */ { NULL,          exprAnd,          PREC_LOGICAL_AND },
+  /* TK_OR         */ { NULL,          exprOr,           PREC_LOGICAL_OR },
   /* TK_NOT        */ { exprUnaryOp,   NULL,             PREC_LOGICAL_NOT },
   /* TK_TRUE       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_FALSE      */ { exprValue,     NULL,             NO_INFIX },
@@ -1051,14 +1058,14 @@ static void exprName(Compiler* compiler, bool can_assign) {
     } else {
       // TODO: The name could be a function which hasn't been defined at this point.
       //       Implement opcode to push a named variable.
-      parseError(parser, "Name \"%.*s\" is not defined.", name_len, name_start);
+      parseError(parser, "Name '%.*s' is not defined.", name_len, name_start);
     }
     return;
   }
 
   switch (result.type) {
     case NAME_LOCAL_VAR:
-    case NAME_GLOBAL_VAR:
+    case NAME_GLOBAL_VAR: {
 
       if (can_assign && matchAssignment(parser)) {
         TokenType assignment = parser->previous.type;
@@ -1087,6 +1094,7 @@ static void exprName(Compiler* compiler, bool can_assign) {
         emitPushVariable(compiler, result.index, result.type == NAME_GLOBAL_VAR);
       }
       return;
+    }
 
     case NAME_FUNCTION:
       emitOpcode(compiler, OP_PUSH_FN);
@@ -1101,6 +1109,56 @@ static void exprName(Compiler* compiler, bool can_assign) {
     case NAME_NOT_DEFINED:
       UNREACHABLE(); // Case already handled.
   }
+}
+
+/*           a or b:             |        a and b:
+                                 |    
+            (...)                |           (...)
+        .-- jump_if [offset]     |       .-- jump_if_not [offset]
+        |   (...)                |       |   (...)         
+        |-- jump_if [offset]     |       |-- jump_if_not [offset]
+        |   push false           |       |   push true   
+     .--+-- jump [offset]        |    .--+-- jump [offset]
+     |  '-> push true            |    |  '-> push false
+     '----> (...)                |    '----> (...)
+*/                                  
+
+void exprOr(Compiler* compiler, bool can_assign) {
+  emitOpcode(compiler, OP_JUMP_IF);
+  int true_offset_a = emitShort(compiler, 0xffff); //< Will be patched.
+
+  parsePrecedence(compiler, PREC_LOGICAL_OR);
+  emitOpcode(compiler, OP_JUMP_IF);
+  int true_offset_b = emitShort(compiler, 0xffff); //< Will be patched.
+
+  emitOpcode(compiler, OP_PUSH_FALSE);
+  emitOpcode(compiler, OP_JUMP);     
+  int end_offset = emitShort(compiler, 0xffff); //< Will be patched.
+
+  patchJump(compiler, true_offset_a);
+  patchJump(compiler, true_offset_b);
+  emitOpcode(compiler, OP_PUSH_TRUE);
+
+  patchJump(compiler, end_offset);
+}
+
+void exprAnd(Compiler* compiler, bool can_assign) {
+  emitOpcode(compiler, OP_JUMP_IF_NOT);
+  int false_offset_a = emitShort(compiler, 0xffff); //< Will be patched.
+
+  parsePrecedence(compiler, PREC_LOGICAL_AND);
+  emitOpcode(compiler, OP_JUMP_IF_NOT);
+  int false_offset_b = emitShort(compiler, 0xffff); //< Will be patched.
+
+  emitOpcode(compiler, OP_PUSH_TRUE);
+  emitOpcode(compiler, OP_JUMP);
+  int end_offset = emitShort(compiler, 0xffff); //< Will be patched.
+
+  patchJump(compiler, false_offset_a);
+  patchJump(compiler, false_offset_b);
+  emitOpcode(compiler, OP_PUSH_FALSE);
+
+  patchJump(compiler, end_offset);
 }
 
 static void exprBinaryOp(Compiler* compiler, bool can_assign) {
@@ -1127,10 +1185,6 @@ static void exprBinaryOp(Compiler* compiler, bool can_assign) {
     case TK_SRIGHT:  emitOpcode(compiler, OP_BIT_RSHIFT); break;
     case TK_SLEFT:   emitOpcode(compiler, OP_BIT_LSHIFT); break;
     case TK_IN:      emitOpcode(compiler, OP_IN);         break;
-
-    // TODO: it doesn't work that way.
-    case TK_AND:     emitOpcode(compiler, OP_AND);        break;
-    case TK_OR:      emitOpcode(compiler, OP_OR);         break;
     default:
       UNREACHABLE();
   }
@@ -1442,11 +1496,11 @@ static void emitConstant(Compiler* compiler, Var value) {
 
 // Update the jump offset.
 static void patchJump(Compiler* compiler, int addr_index) {
-  int jump_to = (int)_FN->opcodes.count - addr_index - 2;
-  ASSERT(jump_to < MAX_JUMP, "Too large address offset to jump to.");
+  int offset = (int)_FN->opcodes.count - addr_index - 2;
+  ASSERT(offset < MAX_JUMP, "Too large address offset to jump to.");
 
-  _FN->opcodes.data[addr_index] = (jump_to >> 8) & 0xff;
-  _FN->opcodes.data[addr_index + 1] = jump_to & 0xff;
+  _FN->opcodes.data[addr_index] = (offset >> 8) & 0xff;
+  _FN->opcodes.data[addr_index + 1] = offset & 0xff;
 }
 
 // Jump back to the start of the loop.
@@ -1486,7 +1540,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
     NameSearchResult result = compilerSearchName(compiler, name,
                                                  name_length);
     if (result.type != NAME_NOT_DEFINED) {
-      parseError(&compiler->parser, "Name %.*s already exists.", name_length,
+      parseError(&compiler->parser, "Name '%.*s' already exists.", name_length,
                  name);
       // Not returning here as to complete for skip cascaded errors.
     }
