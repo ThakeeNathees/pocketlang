@@ -1,9 +1,9 @@
 
 ## Testing import statement
-import os
-import os, path
-import os as o, path as p
-from os import clock
-from os import clock as c
+import lang
+import lang, path
+import lang as o, path as p
+from lang import clock
+from lang import clock as c
 from path import abspath, curdir
 from path import abspath as ap, curdir as cd

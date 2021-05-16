@@ -12,7 +12,7 @@ SRC_DIR     = '../../src/'
 JS_API_PATH = './io_api.js'
 TARGET_DIR  = '../static/'
 TARGET_NAME = 'pocketlang.html'
-JS_SCRIPT   = 'try_now.js'
+PAGE_SCRIPT = 'try_now.js'
 
 def main():
   sources = ' '.join(collect_source_files())
@@ -27,7 +27,7 @@ def main():
   print(cmd)
   os.system(cmd)
   
-  shutil.copyfile(JS_SCRIPT, join(TARGET_DIR,JS_SCRIPT))
+  shutil.copyfile(PAGE_SCRIPT, join(TARGET_DIR,PAGE_SCRIPT))
   os.remove(output) ## Not using the generated html file.
   
   
@@ -36,16 +36,11 @@ def fix_path(path):
 
 def collect_source_files():
   sources = []
-  
-  def add_all(root, sources):
-    for file in os.listdir(root):
-      if not os.path.isfile(join(root, file)): continue
-      if file.endswith('.c'):
-        source = fix_path(join(root, file))
-        sources.append(source)
-
-  add_all(SRC_DIR, sources)
-  add_all(join(SRC_DIR, 'buffers/'), sources)
+  for file in os.listdir(SRC_DIR):
+    if not os.path.isfile(join(SRC_DIR, file)): continue
+    if file.endswith('.c'):
+      source = fix_path(join(SRC_DIR, file))
+      sources.append(source)
   return sources
 
 if __name__ == '__main__':

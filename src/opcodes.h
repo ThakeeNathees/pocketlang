@@ -15,7 +15,7 @@
 
 // Load the constant at index [arg] from the script's literals.
 // params: 2 byte (uint16_t) index value.
-OPCODE(CONSTANT, 2, 1)
+OPCODE(PUSH_CONSTANT, 2, 1)
 
 // Push null on the stack.
 OPCODE(PUSH_NULL, 0, 1)
@@ -28,6 +28,9 @@ OPCODE(PUSH_TRUE, 0, 1)
 
 // Push false on the stack.
 OPCODE(PUSH_FALSE, 0, 1)
+
+// Swap the top 2 stack values.
+OPCODE(SWAP, 0, 0)
 
 // Push a new list to construct from literal.
 // param: 2 bytes list size (defalt is 0).
@@ -182,8 +185,6 @@ OPCODE(BIT_XOR, 0, -1)
 OPCODE(BIT_LSHIFT, 0, -1)
 OPCODE(BIT_RSHIFT, 0, -1)
 
-OPCODE(AND, 0, -1)
-OPCODE(OR, 0, -1)
 OPCODE(EQEQ, 0, -1)
 OPCODE(NOTEQ, 0, -1)
 OPCODE(LT, 0, -1)

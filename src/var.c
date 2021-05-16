@@ -79,22 +79,23 @@ void grayValue(Var self, PKVM* vm) {
 }
 
 void grayVarBuffer(VarBuffer* self, PKVM* vm) {
+  if (self == NULL) return;
   for (uint32_t i = 0; i < self->count; i++) {
     grayValue(self->data[i], vm);
   }
 }
 
-void grayStringBuffer(StringBuffer* self, PKVM* vm) {
-  for (uint32_t i = 0; i < self->count; i++) {
-    grayObject(&self->data[i]->_super, vm);
+#define GRAY_OBJ_BUFFER(m_name)                               \
+  void gray##m_name##Buffer(m_name##Buffer* self, PKVM* vm) { \
+    if (self == NULL) return;                                 \
+    for (uint32_t i = 0; i < self->count; i++) {              \
+      grayObject(&self->data[i]->_super, vm);                 \
+    }                                                         \
   }
-}
 
-void grayFunctionBuffer(FunctionBuffer* self, PKVM* vm) {
-  for (uint32_t i = 0; i < self->count; i++) {
-    grayObject(&self->data[i]->_super, vm);
-  }
-}
+GRAY_OBJ_BUFFER(String)
+GRAY_OBJ_BUFFER(Function)
+
 
 static void blackenObject(Object* obj, PKVM* vm) {
   // TODO: trace here.

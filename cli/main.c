@@ -75,10 +75,10 @@ pkStringResult loadScript(PKVM* vm, const char* path) {
 int main(int argc, char** argv) {
 
   const char* notice =
-    "MiniScript " PK_VERSION_STRING " (https://github.com/ThakeeNathees/miniscript/)\n"
+    "PocketLang " PK_VERSION_STRING " (https://github.com/ThakeeNathees/pocketlang/)\n"
     "Copyright(c) 2020 - 2021 ThakeeNathees.\n"
     "Free and open source software under the terms of the MIT license.\n";
-  const char* help = "Usage: miniscript <source_path>\n";
+  const char* help = "Usage: pocketlang <source_path>\n";
 
   if (argc < 2) {
     printf("%s\n%s", notice, help);
