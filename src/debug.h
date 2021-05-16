@@ -12,9 +12,9 @@
 void dumpValue(PKVM* vm, Var value);
 
 // Dump opcodes of the given function.
-void dumpInstructions(PKVM* vm, Function* func);
+void dumpFunctionCode(PKVM* vm, Function* func);
 
-// Print stack track.
-void reportStackTrace(PKVM* vm);
+// Dump the current (top most) stack call frame.
+void dumpStackFrame(PKVM* vm);
 
 #endif // DEBUG_H

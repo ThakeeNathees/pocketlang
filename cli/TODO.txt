@@ -1,6 +1,7 @@
 
 // To implement.
 
+[ ] Resolve function name (called before defined).
 [ ] Relative file import.
 [ ] Remove resolve path for the root module.
 

@@ -16,7 +16,6 @@ static const char* op_name[] = {
   NULL,
 };
 
-
 static void _dumpValue(PKVM* vm, Var value, bool recursive) {
   if (IS_NULL(value)) {
     printf("null");
@@ -53,8 +52,22 @@ static void _dumpValue(PKVM* vm, Var value, bool recursive) {
     }
 
     case OBJ_MAP:
-      TODO;
+    {
+      Map* map = (Map*)obj;
+      if (recursive) {
+        printf("{...}");
+      } else {
+        printf("{");
+        for (uint32_t i = 0; i < map->count; i++) {
+          if (i != 0) printf(", ");
+          _dumpValue(vm, map->entries[i].key, true);
+          printf(":");
+          _dumpValue(vm, map->entries[i].value, true);
+        }
+        printf("}");
+      }
       return;
+    }
 
     case OBJ_RANGE:
     {
@@ -64,10 +77,11 @@ static void _dumpValue(PKVM* vm, Var value, bool recursive) {
     }
 
     case OBJ_SCRIPT:
-      printf("[Script:%p]", obj);
+      printf("[Script:%s]", ((Script*)obj)->name->data);
       return;
+
     case OBJ_FUNC:
-      printf("[Fn:%p]", obj);
+      printf("[Fn:%s]", ((Function*)obj)->name);
       return;
 
     case OBJ_FIBER:
@@ -84,8 +98,7 @@ void dumpValue(PKVM* vm, Var value) {
   _dumpValue(vm, value, false);
 }
 
-void dumpInstructions(PKVM* vm, Function* func) {  
-
+void dumpFunctionCode(PKVM* vm, Function* func) {
 
   uint32_t i = 0;
   uint8_t* opcodes = func->fn->opcodes.data;
@@ -116,7 +129,7 @@ void dumpInstructions(PKVM* vm, Function* func) {
 
     Opcode op = (Opcode)func->fn->opcodes.data[i++];
     switch (op) {
-      case OP_CONSTANT:
+      case OP_PUSH_CONSTANT:
       {
         int index = READ_SHORT();
         printf("%5d ", index);
@@ -131,6 +144,7 @@ void dumpInstructions(PKVM* vm, Function* func) {
       case OP_PUSH_SELF:
       case OP_PUSH_TRUE:
       case OP_PUSH_FALSE:
+      case OP_SWAP:
         NO_ARGS();
         break;
 
@@ -174,9 +188,20 @@ void dumpInstructions(PKVM* vm, Function* func) {
 
       case OP_PUSH_GLOBAL:
       case OP_STORE_GLOBAL:
-      case OP_PUSH_FN:
-        SHORT_ARG();
+      {
+        int index = READ_SHORT();
+        int name_index = func->owner->global_names.data[index];
+        String* name = func->owner->names.data[name_index];
+        printf("%5d '%s'\n", index, name->data);
         break;
+      }
+
+      case OP_PUSH_FN:
+      {
+        int index = READ_SHORT();
+        printf("%5d [Fn:%s]\n", index, func->name);
+        break;
+      }
 
       case OP_PUSH_BUILTIN_FN:
       {
@@ -184,7 +209,6 @@ void dumpInstructions(PKVM* vm, Function* func) {
         printf("%5d [Fn:%s]\n", index, getBuiltinFunctionName(vm, index));
         break;
       }
-        
 
       case OP_POP:    NO_ARGS(); break;
       case OP_IMPORT: NO_ARGS(); break;
@@ -237,8 +261,6 @@ void dumpInstructions(PKVM* vm, Function* func) {
       case OP_BIT_XOR:
       case OP_BIT_LSHIFT:
       case OP_BIT_RSHIFT:
-      case OP_AND:
-      case OP_OR:
       case OP_EQEQ:
       case OP_NOTEQ:
       case OP_LT:
@@ -258,19 +280,18 @@ void dumpInstructions(PKVM* vm, Function* func) {
   }
 }
 
-void reportStackTrace(PKVM* vm) {
-  if (vm->config.error_fn == NULL) return;
-
+void dumpStackFrame(PKVM* vm) {
   Fiber* fiber = vm->fiber;
+  int frame_ind = fiber->frame_count - 1;
+  ASSERT(frame_ind >= 0, OOPS);
+  CallFrame* frame = &fiber->frames[frame_ind];
+  Var* sp = fiber->sp - 1;
 
-  vm->config.error_fn(vm, PK_ERROR_RUNTIME, NULL, -1, fiber->error->data);
-
-  for (int i = fiber->frame_count - 1; i >= 0; i--) {
-    CallFrame* frame = &fiber->frames[i];
-    Function* fn = frame->fn;
-    ASSERT(!fn->is_native, OOPS);
-    int line = fn->fn->oplines.data[frame->ip - fn->fn->opcodes.data - 1];
-    vm->config.error_fn(vm, PK_ERROR_STACKTRACE, fn->owner->name->data, line, fn->name);
+  printf("Frame: %d.\n", frame_ind);
+  for (; sp >= frame->rbp; sp--) {
+    printf("       ");
+    dumpValue(vm, *sp);
+    printf("\n");
   }
 }
 

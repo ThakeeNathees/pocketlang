@@ -5,9 +5,11 @@
 
 #include "core.h"
 
+#include <ctype.h>
 #include <math.h>
 #include <time.h>
 
+#include "utils.h"
 #include "var.h"
 #include "vm.h"
 
@@ -84,6 +86,20 @@ static inline bool validateIndex(PKVM* vm, int32_t index, int32_t size,
   return true;
 }
 
+// Check if [var] is string for argument at [arg_ind]. If not set error and
+// return false.
+static bool validateArgString(PKVM* vm, Var var, String** value, int arg_ind) {
+  if (!IS_OBJ(var) || AS_OBJ(var)->type != OBJ_STRING) {
+    String* str_arg = toString(vm, VAR_NUM((double)arg_ind), false);
+    vmPushTempRef(vm, &str_arg->_super);
+    vm->fiber->error = stringFormat(vm, "Expected a string at argument @.",
+                                    str_arg, false);
+    vmPopTempRef(vm);
+  }
+  *value = (String*)AS_OBJ(var);
+  return true;
+}
+
 /*****************************************************************************/
 /* BUILTIN FUNCTIONS API                                                     */
 /*****************************************************************************/
@@ -91,7 +107,7 @@ static inline bool validateIndex(PKVM* vm, int32_t index, int32_t size,
 // Argument getter (1 based).
 #define ARG(n) vm->fiber->ret[n]
 
-// Convinent macro
+// Convinent macros.
 #define ARG1 ARG(1)
 #define ARG2 ARG(2)
 #define ARG3 ARG(3)
@@ -216,6 +232,49 @@ void corePrint(PKVM* vm) {
   vm->config.write_fn(vm, "\n");
 }
 
+// string functions
+// ----------------
+
+void coreStrLower(PKVM* vm) {
+  String* str;
+  if (!validateArgString(vm, ARG1, &str, 1)) return;
+
+  String* result = newStringLength(vm, str->data, str->length);
+  char* data = result->data;
+  for (; *data; ++data) *data = tolower(*data);
+  // Since the string is modified re-hash it.
+  result->hash = utilHashString(result->data);
+
+  RET(VAR_OBJ(&result->_super));
+}
+
+void coreStrUpper(PKVM* vm) {
+  String* str;
+  if (!validateArgString(vm, ARG1, &str, 1)) return;
+
+  String* result = newStringLength(vm, str->data, str->length);
+  char* data = result->data;
+  for (; *data; ++data) *data = toupper(*data);
+  // Since the string is modified re-hash it.
+  result->hash = utilHashString(result->data);
+  
+  RET(VAR_OBJ(&result->_super));
+}
+
+void coreStrStrip(PKVM* vm) {
+  String* str;
+  if (!validateArgString(vm, ARG1, &str, 1)) return;
+
+  const char* start = str->data;
+  while (*start && isspace(*start)) start++;
+  if (*start == '\0') RET(VAR_OBJ(&newStringLength(vm, NULL, 0)->_super));
+
+  const char* end = str->data + str->length - 1;
+  while (isspace(*end)) end--;
+
+  RET(VAR_OBJ(&newStringLength(vm, start, end - start + 1)->_super));
+}
+
 /*****************************************************************************/
 /* CORE LIBRARY METHODS                                                      */
 /*****************************************************************************/
@@ -302,6 +361,11 @@ void initializeCore(PKVM* vm) {
   INITALIZE_BUILTIN_FN("hash",        coreHash,       1);
   INITALIZE_BUILTIN_FN("to_string",   coreToString,   1);
   INITALIZE_BUILTIN_FN("print",       corePrint,     -1);
+
+  // string functions.
+  INITALIZE_BUILTIN_FN("str_lower",   coreStrLower,   1);
+  INITALIZE_BUILTIN_FN("str_upper",   coreStrUpper,   1);
+  INITALIZE_BUILTIN_FN("str_strip",   coreStrStrip,   1);
 
   // Make STD scripts.
   Script* std;  // A temporary pointer to the current std script.
@@ -671,12 +735,15 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
     {
       Var value = mapGet((Map*)obj, key);
       if (IS_UNDEF(value)) {
+
         String* key_str = toString(vm, key, true);
-
         vmPushTempRef(vm, &key_str->_super);
-        vm->fiber->error = stringFormat(vm, "Key (@) not exists", key_str);
+        if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
+          vm->fiber->error = stringFormat(vm, "Invalid key '@'.", key_str);
+        } else {
+          vm->fiber->error = stringFormat(vm, "Key '@' not exists", key_str);
+        }
         vmPopTempRef(vm);
-
         return VAR_NULL;
       }
       return value;
