@@ -1,8 +1,14 @@
 
 // To implement.
 
+
+[ ] Single header for embedding.
+[ ] Add a make file/and more? (not every one has scons).
+
+[ ] Resolve function name (called before defined).
 [ ] Relative file import.
 [ ] Remove resolve path for the root module.
+[ ] Global variable names (also update dumpFunctionCode after).
 
 [ ] Implement fiber from script body and vm run fibers (not scripts).
     Then remove vm's root script.
@@ -12,8 +18,8 @@
 [ ] Var handler implement.
 [ ] Make it possible to override function names.
 [ ] Hex, binary literals and floats like ".5".
+[ ] Function docstring property.
 [ ] Union tagging alter in var.
-[ ] Add a make file/and more? (not every one has scons).
 [ ] (future) add structs and maybe enums.
 
 // Add more.

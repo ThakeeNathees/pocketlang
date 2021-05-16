@@ -7,7 +7,7 @@
 #define BUFFERS_TEMPLATE_H
 
 #include "common.h"
-#include "pocketlang.h"
+#include "include/pocketlang.h"
 
 #define DECLARE_BUFFER(M__NAME, M__NAME_L, M__TYPE)                           \
   typedef struct {                                                            \

@@ -5,8 +5,10 @@ val = 0
 
 a = false; b = true;
 if a and b then assert(false) end
-if a or b then va
-else assert(false, '') end
+
+if a or b then val = 42
+else assert(false) end
+assert(val == 42)
 
 get_true = func return true end
 

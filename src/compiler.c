@@ -62,6 +62,7 @@ typedef enum {
   TK_AMP,        // &
   TK_PIPE,       // |
   TK_CARET,      // ^
+  TK_ARROW,      // ->
 
   TK_PLUS,       // +
   TK_MINUS,      // -
@@ -221,6 +222,7 @@ typedef enum {
   PREC_TERM,          // + -
   PREC_FACTOR,        // * / %
   PREC_UNARY,         // - ! ~
+  PREC_CHAIN_CALL,    // ->
   PREC_CALL,          // ()
   PREC_SUBSCRIPT,     // []
   PREC_ATTRIB,        // .index
@@ -623,7 +625,13 @@ static void lexToken(Parser* parser) {
         return;
 
       case '-':
-        setNextTwoCharToken(parser, '=', TK_MINUS, TK_MINUSEQ);
+        if (matchChar(parser, '=')) {
+          setNextToken(parser, TK_MINUSEQ);  // '-='
+        } else if (matchChar(parser, '>')) {
+          setNextToken(parser, TK_ARROW);    // '->'
+        } else {
+          setNextToken(parser, TK_MINUS);    // '-'
+        }
         return;
 
       case '*':
@@ -892,6 +900,7 @@ static void exprName(Compiler* compiler, bool can_assign);
 static void exprOr(Compiler* compiler, bool can_assign);
 static void exprAnd(Compiler* compiler, bool can_assign);
 
+static void exprChainCall(Compiler* compiler, bool can_assign);
 static void exprBinaryOp(Compiler* compiler, bool can_assign);
 static void exprUnaryOp(Compiler* compiler, bool can_assign);
 
@@ -930,6 +939,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_AMP        */ { NULL,          exprBinaryOp,     PREC_BITWISE_AND },
   /* TK_PIPE       */ { NULL,          exprBinaryOp,     PREC_BITWISE_OR },
   /* TK_CARET      */ { NULL,          exprBinaryOp,     PREC_BITWISE_XOR },
+  /* TK_ARROW      */ { NULL,          exprChainCall,    PREC_CHAIN_CALL },
   /* TK_PLUS       */ { NULL,          exprBinaryOp,     PREC_TERM },
   /* TK_MINUS      */ { exprUnaryOp,   exprBinaryOp,     PREC_TERM },
   /* TK_STAR       */ { NULL,          exprBinaryOp,     PREC_FACTOR },
@@ -1016,7 +1026,7 @@ static void emitPushVariable(Compiler* compiler, int index, bool global) {
 static void exprLiteral(Compiler* compiler, bool can_assign) {
   Token* value = &compiler->parser.previous;
   int index = compilerAddConstant(compiler, value->value);
-  emitOpcode(compiler, OP_CONSTANT);
+  emitOpcode(compiler, OP_PUSH_CONSTANT);
   emitShort(compiler, index);
 }
 
@@ -1159,6 +1169,30 @@ void exprAnd(Compiler* compiler, bool can_assign) {
   emitOpcode(compiler, OP_PUSH_FALSE);
 
   patchJump(compiler, end_offset);
+}
+
+static void exprChainCall(Compiler* compiler, bool can_assign) {
+  skipNewLines(&compiler->parser);
+  parsePrecedence(compiler, (Precedence)(PREC_CHAIN_CALL + 1));
+  emitOpcode(compiler, OP_SWAP); // Swap the data with the function.
+
+  int argc = 1; // The initial data.
+
+  if (match(&compiler->parser, TK_LBRACE)) {
+    if (!match(&compiler->parser, TK_RBRACE)) {
+      do {
+        skipNewLines(&compiler->parser);
+        compileExpression(compiler);
+        skipNewLines(&compiler->parser);
+        argc++;
+      } while (match(&compiler->parser, TK_COMMA));
+      consume(&compiler->parser, TK_RBRACE, "Expected '}' after chain call"
+                                            "parameter list.");
+    }
+  }
+
+  emitOpcode(compiler, OP_CALL);
+  emitShort(compiler, argc);
 }
 
 static void exprBinaryOp(Compiler* compiler, bool can_assign) {
@@ -1490,7 +1524,7 @@ static void emitOpcode(Compiler* compiler, Opcode opcode) {
 // make one.
 static void emitConstant(Compiler* compiler, Var value) {
   int index = compilerAddConstant(compiler, value);
-  emitOpcode(compiler, OP_CONSTANT);
+  emitOpcode(compiler, OP_PUSH_CONSTANT);
   emitShort(compiler, index);
 }
 
@@ -1546,7 +1580,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
     }
 
   } else {
-    name = "[FunctionLiteral]";
+    name = "$(LiteralFn)";
     name_length = (int)strlen(name);
   }
   
@@ -1610,7 +1644,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   compilerExitBlock(compiler); // Parameter depth.
 
 #if DEBUG_DUMP_COMPILED_CODE
-  dumpInstructions(compiler->vm, compiler->func->ptr);
+  dumpFunctionCode(compiler->vm, compiler->func->ptr);
 #endif
   compiler->func = compiler->func->outer_func;
 
@@ -2020,7 +2054,7 @@ bool compile(PKVM* vm, Script* script, const char* source) {
   vm->compiler = NULL;
 
 #if DEBUG_DUMP_COMPILED_CODE
-  dumpInstructions(vm, script->body);
+  dumpFunctionCode(vm, script->body);
 #endif
 
   // Return true if success.

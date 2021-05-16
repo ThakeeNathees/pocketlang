@@ -6,7 +6,7 @@
 #include "vm.h"
 
 #include "core.h"
-#include "debug.h"
+//#include "debug.h" //< Wrap around debug macro.
 #include "utils.h"
 
 #define HAS_ERROR() (vm->fiber->error != NULL)
@@ -375,10 +375,19 @@ void pkSetRuntimeError(PKVM* vm, const char* message) {
 
 void vmReportError(PKVM* vm) {
   ASSERT(HAS_ERROR(), "runtimeError() should be called after an error.");
-
   // TODO: pass the error to the caller of the fiber.
 
-  reportStackTrace(vm);
+  // Print the Error message and stack trace.
+  if (vm->config.error_fn == NULL) return;
+  Fiber* fiber = vm->fiber;
+  vm->config.error_fn(vm, PK_ERROR_RUNTIME, NULL, -1, fiber->error->data);
+  for (int i = fiber->frame_count - 1; i >= 0; i--) {
+    CallFrame* frame = &fiber->frames[i];
+    Function* fn = frame->fn;
+    ASSERT(!fn->is_native, OOPS);
+    int line = fn->fn->oplines.data[frame->ip - fn->fn->opcodes.data - 1];
+    vm->config.error_fn(vm, PK_ERROR_STACKTRACE, fn->owner->name->data, line, fn->name);
+  }
 }
 
 // FIXME: temp.
@@ -530,7 +539,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
   Opcode instruction;
   SWITCH(instruction) {
 
-    OPCODE(CONSTANT):
+    OPCODE(PUSH_CONSTANT):
     {
       uint16_t index = READ_SHORT();
       ASSERT_INDEX(index, script->literals.count);
@@ -549,6 +558,16 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(PUSH_FALSE):
       PUSH(VAR_FALSE);
       DISPATCH();
+
+    OPCODE(SWAP):
+    {
+      Var top1 = *(vm->fiber->sp - 1);
+      Var top2 = *(vm->fiber->sp - 2);
+
+      *(vm->fiber->sp - 1) = top2;
+      *(vm->fiber->sp - 2) = top1;
+      DISPATCH();
+    }
 
     OPCODE(PUSH_LIST):
     {
@@ -754,7 +773,6 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       DISPATCH();
     }
 
-
     OPCODE(JUMP_IF):
     {
       Var cond = POP();
@@ -929,21 +947,6 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(BIT_XOR):
     OPCODE(BIT_LSHIFT):
     OPCODE(BIT_RSHIFT):
-    OPCODE(AND):
-      TODO;
-
-    OPCODE(OR):
-    {
-      TODO;
-      // Python like or operator.
-      //Var v1 = POP(), v2 = POP();
-      //if (toBool(v1)) {
-      //  PUSH(v1);
-      //} else {
-      //  PUSH(v2);
-      //}
-      DISPATCH();
-    }
 
     OPCODE(EQEQ) :
     {

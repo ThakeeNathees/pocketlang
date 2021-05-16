@@ -1,13 +1,14 @@
 @echo off
 
-set files=(         ^
-  lang\basics.pk    ^
-  lang\import.pk    ^
-  lang\if.pk        ^
-  lang\logical.pk   ^
-                    ^
-  examples\fib.pk   ^
-  examples\prime.pk ^
+set files=(            ^
+  lang\basics.pk       ^
+  lang\import.pk       ^
+  lang\if.pk           ^
+  lang\logical.pk      ^
+  lang\chain_call.pk   ^
+                       ^
+  examples\fib.pk      ^
+  examples\prime.pk    ^
 )
 
 set errorlevel=0
