@@ -1,0 +1,5 @@
+*
+!.gitignore
+!SConstruct
+!build.bat
+!Makefile
