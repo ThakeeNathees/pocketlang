@@ -272,7 +272,7 @@ void coreStrStrip(PKVM* vm) {
   const char* end = str->data + str->length - 1;
   while (isspace(*end)) end--;
 
-  RET(VAR_OBJ(&newStringLength(vm, start, end - start + 1)->_super));
+  RET(VAR_OBJ(&newStringLength(vm, start, (uint32_t)(end - start + 1))->_super));
 }
 
 /*****************************************************************************/
@@ -376,6 +376,7 @@ void initializeCore(PKVM* vm) {
     String* name = newString(vm, _name);                                      \
     vmPushTempRef(vm, &name->_super);                                         \
     std = newScript(vm, name);                                                \
+    std->moudle = name; /* Core libs's path and the module are the same. */   \
     vmPopTempRef(vm);                                                         \
     /* Add the script to core_libs. */                                        \
     vmPushTempRef(vm, &std->_super);                                          \

@@ -23,35 +23,36 @@ void writeFunction(PKVM* vm, const char* text) {
   fprintf(stdout, "%s", text);
 }
 
-// FIXME:
-void onResultDone(PKVM* vm, pkStringResult result) {
-  //   // The result.string is the allocated buffer and it has to be freed
-  //   // manually since it wasn't allocated by the VM.
-  //   free((void*)result.string);
+void onResultDone(PKVM* vm, pkStringPtr result) {
+
+  if ((bool)result.user_data) {
+    free((void*)result.string);
+  }
 }
 
 // FIXME:
-pkStringResult resolvePath(PKVM* vm, const char* from, const char* name) {
+pkStringPtr resolvePath(PKVM* vm, const char* from, const char* path) {
   if (from == NULL) {
     // TODO: name is the complete path.
   }
 
-  pkStringResult result;
-  result.success = true;
+  pkStringPtr result;
   result.on_done = onResultDone;
-  result.string = name;
+  result.string = path;
+  result.user_data = (void*)false;
   return result;
 }
 
-pkStringResult loadScript(PKVM* vm, const char* path) {
-  pkStringResult result;
-  result.success = true;
+pkStringPtr loadScript(PKVM* vm, const char* path) {
+
+  pkStringPtr result;
   result.on_done = onResultDone;
 
   // Open the file.
   FILE* file = fopen(path, "r");
   if (file == NULL) {
-    result.success = false;
+    // Setting .string to NULL to indicate the failure of loading the script.
+    result.string = NULL;
     return result;
   }
 
@@ -69,6 +70,8 @@ pkStringResult loadScript(PKVM* vm, const char* path) {
   fclose(file);
 
   result.string = buff;
+  result.user_data = (void*)true;
+
   return result;
 }
 

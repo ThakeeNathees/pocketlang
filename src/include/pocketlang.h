@@ -101,29 +101,30 @@ typedef void (*pkErrorFn) (PKVM* vm, PKErrorType type,
 // A function callback used by `print()` statement.
 typedef void (*pkWriteFn) (PKVM* vm, const char* text);
 
-typedef struct pkStringResult pkStringResult;
+typedef struct pkStringPtr pkStringPtr;
 
 // A function callback symbol for clean/free the pkStringResult.
-typedef void (*pkResultDoneFn) (PKVM* vm, pkStringResult result);
+typedef void (*pkResultDoneFn) (PKVM* vm, pkStringPtr result);
 
-// Result of the MiniScriptLoadScriptFn function.
-struct pkStringResult {
-  bool success;           //< State of the result.
+// A string pointer wrapper to pass cstring around with a on_done() callback
+// to clean it when the user of the string done with the string.
+struct pkStringPtr {
   const char* string;     //< The string result.
-  void* user_data;        //< User related data.
   pkResultDoneFn on_done; //< Called once vm done with the string.
+  void* user_data;        //< User related data.
 };
 
 // A function callback to resolve the import script name from the [from] path
 // to an absolute (or relative to the cwd). This is required to solve same
-// script imported with different relative path.
-// Note: If the name is the root script [from] would be NULL.
-typedef pkStringResult (*pkResolvePathFn) (PKVM* vm, const char* from,
-                                        const char* name);
+// script imported with different relative path. Set the string attribute to
+// NULL to indicate if it's failed to resolve.
+typedef pkStringPtr(*pkResolvePathFn) (PKVM* vm, const char* from,
+                                       const char* path);
 
 // Load and return the script. Called by the compiler to fetch initial source
-// code and source for import statements.
-typedef pkStringResult (*pkLoadScriptFn) (PKVM* vm, const char* path);
+// code and source for import statements. Set the string attribute to NULL
+// to indicate if it's failed to load the script.
+typedef pkStringPtr(*pkLoadScriptFn) (PKVM* vm, const char* path);
 
 // This function will be called once it done with the loaded script only if
 // it's corresponding MSLoadScriptResult is succeeded (ie. is_failed = false).
@@ -162,13 +163,13 @@ PK_PUBLIC PKVM* pkNewVM(pkConfiguration* config);
 // Clean the VM and dispose all the resources allocated by the VM.
 PK_PUBLIC void pkFreeVM(PKVM* vm);
 
-// FIXME: Refactor this
-// Interpret the source and return the result. This is a temporary code to test
-// try_online.
-PK_PUBLIC PKInterpretResult pkInterpretSource(PKVM* vm, const char* source);
+// Interpret the source and return the result.
+PK_PUBLIC PKInterpretResult pkInterpretSource(PKVM* vm,
+                                              const char* source,
+                                              const char* path);
 
 // Compile and execut file at given path.
-PK_PUBLIC PKInterpretResult pkInterpret(PKVM* vm, const char* file);
+PK_PUBLIC PKInterpretResult pkInterpret(PKVM* vm, const char* path);
 
 // Set a runtime error to vm.
 PK_PUBLIC void pkSetRuntimeError(PKVM* vm, const char* message);

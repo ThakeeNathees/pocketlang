@@ -171,7 +171,7 @@ if env['vsproj']:
 	
 	targets = [ env.RUN_TARGET ] * 4
 	variants = ["debug|Win32", "debug|x64", "release|Win32", "release|x64"]
-	source_dirs = ('../src/', '../cli/')
+	source_dirs = ('../src/', '../src/include/', '../cli/')
 	
 	env.MSVSProject(
 		target  = PROJECT_NAME + env['MSVSPROJECTSUFFIX'],

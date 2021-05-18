@@ -133,7 +133,8 @@ static void blackenObject(Object* obj, PKVM* vm) {
       Script* script = (Script*)obj;
       vm->bytes_allocated += sizeof(Script);
 
-      grayObject(&script->name->_super, vm);
+      grayObject(&script->path->_super, vm);
+      grayObject(&script->moudle->_super, vm);
 
       grayVarBuffer(&script->globals, vm);
       vm->bytes_allocated += sizeof(Var) * script->globals.capacity;
@@ -274,11 +275,12 @@ Range* newRange(PKVM* vm, double from, double to) {
   return range;
 }
 
-Script* newScript(PKVM* vm, String* name) {
+Script* newScript(PKVM* vm, String* path) {
   Script* script = ALLOCATE(vm, Script);
   varInitObject(&script->_super, vm, OBJ_SCRIPT);
 
-  script->name = name;
+  script->path = path;
+  script->moudle = NULL;
 
   varBufferInit(&script->globals);
   uintBufferInit(&script->global_names);
@@ -797,8 +799,13 @@ String* toString(PKVM* vm, Var v, bool recursive) {
 
         return str;
       }
-        return newStringLength(vm, "[Range]",   7); // TODO;
-      case OBJ_SCRIPT: return stringFormat(vm, "[Lib:@]", ((Script*)obj)->name);
+
+      case OBJ_SCRIPT: {
+        String* name = (((Script*)obj)->moudle != NULL)
+          ? ((Script*)obj)->moudle
+          : ((Script*)obj)->path;
+        return stringFormat(vm, "[Lib:@]", name);
+      }
       case OBJ_FUNC:   return stringFormat(vm, "[Func:$]", ((Function*)obj)->name);
       case OBJ_FIBER:  return newStringLength(vm, "[Fiber]", 7); // TODO;
       case OBJ_USER:   return newStringLength(vm, "[UserObj]", 9); // TODO;
