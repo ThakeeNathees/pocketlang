@@ -46,6 +46,7 @@ PAGES = [
 	('Language API', [
 		'variables.md',
 		'functions.md',
+		'modules.md',
 	]),
 ]
 

@@ -353,23 +353,23 @@ void varInitObject(Object* self, PKVM* vm, ObjectType type);
 
 // Mark the reachable objects at the mark-and-sweep phase of the garbage
 // collection.
-void grayObject(Object* self, PKVM* vm);
+void grayObject(PKVM* vm, Object* self);
 
 // Mark the reachable values at the mark-and-sweep phase of the garbage
 // collection.
-void grayValue(Var self, PKVM* vm);
+void grayValue(PKVM* vm, Var self);
 
 // Mark the elements of the buffer as reachable at the mark-and-sweep pahse of
 // the garbage collection.
-void grayVarBuffer(VarBuffer* self, PKVM* vm);
+void grayVarBuffer(PKVM* vm, VarBuffer* self);
 
 // Mark the elements of the buffer as reachable at the mark-and-sweep pahse of
 // the garbage collection.
-void grayStringBuffer(StringBuffer* self, PKVM* vm);
+void grayStringBuffer(PKVM* vm, StringBuffer* self);
 
 // Mark the elements of the buffer as reachable at the mark-and-sweep pahse of
 // the garbage collection.
-void grayFunctionBuffer(FunctionBuffer* self, PKVM* vm);
+void grayFunctionBuffer(PKVM* vm, FunctionBuffer* self);
 
 // Pop objects from the gray list and add it's referenced objects to the
 // working list to traverse and update the vm's [bytes_allocated] value.
@@ -409,27 +409,27 @@ Fiber* newFiber(PKVM* vm);
 
 // Insert [value] to the list at [index] and shift down the rest of the
 // elements.
-void listInsert(List* self, PKVM* vm, uint32_t index, Var value);
+void listInsert(PKVM* vm, List* self, uint32_t index, Var value);
 
 // Remove and return element at [index].
-Var listRemoveAt(List* self, PKVM* vm, uint32_t index);
+Var listRemoveAt(PKVM* vm, List* self, uint32_t index);
 
 // Returns the value for the [key] in the mape. If key not exists return
 // VAR_UNDEFINED.
 Var mapGet(Map* self, Var key);
 
 // Add the [key], [value] entry to the map.
-void mapSet(Map* self, PKVM* vm, Var key, Var value);
+void mapSet(PKVM* vm, Map* self, Var key, Var value);
 
 // Remove all the entries from the map.
-void mapClear(Map* self, PKVM* vm);
+void mapClear(PKVM* vm, Map* self);
 
 // Remove the [key] from the map. If the key exists return it's value
 // otherwise return VAR_NULL.
-Var mapRemoveKey(Map* self, PKVM* vm, Var key);
+Var mapRemoveKey(PKVM* vm, Map* self, Var key);
 
-// Release all the object owned by the [obj] including itself.
-void freeObject(PKVM* vm, Object* obj);
+// Release all the object owned by the [self] including itself.
+void freeObject(PKVM* vm, Object* self);
 
 // Utility functions //////////////////////////////////////////////////////////
 

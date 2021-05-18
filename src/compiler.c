@@ -92,6 +92,7 @@ typedef enum {
   //TK_XOREQ,    // ^=
 
   // Keywords.
+  TK_MODULE,     // module
   TK_FROM,       // from
   TK_IMPORT,     // import
   TK_AS,         // as
@@ -155,6 +156,7 @@ typedef struct {
 
 // List of keywords mapped into their identifiers.
 static _Keyword _keywords[] = {
+  { "module",   6, TK_MODULE },
   { "from",     4, TK_FROM },
   { "import",   6, TK_IMPORT },
   { "as",       2, TK_AS },
@@ -287,6 +289,7 @@ typedef struct sFunc {
 struct Compiler {
 
   PKVM* vm;
+  Compiler* next_compiler;
 
   // Variables related to parsing.
   const char* source;       //< Currently compiled source (Weak pointer).
@@ -854,6 +857,8 @@ static int emitShort(Compiler* compiler, int arg);
 static void patchJump(Compiler* compiler, int addr_index);
 static int compilerAddConstant(Compiler* compiler, Var value);
 
+static int compilerGetVariable(Compiler* compiler, const char* name,
+  int length);
 static int compilerAddVariable(Compiler* compiler, const char* name,
   int length, int line);
 static int compilerAddConstant(Compiler* compiler, Var value);
@@ -928,6 +933,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_DIVEQ      */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
   /* TK_SRIGHT     */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_SLEFT      */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
+  /* TK_MODULE     */   NO_RULE,
   /* TK_FROM       */   NO_RULE,
   /* TK_IMPORT     */   NO_RULE,
   /* TK_AS         */   NO_RULE,
@@ -1021,11 +1027,6 @@ static void exprName(Compiler* compiler, bool can_assign) {
       compileExpression(compiler);
       if (compiler->scope_depth == DEPTH_GLOBAL) {
         emitStoreVariable(compiler, index, true);
-
-        // Add the name to the script's global names.
-        uint32_t index = scriptAddName(compiler->script, compiler->vm,
-                                            name_start, name_len);
-        uintBufferWrite(&compiler->script->global_names, compiler->vm, index);
 
       } else {
         // This will prevent the assignment from poped out from the stack
@@ -1383,6 +1384,7 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
                          Script* script) {
   
   compiler->vm = vm;
+  compiler->next_compiler = NULL;
 
   compiler->source = source;
   compiler->script = script;
@@ -1407,16 +1409,39 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
   compiler->new_local = false;
 }
 
+// Return the index of the variable if it's already defined in the current
+// scope otherwise returns -1.
+static int compilerGetVariable(Compiler* compiler, const char* name,
+                               int length) {
+  for (int i = compiler->var_count - 1; i >= 0; i--) {
+    Variable* variable = &compiler->variables[i];
+    if (length == variable->length && strncmp(name, variable->name,
+                                              length) == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 // Add a variable and return it's index to the context. Assumes that the
 // variable name is unique and not defined before in the current scope.
 static int compilerAddVariable(Compiler* compiler, const char* name,
                                 int length, int line) {
+
+  // TODO: should I validate the name for pre-defined, etc?
+
   Variable* variable = &compiler->variables[compiler->var_count];
   variable->name = name;
   variable->length = length;
   variable->depth = compiler->scope_depth;
   variable->line = line;
-  if (variable->depth == DEPTH_GLOBAL) compiler->global_count++;
+  if (variable->depth == DEPTH_GLOBAL) {
+    compiler->global_count++;
+    uint32_t name_index = scriptAddName(compiler->script, compiler->vm,
+                                        name, length);
+    uintBufferWrite(&compiler->script->global_names, compiler->vm, name_index);
+  }
+
   return compiler->var_count++;
 }
 
@@ -1599,7 +1624,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
         parseError(compiler, "Multiple definition of a parameter");
 
       compilerAddVariable(compiler, param_name, param_len,
-        compiler->previous.line);
+                          compiler->previous.line);
 
     } while (match(compiler, TK_COMMA));
 
@@ -1668,101 +1693,302 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
   compilerExitBlock(compiler);
 }
 
-typedef enum {
-  IMPORT_REGULAR,      //< Regular import
-  IMPORT_FROM_LIB,     //< Import the lib for `from` import.
-  IMPORT_FROM_SYMBOL,  //< Entry of a `from` import.
-  // TODO: from os import *
-} ImportEntryType;
+// Import a file at the given path (first it'll be resolved from the current
+// path) and return it as a script pointer. And it'll emit opcodes to push
+// that script to the stack.
+static Script* importFile(Compiler* compiler, const char* path) {
+  PKVM* vm = compiler->vm;
 
-// Single entry of a comma seperated import statement. The instructions will
-// import the and assign to the corresponding variables.
-static void _compilerImportEntry(Compiler* compiler, ImportEntryType ie_type) {
+  // Resolve the path.
+  pkStringPtr resolved = { path, NULL, NULL };
+  if (vm->config.resolve_path_fn != NULL) {
+    resolved = vm->config.resolve_path_fn(vm, compiler->script->path->data, path);
+  }
 
-  const char* name = NULL;
-  uint32_t length = 0;
-  int entry = -1; //< Imported library variable index.
+  // Create new string for the resolved path. And free the resolved path.
+  int index = (int)scriptAddName(compiler->script, compiler->vm,
+                           resolved.string, (uint32_t)strlen(resolved.string));
+  String* path_name = compiler->script->names.data[index];
+  if (resolved.on_done != NULL) resolved.on_done(vm, resolved);
 
-  if (match(compiler, TK_NAME)) {
-    name = compiler->previous.start;
-    length = compiler->previous.length;
+  // Check if the script already exists.
+  Var entry = mapGet(vm->scripts, VAR_OBJ(&path_name->_super));
+  if (!IS_UNDEF(entry)) {
+    ASSERT(AS_OBJ(entry)->type == OBJ_SCRIPT, OOPS);
 
-    uint32_t name_line = compiler->previous.line;
+    // Push the script on the stack.
+    emitOpcode(compiler, OP_IMPORT);
+    emitShort(compiler, index);
+    return (Script*)AS_OBJ(entry);
+  }
 
-    // >> from os import clock
-    //    Here `os` is temporary don't add to variable.
-    if (ie_type != IMPORT_FROM_LIB) {
-      entry = compilerAddVariable(compiler, name, length, name_line);
+  // The script not exists, make sure we have the script loading api function.
+  if (vm->config.load_script_fn == NULL) {
+    parseError(compiler, "Cannot import. The hosting application haven't "
+               "registered the script loading API");
+    return NULL;
+  }
+
+  // Load the script at the path.
+  pkStringPtr source = vm->config.load_script_fn(vm, resolved.string);
+  if (source.string == NULL) {
+    parseError(compiler, "Error loading script at '%s'", path_name->data);
+    return NULL;
+  }
+
+  // Make a new script and to compile it.
+  Script* scr = newScript(vm, path_name);
+  vmPushTempRef(vm, &scr->_super); // scr.
+  mapSet(vm, vm->scripts, VAR_OBJ(&path_name->_super),
+         VAR_OBJ(&scr->_super));
+  vmPopTempRef(vm); // scr.
+
+  // Push the script on the stack.
+  emitOpcode(compiler, OP_IMPORT);
+  emitShort(compiler, index);
+
+  // Compile the source to the script and clean the source.
+  bool success = compile(vm, scr, source.string);
+  if (source.on_done != NULL) source.on_done(vm, source);
+
+  if (!success) parseError(compiler, "Compilation of imported script "
+                           "'%s' failed", path_name->data);
+  return scr;
+}
+
+// Import the core library from the vm's core_libs and it'll emit opcodes to
+// push that script to the stack.
+static Script* importCoreLib(Compiler* compiler, const char* name_start,
+                             int name_length) {
+
+  // Add the name to the script's name buffer, we need it as a key to the
+      // vm's script cache.
+  int index = (int)scriptAddName(compiler->script, compiler->vm,
+                                 name_start, name_length);
+  String* module = compiler->script->names.data[index];
+
+  Var entry = mapGet(compiler->vm->core_libs, VAR_OBJ(&module->_super));
+  if (IS_UNDEF(entry)) {
+    parseError(compiler, "No module named '%s' exists.", module->data);
+    return NULL;
+  }
+
+  // Push the script on the stack.
+  emitOpcode(compiler, OP_IMPORT);
+  emitShort(compiler, index);
+
+  ASSERT(AS_OBJ(entry)->type == OBJ_SCRIPT, OOPS);
+  return (Script*)AS_OBJ(entry);
+}
+
+// Push the imported script on the stack and return the pointer. It could be
+// either core library or a local import.
+static inline Script* compilerImport(Compiler* compiler) {
+  // Get the script (from core libs or vm's cache or compile new one).
+  // And push it on the stack.
+  if (match(compiler, TK_NAME)) { //< Core library.
+    return importCoreLib(compiler, compiler->previous.start,
+                         compiler->previous.length);
+
+  } else if (match(compiler, TK_STRING)) { //< Local library.
+    Var var_path = compiler->previous.value;
+    ASSERT(IS_OBJ(var_path) && AS_OBJ(var_path)->type == OBJ_STRING, OOPS);
+    String* path = (String*)AS_OBJ(var_path);
+    return importFile(compiler, path->data);
+  }
+
+  // Invalid token after import/from keyword.
+  parseError(compiler, "Expected a module name or path to import.");
+  return NULL;
+}
+
+// Import all from the script, which is also would be at the top of the stack
+// before executing the below instructions.
+static void compilerImportAll(Compiler* compiler, Script* script) {
+
+  // Line number of the variables which will be bind to the imported sybmols.
+  int line = compiler->previous.line;
+
+  //                           !!! WARNING !!!
+  //
+  // The below code uses 'goto' statement to run same loop twice with different
+  // string buffer, instead of making the loop a function or writeing it twice.
+  // So modify the below code with caution.
+
+  bool done = false;            //< A flag to jump out of the loop.
+  UintBuffer* name_buff = NULL; //< The string buffer to iterate through.
+  goto L_first_buffer;          //< Skip pass the below iteration.
+
+  // --------------------------------------------------------------------------
+L_import_all_from_buffer:
+  // Iterate over the names and import them.
+  for (uint32_t i = 0; i < name_buff->count; i++) {
+    String* name = script->names.data[name_buff->data[i]];
+
+    // Special names are begins with '$' like function body (only for now).
+    // Skip them.
+    if (name->data[0] == '$') continue;
+
+    // Add the name to the **current** script's name buffer.
+    int name_index = (int)scriptAddName(compiler->script, compiler->vm,
+                                        name->data, name->length);
+    // Get the function from the script.
+    emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
+    emitShort(compiler, name_index);
+
+    // Store the bind the function with the variable. If the variable already
+    // exists, override it, otherwise a add a new varaible.
+    int var_index = compilerGetVariable(compiler, name->data, name->length);
+    if (var_index == -1) {
+      var_index = compilerAddVariable(compiler, name->data,
+                                          name->length, line);
     }
+    emitStoreVariable(compiler, var_index, true);
+    emitOpcode(compiler, OP_POP);
+  }
 
-    int index = (int)scriptAddName(compiler->script, compiler->vm,
-      name, length);
+  // If we have multiple buffer, we need to use an integer to keep track by
+  // incrementing it, But it's just 2 buffers so using a boolean 'done' here.
+  if (!done) {
+    done = true;
+    goto L_next_buffer;
+  } else {
+    goto L_import_done;
+  }
+  // --------------------------------------------------------------------------
 
-    // >> from os import clock
-    //    Here clock is not imported but get attribute of os.
-    if (ie_type != IMPORT_FROM_SYMBOL) {
-      emitOpcode(compiler, OP_IMPORT);
-      emitShort(compiler, index); //< Name of the lib.
-    } else {
+  // Set the buffer to function names and run the iteration.
+L_first_buffer:
+  name_buff = &script->function_names;
+  goto L_import_all_from_buffer;
+
+  // Set the buffer to global names and run the iteration.
+L_next_buffer:
+  name_buff = &script->global_names;
+  goto L_import_all_from_buffer;
+
+L_import_done:
+  return;
+}
+
+// from module import symbol [as alias [, symbol2 [as alias]]]
+static void compileFromImport(Compiler* compiler) {
+
+  // Import the library and push it on the stack.
+  Script* lib_from = compilerImport(compiler);
+
+  // At this point the script would be on the stack before executing the next
+  // instruction.
+  consume(compiler, TK_IMPORT, "Expected keyword 'import'.");
+
+  if (match(compiler, TK_STAR)) {
+    // from math import *
+    compilerImportAll(compiler, lib_from);
+
+  } else {
+    do {
+      // Consume the symbol name to import from the script.
+      consume(compiler, TK_NAME, "Expected symbol to import.");
+      const char* name = compiler->previous.start;
+      int length = compiler->previous.length;
+      int line = compiler->previous.line;
+    
+      // Add the name of the symbol to the names buffer.
+      int name_index = (int)scriptAddName(compiler->script, compiler->vm,
+                                          name, length);
+    
       // Don't pop the lib since it'll be used for the next entry.
       emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
-      emitShort(compiler, index); //< Name of the attrib.
+      emitShort(compiler, name_index); //< Name of the attrib.
+    
+      // Check if it has an alias.
+      if (match(compiler, TK_AS)) {
+        // Consuming it'll update the previous token which would be the name of
+        // the binding variable.
+        consume(compiler, TK_NAME, "Expected a name after 'as'.");
+      }
+    
+      // Get the variable to bind the imported symbol, if we already have a
+      // variable with that name override it, otherwise use a new variable.
+      const char* name_start = compiler->previous.start;
+      length = compiler->previous.length, line = compiler->previous.line;
+      int var_index = compilerGetVariable(compiler, name_start, length);
+      if (var_index == -1) {
+        var_index = compilerAddVariable(compiler, name_start, length, line);
+      }
+
+      emitStoreVariable(compiler, var_index, true);
+      emitOpcode(compiler, OP_POP);
+    
+    } while (match(compiler, TK_COMMA));
+  }
+
+  // Done getting all the attributes, now pop the lib from the stack.
+  emitOpcode(compiler, OP_POP);
+
+  // Always end the import statement.
+  consumeEndStatement(compiler);
+}
+
+static void compileRegularImport(Compiler* compiler) {
+  do {
+    // Import the library and push it on the stack.
+    Script* lib = compilerImport(compiler);
+
+    // variable to bind the imported script.
+    int var_index = -1;
+
+    // Check if it has an alias, if so bind the variable with that name.
+    if (match(compiler, TK_AS)) {
+      // Consuming it'll update the previous token which would be the name of
+      // the binding variable.
+      consume(compiler, TK_NAME, "Expected a name after 'as'.");
+
+      // Get the variable to bind the imported symbol, if we already have a
+      // variable with that name override it, otherwise use a new variable.
+      const char* name_start = compiler->previous.start;
+      int length = compiler->previous.length, line = compiler->previous.line;
+      var_index = compilerGetVariable(compiler, name_start, length);
+      if (var_index == -1) {
+        var_index = compilerAddVariable(compiler, name_start, length, line);
+      }
+    } else {
+      // If it has a module name use it as binding variable.
+      // Core libs names are it's module name but for local libs it's optional
+      // to define a module name for a script.
+      if (lib->moudle != NULL) {
+
+        // Get the variable to bind the imported symbol, if we already have a
+        // variable with that name override it, otherwise use a new variable.
+        const char* name_start = lib->moudle->data;
+        int length = lib->moudle->length, line = compiler->previous.line;
+        var_index = compilerGetVariable(compiler, name_start, length);
+        if (var_index == -1) {
+          var_index = compilerAddVariable(compiler, name_start, length, line);
+        }
+
+      } else {
+        // -- Nothing to do here --
+        // Importing from path which doesn't have a module name. Import
+        // everything of it. and bind to a variables.
+      }
     }
 
-  } else {
-    TODO; // import and push the lib to the stack.
-  }
+    if (var_index != -1) {
+      emitStoreVariable(compiler, var_index, true);
+      emitOpcode(compiler, OP_POP);
 
-  // >> from os import clock
-  //    Here the os is imported and not bound to any variable, just temp.
-  if (ie_type == IMPORT_FROM_LIB) return;
+    } else {
+      compilerImportAll(compiler, lib);
+      // Done importing everything from lib now pop the lib.
+      emitOpcode(compiler, OP_POP);
+    }
 
-  // Store to the variable.
-  if (match(compiler, TK_AS)) {
-    consume(compiler, TK_NAME, "Expected a name after as.");
-    // TODO: validate the name (maybe can't be predefined?).
-    compiler->variables[entry].name = compiler->previous.start;
-    compiler->variables[entry].length = compiler->previous.length;
-    // TODO: add the name to global_names ??
-  }
+  } while (match(compiler, TK_COMMA));
 
-  emitStoreVariable(compiler, entry, true);
-  emitOpcode(compiler, OP_POP);
+  consumeEndStatement(compiler);
 }
 
-// The 'import' statement compilation. It's inspired by the python's import
-// statement. It could be multiple import libs comma seperated and they can
-// be aliased with 'as' keyword. Using from keyword it's possible to import
-// some of the members of the lib.
-//
-// example. import lib
-//          import lib1, lib2 as l2
-//          from lib import func1, func2 as f2
-// 
-static void compileImportStatement(Compiler* compiler, bool is_from) {
-  
-  if (is_from) {
-    _compilerImportEntry(compiler, IMPORT_FROM_LIB);
-    consume(compiler, TK_IMPORT, "Expected keyword 'import'.");
-
-    do {
-      _compilerImportEntry(compiler, IMPORT_FROM_SYMBOL);
-    } while (match(compiler, TK_COMMA));
-
-    // Done getting all the attributes, now pop the lib from the stack.
-    emitOpcode(compiler, OP_POP);
-
-  } else {
-    do {
-      //skipNewLines(compiler);
-      _compilerImportEntry(compiler, IMPORT_REGULAR);
-    } while (match(compiler, TK_COMMA));
-  }
-
-  if (peek(compiler) != TK_EOF) {
-    consume(compiler, TK_LINE, "Expected EOL after import statement.");
-  }
-}
 
 // Compiles an expression. An expression will result a value on top of the
 // stack.
@@ -1978,9 +2204,9 @@ bool compile(PKVM* vm, Script* script, const char* source) {
   compilerInit(compiler, vm, source, script);
 
   // If compiling for an imported script the vm->compiler would be the compiler
-  // of the script that imported this script. create a reference to it and
-  // update the compiler when we're done with this one.
-  Compiler* last_compiler = vm->compiler;
+  // of the script that imported this script. Add the all the compilers into a
+  // link list.
+  compiler->next_compiler = vm->compiler;
   vm->compiler = compiler;
 
   Func curr_fn;
@@ -1994,6 +2220,23 @@ bool compile(PKVM* vm, Script* script, const char* source) {
   lexToken(compiler);
   skipNewLines(compiler);
 
+  if (match(compiler, TK_MODULE)) {
+
+    // If the script running a REPL or compiled multiple times by hosting
+    // application module attribute might already set. In that case make it
+    // Compile error.
+    if (script->moudle != NULL) {
+      parseError(compiler, "Module name already defined.");
+
+    } else {
+      consume(compiler, TK_NAME, "Expected a name for the module.");
+      const char* name = compiler->previous.start;
+      uint32_t len = compiler->previous.length;
+      script->moudle = newStringLength(vm, name, len);
+      consumeEndStatement(compiler);
+    }
+  }
+
   while (!match(compiler, TK_EOF)) {
 
     if (match(compiler, TK_NATIVE)) {
@@ -2003,10 +2246,14 @@ bool compile(PKVM* vm, Script* script, const char* source) {
       compileFunction(compiler, FN_SCRIPT);
 
     } else if (match(compiler, TK_FROM)) {
-      compileImportStatement(compiler, true);
+      compileFromImport(compiler);
 
     } else if (match(compiler, TK_IMPORT)) {
-      compileImportStatement(compiler, false);
+      compileRegularImport(compiler);
+
+    } else if (match(compiler, TK_MODULE)) {
+      parseError(compiler, "Module name must be the first statement "
+                 "of the script.");
 
     } else {
       compileStatement(compiler);
@@ -2015,6 +2262,7 @@ bool compile(PKVM* vm, Script* script, const char* source) {
     skipNewLines(compiler);
   }
 
+  // TODO: the stack already has a null remove one (at vm.c or here).
   emitOpcode(compiler, OP_PUSH_NULL);
   emitOpcode(compiler, OP_RETURN);
   emitOpcode(compiler, OP_END);
@@ -2026,7 +2274,7 @@ bool compile(PKVM* vm, Script* script, const char* source) {
     // TODO: add the names to global_names table.
   }
 
-  vm->compiler = last_compiler;
+  vm->compiler = compiler->next_compiler;
 
 #if DEBUG_DUMP_COMPILED_CODE
   dumpFunctionCode(vm, script->body);
@@ -2038,14 +2286,18 @@ bool compile(PKVM* vm, Script* script, const char* source) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void compilerMarkObjects(Compiler* compiler, PKVM* vm) {
+void compilerMarkObjects(PKVM* vm, Compiler* compiler) {
   
   // Mark the script which is currently being compiled.
-  grayObject(&compiler->script->_super, vm);
+  grayObject(vm, &compiler->script->_super);
 
   // Mark the string literals (they haven't added to the script's literal
   // buffer yet).
-  grayValue(compiler->current.value, vm);
-  grayValue(compiler->previous.value, vm);
-  grayValue(compiler->next.value, vm);
+  grayValue(vm, compiler->current.value);
+  grayValue(vm, compiler->previous.value);
+  grayValue(vm, compiler->next.value);
+
+  if (compiler->next_compiler != NULL) {
+    compilerMarkObjects(vm, compiler->next_compiler);
+  }
 }

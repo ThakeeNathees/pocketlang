@@ -1,22 +1,12 @@
 
 # PocketLang ignore list
-
-[Rr]elease/
-[Dd]ebug/
-*__pycache__/
 .vs/
 .vscode/
-x64/
 
-*.dblite
-*.idb
-*.pdb
-*.exp
-*.sln
-*.vcxproj
-*.vcxproj.filters
-*.vcxproj.user
-*.obj.enc
+# It's a convinent batch scrpit to run pyton script
+# changing directory and run another script.
+# Which are compile wasm and generate pages.
+docs/build.bat
 
 # Prerequisites
 *.d

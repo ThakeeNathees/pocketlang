@@ -79,8 +79,11 @@ static void _dumpValue(PKVM* vm, Var value, bool recursive) {
     case OBJ_SCRIPT:
     {
       Script* scr = (Script*)obj;
-      String* name = (scr->moudle != NULL) ? scr->moudle : scr->path;
-      printf("[Script:%s]", name->data);
+      if (scr->moudle != NULL) {
+        printf("[Script:%s]", scr->moudle->data);
+      } else {
+        printf("[Script:\"%s\"]", scr->path->data);
+      }
       return;
     }
 
@@ -293,6 +296,22 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
   }
 }
 
+void dumpGlobalValues(PKVM* vm) {
+  Fiber* fiber = vm->fiber;
+  int frame_ind = fiber->frame_count - 1;
+  ASSERT(frame_ind >= 0, OOPS);
+  CallFrame* frame = &fiber->frames[frame_ind];
+  Script* scr = frame->fn->owner;
+
+  for (uint32_t i = 0; i < scr->global_names.count; i++) {
+    String* name = scr->names.data[scr->global_names.data[i]];
+    Var value = scr->globals.data[i];
+    printf("%10s = ", name->data);
+    dumpValue(vm, value);
+    printf("\n");
+  }
+}
+
 void dumpStackFrame(PKVM* vm) {
   Fiber* fiber = vm->fiber;
   int frame_ind = fiber->frame_count - 1;
@@ -300,7 +319,7 @@ void dumpStackFrame(PKVM* vm) {
   CallFrame* frame = &fiber->frames[frame_ind];
   Var* sp = fiber->sp - 1;
 
-  printf("Frame: %d.\n", frame_ind);
+  printf("Frame: %d\n", frame_ind);
   for (; sp >= frame->rbp; sp--) {
     printf("       ");
     dumpValue(vm, *sp);

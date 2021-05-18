@@ -12,7 +12,7 @@ The language is written using [Wren Language](https://wren.io/) and their wonder
 
 ```ruby
 # Python like import statement.
-from os import clock as now
+from lang import clock as now
 
 # A recursive fibonacci function.
 def fib(n)

@@ -10,13 +10,15 @@ SOURCES     = ../cli/*.c ../src/*.c
 all: debug
 
 init:
-	mkdir -p bin/
+	@mkdir -p debug/
+	@mkdir -p release/
 
 debug: init
-	$(CC) -o bin/pocket $(SOURCES) $(INCLUDE_DIR) $(CFLAGS) -g3 -Og
+	$(CC) -o debug/pocket $(SOURCES) $(INCLUDE_DIR) $(CFLAGS) -D DEBUG -g3 -Og
 
 release: init
-	$(CC) -o bin/pocket $(SOURCES) $(INCLUDE_DIR) $(CFLAGS) -g -O3
+	$(CC) -o release/pocket $(SOURCES) $(INCLUDE_DIR) $(CFLAGS) -g -O3
 
 clean:
-	rm -rf bin/
+	rm -rf debug/
+	rm -rf release/

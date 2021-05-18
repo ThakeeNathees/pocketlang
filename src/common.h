@@ -18,6 +18,9 @@
 // Set this to dump compiled opcodes of each functions.
 #define DEBUG_DUMP_COMPILED_CODE 0
 
+// Set this to dump stack frame before executing the next instruction.
+#define DEBUG_DUMP_CALL_STACK 0
+
 #include <stdio.h> //< Only needed for ASSERT() macro and for release mode
                    //< TODO; macro use this to print a crash report.
 // The internal assertion macro, do not use this. Use ASSERT() instead.

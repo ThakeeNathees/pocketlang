@@ -62,7 +62,7 @@ pkStringPtr loadScript(PKVM* vm, const char* path) {
   fseek(file, 0, SEEK_SET);
 
   // Read source to buffer.
-  char* buff = (char*)malloc(file_size + 1);
+  char* buff = (char*)malloc((size_t)(file_size) + 1);
   size_t read = fread(buff, sizeof(char), file_size, file);
   // Using read instead of file_size is because "\r\n" is read as '\n' in
   // windows the '\r'.
@@ -90,8 +90,7 @@ int main(int argc, char** argv) {
   
   const char* source_path = argv[1];
 
-  pkConfiguration config;
-  pkInitConfiguration(&config);
+  pkConfiguration config = pkNewConfiguration();
   config.error_fn = errorPrint;
   config.write_fn = writeFunction;
   config.load_script_fn = loadScript;

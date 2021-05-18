@@ -1,0 +1,15 @@
+
+## TODO: initialize global variables
+## and test it here.
+
+def all_f1()
+	return 'f1'
+end
+
+def all_f2()
+	return 'f2'
+end
+
+def all_f3()
+	return 'f3'
+end

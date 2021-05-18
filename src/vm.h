@@ -65,7 +65,9 @@ struct PKVM {
   pkConfiguration config;
 
   // Current compiler reference to mark it's heap allocated objects. Note that
-  // The compiler isn't heap allocated.
+  // The compiler isn't heap allocated. It'll be a link list of all the
+  // compiler we have so far. A new compiler will be created and appended when
+  // a new scirpt is being imported and compiled at compiletime.
   Compiler* compiler;
 
   // A cache of the compiled scripts with their path as key and the Scrpit
