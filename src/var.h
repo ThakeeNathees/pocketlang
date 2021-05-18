@@ -255,9 +255,10 @@ struct Range {
 struct Script {
   Object _super;
 
-  // The path of the script and it's the key in the vm's scripts cache for the
-  // script.
-  String* name;
+  // For core libraries the module and the path are same and points to the
+  // same String objects.
+  String* moudle; //< Module name of the script.
+  String* path;   //< Path of the script.
 
   /*
   names:     ["v1", "fn1", "v2", "fn2", ...]
@@ -394,7 +395,7 @@ Map* newMap(PKVM* vm);
 Range* newRange(PKVM* vm, double from, double to);
 
 // Allocate new Script object and return Script*.
-Script* newScript(PKVM* vm, String* name);
+Script* newScript(PKVM* vm, String* path);
 
 // Allocate new Function object and return Function*. Parameter [name] should
 // be the name in the Script's nametable. If the [owner] is NULL the function

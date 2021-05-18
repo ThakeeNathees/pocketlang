@@ -77,8 +77,12 @@ static void _dumpValue(PKVM* vm, Var value, bool recursive) {
     }
 
     case OBJ_SCRIPT:
-      printf("[Script:%s]", ((Script*)obj)->name->data);
+    {
+      Script* scr = (Script*)obj;
+      String* name = (scr->moudle != NULL) ? scr->moudle : scr->path;
+      printf("[Script:%s]", name->data);
       return;
+    }
 
     case OBJ_FUNC:
       printf("[Fn:%s]", ((Function*)obj)->name);

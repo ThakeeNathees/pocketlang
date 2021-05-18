@@ -204,60 +204,73 @@ static Script* getScript(PKVM* vm, String* name) {
  * RUNTIME                                                                    *
  *****************************************************************************/
 
-// If failed to resolve it'll return false. Parameter [resolved] will be
-// updated with a resolved path.
-static bool resolveScriptPath(PKVM* vm, String** resolved) {
+// If failed to resolve it'll return false. Parameter [result] should be points
+// to the string which is the path that has to be resolved and once it resolved
+// the provided result's string's on_done() will be called and, it's string will 
+// be updated with the new resolved path string.
+static bool resolveScriptPath(PKVM* vm, pkStringPtr* path_string) {
   if (vm->config.resolve_path_fn == NULL) return true;
 
-  pkStringResult result;
-  const char* path = (*resolved)->data;
+  const char* path = path_string->string;
+  pkStringPtr resolved;
 
   Fiber* fiber = vm->fiber;
   if (fiber == NULL || fiber->frame_count <= 0) {
     // fiber == NULL => vm haven't started yet and it's a root script.
-    result = vm->config.resolve_path_fn(vm, NULL, path);
+    resolved = vm->config.resolve_path_fn(vm, NULL, path);
   } else {
     Function* fn = fiber->frames[fiber->frame_count - 1].fn;
-    result = vm->config.resolve_path_fn(vm, fn->owner->name->data, path);
+    resolved = vm->config.resolve_path_fn(vm, fn->owner->path->data, path);
   }
-  if (!result.success) return false;
 
-  // If the resolved string is the SAME as [path] don't allocate a new string.
-  if (result.string != path) *resolved = newString(vm, result.string);
-  if (result.on_done != NULL) result.on_done(vm, result);
+  // Done with the last string and update it with the new string.
+  if (path_string->on_done != NULL) path_string->on_done(vm, *path_string);
+  *path_string = resolved;
 
-  return true;
+  return path_string->string != NULL;
 }
 
 // Import and return Script object as Var. If the script is imported and
 // compiled here it'll set [is_new_script] to true oterwise (using the cached
 // script) set to false.
-static Var importScript(PKVM* vm, String* name, bool is_core,
+static Var importScript(PKVM* vm, String* path_name, bool is_core,
                         bool* is_new_script) {
   if (is_core) {
     ASSERT(is_new_script == NULL, OOPS);
-    Script* core_lib = getCoreLib(vm, name);
+    Script* core_lib = getCoreLib(vm, path_name);
     if (core_lib != NULL) {
       return VAR_OBJ(&core_lib->_super);
     }
     vm->fiber->error = stringFormat(vm, "Failed to import core library '@'",
-                                    name);
+                                    path_name);
     return VAR_NULL;
   }
 
   // Relative path import.
 
+  pkStringPtr resolved;
+  resolved.string = path_name->data;
+  resolved.on_done = NULL; // Don't have to clean the String.
+
   ASSERT(is_new_script != NULL, OOPS);
-  if (!resolveScriptPath(vm, &name)) {
+  if (!resolveScriptPath(vm, &resolved)) {
     vm->fiber->error = stringFormat(vm, "Failed to resolve script '@' from '@'",
-                                    name, vm->fiber->func->owner->name);
+                                    path_name, vm->fiber->func->owner->path);
     return VAR_NULL;
   }
 
-  vmPushTempRef(vm, &name->_super);
+  // If the returned string is not the same as (pointer wise) provided one,
+  // allocate a new string. And clean the old string result.
+  if (resolved.string != path_name->data) {
+    path_name = newString(vm, resolved.string);
+    if (resolved.on_done != NULL) resolved.on_done(vm, resolved);
+  }
+
+  // Push the path_name string. Incase if it's allocated above.
+  vmPushTempRef(vm, &path_name->_super);
 
   // Check if the script is already cached (then use it).
-  Var scr = mapGet(vm->scripts, VAR_OBJ(&name->_super));
+  Var scr = mapGet(vm->scripts, VAR_OBJ(&path_name->_super));
   if (!IS_UNDEF(scr)) {
     ASSERT(AS_OBJ(scr)->type == OBJ_SCRIPT, OOPS);
     *is_new_script = false;
@@ -265,33 +278,33 @@ static Var importScript(PKVM* vm, String* name, bool is_core,
   }
   *is_new_script = true;
 
-  pkStringResult result = { false, NULL, NULL };
+  pkStringPtr source = { false, NULL, NULL };
   if (vm->config.load_script_fn != NULL) {
-    result = vm->config.load_script_fn(vm, name->data);
+    source = vm->config.load_script_fn(vm, path_name->data);
   }
 
-  if (!result.success) {
-    vmPopTempRef(vm); // name
+  if (source.string == NULL) {
+    vmPopTempRef(vm); // path_name
 
-    String* err_msg = stringFormat(vm, "Cannot import script '@'", name);
+    String* err_msg = stringFormat(vm, "Cannot import script '@'", path_name);
     vm->fiber->error = err_msg; //< Set the error msg.
 
     return VAR_NULL;
   }
 
-  Script* script = newScript(vm, name);
+  Script* script = newScript(vm, path_name);
   vmPushTempRef(vm, &script->_super);
-  mapSet(vm->scripts, vm, VAR_OBJ(&name->_super), VAR_OBJ(&script->_super));
+  mapSet(vm->scripts, vm, VAR_OBJ(&path_name->_super), VAR_OBJ(&script->_super));
   vmPopTempRef(vm);
 
-  vmPopTempRef(vm); // name
+  vmPopTempRef(vm); // path_name
 
-  bool success = compile(vm, script, result.string);
-  if (result.on_done) result.on_done(vm, result);
+  bool success = compile(vm, script, source.string);
+  if (source.on_done) source.on_done(vm, source);
 
   if (!success) {
     vm->fiber->error = stringFormat(vm, "Compilation of script '@' failed.",
-                                    name);
+                                    path_name);
     return VAR_NULL;
   }
 
@@ -386,74 +399,75 @@ void vmReportError(PKVM* vm) {
     Function* fn = frame->fn;
     ASSERT(!fn->is_native, OOPS);
     int line = fn->fn->oplines.data[frame->ip - fn->fn->opcodes.data - 1];
-    vm->config.error_fn(vm, PK_ERROR_STACKTRACE, fn->owner->name->data, line, fn->name);
+    vm->config.error_fn(vm, PK_ERROR_STACKTRACE, fn->owner->path->data, line,
+                        fn->name);
   }
 }
 
-// FIXME: temp.
-PKInterpretResult pkInterpretSource(PKVM* vm, const char* source) {
-  String* name = newString(vm, "@module");
-  vmPushTempRef(vm, &name->_super);
-
-  Script* scr = newScript(vm, name);
-  vmPushTempRef(vm, &scr->_super);
-  mapSet(vm->scripts, vm, VAR_OBJ(&name->_super), VAR_OBJ(&scr->_super));
-  vmPopTempRef(vm);
-
-  vmPopTempRef(vm); // name
-
-  // Compile the source.
-  bool success = compile(vm, scr, source);
-  //if (res.on_done) res.on_done(vm, res);
-
-  if (!success) return PK_RESULT_COMPILE_ERROR;
-  vm->script = scr;
-
-  return vmRunScript(vm, scr);
-}
-
-PKInterpretResult pkInterpret(PKVM* vm, const char* file) {
-
-  // Resolve file path.
-  String* name = newString(vm, file);
-  vmPushTempRef(vm, &name->_super);
-
-  if (!resolveScriptPath(vm, &name)) {
-    if (vm->config.error_fn != NULL) {
-      vm->config.error_fn(vm, PK_ERROR_COMPILE, NULL, -1,
-        stringFormat(vm, "Failed to resolve path '$'.", file)->data);
-    }
-    return PK_RESULT_COMPILE_ERROR;
-  }
-
-  // Load the script source.
-  pkStringResult res = vm->config.load_script_fn(vm, name->data);
-  if (!res.success) {
-    if (vm->config.error_fn != NULL) {
-      vm->config.error_fn(vm, PK_ERROR_COMPILE, NULL, -1,
-        stringFormat(vm, "Failed to load script '@'.", name)->data);
-    }
-    return PK_RESULT_COMPILE_ERROR;
-  }
+// This function is responsible to call on_done function if it's done with the 
+// provided string pointers.
+static PKInterpretResult interpretSource(PKVM* vm, pkStringPtr source,
+                                         pkStringPtr path) {
+  String* path_name = newString(vm, path.string);
+  if (path.on_done) path.on_done(vm, path);
+  vmPushTempRef(vm, &path_name->_super); // path_name.
 
   // Load a new script to the vm's scripts cache.
-  Script* scr = getScript(vm, name);
+  Script* scr = getScript(vm, path_name);
   if (scr == NULL) {
-    scr = newScript(vm, name);
-    vmPushTempRef(vm, &scr->_super);
-    mapSet(vm->scripts, vm, VAR_OBJ(&name->_super), VAR_OBJ(&scr->_super));
-    vmPopTempRef(vm);
+    scr = newScript(vm, path_name);
+    vmPushTempRef(vm, &scr->_super); // scr.
+    mapSet(vm->scripts, vm, VAR_OBJ(&path_name->_super),
+      VAR_OBJ(&scr->_super));
+    vmPopTempRef(vm); // scr.
   }
-  vmPopTempRef(vm); // name
+  vmPopTempRef(vm); // path_name.
 
   // Compile the source.
-  bool success = compile(vm, scr, res.string);
-  if (res.on_done) res.on_done(vm, res);
+  bool success = compile(vm, scr, source.string);
+  if (source.on_done) source.on_done(vm, source);
 
   if (!success) return PK_RESULT_COMPILE_ERROR;
   vm->script = scr;
 
   return vmRunScript(vm, scr);
+}
+
+PKInterpretResult pkInterpretSource(PKVM* vm, const char* source,
+                                    const char* path) {
+  // Call the internal interpretSource implementation.
+  pkStringPtr source_ptr = { source, NULL, NULL };
+  pkStringPtr path_ptr = { path, NULL, NULL };
+  return interpretSource(vm, source_ptr, path_ptr);
+}
+
+PKInterpretResult pkInterpret(PKVM* vm, const char* path) {
+
+  pkStringPtr resolved;
+  resolved.string = path;
+  resolved.on_done = NULL;
+
+  // The provided path should already be resolved.
+  //if (!resolveScriptPath(vm, &resolved)) {
+  //  if (vm->config.error_fn != NULL) {
+  //    vm->config.error_fn(vm, PK_ERROR_COMPILE, NULL, -1,
+  //      stringFormat(vm, "Failed to resolve path '$'.", path)->data);
+  //  }
+  //  return PK_RESULT_COMPILE_ERROR;
+  //}
+
+  // Load the script source.
+  pkStringPtr source = vm->config.load_script_fn(vm, resolved.string);
+  if (source.string == NULL) {
+    if (vm->config.error_fn != NULL) {
+      vm->config.error_fn(vm, PK_ERROR_COMPILE, NULL, -1,
+        stringFormat(vm, "Failed to load script '$'.", resolved.string)->data);
+    }
+
+    return PK_RESULT_COMPILE_ERROR;
+  }
+
+  return interpretSource(vm, source, resolved);
 }
 
 PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {

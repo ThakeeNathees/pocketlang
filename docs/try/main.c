@@ -25,15 +25,15 @@ void writeFunction(PKVM* vm, const char* text) {
   js_writeFunction(text);
 }
 
-pkStringResult resolvePath(PKVM* vm, const char* from, const char* name) {
-  pkStringResult result;
-  result.success = false;
+pkStringPtr resolvePath(PKVM* vm, const char* from, const char* name) {
+  pkStringPtr result;
+  result.string = NULL;
   return result;
 }
 
-pkStringResult loadScript(PKVM* vm, const char* path) {
-  pkStringResult result;
-  result.success = false;
+pkStringPtr loadScript(PKVM* vm, const char* path) {
+  pkStringPtr result;
+  result.string = NULL;
   return result;
 }
 
@@ -48,7 +48,7 @@ int runSource(const char* source) {
   config.resolve_path_fn = resolvePath;
 
   PKVM* vm = pkNewVM(&config);
-  PKInterpretResult result = pkInterpretSource(vm, source);
+  PKInterpretResult result = pkInterpretSource(vm, source, "@try");
 
   pkFreeVM(vm);
 
