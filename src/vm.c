@@ -6,8 +6,11 @@
 #include "vm.h"
 
 #include "core.h"
-//#include "debug.h" //< Wrap around debug macro.
 #include "utils.h"
+
+#if DEBUG_DUMP_CALL_STACK
+  #include "debug.h" //< Wrap around debug macro.
+#endif
 
 #define HAS_ERROR() (vm->fiber->error != NULL)
 
@@ -52,28 +55,27 @@ void* vmRealloc(PKVM* self, void* memory, size_t old_size, size_t new_size) {
   return self->config.realloc_fn(memory, new_size, self->config.user_data);
 }
 
-void pkInitConfiguration(pkConfiguration* config) {
-  config->realloc_fn = defaultRealloc;
+pkConfiguration pkNewConfiguration() {
+  pkConfiguration config;
+  config.realloc_fn = defaultRealloc;
 
-  config->error_fn = NULL;
-  config->write_fn = NULL;
+  config.error_fn = NULL;
+  config.write_fn = NULL;
 
-  config->load_script_fn = NULL;
-  config->resolve_path_fn = NULL;
-  config->user_data = NULL;
+  config.load_script_fn = NULL;
+  config.resolve_path_fn = NULL;
+  config.user_data = NULL;
+
+  return config;
 }
 
 PKVM* pkNewVM(pkConfiguration* config) {
 
-  // TODO: If the [config] is NULL, initialize a default one.
+  pkConfiguration default_config = pkNewConfiguration();
 
-  pkReallocFn realloc_fn = defaultRealloc;
-  void* user_data = NULL;
-  if (config != NULL) {
-    realloc_fn = config->realloc_fn;
-    user_data = config->user_data;
-  }
-  PKVM* vm = (PKVM*)realloc_fn(NULL, sizeof(PKVM), user_data);
+  if (config == NULL) config = &default_config;
+
+  PKVM* vm = (PKVM*)config->realloc_fn(NULL, sizeof(PKVM), config->user_data);
   memset(vm, 0, sizeof(PKVM));
 
   vm->config = *config;
@@ -127,31 +129,31 @@ void vmCollectGarbage(PKVM* self) {
   self->bytes_allocated = 0;
 
   // Mark the core libs and builtin functions.
-  grayObject(&self->core_libs->_super, self);
+  grayObject(self, &self->core_libs->_super);
   for (int i = 0; i < self->builtins_count; i++) {
-    grayObject(&self->builtins[i].fn->_super, self);
+    grayObject(self, &self->builtins[i].fn->_super);
   }
 
   // Mark the scripts cache.
-  grayObject(&self->scripts->_super, self);
+  grayObject(self, &self->scripts->_super);
 
   // Mark temp references.
   for (int i = 0; i < self->temp_reference_count; i++) {
-    grayObject(self->temp_reference[i], self);
+    grayObject(self, self->temp_reference[i]);
   }
 
   // Garbage collection triggered at the middle of a compilation.
   if (self->compiler != NULL) {
-    compilerMarkObjects(self->compiler, self);
+    compilerMarkObjects(self, self->compiler);
   }
 
   // Garbage collection triggered at the middle of runtime.
   if (self->script != NULL) {
-    grayObject(&self->script->_super, self);
+    grayObject(self, &self->script->_super);
   }
 
   if (self->fiber != NULL) {
-    grayObject(&self->fiber->_super, self);
+    grayObject(self, &self->fiber->_super);
   }
   
   blackenObjects(self);
@@ -193,8 +195,8 @@ void pkSetUserData(PKVM* vm, void* user_data) {
   vm->config.user_data = user_data;
 }
 
-static Script* getScript(PKVM* vm, String* name) {
-  Var scr = mapGet(vm->scripts, VAR_OBJ(&name->_super));
+static Script* getScript(PKVM* vm, String* path) {
+  Var scr = mapGet(vm->scripts, VAR_OBJ(&path->_super));
   if (IS_UNDEF(scr)) return NULL;
   ASSERT(AS_OBJ(scr)->type == OBJ_SCRIPT, OOPS);
   return (Script*)AS_OBJ(scr);
@@ -233,82 +235,23 @@ static bool resolveScriptPath(PKVM* vm, pkStringPtr* path_string) {
 // Import and return Script object as Var. If the script is imported and
 // compiled here it'll set [is_new_script] to true oterwise (using the cached
 // script) set to false.
-static Var importScript(PKVM* vm, String* path_name, bool is_core,
-                        bool* is_new_script) {
-  if (is_core) {
-    ASSERT(is_new_script == NULL, OOPS);
-    Script* core_lib = getCoreLib(vm, path_name);
-    if (core_lib != NULL) {
-      return VAR_OBJ(&core_lib->_super);
-    }
-    vm->fiber->error = stringFormat(vm, "Failed to import core library '@'",
-                                    path_name);
-    return VAR_NULL;
+static Var importScript(PKVM* vm, String* path_name) {
+
+  // Check in the core libs.
+  Script* scr = getCoreLib(vm, path_name);
+  if (scr != NULL) return VAR_OBJ(&scr->_super);
+
+  // Check in the scripts cache.
+  Var entry = mapGet(vm->scripts, VAR_OBJ(&path_name->_super));
+  if (!IS_UNDEF(entry)) {
+    ASSERT(AS_OBJ(entry)->type == OBJ_SCRIPT, OOPS);
+    return entry;
   }
 
-  // Relative path import.
+  // Imported scripts were resolved at compile time.
+  UNREACHABLE();
 
-  pkStringPtr resolved;
-  resolved.string = path_name->data;
-  resolved.on_done = NULL; // Don't have to clean the String.
-
-  ASSERT(is_new_script != NULL, OOPS);
-  if (!resolveScriptPath(vm, &resolved)) {
-    vm->fiber->error = stringFormat(vm, "Failed to resolve script '@' from '@'",
-                                    path_name, vm->fiber->func->owner->path);
-    return VAR_NULL;
-  }
-
-  // If the returned string is not the same as (pointer wise) provided one,
-  // allocate a new string. And clean the old string result.
-  if (resolved.string != path_name->data) {
-    path_name = newString(vm, resolved.string);
-    if (resolved.on_done != NULL) resolved.on_done(vm, resolved);
-  }
-
-  // Push the path_name string. Incase if it's allocated above.
-  vmPushTempRef(vm, &path_name->_super);
-
-  // Check if the script is already cached (then use it).
-  Var scr = mapGet(vm->scripts, VAR_OBJ(&path_name->_super));
-  if (!IS_UNDEF(scr)) {
-    ASSERT(AS_OBJ(scr)->type == OBJ_SCRIPT, OOPS);
-    *is_new_script = false;
-    return scr;
-  }
-  *is_new_script = true;
-
-  pkStringPtr source = { false, NULL, NULL };
-  if (vm->config.load_script_fn != NULL) {
-    source = vm->config.load_script_fn(vm, path_name->data);
-  }
-
-  if (source.string == NULL) {
-    vmPopTempRef(vm); // path_name
-
-    String* err_msg = stringFormat(vm, "Cannot import script '@'", path_name);
-    vm->fiber->error = err_msg; //< Set the error msg.
-
-    return VAR_NULL;
-  }
-
-  Script* script = newScript(vm, path_name);
-  vmPushTempRef(vm, &script->_super);
-  mapSet(vm->scripts, vm, VAR_OBJ(&path_name->_super), VAR_OBJ(&script->_super));
-  vmPopTempRef(vm);
-
-  vmPopTempRef(vm); // path_name
-
-  bool success = compile(vm, script, source.string);
-  if (source.on_done) source.on_done(vm, source);
-
-  if (!success) {
-    vm->fiber->error = stringFormat(vm, "Compilation of script '@' failed.",
-                                    path_name);
-    return VAR_NULL;
-  }
-
-  return VAR_OBJ(&script->_super);
+  return VAR_NULL;
 }
 
 static void ensureStackSize(PKVM* vm, int size) {
@@ -417,7 +360,7 @@ static PKInterpretResult interpretSource(PKVM* vm, pkStringPtr source,
   if (scr == NULL) {
     scr = newScript(vm, path_name);
     vmPushTempRef(vm, &scr->_super); // scr.
-    mapSet(vm->scripts, vm, VAR_OBJ(&path_name->_super),
+    mapSet(vm, vm->scripts, VAR_OBJ(&path_name->_super),
       VAR_OBJ(&scr->_super));
     vmPopTempRef(vm); // scr.
   }
@@ -541,9 +484,22 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
   #error "OPCODE" should not be deifined here.
 #endif
 
+#if  DEBUG_DUMP_CALL_STACK
+  #define DEBUG_CALL_STACK()      \
+    do {                          \
+      /*   system("cls");   */    \
+      dumpGlobalValues(vm);       \
+      dumpStackFrame(vm);         \
+    } while (false)
+#else
+  #define DEBUG_CALL_STACK() ((void*)0)
+#endif
+
 #define SWITCH(code)                 \
   L_vm_main_loop:                    \
+  DEBUG_CALL_STACK();                \
   switch (code = (Opcode)READ_BYTE())
+
 #define OPCODE(code) case OP_##code
 #define DISPATCH()   goto L_vm_main_loop
 
@@ -617,7 +573,7 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
         RUNTIME_ERROR(stringFormat(vm, "$ type is not hashable.", varTypeName(key)));
       } else {
-        mapSet((Map*)AS_OBJ(on), vm, key, value);
+        mapSet(vm, (Map*)AS_OBJ(on), key, value);
       }
 
       varsetSubscript(vm, on, key, value);
@@ -706,7 +662,9 @@ PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(IMPORT):
     {
       String* name = script->names.data[READ_SHORT()];
-      PUSH(importScript(vm, name, true, NULL));
+      Var script = importScript(vm, name);
+      // TODO: initialize global variables.
+      PUSH(script);
       CHECK_ERROR();
       DISPATCH();
     }

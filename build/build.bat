@@ -99,6 +99,7 @@ if "%debug_build%"=="false" (
 	set target_dir=release\
 ) else (
 	set cflags=%cflags% -MDd -ZI
+	set addnl_cdefines=%addnl_cdefines% /DDEBUG
 	set target_dir=debug\
 )
 

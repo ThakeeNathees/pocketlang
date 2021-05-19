@@ -380,7 +380,7 @@ void initializeCore(PKVM* vm) {
     vmPopTempRef(vm);                                                         \
     /* Add the script to core_libs. */                                        \
     vmPushTempRef(vm, &std->_super);                                          \
-    mapSet(vm->core_libs, vm, VAR_OBJ(&name->_super), VAR_OBJ(&std->_super)); \
+    mapSet(vm, vm->core_libs, VAR_OBJ(&name->_super), VAR_OBJ(&std->_super)); \
     vmPopTempRef(vm);                                                         \
   } while (false)
 
@@ -792,7 +792,7 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
       if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
         vm->fiber->error = stringFormat(vm, "$ type is not hashable.", varTypeName(key));
       } else {
-        mapSet((Map*)obj, vm, key, value);
+        mapSet(vm, (Map*)obj, key, value);
       }
       return;
     }

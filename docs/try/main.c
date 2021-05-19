@@ -40,8 +40,7 @@ pkStringPtr loadScript(PKVM* vm, const char* path) {
 EMSCRIPTEN_KEEPALIVE
 int runSource(const char* source) {
   
-  pkConfiguration config;
-  pkInitConfiguration(&config);
+  pkConfiguration config = pkNewConfiguration();
   config.error_fn = errorPrint;
   config.write_fn = writeFunction;
   config.load_script_fn = loadScript;

@@ -168,6 +168,12 @@ pre {
   word-wrap: break-word;
 }
 
+code {
+  background-color:#dde4e9;
+  padding: 0 5px ;
+  border-radius: 2px;
+}
+
 /* Codejar line numbers are not visible -> override them. */
 .codejar-linenumbers {
   color: #969696 !important;

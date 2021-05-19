@@ -56,7 +56,7 @@ void varInitObject(Object* self, PKVM* vm, ObjectType type) {
   vm->first = self;
 }
 
-void grayObject(Object* self, PKVM* vm) {
+void grayObject(PKVM* vm, Object* self) {
   if (self == NULL || self->is_marked) return;
   self->is_marked = true;
 
@@ -73,23 +73,23 @@ void grayObject(Object* self, PKVM* vm) {
   vm->gray_list[vm->gray_list_count++] = self;
 }
 
-void grayValue(Var self, PKVM* vm) {
+void grayValue(PKVM* vm, Var self) {
   if (!IS_OBJ(self)) return;
-  grayObject(AS_OBJ(self), vm);
+  grayObject(vm, AS_OBJ(self));
 }
 
-void grayVarBuffer(VarBuffer* self, PKVM* vm) {
+void grayVarBuffer(PKVM* vm, VarBuffer* self) {
   if (self == NULL) return;
   for (uint32_t i = 0; i < self->count; i++) {
-    grayValue(self->data[i], vm);
+    grayValue(vm, self->data[i]);
   }
 }
 
 #define GRAY_OBJ_BUFFER(m_name)                               \
-  void gray##m_name##Buffer(m_name##Buffer* self, PKVM* vm) { \
+  void gray##m_name##Buffer(PKVM* vm, m_name##Buffer* self) { \
     if (self == NULL) return;                                 \
     for (uint32_t i = 0; i < self->count; i++) {              \
-      grayObject(&self->data[i]->_super, vm);                 \
+      grayObject(vm, &self->data[i]->_super);                 \
     }                                                         \
   }
 
@@ -103,12 +103,12 @@ static void blackenObject(Object* obj, PKVM* vm) {
   switch (obj->type) {
     case OBJ_STRING: {
       vm->bytes_allocated += sizeof(String);
-      vm->bytes_allocated += (size_t)(((String*)obj)->length + 1);
+      vm->bytes_allocated += ((size_t)((String*)obj)->length + 1);
     } break;
 
     case OBJ_LIST: {
       List* list = (List*)obj;
-      grayVarBuffer(&list->elements, vm);
+      grayVarBuffer(vm, &list->elements);
       vm->bytes_allocated += sizeof(List);
       vm->bytes_allocated += sizeof(Var) * list->elements.capacity;
     } break;
@@ -117,8 +117,8 @@ static void blackenObject(Object* obj, PKVM* vm) {
       Map* map = (Map*)obj;
       for (uint32_t i = 0; i < map->capacity; i++) {
         if (IS_UNDEF(map->entries[i].key)) continue;
-        grayObject(AS_OBJ(map->entries[i].key), vm);
-        grayObject(AS_OBJ(map->entries[i].value), vm);
+        grayObject(vm, AS_OBJ(map->entries[i].key));
+        grayObject(vm, AS_OBJ(map->entries[i].value));
       }
       vm->bytes_allocated += sizeof(Map);
       vm->bytes_allocated += sizeof(MapEntry) * map->capacity;
@@ -133,28 +133,28 @@ static void blackenObject(Object* obj, PKVM* vm) {
       Script* script = (Script*)obj;
       vm->bytes_allocated += sizeof(Script);
 
-      grayObject(&script->path->_super, vm);
-      grayObject(&script->moudle->_super, vm);
+      grayObject(vm, &script->path->_super);
+      grayObject(vm, &script->moudle->_super);
 
-      grayVarBuffer(&script->globals, vm);
+      grayVarBuffer(vm, &script->globals);
       vm->bytes_allocated += sizeof(Var) * script->globals.capacity;
 
       // Integer buffer have no gray call.
       vm->bytes_allocated += sizeof(uint32_t) * script->global_names.capacity;
 
-      grayVarBuffer(&script->literals, vm);
+      grayVarBuffer(vm, &script->literals);
       vm->bytes_allocated += sizeof(Var) * script->literals.capacity;
 
-      grayFunctionBuffer(&script->functions, vm);
+      grayFunctionBuffer(vm, &script->functions);
       vm->bytes_allocated += sizeof(Function*) * script->functions.capacity;
 
       // Integer buffer have no gray call.
       vm->bytes_allocated += sizeof(uint32_t) * script->function_names.capacity;
 
-      grayStringBuffer(&script->names, vm);
+      grayStringBuffer(vm, &script->names);
       vm->bytes_allocated += sizeof(String*) * script->names.capacity;
 
-      grayObject(&script->body->_super, vm);
+      grayObject(vm, &script->body->_super);
     } break;
 
     case OBJ_FUNC:
@@ -162,7 +162,7 @@ static void blackenObject(Object* obj, PKVM* vm) {
       Function* func = (Function*)obj;
       vm->bytes_allocated += sizeof(Function);
 
-      grayObject(&func->owner->_super, vm);
+      grayObject(vm, &func->owner->_super);
 
       if (!func->is_native) {
         Fn* fn = func->fn;
@@ -176,23 +176,23 @@ static void blackenObject(Object* obj, PKVM* vm) {
       Fiber* fiber = (Fiber*)obj;
       vm->bytes_allocated += sizeof(Fiber);
 
-      grayObject(&fiber->func->_super, vm);
+      grayObject(vm, &fiber->func->_super);
 
       // Blacken the stack.
       for (Var* local = fiber->stack; local < fiber->sp; local++) {
-        grayValue(*local, vm);
+        grayValue(vm, *local);
       }
       vm->bytes_allocated += sizeof(Var) * fiber->stack_size;
 
       // Blacken call frames.
       for (int i = 0; i < fiber->frame_count; i++) {
-        grayObject(&fiber->frames[i].fn->_super, vm);
-        grayObject(&fiber->frames[i].fn->owner->_super, vm);
+        grayObject(vm, &fiber->frames[i].fn->_super);
+        grayObject(vm, &fiber->frames[i].fn->owner->_super);
       }
       vm->bytes_allocated += sizeof(CallFrame) * fiber->frame_capacity;
 
-      grayObject(&fiber->caller->_super, vm);
-      grayObject(&fiber->error->_super, vm);
+      grayObject(vm, &fiber->caller->_super);
+      grayObject(vm, &fiber->error->_super);
 
     } break;
 
@@ -344,7 +344,7 @@ Fiber* newFiber(PKVM* vm) {
   return fiber;
 }
 
-void listInsert(List* self, PKVM* vm, uint32_t index, Var value) {
+void listInsert(PKVM* vm, List* self, uint32_t index, Var value) {
 
   // Add an empty slot at the end of the buffer.
   if (IS_OBJ(value)) vmPushTempRef(vm, AS_OBJ(value));
@@ -360,7 +360,7 @@ void listInsert(List* self, PKVM* vm, uint32_t index, Var value) {
   self->elements.data[index] = value;
 }
 
-Var listRemoveAt(List* self, PKVM* vm, uint32_t index) {
+Var listRemoveAt(PKVM* vm, List* self, uint32_t index) {
   Var removed = self->elements.data[index];
   if (IS_OBJ(removed)) vmPushTempRef(vm, AS_OBJ(removed));
 
@@ -505,7 +505,7 @@ static bool _mapInsertEntry(Map* self, Var key, Var value) {
 }
 
 // Resize the map's size to the given [capacity].
-static void _mapResize(Map* self, PKVM* vm, uint32_t capacity) {
+static void _mapResize(PKVM* vm, Map* self, uint32_t capacity) {
 
   MapEntry* old_entries = self->entries;
   uint32_t old_capacity = self->capacity;
@@ -534,13 +534,13 @@ Var mapGet(Map* self, Var key) {
   return VAR_UNDEFINED;
 }
 
-void mapSet(Map* self, PKVM* vm, Var key, Var value) {
+void mapSet(PKVM* vm, Map* self, Var key, Var value) {
 
   // If map is about to fill, resize it first.
   if (self->count + 1 > self->capacity * MAP_LOAD_PERCENT / 100) {
     uint32_t capacity = self->capacity * GROW_FACTOR;
     if (capacity < MIN_CAPACITY) capacity = MIN_CAPACITY;
-    _mapResize(self, vm, capacity);
+    _mapResize(vm, self, capacity);
   }
 
   if (_mapInsertEntry(self, key, value)) {
@@ -548,14 +548,14 @@ void mapSet(Map* self, PKVM* vm, Var key, Var value) {
   }
 }
 
-void mapClear(Map* self, PKVM* vm) {
+void mapClear(PKVM* vm, Map* self) {
   DEALLOCATE(vm, self->entries);
   self->entries = NULL;
   self->capacity = 0;
   self->count = 0;
 }
 
-Var mapRemoveKey(Map* self, PKVM* vm, Var key) {
+Var mapRemoveKey(PKVM* vm, Map* self, Var key) {
   MapEntry* entry;
   if (!_mapFindEntry(self, key, &entry)) return VAR_NULL;
 
@@ -571,14 +571,14 @@ Var mapRemoveKey(Map* self, PKVM* vm, Var key) {
 
   if (self->count == 0) {
     // Clear the map if it's empty.
-    mapClear(self, vm);
+    mapClear(vm, self);
 
   } else if (self->capacity > MIN_CAPACITY &&
              self->capacity / GROW_FACTOR > self->count / MAP_LOAD_PERCENT * 100) {
     uint32_t capacity = self->capacity / GROW_FACTOR;
     if (capacity < MIN_CAPACITY) capacity = MIN_CAPACITY;
 
-    _mapResize(self, vm, capacity);
+    _mapResize(vm, self, capacity);
   }
 
   if (IS_OBJ(value)) vmPopTempRef(vm);
@@ -586,7 +586,7 @@ Var mapRemoveKey(Map* self, PKVM* vm, Var key) {
   return value;
 }
 
-void freeObject(PKVM* vm, Object* obj) {
+void freeObject(PKVM* vm, Object* self) {
   // TODO: Debug trace memory here.
 
   // First clean the object's referencs, but we're not recursively doallocating
@@ -595,23 +595,23 @@ void freeObject(PKVM* vm, Object* obj) {
   // array of `var*` which will be cleaned below but the actual `var` elements
   // will won't be freed here instead they havent marked at all, and will be
   // removed at the sweeping phase of the garbage collection.
-  switch (obj->type) {
+  switch (self->type) {
     case OBJ_STRING:
       break;
 
     case OBJ_LIST:
-      varBufferClear(&(((List*)obj)->elements), vm);
+      varBufferClear(&(((List*)self)->elements), vm);
       break;
 
     case OBJ_MAP:
-      DEALLOCATE(vm, ((Map*)obj)->entries);
+      DEALLOCATE(vm, ((Map*)self)->entries);
       break;
 
     case OBJ_RANGE:
       break;
 
     case OBJ_SCRIPT: {
-      Script* scr = (Script*)obj;
+      Script* scr = (Script*)self;
       varBufferClear(&scr->globals, vm);
       uintBufferClear(&scr->global_names, vm);
       varBufferClear(&scr->literals, vm);
@@ -621,7 +621,7 @@ void freeObject(PKVM* vm, Object* obj) {
     } break;
 
     case OBJ_FUNC: {
-      Function* func = (Function*)obj;
+      Function* func = (Function*)self;
       if (!func->is_native) {
         byteBufferClear(&func->fn->opcodes, vm);
         uintBufferClear(&func->fn->oplines, vm);
@@ -629,7 +629,7 @@ void freeObject(PKVM* vm, Object* obj) {
     } break;
 
     case OBJ_FIBER: {
-      Fiber* fiber = (Fiber*)obj;
+      Fiber* fiber = (Fiber*)self;
       DEALLOCATE(vm, fiber->stack);
       DEALLOCATE(vm, fiber->frames);
     } break;
@@ -639,7 +639,7 @@ void freeObject(PKVM* vm, Object* obj) {
       break;
   }
 
-  DEALLOCATE(vm, obj);
+  DEALLOCATE(vm, self);
 }
 
 // Utility functions //////////////////////////////////////////////////////////
@@ -801,10 +801,12 @@ String* toString(PKVM* vm, Var v, bool recursive) {
       }
 
       case OBJ_SCRIPT: {
-        String* name = (((Script*)obj)->moudle != NULL)
-          ? ((Script*)obj)->moudle
-          : ((Script*)obj)->path;
-        return stringFormat(vm, "[Lib:@]", name);
+        Script* scr = ((Script*)obj);
+        if (scr->moudle != NULL) {
+          return stringFormat(vm, "[Lib:@]", scr->moudle);
+        } else {
+          return stringFormat(vm, "[Lib:\"@\"]", scr->path);
+        }
       }
       case OBJ_FUNC:   return stringFormat(vm, "[Func:$]", ((Function*)obj)->name);
       case OBJ_FIBER:  return newStringLength(vm, "[Fiber]", 7); // TODO;

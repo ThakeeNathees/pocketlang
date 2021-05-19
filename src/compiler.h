@@ -13,6 +13,6 @@ typedef struct Compiler Compiler;
 
 bool compile(PKVM* vm, Script* script, const char* source);
 
-void compilerMarkObjects(Compiler* compiler, PKVM* vm);
+void compilerMarkObjects(PKVM* vm, Compiler* compiler);
 
 #endif // COMPILER_H

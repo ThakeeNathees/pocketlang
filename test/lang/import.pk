@@ -3,7 +3,34 @@
 import lang
 import lang, path
 import lang as o, path as p
-from lang import clock
+from lang import write
 from lang import clock as c
 from path import abspath, curdir
 from path import abspath as ap, curdir as cd
+
+from lang import *
+from path import *
+
+import "basics.pk" ## will import all
+import "if.pk" as if_test
+from "chain_call.pk" import fn1, fn2 as f2, fn3
+
+## If it has a module name it'll bind to that name.
+import 'import/module.pk'
+assert(module_name.get_module_name() == 'module_name')
+
+## Import everything from the module.
+from 'import/module.pk' import *
+assert(module_name.get_module_name == get_module_name)
+
+## script without module name will import all by default.
+import 'import/all_import.pk'
+assert(all_f1() == 'f1')
+assert(all_f2() == 'f2')
+assert(all_f3() == 'f3')
+
+## Import the script and bound it with a given name.
+import 'import/all_import.pk' as all_import
+assert(all_import.all_f1 == all_f1)
+
+

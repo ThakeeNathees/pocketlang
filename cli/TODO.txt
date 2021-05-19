@@ -2,8 +2,8 @@
 // To implement.
 
 
-[ ] Remove resolve path for the root module.
-[ ] Relative file import.
+[ ] Implement math library.
+[ ] Implement resolve path in cli.
 
 [ ] Single header for embedding.
 [ ] Resolve function name (called before defined).

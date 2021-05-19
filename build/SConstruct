@@ -98,9 +98,11 @@ if env['platform'] == '':
 		print("platform(%s) not supported." % sys.platform)
 		quit()
 
+if env['target'] == 'debug':
+	env.Append(CPPDEFINES=['DEBUG'])
+
 ## Check our platform specifics
 if env['platform'] == "osx":
-	#env.Append(CXXFLAGS=['-std=c++17'])
 	if env['target'] == 'debug':
 		env.Append(CCFLAGS=['-g', '-O2', '-arch', 'x86_64'])
 		env.Append(LINKFLAGS=['-arch', 'x86_64'])
@@ -109,15 +111,13 @@ if env['platform'] == "osx":
 		env.Append(LINKFLAGS=['-arch', 'x86_64'])
 
 elif env['platform'] == 'x11':
-	env.Append(LIBS=['m', 'dl'])
-	#env.Append(CXXFLAGS=['-std=c++17'])
+	env.Append(LIBS=['m'])
 	if env['target'] == 'debug':
 		env.Append(CCFLAGS=['-fPIC', '-g3', '-Og'])
 	else:
 		env.Append(CCFLAGS=['-fPIC', '-g', '-O3'])
 
 elif env['platform'] == "windows":
-	#env.Append(CXXFLAGS=['/std:c++17', '/bigobj'])
 	env.Append(CPPDEFINES=['_CRT_SECURE_NO_WARNINGS'])
 	env.Append(CPPDEFINES=['WIN32', '_WIN32', '_WINDOWS'])
 	env.Append(CCFLAGS=['-W3', '-GR', '/FS'])
@@ -128,7 +128,6 @@ elif env['platform'] == "windows":
 	else:                   env['TARGET_ARCH'] = 'x86_64'
 
 	if env['target'] == 'debug':
-		env.Append(CPPDEFINES=['DEBUG'])
 		env.Append(CCFLAGS=['-EHsc', '-MDd', '-ZI'])
 		env.Append(LINKFLAGS=['-DEBUG'])
 	else:

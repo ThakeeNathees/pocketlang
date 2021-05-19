@@ -147,9 +147,10 @@ typedef struct {
 
 } pkConfiguration;
 
-// Initialize the configuration and set ALL of it's values to the defaults.
-// Call this before setting any particular field of it.
-PK_PUBLIC void pkInitConfiguration(pkConfiguration* config);
+// Create a new pkConfiguraition with the default values and return it.
+// Override those default configuration to adopt to another hosting
+// application.
+PK_PUBLIC pkConfiguration pkNewConfiguration();
 
 typedef enum {
   PK_RESULT_SUCCESS = 0,
