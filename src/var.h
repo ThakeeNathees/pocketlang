@@ -297,7 +297,7 @@ struct Function {
   bool is_native;      //< True if Native function.
   union {
     pkNativeFn native;  //< Native function pointer.
-    Fn* fn;                     //< Script function pointer.
+    Fn* fn;             //< Script function pointer.
   };
 };
 

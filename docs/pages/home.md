@@ -1,7 +1,7 @@
 
 ## PocketLang is a small, fast and friendly language for scripting and embedding.
 
-An easy to use programming language with mixed syntax of ruby and python, that can be learned in less than an hour or in no time if you have python/ruby background.
+With mixed syntax of ruby and python, that can be learned in less than an hour, and it's easy to embed into another application for scripting.
 
 ```ruby
 # Python like import statement.
@@ -19,4 +19,4 @@ for i in 0..5
 end
 ```
 
-The complete language (including the internals and runtime) is a standalone executable that can be easily copied to a flash drive. And the language itself can be compiled from source in seconds without any dependencies (of cause you need a C compiler and optionally a build system).
+The complete language (including the internals and runtime) is a standalone executable with zero external dependency, that can be easily copied to a flash drive. And the language itself can be compiled from source in seconds without any dependencies (of cause you need a C compiler and **optionally** a build system).

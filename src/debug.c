@@ -197,10 +197,9 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_STORE_GLOBAL:
       {
         int index = READ_SHORT();
-        // TODO: name hasn't implemented yet.
-        //int name_index = func->owner->global_names.data[index];
-        //String* name = func->owner->names.data[name_index];
-        printf("%5d '%s'\n", index, "todo:name"/*name->data*/);
+        int name_index = func->owner->global_names.data[index];
+        String* name = func->owner->names.data[name_index];
+        printf("%5d '%s'\n", index, name->data);
         break;
       }
 

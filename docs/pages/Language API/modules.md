@@ -40,7 +40,7 @@ from '../baz.pk' import *
 
 ```
 
-If the local scripts have defined a module name, they'll imported and binded with it's module name unless they've imported with an alias. If the local script don't have a module name and imported without an alias, every symbols (global variables, and functions) will be imported and that's similer to import all statement.
+If the local scripts have defined a module name, they'll imported and binded with it's module name if not they've imported with an alias. If the local script don't have a module name and imported without an alias, every symbols (global variables, and functions) will be imported and that's similer to import all statement.
 
 ```ruby
 # 'foo.pk' isn't defined a module name.
