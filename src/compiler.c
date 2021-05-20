@@ -22,6 +22,11 @@
 // which is using a single byte value to identify the local.
 #define MAX_VARIABLES 256
 
+// The maximum number of names that were used before defined. Its just the size
+// of the Forward buffer of the compiler. Feel free to increase it if it
+// require more.
+#define MAX_FORWARD_NAMES 256
+
 // The maximum number of constant literal a script can contain. Also it's
 // limited by it's opcode which is using a short value to identify.
 #define MAX_CONSTANTS (1 << 16)
@@ -268,6 +273,26 @@ typedef struct sLoop {
 
 } Loop;
 
+// To keep track of names used but not defined yet. This is only used for
+// functions, because variables can't be accessed before it ever defined.
+typedef struct sForwardName {
+
+  // Index of the short instruction that has the value of the name (in the
+  // names buffer of the script).
+  int instruction;
+
+  // The function where the name is used, and the instruction is belongs to.
+  Fn* func;
+
+  // The name string's pointer in the source.
+  const char* name;
+  int length;
+
+  // Line number of the name used (required for error message).
+  int line;
+
+} ForwardName;
+
 typedef struct sFunc {
 
   // Scope of the function. -2 for script body, -1 for top level function and 
@@ -312,6 +337,11 @@ struct Compiler {
   Script* script;  //< Current script (a weak pointer).
   Loop* loop;      //< Current loop.
   Func* func;      //< Current function.
+
+  // An array of implicitly forward declared names, which will be resolved once
+  // the script is completely compiled.
+  ForwardName forwards[MAX_FORWARD_NAMES];
+  int forwards_count;
 
   // True if the last statement is a new local variable assignment. Because
   // the assignment is different than reqular assignment and use this boolean 
@@ -370,6 +400,17 @@ static void parseError(Compiler* compiler, const char* fmt, ...) {
   va_start(args, fmt);
   const char* path = compiler->script->path->data;
   reportError(compiler, path, token->line, fmt, args);
+  va_end(args);
+}
+
+// Error caused when trying to resolve forward names (maybe more in the
+// furure), Which will be called once after compiling the script and thus we
+// need to pass the line number the error origined from.
+static void resolveError(Compiler* compiler, int line, const char* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  const char* path = compiler->script->path->data;
+  reportError(compiler, path, line, fmt, args);
   va_end(args);
 }
 
@@ -854,18 +895,21 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
 static void emitOpcode(Compiler* compiler, Opcode opcode);
 static int emitByte(Compiler* compiler, int byte);
 static int emitShort(Compiler* compiler, int arg);
-static void patchJump(Compiler* compiler, int addr_index);
-static int compilerAddConstant(Compiler* compiler, Var value);
 
-static int compilerGetVariable(Compiler* compiler, const char* name,
-  int length);
-static int compilerAddVariable(Compiler* compiler, const char* name,
-  int length, int line);
+static void patchJump(Compiler* compiler, int addr_index);
+static void patchForward(Compiler* compiler, Fn* fn, int addr_index, int name);
+
 static int compilerAddConstant(Compiler* compiler, Var value);
-static int compileFunction(Compiler* compiler, FuncType fn_type);
+static int compilerGetVariable(Compiler* compiler, const char* name,
+                               int length);
+static int compilerAddVariable(Compiler* compiler, const char* name,
+                               int length, int line);
+static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
+                               const char* name, int length, int line);
 
 // Forward declaration of grammar functions.
 static void parsePrecedence(Compiler* compiler, Precedence precedence);
+static int compileFunction(Compiler* compiler, FuncType fn_type);
 static void compileExpression(Compiler* compiler);
 
 static void exprLiteral(Compiler* compiler, bool can_assign);
@@ -1035,9 +1079,17 @@ static void exprName(Compiler* compiler, bool can_assign) {
         emitStoreVariable(compiler, (index - compiler->global_count), false);
       }
     } else {
-      // TODO: The name could be a function which hasn't been defined at this point.
-      //       Implement opcode to push a named variable.
-      parseError(compiler, "Name '%.*s' is not defined.", name_len, name_start);
+
+      // The name could be a function which hasn't been defined at this point.
+      if (peek(compiler) == TK_LPARAN) {
+        emitOpcode(compiler, OP_PUSH_FN);
+        int index = emitShort(compiler, result.index);
+        compilerAddForward(compiler, index, _FN, name_start, name_len,
+                           name_line);
+      } else {
+        parseError(compiler, "Name '%.*s' is not defined.", name_len, name_start);
+      }
+
     }
     return;
   }
@@ -1156,7 +1208,7 @@ static void exprChainCall(Compiler* compiler, bool can_assign) {
         argc++;
       } while (match(compiler, TK_COMMA));
       consume(compiler, TK_RBRACE, "Expected '}' after chain call"
-                                            "parameter list.");
+                                   "parameter list.");
     }
   }
 
@@ -1406,6 +1458,8 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
 
   compiler->loop = NULL;
   compiler->func = NULL;
+
+  compiler->forwards_count = 0;
   compiler->new_local = false;
 }
 
@@ -1430,6 +1484,12 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
 
   // TODO: should I validate the name for pre-defined, etc?
 
+  if (compiler->var_count == MAX_VARIABLES) {
+    parseError(compiler, "A script should contain at most %d variables.",
+               MAX_VARIABLES);
+    return -1;
+  }
+
   Variable* variable = &compiler->variables[compiler->var_count];
   variable->name = name;
   variable->length = length;
@@ -1443,6 +1503,22 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
   }
 
   return compiler->var_count++;
+}
+
+static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
+                               const char* name, int length, int line) {
+  if (compiler->forwards_count == MAX_VARIABLES) {
+    parseError(compiler, "A script should contain at most %d implict forward "
+               "function declarations.", MAX_VARIABLES);
+    return;
+  }
+
+  ForwardName* forward = &compiler->forwards[compiler->forwards_count++];
+  forward->instruction = instruction;
+  forward->func = fn;
+  forward->name = name;
+  forward->length = length;
+  forward->line = line;
 }
 
 // Add a literal constant to scripts literals and return it's index.
@@ -1540,6 +1616,11 @@ static void patchJump(Compiler* compiler, int addr_index) {
   _FN->opcodes.data[addr_index + 1] = offset & 0xff;
 }
 
+static void patchForward(Compiler* compiler, Fn* fn, int addr_index, int name) {
+  fn->opcodes.data[addr_index] = (name >> 8) & 0xff;
+  fn->opcodes.data[addr_index + 1] = name & 0xff;
+}
+
 // Jump back to the start of the loop.
 static void emitLoopJump(Compiler* compiler) {
   emitOpcode(compiler, OP_LOOP);
@@ -1572,12 +1653,9 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
     consume(compiler, TK_NAME, "Expected a function name.");
     name = compiler->previous.start;
     name_length = compiler->previous.length;
-    NameSearchResult result = compilerSearchName(compiler, name,
-                                                 name_length);
+    NameSearchResult result = compilerSearchName(compiler, name, name_length);
     if (result.type != NAME_NOT_DEFINED) {
-      parseError(compiler, "Name '%.*s' already exists.", name_length,
-                 name);
-      // Not returning here as to complete for skip cascaded errors.
+      parseError(compiler, "Name '%.*s' already exists.", name_length, name);
     }
 
   } else {
@@ -2267,11 +2345,23 @@ bool compile(PKVM* vm, Script* script, const char* source) {
   emitOpcode(compiler, OP_RETURN);
   emitOpcode(compiler, OP_END);
 
+  // Resolve forward names (function names that are used before defined).
+  for (int i = 0; i < compiler->forwards_count; i++) {
+    ForwardName* forward = &compiler->forwards[i];
+    const char* name = forward->name;
+    int length = forward->length;
+    int index = scriptSearchFunc(script, name, (uint32_t)length);
+    if (index != -1) {
+      patchForward(compiler, forward->func, forward->instruction, index);
+    } else {
+      resolveError(compiler, forward->line, "Name '%.*s' is not defined.", length, name);
+    }
+  }
+
   // Create script globals.
   for (int i = 0; i < compiler->var_count; i++) {
     ASSERT(compiler->variables[i].depth == (int)DEPTH_GLOBAL, OOPS);
     varBufferWrite(&script->globals, vm, VAR_NULL);
-    // TODO: add the names to global_names table.
   }
 
   vm->compiler = compiler->next_compiler;

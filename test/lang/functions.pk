@@ -1,0 +1,21 @@
+
+# Function Tests. (TODO: add more)
+
+def f1 return 'f1' end
+assert(f1() == 'f1')
+
+def f2() return 'f2' end
+assert(f2() == 'f2')
+
+def f3(a, b, c, d)
+	return c
+end
+assert(f3('a', 'b', 'c', 'd') == 'c')
+
+# forward call.
+val = before_defn()
+def before_defn()
+	return 'defined after the call'
+end
+
+assert(val == 'defined after the call')
