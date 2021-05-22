@@ -4,12 +4,13 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 
 #include "pocketlang.h"
 
 void errorPrint(PKVM* vm, PKErrorType type, const char* file, int line,
-                const char* message) {
+  const char* message) {
   if (type == PK_ERROR_COMPILE) {
     fprintf(stderr, "Error: %s\n       at %s:%i\n", message, file, line);
   } else if (type == PK_ERROR_RUNTIME) {
@@ -63,9 +64,9 @@ pkStringPtr loadScript(PKVM* vm, const char* path) {
 
   // Read source to buffer.
   char* buff = (char*)malloc((size_t)(file_size) + 1);
-  size_t read = fread(buff, sizeof(char), file_size, file);
   // Using read instead of file_size is because "\r\n" is read as '\n' in
-  // windows the '\r'.
+  // windows.
+  size_t read = fread(buff, sizeof(char), file_size, file);
   buff[read] = '\0';
   fclose(file);
 
@@ -83,12 +84,12 @@ int main(int argc, char** argv) {
     "Free and open source software under the terms of the MIT license.\n";
   const char* help = "Usage: pocketlang <source_path>\n";
 
+  // TODO: implement arg parse.
+
   if (argc < 2) {
     printf("%s\n%s", notice, help);
     return 0;
   }
-  
-  const char* source_path = argv[1];
 
   pkConfiguration config = pkNewConfiguration();
   config.error_fn = errorPrint;
@@ -96,9 +97,20 @@ int main(int argc, char** argv) {
   config.load_script_fn = loadScript;
   config.resolve_path_fn = resolvePath;
 
-  PKVM* vm = pkNewVM(&config);
-  PKInterpretResult result = pkInterpret(vm, source_path);
-  pkFreeVM(vm);
 
-  return result;
+  // FIXME: this is temp till arg parse implemented.
+  if (argc >= 3 && strcmp(argv[1], "-c") == 0) {
+    PKVM* vm = pkNewVM(&config);
+    PKInterpretResult result = pkInterpretSource(vm, argv[2], "$(Source)");
+    pkFreeVM(vm);
+    return result;
+
+  } else {
+    PKVM* vm = pkNewVM(&config);
+    PKInterpretResult result = pkInterpret(vm, argv[1]);
+    pkFreeVM(vm);
+    return result;
+  }
+
+  return 0;
 }

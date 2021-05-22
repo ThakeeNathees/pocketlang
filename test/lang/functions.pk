@@ -1,21 +1,26 @@
 
-# Function Tests. (TODO: add more)
+## Function Tests.
 
-def f1 return 'f1' end
-assert(f1() == 'f1')
-
-def f2() return 'f2' end
-assert(f2() == 'f2')
-
-def f3(a, b, c, d)
-	return c
-end
+def f1 return 'f1' end assert(f1() == 'f1')
+def f2() return 'f2' end assert(f2() == 'f2')
+def f3(a, b, c, d) return c end
 assert(f3('a', 'b', 'c', 'd') == 'c')
 
-# forward call.
+## Forward call.
 val = before_defn()
 def before_defn()
 	return 'defined after the call'
 end
-
 assert(val == 'defined after the call')
+
+## Chain call tests. (concatenative programming)
+
+def fn1(data) return '[fn1:' + data + ']' end
+def fn2(data, suffix) return '[fn2:' + data + '|' + suffix + ']' end
+def fn3(data) return '[fn3:' + data + ']' end
+
+result = 'data' -> fn1 -> fn2{'suff'} -> fn3
+assert(result == '[fn3:[fn2:[fn1:data]|suff]]')
+
+result = ' tEST+InG ' -> str_strip -> str_lower
+assert(result == 'test+ing')

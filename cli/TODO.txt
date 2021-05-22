@@ -1,12 +1,11 @@
 
 // To implement.
 
-
-[ ] Resolve function name (called before defined).
+[ ] Implement argparse.
+[ ] Implement resolve path in cli.
 
 [ ] Structs.
 [ ] Implement math library.
-[ ] Implement resolve path in cli.
 [ ] Single header for embedding.
 [ ] Implement fiber from script body and vm run fibers (not scripts).
     Then remove vm's root script.
