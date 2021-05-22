@@ -23,7 +23,11 @@
 
 #include <stdio.h> //< Only needed for ASSERT() macro and for release mode
                    //< TODO; macro use this to print a crash report.
-// The internal assertion macro, do not use this. Use ASSERT() instead.
+
+// The internal assertion macro, this will print error and break regardless of
+// the build target (debug or release). Use ASSERT() for debug assertion and
+// use __ASSERT() for TODOs and assetion's in public methods (to indicate that
+// the host application did something wrong).
 #define __ASSERT(condition, message)                                 \
   do {                                                               \
     if (!(condition)) {                                              \
@@ -103,19 +107,22 @@
 #define DEALLOCATE(vm, pointer) \
     vmRealloc(vm, pointer, 0, 0)
 
+// Unique number to identify for various cases.
+typedef uint32_t ID;
+
+#if VAR_NAN_TAGGING
+  typedef uint64_t Var;
+#else
+  typedef struct Var Var;
+#endif
+
 typedef struct Object Object;
 typedef struct String String;
 typedef struct List List;
 typedef struct Map Map;
 typedef struct Range Range;
-
 typedef struct Script Script;
 typedef struct Function Function;
-
-// Unique number to identify for various cases.
-typedef uint32_t ID;
-
-// VM's fiber type.
 typedef struct Fiber Fiber;
 
 #endif //PK_COMMON_H

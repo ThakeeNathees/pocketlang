@@ -9,7 +9,15 @@
 
 #include "pocketlang.h"
 
-void errorPrint(PKVM* vm, PKErrorType type, const char* file, int line,
+ // FIXME: everything below here is temproary and for testing.
+
+// TODO: include this.
+void register_cli_modules(PKVM* vm);
+
+
+// ---------------------------------------
+
+void errorPrint(PKVM* vm, PkErrorType type, const char* file, int line,
   const char* message) {
   if (type == PK_ERROR_COMPILE) {
     fprintf(stderr, "Error: %s\n       at %s:%i\n", message, file, line);
@@ -101,16 +109,15 @@ int main(int argc, char** argv) {
   // FIXME: this is temp till arg parse implemented.
   if (argc >= 3 && strcmp(argv[1], "-c") == 0) {
     PKVM* vm = pkNewVM(&config);
-    PKInterpretResult result = pkInterpretSource(vm, argv[2], "$(Source)");
-    pkFreeVM(vm);
-    return result;
-
-  } else {
-    PKVM* vm = pkNewVM(&config);
-    PKInterpretResult result = pkInterpret(vm, argv[1]);
+    PkInterpretResult result = pkInterpretSource(vm, argv[2], "$(Source)");
     pkFreeVM(vm);
     return result;
   }
 
-  return 0;
+  PKVM* vm = pkNewVM(&config);
+  register_cli_modules(vm);
+
+  PkInterpretResult result = pkInterpret(vm, argv[1]);
+  pkFreeVM(vm);
+  return result;
 }
