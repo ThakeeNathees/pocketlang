@@ -691,7 +691,7 @@ static void lexToken(Compiler* compiler) {
           eatName(compiler);
         } else {
           if (c >= 32 && c <= 126) {
-            lexError(compiler, "Invalid character %c", c);
+            lexError(compiler, "Invalid character '%c'", c);
           } else {
             lexError(compiler, "Invalid byte 0x%x", (uint8_t)c);
           }
@@ -752,15 +752,22 @@ static bool matchLine(Compiler* compiler) {
   return true;
 }
 
-// Match semi collon, multiple new lines or peek 'end' keyword.
+// Match semi collon, multiple new lines or peek 'end', 'else', 'elif'
+// keywords.
 static bool matchEndStatement(Compiler* compiler) {
   if (match(compiler, TK_SEMICOLLON)) {
     skipNewLines(compiler);
     return true;
   }
-
-  if (matchLine(compiler) || peek(compiler) == TK_END || peek(compiler) == TK_EOF)
+  if (matchLine(compiler) || peek(compiler) == TK_EOF)
     return true;
+
+  // In the below statement we don't require any new lines or semicollons.
+  // 'if cond then stmnt1 elif cond2 then stmnt2 else stmnt3 end'
+  if (peek(compiler) == TK_END || peek(compiler) == TK_ELSE ||
+      peek(compiler) == TK_ELIF)
+    return true;
+
   return false;
 }
 
@@ -1207,7 +1214,7 @@ static void exprChainCall(Compiler* compiler, bool can_assign) {
         skipNewLines(compiler);
         argc++;
       } while (match(compiler, TK_COMMA));
-      consume(compiler, TK_RBRACE, "Expected '}' after chain call"
+      consume(compiler, TK_RBRACE, "Expected '}' after chain call "
                                    "parameter list.");
     }
   }
@@ -1263,7 +1270,7 @@ static void exprGrouping(Compiler* compiler, bool can_assign) {
   skipNewLines(compiler);
   compileExpression(compiler);
   skipNewLines(compiler);
-  consume(compiler, TK_RPARAN, "Expected ')' after expression ");
+  consume(compiler, TK_RPARAN, "Expected ')' after expression.");
 }
 
 static void exprList(Compiler* compiler, bool can_assign) {
@@ -1699,7 +1706,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
         }
       }
       if (predefined)
-        parseError(compiler, "Multiple definition of a parameter");
+        parseError(compiler, "Multiple definition of a parameter.");
 
       compilerAddVariable(compiler, param_name, param_len,
                           compiler->previous.line);
@@ -1781,6 +1788,11 @@ static Script* importFile(Compiler* compiler, const char* path) {
   pkStringPtr resolved = { path, NULL, NULL };
   if (vm->config.resolve_path_fn != NULL) {
     resolved = vm->config.resolve_path_fn(vm, compiler->script->path->data, path);
+  }
+
+  if (resolved.string == NULL) {
+    parseError(compiler, "Cannot resolve path '%s' from '%s'", path,
+               compiler->script->path->data);
   }
 
   // Create new string for the resolved path. And free the resolved path.
@@ -1952,7 +1964,8 @@ L_import_done:
 // from module import symbol [as alias [, symbol2 [as alias]]]
 static void compileFromImport(Compiler* compiler) {
 
-  // Import the library and push it on the stack.
+  // Import the library and push it on the stack. If the import failed
+  // lib_from would be NULL.
   Script* lib_from = compilerImport(compiler);
 
   // At this point the script would be on the stack before executing the next
@@ -1961,7 +1974,7 @@ static void compileFromImport(Compiler* compiler) {
 
   if (match(compiler, TK_STAR)) {
     // from math import *
-    compilerImportAll(compiler, lib_from);
+    if (lib_from) compilerImportAll(compiler, lib_from);
 
   } else {
     do {
@@ -2010,7 +2023,10 @@ static void compileFromImport(Compiler* compiler) {
 
 static void compileRegularImport(Compiler* compiler) {
   do {
-    // Import the library and push it on the stack.
+
+    // Import the library and push it on the stack. If it cannot import
+    // the lib would be null, but we're not terminating here, just continue
+    // parsing for cascaded errors.
     Script* lib = compilerImport(compiler);
 
     // variable to bind the imported script.
@@ -2034,7 +2050,7 @@ static void compileRegularImport(Compiler* compiler) {
       // If it has a module name use it as binding variable.
       // Core libs names are it's module name but for local libs it's optional
       // to define a module name for a script.
-      if (lib->moudle != NULL) {
+      if (lib && lib->moudle != NULL) {
 
         // Get the variable to bind the imported symbol, if we already have a
         // variable with that name override it, otherwise use a new variable.
@@ -2057,7 +2073,7 @@ static void compileRegularImport(Compiler* compiler) {
       emitOpcode(compiler, OP_POP);
 
     } else {
-      compilerImportAll(compiler, lib);
+      if (lib) compilerImportAll(compiler, lib);
       // Done importing everything from lib now pop the lib.
       emitOpcode(compiler, OP_POP);
     }

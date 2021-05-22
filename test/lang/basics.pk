@@ -15,3 +15,11 @@ l1[1] = true; assert(l1[1], 'List subscript set failed.')
 h1 = hash("testing"); h2 = hash("test" + "ing")
 assert(h1 == h2, 'Hash function failed.')
 assert(to_string(42) == '42', 'to_string() failed.')
+
+
+## Logical statement test
+val = 0; a = false; b = true
+get_true = func return true end
+if a and b then assert(false) end
+if a or b then val = 42 else assert(false) end assert(val == 42)
+if get_true() or false then val = 12 end assert(val == 12)

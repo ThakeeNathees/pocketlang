@@ -3,8 +3,7 @@
 variable = null ## Will be changed by the control flow.
 unreachable = func assert(false, 'Unreachable') end
 
-if true then variable = 42
-else unreachable() end
+if true then variable = 42 else unreachable() end
 assert(variable == 42, 'If statement failed.')
 
 if false then unreachable()
