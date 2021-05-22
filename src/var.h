@@ -180,18 +180,15 @@ typedef struct {
 
 #endif // VAR_NAN_TAGGING
 
-typedef enum /* ObjectType */ {
+typedef enum {
   OBJ_STRING,
   OBJ_LIST,
   OBJ_MAP,
   OBJ_RANGE,
-
   OBJ_SCRIPT,
   OBJ_FUNC,
-
   OBJ_FIBER,
-
-  // TODO: remove OBJ_USER and implement handlers for that.
+  // TODO:
   OBJ_USER,
 } ObjectType;
 
@@ -432,6 +429,12 @@ Var mapRemoveKey(PKVM* vm, Map* self, Var key);
 void freeObject(PKVM* vm, Object* self);
 
 // Utility functions //////////////////////////////////////////////////////////
+
+// Returns the type name of the PkVarType enum value.
+const char* getPkVarTypeName(PkVarType type);
+
+// Returns the type name of the ObjectType enum value.
+const char* getObjectTypeName(ObjectType type);
 
 // Returns the type name of the var [v].
 const char* varTypeName(Var v);

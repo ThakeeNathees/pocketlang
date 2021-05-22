@@ -9,32 +9,57 @@
 #include "var.h"
 #include "vm.h"
 
-// Public Api /////////////////////////////////////////////////////////////////
-Var pkVarBool(PKVM* vm, bool value) {
-  return VAR_BOOL(value);
+ /*****************************************************************************/
+ /* PUBLIC API                                                                */
+ /*****************************************************************************/
+
+PkVarType pkGetValueType(PkVar value) {
+  __ASSERT(value != NULL, "Given value was NULL.");
+
+  if (IS_NULL(*(Var*)(value))) return PK_NULL;
+  if (IS_BOOL(*(Var*)(value))) return PK_BOOL;
+  if (IS_NUM(*(Var*)(value))) return PK_NUMBER;
+
+  __ASSERT(IS_OBJ(*(Var*)(value)),
+           "Invalid var pointer. Might be a dangling pointer");
+
+  Object* obj = AS_OBJ(*(Var*)(value));
+  switch (obj->type) {
+    case OBJ_STRING: return PK_STRING;
+    case OBJ_LIST:   return PK_LIST;
+    case OBJ_MAP:    return PK_MAP;
+    case OBJ_RANGE:  return PK_RANGE;
+    case OBJ_SCRIPT: return PK_SCRIPT;
+    case OBJ_FUNC:   return PK_FUNCTION;
+    case OBJ_FIBER:  return PK_FIBER;
+  }
+
+  UNREACHABLE();
+  return (PkVarType)0;
 }
 
-Var pkVarNumber(PKVM* vm, double value) {
-  return VAR_NUM(value);
+PkHandle* pkNewString(PKVM* vm, const char* value) {
+  return vmNewHandle(vm, VAR_OBJ(&newString(vm, value)->_super));
 }
 
-Var pkVarString(PKVM* vm, const char* value) {
-  return VAR_OBJ(newStringLength(vm, value, (uint32_t)strlen(value)));
+PkHandle* pkNewList(PKVM* vm) {
+  return vmNewHandle(vm, VAR_OBJ(&newList(vm, MIN_CAPACITY)->_super));
 }
 
-bool pkAsBool(PKVM* vm, Var value) {
-  return AS_BOOL(value);
+PkHandle* pkNewMap(PKVM* vm) {
+  return vmNewHandle(vm, VAR_OBJ(&newMap(vm)->_super));
 }
 
-double pkAsNumber(PKVM* vm, Var value) {
-  return AS_NUM(value);
+const char* pkStringGetData(PkVar value) {
+  Var str = (*(Var*)value);
+  __ASSERT(IS_OBJ(str) && AS_OBJ(str)->type == OBJ_STRING,
+    "Value should be of type string.");
+  return ((String*)AS_OBJ(str))->data;
 }
 
-const char* pkAsString(PKVM* vm, Var value) {
-  return AS_STRING(value)->data;
-}
-
-///////////////////////////////////////////////////////////////////////////////
+/*****************************************************************************/
+/* VAR INTERNALS                                                             */
+/*****************************************************************************/
 
 // Number of maximum digits for to_string buffer.
 #define TO_STRING_BUFF_SIZE 128
@@ -644,14 +669,26 @@ void freeObject(PKVM* vm, Object* self) {
 
 // Utility functions //////////////////////////////////////////////////////////
 
-const char* varTypeName(Var v) {
-  if (IS_NULL(v)) return "null";
-  if (IS_BOOL(v)) return "bool";
-  if (IS_NUM(v))  return "number";
+const char* getPkVarTypeName(PkVarType type) {
+  switch (type) {
+    case PK_NULL:     return "null";
+    case PK_BOOL:     return "bool";
+    case PK_NUMBER:   return "number";
+    case PK_STRING:   return "String";
+    case PK_LIST:     return "List";
+    case PK_MAP:      return "Map";
+    case PK_RANGE:    return "Range";
+    case PK_SCRIPT:   return "Script";
+    case PK_FUNCTION: return "Function";
+    case PK_FIBER:    return "Fiber";
+  }
 
-  ASSERT(IS_OBJ(v), OOPS);
-  Object* obj = AS_OBJ(v);
-  switch (obj->type) {
+  UNREACHABLE();
+  return NULL;
+}
+
+const char* getObjectTypeName(ObjectType type) {
+  switch (type) {
     case OBJ_STRING:  return "String";
     case OBJ_LIST:    return "List";
     case OBJ_MAP:     return "Map";
@@ -663,6 +700,16 @@ const char* varTypeName(Var v) {
     default:
       UNREACHABLE();
   }
+}
+
+const char* varTypeName(Var v) {
+  if (IS_NULL(v)) return "null";
+  if (IS_BOOL(v)) return "bool";
+  if (IS_NUM(v))  return "number";
+
+  ASSERT(IS_OBJ(v), OOPS);
+  Object* obj = AS_OBJ(v);
+  return getObjectTypeName(obj->type);
 }
 
 bool isValuesSame(Var v1, Var v2) {

@@ -32,6 +32,14 @@ typedef struct {
   Function* fn;     //< Native function pointer.
 } BuiltinFn;
 
+// A doubly link list of vars that have reference in the host application.
+struct PkHandle {
+  Var value;
+
+  PkHandle* prev;
+  PkHandle* next;
+};
+
 struct PKVM {
 
   // The first object in the link list of all heap allocated objects.
@@ -60,6 +68,9 @@ struct PKVM {
   // doesn't garbage collected.
   Object* temp_reference[MAX_TEMP_REFERENCE];
   int temp_reference_count;
+
+  // Pointer to the first handle in the doubly linked list of handles.
+  PkHandle* handles;
 
   // VM's configurations.
   pkConfiguration config;
@@ -109,10 +120,14 @@ void vmPushTempRef(PKVM* self, Object* obj);
 // Pop the top most object from temporary reference stack.
 void vmPopTempRef(PKVM* self);
 
+// Create and return a new handle for the [value].
+PkHandle* vmNewHandle(PKVM* self, Var value);
+
 // Trigger garbage collection manually.
 void vmCollectGarbage(PKVM* self);
 
+
 // Runs the script and return result.
-PKInterpretResult vmRunScript(PKVM* vm, Script* script);
+PkInterpretResult vmRunScript(PKVM* vm, Script* script);
 
 #endif // VM_H

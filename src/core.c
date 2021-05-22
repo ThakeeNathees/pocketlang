@@ -13,6 +13,137 @@
 #include "var.h"
 #include "vm.h"
 
+/*****************************************************************************/
+/* PUBLIC API                                                                */
+/*****************************************************************************/
+
+// Declare internal functions of public api.
+static Script* newModuleInternal(PKVM* vm, const char* name);
+static void moduleAddFunctionInternal(PKVM* vm, Script* script,
+                                 const char* name, pkNativeFn fptr, int arity);
+
+PkHandle* pkNewModule(PKVM* vm, const char* name) {
+  Script* module = newModuleInternal(vm, name);
+  return vmNewHandle(vm, VAR_OBJ(&module->_super));
+}
+
+void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
+                         pkNativeFn fptr, int arity) {
+  __ASSERT(module != NULL, "Argument module was NULL.");
+
+  Var scr = module->value;
+  __ASSERT(IS_OBJ(scr) && AS_OBJ(scr)->type == OBJ_SCRIPT,
+           "Given handle is not a module");
+  
+  moduleAddFunctionInternal(vm, (Script*)AS_OBJ(scr), name, fptr, arity);
+}
+
+// Argument getter (1 based).
+#define ARG(n) vm->fiber->ret[n]
+
+// Convinent macros.
+#define ARG1 ARG(1)
+#define ARG2 ARG(2)
+#define ARG3 ARG(3)
+
+// Argument count used in variadic functions.
+#define ARGC ((int)(vm->fiber->sp - vm->fiber->ret) - 1)
+
+// Set return value.
+#define RET(value)             \
+  do {                         \
+    *(vm->fiber->ret) = value; \
+    return;                    \
+  } while (false)
+
+// Check for errors in before calling the get arg public api function.
+#define CHECK_GET_ARG_API_ERRORS()                                             \
+  __ASSERT(vm->fiber != NULL, "This function can only be called at runtime."); \
+  __ASSERT(arg > 0 || arg < ARGC, "Invalid argument index.");                  \
+  __ASSERT(value != NULL, "Parameter [value] was NULL.");                      \
+  ((void*)0)
+
+#define ERR_INVALID_ARG_TYPE(m_type)                           \
+do {                                                           \
+  /* 12 chars is enought for a 4 byte integer string.*/        \
+  char buff[12];                                               \
+  sprintf(buff, "%d", arg);                                    \
+  vm->fiber->error = stringFormat(vm, "Expected a " m_type     \
+                                  " at argument $.", buff);    \
+} while (false)
+
+int pkGetArgc(PKVM* vm) {
+  __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
+  return ARGC;
+}
+
+PkVar pkGetArg(PKVM* vm, int arg) {
+  __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
+  __ASSERT(arg > 0 || arg < ARGC, "Invalid argument index.");
+
+  return &(ARG(arg));
+}
+
+bool pkGetArgNumber(PKVM* vm, int arg, double* value) {
+  CHECK_GET_ARG_API_ERRORS();
+
+  Var val = ARG(arg);
+  if (IS_NUM(val)) {
+    *value = AS_NUM(val);
+
+  } else if (IS_BOOL(val)) {
+    *value = AS_BOOL(val) ? 1 : 0;
+
+  } else {
+    ERR_INVALID_ARG_TYPE("number");
+    return false;
+  }
+
+  return true;
+}
+
+bool pkGetArgBool(PKVM* vm, int arg, bool* value) {
+  CHECK_GET_ARG_API_ERRORS();
+
+  Var val = ARG(arg);
+  *value = toBool(val);
+  return true;
+}
+
+bool pkGetArgValue(PKVM* vm, int arg, PkVarType type, PkVar* value) {
+  CHECK_GET_ARG_API_ERRORS();
+
+  Var val = ARG(arg);
+  if (pkGetValueType((PkVar)&val) != type) {
+    char buff[12]; sprintf(buff, "%d", arg);
+    vm->fiber->error = stringFormat(vm,
+      "Expected a $ at argument $.", getPkVarTypeName(type), buff);
+    return false;
+  }
+
+  *value = (PkVar)&val;
+  return true;
+}
+
+void pkReturnNull(PKVM* vm) {
+  RET(VAR_NULL);
+}
+
+void pkReturnBool(PKVM* vm, bool value) {
+  RET(VAR_BOOL(value));
+}
+
+void pkReturnNumber(PKVM* vm, double value) {
+  RET(VAR_NUM(value));
+}
+
+void pkReturnValue(PKVM* vm, PkVar value) {
+  RET(*(Var*)value);
+}
+
+// ----------------------------------------------------------------------------
+
+
 // Convert number var as int32_t. Check if it's number before using it.
 #define _AS_INTEGER(var) (int32_t)trunc(AS_NUM(var))
 
@@ -104,23 +235,6 @@ static bool validateArgString(PKVM* vm, Var var, String** value, int arg_ind) {
 /* BUILTIN FUNCTIONS API                                                     */
 /*****************************************************************************/
 
-// Argument getter (1 based).
-#define ARG(n) vm->fiber->ret[n]
-
-// Convinent macros.
-#define ARG1 ARG(1)
-#define ARG2 ARG(2)
-#define ARG3 ARG(3)
-
-// Argument count used in variadic functions.
-#define ARGC ((int)(vm->fiber->sp - vm->fiber->ret) - 1)
-
-// Set return value.
-#define RET(value)             \
-  do {                         \
-    *(vm->fiber->ret) = value; \
-    return;                    \
-  } while (false)
 
 Function* getBuiltinFunction(PKVM* vm, int index) {
   ASSERT_INDEX(index, vm->builtins_count);
@@ -276,25 +390,54 @@ void coreStrStrip(PKVM* vm) {
 }
 
 /*****************************************************************************/
-/* CORE LIBRARY METHODS                                                      */
+/* CORE MODULE METHODS                                                       */
 /*****************************************************************************/
 
-// 'path' library methods.
-// -----------------------
+// Create a module and add it to the vm's core modules, returns the script.
+static Script* newModuleInternal(PKVM* vm, const char* name) {
 
-//  TODO: path library should be added by the cli (or the hosting application).
-void stdPathAbspath(PKVM* vm) {
-  Var relpath = ARG1;
-  if (!IS_OBJ(relpath) || AS_OBJ(relpath)->type != OBJ_STRING) {
-    vm->fiber->error = newString(vm, "Expected a string at argument 1.");
+  // Create a new Script for the module.
+  String* _name = newString(vm, name);
+  vmPushTempRef(vm, &_name->_super);
+
+  // Check if any module with the same name already exists and assert to the
+  // hosting application.
+  if (!IS_UNDEF(mapGet(vm->core_libs, VAR_OBJ(&_name->_super)))) {
+    vmPopTempRef(vm); // _name
+    __ASSERT(false, stringFormat(vm, "A module named '$' already exists",
+      name)->data);
   }
 
-  // TODO: abspath.
-  RET(VAR_OBJ(newString(vm, "TODO: abspath")));
+  Script* scr = newScript(vm, _name);
+  scr->moudle = _name;
+  vmPopTempRef(vm); // _name
+
+  // Add the script to core_libs.
+  vmPushTempRef(vm, &scr->_super);
+  mapSet(vm, vm->core_libs, VAR_OBJ(&_name->_super), VAR_OBJ(&scr->_super));
+  vmPopTempRef(vm);
+
+  return scr;
 }
 
-void stdPathCurdir(PKVM* vm) {
-  RET(VAR_OBJ(newString(vm, "TODO: curdir")));
+static void moduleAddFunctionInternal(PKVM* vm, Script* script,
+                                const char* name, pkNativeFn fptr, int arity) {
+
+  // Check if function with the same name already exists.
+  if (scriptSearchFunc(script, name, (uint32_t)strlen(name)) != -1) {
+    __ASSERT(false, stringFormat(vm, "A function named '$' already esists "
+      "on module '@'", name, script->moudle)->data);
+  }
+
+  // Check if a global variable with the same name already exists.
+  if (scriptSearchGlobals(script, name, (uint32_t)strlen(name)) != -1) {
+    __ASSERT(false, stringFormat(vm, "A global variable named '$' already "
+      "esists on module '@'", name, script->moudle)->data);
+  }
+
+  Function* fn = newFunction(vm, name, (int)strlen(name), script, true);
+  fn->native = fptr;
+  fn->arity = arity;
 }
 
 // 'lang' library methods.
@@ -367,40 +510,12 @@ void initializeCore(PKVM* vm) {
   INITALIZE_BUILTIN_FN("str_upper",   coreStrUpper,   1);
   INITALIZE_BUILTIN_FN("str_strip",   coreStrStrip,   1);
 
-  // Make STD scripts.
-  Script* std;  // A temporary pointer to the current std script.
-  Function* fn; // A temporary pointer to the allocated function function.
-#define STD_NEW_SCRIPT(_name)                                                 \
-  do {                                                                        \
-    /* Create a new Script. */                                                \
-    String* name = newString(vm, _name);                                      \
-    vmPushTempRef(vm, &name->_super);                                         \
-    std = newScript(vm, name);                                                \
-    std->moudle = name; /* Core libs's path and the module are the same. */   \
-    vmPopTempRef(vm);                                                         \
-    /* Add the script to core_libs. */                                        \
-    vmPushTempRef(vm, &std->_super);                                          \
-    mapSet(vm, vm->core_libs, VAR_OBJ(&name->_super), VAR_OBJ(&std->_super)); \
-    vmPopTempRef(vm);                                                         \
-  } while (false)
+  // Core Modules /////////////////////////////////////////////////////////////
 
-#define STD_ADD_FUNCTION(_name, fptr, _arity)                   \
-  do {                                                          \
-    fn = newFunction(vm, _name, (int)strlen(_name), std, true); \
-    fn->native = fptr;                                          \
-    fn->arity = _arity;                                         \
-  } while (false)
-
-  // path
-  STD_NEW_SCRIPT("path");
-  STD_ADD_FUNCTION("abspath", stdPathAbspath, 1);
-  STD_ADD_FUNCTION("curdir",  stdPathCurdir,  0);
-
-  // lang
-  STD_NEW_SCRIPT("lang");
-  STD_ADD_FUNCTION("clock", stdLangClock,  0);
-  STD_ADD_FUNCTION("gc",    stdLangGC,     0);
-  STD_ADD_FUNCTION("write", stdLangWrite, -1);
+  Script* lang = newModuleInternal(vm, "lang");
+  moduleAddFunctionInternal(vm, lang, "clock", stdLangClock,  0);
+  moduleAddFunctionInternal(vm, lang, "gc",    stdLangGC,     0);
+  moduleAddFunctionInternal(vm, lang, "write", stdLangWrite, -1);
 }
 
 /*****************************************************************************/

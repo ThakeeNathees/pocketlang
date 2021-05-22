@@ -13,7 +13,7 @@ from path import *
 
 import "basics.pk" ## will import all
 import "if.pk" as if_test
-from "chain_call.pk" import fn1, fn2 as f2, fn3
+from "functions.pk" import fn1, fn2 as f2, fn3
 
 ## If it has a module name it'll bind to that name.
 import 'import/module.pk'

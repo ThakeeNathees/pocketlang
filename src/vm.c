@@ -107,8 +107,40 @@ void pkFreeVM(PKVM* self) {
   self->gray_list = (Object**)self->config.realloc_fn(
     self->gray_list, 0, self->config.user_data);
 
+  // Tell the host application that it forget to release all of it's handles
+  // before freeing the VM.
+  __ASSERT(self->handles != NULL, "Not all handles were released.");
+
   DEALLOCATE(self, self);
 }
+
+PkHandle* pkNewHandle(PKVM* vm, PkVar value) {
+  return vmNewHandle(vm, *((Var*)value));
+}
+
+PkVar pkGetHandleValue(PkHandle* handle) {
+  return (PkVar)&handle->value;
+}
+
+void pkReleaseHandle(PKVM* vm, PkHandle* handle) {
+  __ASSERT(handle != NULL, "Given handle was NULL.");
+
+  // If the handle is the head of the vm's handle chain set it to the next one.
+  if (handle == vm->handles) {
+    vm->handles = handle->next;
+  }
+
+  // Remove the handle from the chain by connecting the both ends together.
+  if (handle->next) handle->next->prev = handle->prev;
+  if (handle->prev) handle->prev->next = handle->next;
+
+  // Free the handle.
+  DEALLOCATE(vm, handle);
+}
+
+/*****************************************************************************/
+/* VM INTERNALS                                                              */
+/*****************************************************************************/
 
 void vmPushTempRef(PKVM* self, Object* obj) {
   ASSERT(obj != NULL, "Cannot reference to NULL.");
@@ -120,6 +152,16 @@ void vmPushTempRef(PKVM* self, Object* obj) {
 void vmPopTempRef(PKVM* self) {
   ASSERT(self->temp_reference_count > 0, "Temporary reference is empty to pop.");
   self->temp_reference_count--;
+}
+
+PkHandle* vmNewHandle(PKVM* self, Var value) {
+  PkHandle* handle = (PkHandle*)ALLOCATE(self, PkHandle);
+  handle->value = value;
+  handle->prev = NULL;
+  handle->next = self->handles;
+  if (handle->next != NULL) handle->next->prev = handle;
+  self->handles = handle;
+  return handle;
 }
 
 void vmCollectGarbage(PKVM* self) {
@@ -140,6 +182,11 @@ void vmCollectGarbage(PKVM* self) {
   // Mark temp references.
   for (int i = 0; i < self->temp_reference_count; i++) {
     grayObject(self, self->temp_reference[i]);
+  }
+
+  // Mark the handles.
+  for (PkHandle* handle = self->handles; handle != NULL; handle = handle->next) {
+    grayValue(self, handle->value);
   }
 
   // Garbage collection triggered at the middle of a compilation.
@@ -326,6 +373,7 @@ static inline void pushCallFrame(PKVM* vm, Function* fn) {
 }
 
 void pkSetRuntimeError(PKVM* vm, const char* message) {
+  __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
   vm->fiber->error = newString(vm, message);
 }
 
@@ -349,7 +397,7 @@ void vmReportError(PKVM* vm) {
 
 // This function is responsible to call on_done function if it's done with the 
 // provided string pointers.
-static PKInterpretResult interpretSource(PKVM* vm, pkStringPtr source,
+static PkInterpretResult interpretSource(PKVM* vm, pkStringPtr source,
                                          pkStringPtr path) {
   String* path_name = newString(vm, path.string);
   if (path.on_done) path.on_done(vm, path);
@@ -376,7 +424,7 @@ static PKInterpretResult interpretSource(PKVM* vm, pkStringPtr source,
   return vmRunScript(vm, scr);
 }
 
-PKInterpretResult pkInterpretSource(PKVM* vm, const char* source,
+PkInterpretResult pkInterpretSource(PKVM* vm, const char* source,
                                     const char* path) {
   // Call the internal interpretSource implementation.
   pkStringPtr source_ptr = { source, NULL, NULL };
@@ -384,7 +432,7 @@ PKInterpretResult pkInterpretSource(PKVM* vm, const char* source,
   return interpretSource(vm, source_ptr, path_ptr);
 }
 
-PKInterpretResult pkInterpret(PKVM* vm, const char* path) {
+PkInterpretResult pkInterpret(PKVM* vm, const char* path) {
 
   pkStringPtr resolved;
   resolved.string = path;
@@ -413,7 +461,7 @@ PKInterpretResult pkInterpret(PKVM* vm, const char* path) {
   return interpretSource(vm, source, resolved);
 }
 
-PKInterpretResult vmRunScript(PKVM* vm, Script* _script) {
+PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
   // Reference to the instruction pointer in the call frame.
   register uint8_t** ip;
