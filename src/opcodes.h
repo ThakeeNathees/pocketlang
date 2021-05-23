@@ -20,8 +20,8 @@ OPCODE(PUSH_CONSTANT, 2, 1)
 // Push null on the stack.
 OPCODE(PUSH_NULL, 0, 1)
 
-// Push self on the stack. If the runtime don't have self it'll push null.
-OPCODE(PUSH_SELF, 0, 1)
+// Push number 0 on the stack.
+OPCODE(PUSH_0, 0, 1)
 
 // Push true on the stack.
 OPCODE(PUSH_TRUE, 0, 1)
@@ -96,34 +96,27 @@ OPCODE(PUSH_BUILTIN_FN, 2, 1)
 // Pop the stack top.
 OPCODE(POP, 0, -1)
 
-// Calls a function using stack's top N values as the arguments and once it
-// done the stack top should be stored otherwise it'll be disregarded. The
-// function should set the 0 th argment to return value. Locals at 0 to 8 
-// marked explicitly since it's performance criticle.
-// params: n bytes argc.
-
 // Pop the path from the stack, import the module at the path and push the
 // script in the script. If the script is imported for the first time (not
 // cached) the script's body will be executed.
 OPCODE(IMPORT, 0, 0)
 
-// TODO: may be later.
-//OPCODE(CALL_0, 0,  0) //< Push null call null will be the return value.
-//OPCODE(CALL_1, 0, -1) //< Push null and arg1. arg1 will be popped.
-//OPCODE(CALL_2, 0, -2) //< And so on.
-//OPCODE(CALL_3, 0, -3)
-//OPCODE(CALL_4, 0, -4)
-//OPCODE(CALL_5, 0, -5)
-//OPCODE(CALL_6, 0, -6)
-//OPCODE(CALL_7, 0, -7)
-//OPCODE(CALL_8, 0, -8)
+// Calls a function using stack's top N values as the arguments and once it
+// done the stack top should be stored otherwise it'll be disregarded. The
+// function should set the 0 th argment to return value.
+// params: n bytes argc.
 OPCODE(CALL, 2, -0) //< Will calculated at compile time.
+
+// Starts the iteration and test the sequence if it's iterable, before the
+// iteration instead of checking it everytime.
+OPCODE(ITER_TEST, 0, 0)
 
 // The stack top will be iteration value, next one is iterator (integer) and
 // next would be the container. It'll update those values but not push or pop
 // any values. We need to ensure that stack state at the point.
+// param: 1 byte iterate type (will be set by ITER_TEST at runtime).
 // param: 2 bytes jump offset if the iteration should stop.
-OPCODE(ITER, 2, 0)
+OPCODE(ITER, 3, 0)
 
 // The address offset to jump to. It'll add the offset to ip.
 // param: 2 bytes jump address offset.
@@ -194,8 +187,6 @@ OPCODE(GTEQ, 0, -1)
 
 OPCODE(RANGE, 0, -1) //< Pop 2 integer make range push.
 OPCODE(IN, 0, -1)
-
-// TODO: literal list, map
 
 // A sudo instruction which will never be called. A function's last opcode
 // used for debugging.

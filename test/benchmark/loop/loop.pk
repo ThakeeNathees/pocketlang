@@ -3,9 +3,13 @@ from lang import clock
 start = clock()
 
 list = []
-for i in 0..10000000 do list_append(list, i) end
+for i in 0..10000000
+	list_append(list, i)
+end
 sum = 0
-for i in list do sum += i end
+for i in list
+	sum += i
+end
 print(sum)
 
 print("elapsed:", clock() - start)

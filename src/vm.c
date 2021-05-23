@@ -5,6 +5,7 @@
 
 #include "vm.h"
 
+#include <math.h>
 #include "core.h"
 #include "utils.h"
 
@@ -12,6 +13,7 @@
   #include "debug.h" //< Wrap around debug macro.
 #endif
 
+// Evaluvated to true if a runtime error set on the current fiber.
 #define HAS_ERROR() (vm->fiber->error != NULL)
 
 // Initially allocated call frame capacity. Will grow dynamically.
@@ -31,7 +33,9 @@
 // allocated so far plus the fill factor of it.
 #define HEAP_FILL_PERCENT 75
 
-static void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
+// The default allocator that will be used to initialize the vm's configuration
+// if the host doesn't provided any allocators for us.
+static forceinline void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
   if (new_size == 0) {
     free(memory);
     return NULL;
@@ -82,7 +86,7 @@ PKVM* pkNewVM(pkConfiguration* config) {
   vm->gray_list_count = 0;
   vm->gray_list_capacity = MIN_CAPACITY;
   vm->gray_list = (Object**)vm->config.realloc_fn(
-    NULL, sizeof(Object*) * vm->gray_list_capacity, NULL);
+                   NULL, sizeof(Object*) * vm->gray_list_capacity, NULL);
   vm->next_gc = INITIAL_GC_SIZE;
   vm->min_heap_size = MIN_HEAP_SIZE;
   vm->heap_fill_percent = HEAP_FILL_PERCENT;
@@ -141,18 +145,6 @@ void pkReleaseHandle(PKVM* vm, PkHandle* handle) {
 /*****************************************************************************/
 /* VM INTERNALS                                                              */
 /*****************************************************************************/
-
-void vmPushTempRef(PKVM* self, Object* obj) {
-  ASSERT(obj != NULL, "Cannot reference to NULL.");
-  ASSERT(self->temp_reference_count < MAX_TEMP_REFERENCE, 
-         "Too many temp references");
-  self->temp_reference[self->temp_reference_count++] = obj;
-}
-
-void vmPopTempRef(PKVM* self) {
-  ASSERT(self->temp_reference_count > 0, "Temporary reference is empty to pop.");
-  self->temp_reference_count--;
-}
 
 PkHandle* vmNewHandle(PKVM* self, Var value) {
   PkHandle* handle = (PkHandle*)ALLOCATE(self, PkHandle);
@@ -242,7 +234,7 @@ void pkSetUserData(PKVM* vm, void* user_data) {
   vm->config.user_data = user_data;
 }
 
-static Script* getScript(PKVM* vm, String* path) {
+static forceinline Script* getScript(PKVM* vm, String* path) {
   Var scr = mapGet(vm->scripts, VAR_OBJ(&path->_super));
   if (IS_UNDEF(scr)) return NULL;
   ASSERT(AS_OBJ(scr)->type == OBJ_SCRIPT, OOPS);
@@ -257,7 +249,7 @@ static Script* getScript(PKVM* vm, String* path) {
 // to the string which is the path that has to be resolved and once it resolved
 // the provided result's string's on_done() will be called and, it's string will 
 // be updated with the new resolved path string.
-static bool resolveScriptPath(PKVM* vm, pkStringPtr* path_string) {
+static forceinline bool resolveScriptPath(PKVM* vm, pkStringPtr* path_string) {
   if (vm->config.resolve_path_fn == NULL) return true;
 
   const char* path = path_string->string;
@@ -282,7 +274,7 @@ static bool resolveScriptPath(PKVM* vm, pkStringPtr* path_string) {
 // Import and return Script object as Var. If the script is imported and
 // compiled here it'll set [is_new_script] to true oterwise (using the cached
 // script) set to false.
-static Var importScript(PKVM* vm, String* path_name) {
+static forceinline Var importScript(PKVM* vm, String* path_name) {
 
   // Check in the core libs.
   Script* scr = getCoreLib(vm, path_name);
@@ -301,14 +293,12 @@ static Var importScript(PKVM* vm, String* path_name) {
   return VAR_NULL;
 }
 
-static void ensureStackSize(PKVM* vm, int size) {
+static forceinline void growStack(PKVM* vm, int size) {
   Fiber* fiber = vm->fiber;
-
-  if (fiber->stack_size > size) return;
+  ASSERT(fiber->stack_size <= size, OOPS);
   int new_size = utilPowerOf2Ceil(size);
 
   Var* old_rbp = fiber->stack; //< Old stack base pointer.
-
   fiber->stack = (Var*)vmRealloc(vm, fiber->stack,
                                  sizeof(Var) * fiber->stack_size,
                                  sizeof(Var) * new_size);
@@ -337,39 +327,37 @@ static void ensureStackSize(PKVM* vm, int size) {
                         = fiber->stack + ( old_ptr  - old_rbp )  */
 #define MAP_PTR(old_ptr) (fiber->stack + ((old_ptr) - old_rbp))
 
-  // Update the stack top pointer.
+  // Update the stack top pointer and the return pointer.
   fiber->sp = MAP_PTR(fiber->sp);
+  fiber->ret = MAP_PTR(fiber->ret);
 
   // Update the stack base pointer of the call frames.
-  for (int i = 0; i < fiber->frame_capacity; i++) {
+  for (int i = 0; i < fiber->frame_count; i++) {
     CallFrame* frame = fiber->frames + i;
     frame->rbp = MAP_PTR(frame->rbp);
   }
-
 }
 
-static inline void pushCallFrame(PKVM* vm, Function* fn) {
-  ASSERT(!fn->is_native, "Native function shouldn't use call frames.");
+static forceinline void pushCallFrame(PKVM* vm, Function* fn) {
+    ASSERT(!fn->is_native, "Native function shouldn't use call frames.");
 
-  // Grow the stack frame if needed.
-  if (vm->fiber->frame_count + 1 > vm->fiber->frame_capacity) {
-    int new_capacity = vm->fiber->frame_capacity * 2;
-    vm->fiber->frames = (CallFrame*)vmRealloc(vm, vm->fiber->frames,
-                           sizeof(CallFrame) * vm->fiber->frame_capacity,
-                           sizeof(CallFrame) * new_capacity);
-    vm->fiber->frame_capacity = new_capacity;
-  }
+    /* Grow the stack frame if needed. */
+    if (vm->fiber->frame_count + 1 > vm->fiber->frame_capacity) {
+      int new_capacity = vm->fiber->frame_capacity << 1;
+      vm->fiber->frames = (CallFrame*)vmRealloc(vm, vm->fiber->frames,
+                             sizeof(CallFrame) * vm->fiber->frame_capacity,
+                             sizeof(CallFrame) * new_capacity);
+      vm->fiber->frame_capacity = new_capacity;
+    }
 
-  // Grow the stack if needed.
-  int stack_size = (int)(vm->fiber->sp - vm->fiber->stack);
-  int needed = stack_size + fn->fn->stack_size;
-  // TODO: set stack overflow maybe?.
-  ensureStackSize(vm, needed);
+    /* Grow the stack if needed. */
+    int needed = fn->fn->stack_size + (int)(vm->fiber->sp - vm->fiber->stack);
+    if (vm->fiber->stack_size <= needed) growStack(vm, needed);
 
-  CallFrame* frame = &vm->fiber->frames[vm->fiber->frame_count++];
-  frame->rbp = vm->fiber->ret;
-  frame->fn = fn;
-  frame->ip = fn->fn->opcodes.data;
+    CallFrame* frame = vm->fiber->frames + vm->fiber->frame_count++;
+    frame->rbp = vm->fiber->ret;
+    frame->fn = fn;
+    frame->ip = fn->fn->opcodes.data;
 }
 
 void pkSetRuntimeError(PKVM* vm, const char* message) {
@@ -397,7 +385,7 @@ void vmReportError(PKVM* vm) {
 
 // This function is responsible to call on_done function if it's done with the 
 // provided string pointers.
-static PkInterpretResult interpretSource(PKVM* vm, pkStringPtr source,
+static forceinline PkInterpretResult interpretSource(PKVM* vm, pkStringPtr source,
                                          pkStringPtr path) {
   String* path_name = newString(vm, path.string);
   if (path.on_done) path.on_done(vm, path);
@@ -543,19 +531,16 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
   #define DEBUG_CALL_STACK() ((void*)0)
 #endif
 
-#define SWITCH(code)                 \
-  L_vm_main_loop:                    \
-  DEBUG_CALL_STACK();                \
-  switch (code = (Opcode)READ_BYTE())
-
+#define SWITCH() Opcode instruction; switch (instruction = (Opcode)READ_BYTE())
 #define OPCODE(code) case OP_##code
 #define DISPATCH()   goto L_vm_main_loop
 
   PUSH(VAR_NULL); // Return value of the script body.
   LOAD_FRAME();
 
-  Opcode instruction;
-  SWITCH(instruction) {
+  L_vm_main_loop:
+  DEBUG_CALL_STACK();
+  SWITCH() {
 
     OPCODE(PUSH_CONSTANT):
     {
@@ -569,6 +554,10 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       PUSH(VAR_NULL);
       DISPATCH();
 
+    OPCODE(PUSH_0):
+      PUSH(VAR_NUM(0));
+      DISPATCH();
+
     OPCODE(PUSH_TRUE):
       PUSH(VAR_TRUE);
       DISPATCH();
@@ -579,11 +568,9 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(SWAP):
     {
-      Var top1 = *(vm->fiber->sp - 1);
-      Var top2 = *(vm->fiber->sp - 2);
-
-      *(vm->fiber->sp - 1) = top2;
-      *(vm->fiber->sp - 2) = top1;
+      Var tmp = *(vm->fiber->sp - 1);
+      *(vm->fiber->sp - 1) = *(vm->fiber->sp - 2);
+      *(vm->fiber->sp - 2) = tmp;
       DISPATCH();
     }
 
@@ -621,15 +608,12 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
       if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
         RUNTIME_ERROR(stringFormat(vm, "$ type is not hashable.", varTypeName(key)));
-      } else {
-        mapSet(vm, (Map*)AS_OBJ(on), key, value);
       }
-      varsetSubscript(vm, on, key, value);
+      mapSet(vm, (Map*)AS_OBJ(on), key, value);
 
       POP(); // value
       POP(); // key
 
-      CHECK_ERROR();
       DISPATCH();
     }
 
@@ -702,7 +686,9 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(PUSH_BUILTIN_FN):
     {
-      Function* fn = getBuiltinFunction(vm, READ_SHORT());
+      uint16_t index = READ_SHORT();
+      ASSERT_INDEX(index, vm->builtins_count);
+      Function* fn = vm->builtins[index].fn;
       PUSH(VAR_OBJ(&fn->_super));
       DISPATCH();
     }
@@ -727,22 +713,17 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var* callable = vm->fiber->sp - argc - 1;
 
       if (IS_OBJ(*callable) && AS_OBJ(*callable)->type == OBJ_FUNC) {
-
         Function* fn = (Function*)AS_OBJ(*callable);
 
         // -1 argument means multiple number of args.
         if (fn->arity != -1 && fn->arity != argc) {
-          String* arg_str = toString(vm, VAR_NUM(fn->arity), false);
+          String* arg_str = toString(vm, VAR_NUM(fn->arity));
           vmPushTempRef(vm, &arg_str->_super);
           String* msg = stringFormat(vm, "Expected excatly @ argument(s).",
                                      arg_str);
           vmPopTempRef(vm); // arg_str.
           RUNTIME_ERROR(msg);
         }
-
-        // Now the function will never needed in the stack and it'll
-        // initialized with VAR_NULL as return value.
-        *callable = VAR_NULL;
 
         // Next call frame starts here. (including return value).
         vm->fiber->ret = callable;
@@ -756,30 +737,125 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
           // Pop function arguments except for the return value.
           vm->fiber->sp = vm->fiber->ret + 1;
           CHECK_ERROR();
+          DISPATCH(); //< This will save 2 jumps.
 
         } else {
           pushCallFrame(vm, fn);
           LOAD_FRAME(); //< Load the top frame to vm's execution variables.
+          DISPATCH();   //< This will save 2 jumps.
         }
 
       } else {
         RUNTIME_ERROR(newString(vm, "Expected a function in call."));
       }
+
+      DISPATCH();
+    }
+
+    OPCODE(ITER_TEST):
+    {
+      Var seq = PEEK(-3);
+
+      // Primitive types are not iterable.
+      if (!IS_OBJ(seq)) {
+        if (IS_NULL(seq)) {
+          RUNTIME_ERROR(newString(vm, "Null is not iterable."));
+        } else if (IS_BOOL(seq)) {
+          RUNTIME_ERROR(newString(vm, "Boolenan is not iterable."));
+        } else if (IS_NUM(seq)) {
+          RUNTIME_ERROR(newString(vm, "Number is not iterable."));
+        } else {
+          UNREACHABLE();
+        }
+      }
+
       DISPATCH();
     }
 
     OPCODE(ITER):
     {
-      Var* iter_value = (vm->fiber->sp - 1);
-      Var* iterator   = (vm->fiber->sp - 2);
-      Var* container  = (vm->fiber->sp - 3);
+      Var* value    = (vm->fiber->sp - 1);
+      Var* iterator = (vm->fiber->sp - 2);
+      Var seq       = PEEK(-3);
       uint16_t jump_offset = READ_SHORT();
-      
-      bool iterated = varIterate(vm, *container, iterator, iter_value);
-      CHECK_ERROR();
-      if (!iterated) {
-        IP += jump_offset;
+
+    #define JUMP_ITER_EXIT() \
+      do {                   \
+        IP += jump_offset;   \
+        DISPATCH();          \
+      } while (false)
+
+      ASSERT(IS_NUM(*iterator), OOPS);
+      double it = AS_NUM(*iterator); //< Nth iteration.
+      ASSERT(AS_NUM(*iterator) == (int32_t)trunc(it), OOPS);
+
+      Object* obj = AS_OBJ(seq);
+      switch (obj->type) {
+
+        case OBJ_STRING: {
+          uint32_t iter = (int32_t)trunc(it);
+
+          // TODO: // Need to consider utf8.
+          String* str = ((String*)obj);
+          if (iter >= str->length) JUMP_ITER_EXIT();
+
+          //TODO: vm's char (and reusable) strings.
+          *value = VAR_OBJ(newStringLength(vm, str->data + iter, 1));
+          *iterator = VAR_NUM((double)iter + 1);
+
+        } DISPATCH();
+
+        case OBJ_LIST: {
+          uint32_t iter = (int32_t)trunc(it);
+          VarBuffer* elems = &((List*)obj)->elements;
+          if (iter >= elems->count) JUMP_ITER_EXIT();
+          *value = elems->data[iter];
+          *iterator = VAR_NUM((double)iter + 1);
+          
+        } DISPATCH();
+
+        case OBJ_MAP: {
+          uint32_t iter = (int32_t)trunc(it);
+
+          Map* map = (Map*)obj;
+          if (map->entries == NULL) JUMP_ITER_EXIT();
+          MapEntry* e = map->entries + iter;
+          for (; iter < map->capacity; iter++, e++) {
+            if (!IS_UNDEF(e->key)) JUMP_ITER_EXIT();
+          }
+          if (iter >= map->capacity) JUMP_ITER_EXIT();
+
+          *value = map->entries[iter].key;
+          *iterator = VAR_NUM((double)iter + 1);
+          
+        } DISPATCH();
+
+        case OBJ_RANGE: {
+          double from = ((Range*)obj)->from;
+          double to = ((Range*)obj)->to;
+          if (from == to) JUMP_ITER_EXIT();
+
+          double current;
+          if (from <= to) { //< Straight range.
+            current = from + it;
+          } else {          //< Reversed range.
+            current = from - it;
+          }
+          if (current == to) JUMP_ITER_EXIT();
+          *value = VAR_NUM(current);
+          *iterator = VAR_NUM(it + 1);
+          
+        } DISPATCH();
+
+        case OBJ_SCRIPT:
+        case OBJ_FUNC:
+        case OBJ_FIBER:
+        case OBJ_USER:
+          TODO; break;
+        default:
+          UNREACHABLE();
       }
+
       DISPATCH();
     }
 
@@ -821,22 +897,17 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     {
       // TODO: handle caller fiber.
 
-      Var ret = POP();
+      // Set the return value.
+      *(frame->rbp) = POP();
 
-      // Pop the last frame.
-      vm->fiber->frame_count--;
-
-      // If no more call frames. We're done.
-      if (vm->fiber->frame_count == 0) {
+      // Pop the last frame, and if no more call frames, we're done.
+      if (--vm->fiber->frame_count == 0) {
         vm->fiber->sp = vm->fiber->stack;
-        PUSH(ret);
         return PK_RESULT_SUCCESS;
       }
 
-      // Set the return value.
-      *(frame->rbp) = ret;
-
-      // Pop the locals and update stack pointer.
+      // Pop the params (locals should have popped at this point) and update
+      // stack pointer.
       vm->fiber->sp = frame->rbp + 1; // +1: rbp is returned value.
 
       LOAD_FRAME();
@@ -979,7 +1050,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-      Var value = varMultiply(vm, l, r);
+      Var value = varDivide(vm, l, r);
       POP(); POP(); // r, l
       PUSH(value);
 
@@ -1004,8 +1075,9 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(BIT_XOR):
     OPCODE(BIT_LSHIFT):
     OPCODE(BIT_RSHIFT):
+      TODO;
 
-    OPCODE(EQEQ) :
+    OPCODE(EQEQ):
     {
       Var r = POP(), l = POP();
       PUSH(VAR_BOOL(isValuesEqual(l, r)));

@@ -1,21 +1,25 @@
 
-## Numericals tests.
-assert(1.0 + 2.0 == 3, 'Num addition failed')
-
-## Strings tests.
-assert("'\"'" == '\'"\'', 'Mixed string escape failed.')
-assert("testing" == "test" + "ing", 'String addition failed.')
+s = "foo"; s += "bar"
+assert(s == "foobar")
+assert( 1 + 2 * 3 == 7)
+assert((1 + 2)* 3 == 9)
+assert(42 % 40.0 == 2)
+assert("'\"'" == '\'"\'')
+assert("testing" == "test" + "ing")
 
 ## Lists test.
 l1 = [1, false, null, func print('hello') end]
-assert(is_null(l1[2]), 'List indexing failed.')
-l1[1] = true; assert(l1[1], 'List subscript set failed.')
+assert(is_null(l1[2]))
+l1[1] = true; assert(l1[1])
 
 ## Builtin functions tests.
-h1 = hash("testing"); h2 = hash("test" + "ing")
-assert(h1 == h2, 'Hash function failed.')
-assert(to_string(42) == '42', 'to_string() failed.')
+assert(to_string(42) == '42')
 
+## Core module test.
+import math
+h1 = math.hash("testing"); h2 = math.hash("test" + "ing")
+assert(h1 == h2)
+assert(math.ceil(1.1) == math.floor(2.9))
 
 ## Logical statement test
 val = 0; a = false; b = true
@@ -23,3 +27,13 @@ get_true = func return true end
 if a and b then assert(false) end
 if a or b then val = 42 else assert(false) end assert(val == 42)
 if get_true() or false then val = 12 end assert(val == 12)
+
+## Recursive to_string list/map
+l = [1]
+list_append(l, l)
+assert(to_string(l) == '[1, [...]]')
+m = {}
+m['m'] = m
+assert(to_string(m) == '{"m":{...}}')
+
+

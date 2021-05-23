@@ -18,13 +18,6 @@ bool utilIsName(char c);
 // Returns true if `c` is [0-9].
 bool utilIsDigit(char c);
 
-// A union to reinterpret a double as raw bits and back.
-typedef union {
-  uint64_t bits64;
-  uint32_t bits32[2];
-  double num;
-} _DoubleBitsConv;
-
 // Return Reinterpreted bits of the double value.
 uint64_t utilDoubleToBits(double value);
 

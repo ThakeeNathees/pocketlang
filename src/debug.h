@@ -14,7 +14,6 @@ void dumpValue(PKVM* vm, Var value);
 // Dump opcodes of the given function.
 void dumpFunctionCode(PKVM* vm, Function* func);
 
-
 // Dump the all the global values of the script.
 void dumpGlobalValues(PKVM* vm);
 

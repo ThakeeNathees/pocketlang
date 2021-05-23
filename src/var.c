@@ -3,10 +3,10 @@
  *  Licensed under: MIT License
  */
 
-#include <stdio.h>
-
-#include "utils.h"
 #include "var.h"
+
+#include <stdio.h>
+#include "utils.h"
 #include "vm.h"
 
  /*****************************************************************************/
@@ -257,6 +257,7 @@ static String* _allocateString(PKVM* vm, size_t length) {
   varInitObject(&string->_super, vm, OBJ_STRING);
   string->length = (uint32_t)length;
   string->data[length] = '\0';
+  string->capacity = (uint32_t)(length + 1);
   return string;
 }
 
@@ -274,12 +275,14 @@ String* newStringLength(PKVM* vm, const char* text, uint32_t length) {
 
 List* newList(PKVM* vm, uint32_t size) {
   List* list = ALLOCATE(vm, List);
+  vmPushTempRef(vm, &list->_super);
   varInitObject(&list->_super, vm, OBJ_LIST);
   varBufferInit(&list->elements);
   if (size > 0) {
     varBufferFill(&list->elements, vm, VAR_NULL, size);
     list->elements.count = 0;
   }
+  vmPopTempRef(vm);
   return list;
 }
 
@@ -760,140 +763,192 @@ bool isObjectHashable(ObjectType type) {
   return type != OBJ_LIST && type != OBJ_MAP;
 }
 
-String* toString(PKVM* vm, Var v, bool recursive) {
+// This will prevent recursive list/map from crash when calling to_string, by
+// checking if the current sequence is in the outer sequence linked list.
+struct OuterSequence {
+  struct OuterSequence* outer;
+  // If false it'll be map. If we have multiple sequence we should use an enum
+  // here but we only ever support list and map as builtin sequence (thus bool).
+  bool is_list;
+  union {
+    List* list;
+    Map* map;
+  };
+};
+typedef struct OuterSequence OuterSequence;
 
+static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
+                             OuterSequence* outer) {
   if (IS_NULL(v)) {
-    return newStringLength(vm, "null", 4);
+    ByteBufferAddString(buff, vm, "null", 4);
+    return;
 
   } else if (IS_BOOL(v)) {
-    if (AS_BOOL(v)) {
-      return newStringLength(vm, "true", 4);
-    } else {
-      return newStringLength(vm, "false", 5);
-    }
+    if (AS_BOOL(v)) ByteBufferAddString(buff, vm, "true", 4);
+    else ByteBufferAddString(buff, vm, "false", 5);
+    return;
 
   } else if (IS_NUM(v)) {
-    char buff[TO_STRING_BUFF_SIZE];
-    int length = sprintf(buff, "%.14g", AS_NUM(v));
-    ASSERT(length < TO_STRING_BUFF_SIZE, "Buffer overflowed.");
-    return newStringLength(vm, buff, length);
+    char num_buff[TO_STRING_BUFF_SIZE];
+    int length = sprintf(num_buff, "%.14g", AS_NUM(v));
+    __ASSERT(length < TO_STRING_BUFF_SIZE, "Buffer overflowed.");
+    ByteBufferAddString(buff, vm, num_buff, length); return;
 
   } else if (IS_OBJ(v)) {
+
     Object* obj = AS_OBJ(v);
     switch (obj->type) {
+
       case OBJ_STRING:
       {
+        String* str = (String*)obj;
+        if (outer == NULL) {
+          ByteBufferAddString(buff, vm, str->data, str->length);
+          return;
+        }
+
         // If recursive return with quotes (ex: [42, "hello", 0..10]).
-        String* string = newStringLength(vm, ((String*)obj)->data, ((String*)obj)->length);
-        if (!recursive) return string;
-        vmPushTempRef(vm, &string->_super);
-        String* repr = stringFormat(vm, "\"@\"", string);
-        vmPopTempRef(vm);
-        return repr;
+        byteBufferWrite(buff, vm, '"');
+        ByteBufferAddString(buff, vm, str->data, str->length);
+        byteBufferWrite(buff, vm, '"');
+        return;
       }
 
       case OBJ_LIST:
       {
         List* list = (List*)obj;
-        if (list->elements.count == 0) return newStringLength(vm, "[]", 2);
-
-        String* result = newStringLength(vm, "[", 1);
-        vmPushTempRef(vm, &result->_super); // result
-
-        for (uint32_t i = 0; i < list->elements.count; i++) {
-          const char* fmt = (i != 0) ? "@, @" : "@@";
-
-          String* elem_str = toString(vm, list->elements.data[i], true);
-          vmPushTempRef(vm, &elem_str->_super); // elem_str
-          result = stringFormat(vm, fmt, result, elem_str);
-          vmPopTempRef(vm); // elem_str
-
-          vmPopTempRef(vm); // result (old pointer)
-          vmPushTempRef(vm, &result->_super); // result (old pointer)
+        if (list->elements.count == 0) {
+          ByteBufferAddString(buff, vm, "[]", 2);
+          return;
         }
 
-        result = stringFormat(vm, "@]", result);
-        vmPopTempRef(vm); // result (last pointer)
-        return result;
+        // Check if the list is recursive.
+        OuterSequence* seq = outer;
+        while (seq != NULL) {
+          if (seq->is_list) {
+            if (seq->list == list) {
+              ByteBufferAddString(buff, vm, "[...]", 5);
+              return;
+            }
+          }
+          seq = seq->outer;
+        }
+        OuterSequence seq_list;
+        seq_list.outer = outer; seq_list.is_list = true; seq_list.list = list;
+
+        byteBufferWrite(buff, vm, '[');
+        for (uint32_t i = 0; i < list->elements.count; i++) {
+          if (i != 0) ByteBufferAddString(buff, vm, ", ", 2);
+          toStringInternal(vm, list->elements.data[i], buff, &seq_list);
+        }
+        byteBufferWrite(buff, vm, ']');
+        return;
       }
 
       case OBJ_MAP:
       {
         Map* map = (Map*)obj;
-        if (map->entries == NULL) return newStringLength(vm, "{}", 2);
+        if (map->entries == NULL) {
+          ByteBufferAddString(buff, vm, "{}", 2);
+          return;
+        }
 
-        String* result = newStringLength(vm, "{", 1);
-        vmPushTempRef(vm, &result->_super); // result
+        // Check if the map is recursive.
+        OuterSequence* seq = outer;
+        while (seq != NULL) {
+          if (!seq->is_list) {
+            if (seq->map == map) {
+              ByteBufferAddString(buff, vm, "{...}", 5);
+              return;
+            }
+          }
+          seq = seq->outer;
+        }
+        OuterSequence seq_map;
+        seq_map.outer = outer; seq_map.is_list = false; seq_map.map = map;
 
-        uint32_t i = 0;
+        byteBufferWrite(buff, vm, '{');
+        uint32_t i = 0;     // Index of the current entry to iterate.
         bool _first = true; // For first element no ',' required.
         do {
 
           // Get the next valid key index.
-          bool _done = false; //< To break from inner loop.
+          bool _done = false; //< To break from inner loop if we don't have anymore keys.
           while (IS_UNDEF(map->entries[i].key)) {
-            i++;
-            if (i >= map->capacity) {
+            if (++i >= map->capacity) {
               _done = true;
               break;
             }
           }
           if (_done) break;
 
-          const char* fmt = (!_first) ? "@, @:@" : "@@:@";
-
-          String* key_str = toString(vm, map->entries[i].key, true);
-          vmPushTempRef(vm, &key_str->_super); // key_str
-
-          String* val_str = toString(vm, map->entries[i].value, true);
-          vmPushTempRef(vm, &val_str->_super); // val_str
-
-          result = stringFormat(vm, fmt, result, key_str, val_str);
-          vmPopTempRef(vm); // val_str
-          vmPopTempRef(vm); // key_str
-
-          vmPopTempRef(vm); // result (old pointer)
-          vmPushTempRef(vm, &result->_super); // result (new pointer)
-
-          _first = false;
+          if (!_first) {
+            ByteBufferAddString(buff, vm, ", ", 2);
+            _first = false;
+          }
+          toStringInternal(vm, map->entries[i].key, buff, &seq_map);
+          byteBufferWrite(buff, vm, ':');
+          toStringInternal(vm, map->entries[i].value, buff, &seq_map);
           i++;
         } while (i < map->capacity);
-
-        result = stringFormat(vm, "@}", result);
-        vmPopTempRef(vm); // result (last pointer)
-        return result;
+        byteBufferWrite(buff, vm, '}');
+        return;
       }
 
       case OBJ_RANGE:
       {
         Range* range = (Range*)obj;
 
-        // FIXME: Validate I might need some review on the below one.
-        char buff_from[50];
-        snprintf(buff_from, 50, "%f", range->from);
-        char buff_to[50];
-        snprintf(buff_to, 50, "%f", range->to);
-
-        return stringFormat(vm, "[Range:$..$]", buff_from, buff_to);
+        char buff_from[STR_NUM_BUFF_SIZE];
+        int len_from = snprintf(buff_from, sizeof(buff_from), "%f", range->from);
+        char buff_to[STR_NUM_BUFF_SIZE];
+        int len_to = snprintf(buff_to, sizeof(buff_to), "%f", range->to);
+        ByteBufferAddString(buff, vm, "[Range:", 7);
+        ByteBufferAddString(buff, vm, buff_from, len_from);
+        ByteBufferAddString(buff, vm, "..", 2);
+        ByteBufferAddString(buff, vm, buff_to, len_to);
+        byteBufferWrite(buff, vm, ']');
+        return;
       }
 
       case OBJ_SCRIPT: {
         Script* scr = ((Script*)obj);
+        ByteBufferAddString(buff, vm, "[Module:", 8);
         if (scr->moudle != NULL) {
-          return stringFormat(vm, "[Lib:@]", scr->moudle);
+          ByteBufferAddString(buff, vm, scr->moudle->data, scr->moudle->length);
         } else {
-          return stringFormat(vm, "[Lib:\"@\"]", scr->path);
+          byteBufferWrite(buff, vm, '"');
+          ByteBufferAddString(buff, vm, scr->path->data, scr->path->length);
+          byteBufferWrite(buff, vm, '"');
         }
+        byteBufferWrite(buff, vm, ']');
+        return;
       }
-      case OBJ_FUNC:   return stringFormat(vm, "[Func:$]", ((Function*)obj)->name);
-      case OBJ_FIBER:  return newStringLength(vm, "[Fiber]", 7); // TODO;
-      case OBJ_USER:   return newStringLength(vm, "[UserObj]", 9); // TODO;
+
+      case OBJ_FUNC: {
+        Function* func = (Function*)obj;
+        ByteBufferAddString(buff, vm, "[Func:", 6);
+        ByteBufferAddString(buff, vm, func->name, (uint32_t)strlen(func->name));
+        byteBufferWrite(buff, vm, ']');
+        return;
+      }
+
+      // TODO: Maybe add address with %p.
+      case OBJ_FIBER:  ByteBufferAddString(buff, vm, "[Fiber]", 7); return;
+      case OBJ_USER:   ByteBufferAddString(buff, vm, "[UserObj]", 9); return;
         break;
     }
 
   }
   UNREACHABLE();
-  return NULL;
+  return;
+}
+
+String* toString(PKVM* vm, Var v) {
+  ByteBuffer buff;
+  byteBufferInit(&buff);
+  toStringInternal(vm, v, &buff, NULL);
+  return newStringLength(vm, (const char*)buff.data, buff.count);
 }
 
 bool toBool(Var v) {
@@ -974,6 +1029,23 @@ String* stringFormat(PKVM* vm, const char* fmt, ...) {
 
   result->hash = utilHashString(result->data);
   return result;
+}
+
+String* stringJoin(PKVM* vm, String* str1, String* str2) {
+
+  // Optimize end case.
+  if (str1->length == 0) return str2;
+  if (str2->length == 0) return str1;
+
+  size_t length = (size_t)str1->length + (size_t)str2->length;
+  String* string = _allocateString(vm, length);
+
+  memcpy(string->data,                str1->data, str1->length);
+  memcpy(string->data + str1->length, str2->data, str2->length);
+  // Null byte already existed. From _allocateString.
+
+  string->hash = utilHashString(string->data);
+  return string;
 }
 
 uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,

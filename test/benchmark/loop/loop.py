@@ -8,4 +8,4 @@ sum = 0
 for i in list: sum += i
 print(sum)
 
-print("elapsed:", clock() - start)
+print("elapsed:", clock() - start, 's')

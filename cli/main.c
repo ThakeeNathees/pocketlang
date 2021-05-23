@@ -118,5 +118,6 @@ int main(int argc, char** argv) {
 
   PkInterpretResult result = pkInterpret(vm, argv[1]);
   pkFreeVM(vm);
+
   return result;
 }
