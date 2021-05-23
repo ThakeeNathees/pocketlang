@@ -9,6 +9,9 @@
 #include "debug.h"
 #include "vm.h"
 
+// To limit maximum elements to be dumpin in a map or a list.
+#define MAX_DUMP_ELEMENTS 30
+
 static const char* op_name[] = {
   #define OPCODE(name, params, stack) #name,
   #include "opcodes.h"
@@ -45,6 +48,12 @@ static void _dumpValue(PKVM* vm, Var value, bool recursive) {
         for (uint32_t i = 0; i < list->elements.count; i++) {
           if (i != 0) printf(", ");
           _dumpValue(vm, list->elements.data[i], true);
+
+          // Terminate the dump if it's too long.
+          if (i >= MAX_DUMP_ELEMENTS) {
+            printf("...");
+            break;
+          }
         }
         printf("]");
       }
@@ -58,11 +67,21 @@ static void _dumpValue(PKVM* vm, Var value, bool recursive) {
         printf("{...}");
       } else {
         printf("{");
-        for (uint32_t i = 0; i < map->count; i++) {
-          if (i != 0) printf(", ");
+        bool first = true;
+        for (uint32_t i = 0; i < map->capacity; i++) {
+          if (IS_UNDEF(map->entries[i].key)) continue;
+          if (!first) printf(", "); first = false;
+
           _dumpValue(vm, map->entries[i].key, true);
           printf(":");
           _dumpValue(vm, map->entries[i].value, true);
+
+          // Terminate the dump if it's too long.
+          if (i >= MAX_DUMP_ELEMENTS) {
+            printf("...");
+            break;
+          }
+
         }
         printf("}");
       }

@@ -142,8 +142,8 @@ static void blackenObject(Object* obj, PKVM* vm) {
       Map* map = (Map*)obj;
       for (uint32_t i = 0; i < map->capacity; i++) {
         if (IS_UNDEF(map->entries[i].key)) continue;
-        grayObject(vm, AS_OBJ(map->entries[i].key));
-        grayObject(vm, AS_OBJ(map->entries[i].value));
+        grayValue(vm, map->entries[i].key);
+        grayValue(vm, map->entries[i].value);
       }
       vm->bytes_allocated += sizeof(Map);
       vm->bytes_allocated += sizeof(MapEntry) * map->capacity;
@@ -598,9 +598,17 @@ Var mapRemoveKey(PKVM* vm, Map* self, Var key) {
     // Clear the map if it's empty.
     mapClear(vm, self);
 
-  } else if (self->capacity > MIN_CAPACITY &&
-             self->capacity / GROW_FACTOR > self->count / MAP_LOAD_PERCENT * 100) {
-    uint32_t capacity = self->capacity / GROW_FACTOR;
+ } else if ((self->capacity > MIN_CAPACITY) &&
+             (self->capacity / (GROW_FACTOR * GROW_FACTOR)) >
+             ((self->count * 100) / MAP_LOAD_PERCENT)) {
+
+    // We grow the map when it's filled 75% (MAP_LOAD_PERCENT) by 2
+    // (GROW_FACTOR) but we're not shrink the map when it's half filled (ie.
+    // half of the capacity is 75%). Instead we wait till it'll become 1/4 is
+    // filled (1/4 = 1/(GROW_FACTOR*GROW_FACTOR)) to minimize the
+    // reallocations and which is more faster.
+
+    uint32_t capacity = self->capacity / (GROW_FACTOR * GROW_FACTOR);
     if (capacity < MIN_CAPACITY) capacity = MIN_CAPACITY;
 
     _mapResize(vm, self, capacity);
@@ -778,28 +786,44 @@ String* toString(PKVM* vm, Var v, bool recursive) {
         // If recursive return with quotes (ex: [42, "hello", 0..10]).
         String* string = newStringLength(vm, ((String*)obj)->data, ((String*)obj)->length);
         if (!recursive) return string;
-        else return stringFormat(vm, "\"@\"", string);
+        vmPushTempRef(vm, &string->_super);
+        String* repr = stringFormat(vm, "\"@\"", string);
+        vmPopTempRef(vm);
+        return repr;
       }
 
-      case OBJ_LIST: {
+      case OBJ_LIST:
+      {
         List* list = (List*)obj;
+        if (list->elements.count == 0) return newStringLength(vm, "[]", 2);
+
         String* result = newStringLength(vm, "[", 1);
+        vmPushTempRef(vm, &result->_super); // result
 
         for (uint32_t i = 0; i < list->elements.count; i++) {
           const char* fmt = (i != 0) ? "@, @" : "@@";
 
-          vmPushTempRef(vm, &result->_super);
-          result = stringFormat(vm, fmt, result,
-            toString(vm, list->elements.data[i], true));
-          vmPopTempRef(vm);
+          String* elem_str = toString(vm, list->elements.data[i], true);
+          vmPushTempRef(vm, &elem_str->_super); // elem_str
+          result = stringFormat(vm, fmt, result, elem_str);
+          vmPopTempRef(vm); // elem_str
+
+          vmPopTempRef(vm); // result (old pointer)
+          vmPushTempRef(vm, &result->_super); // result (old pointer)
         }
-        return stringFormat(vm, "@]", result);
+
+        result = stringFormat(vm, "@]", result);
+        vmPopTempRef(vm); // result (last pointer)
+        return result;
       }
 
       case OBJ_MAP:
       {
         Map* map = (Map*)obj;
+        if (map->entries == NULL) return newStringLength(vm, "{}", 2);
+
         String* result = newStringLength(vm, "{", 1);
+        vmPushTempRef(vm, &result->_super); // result
 
         uint32_t i = 0;
         bool _first = true; // For first element no ',' required.
@@ -817,34 +841,40 @@ String* toString(PKVM* vm, Var v, bool recursive) {
           if (_done) break;
 
           const char* fmt = (!_first) ? "@, @:@" : "@@:@";
-          vmPushTempRef(vm, &result->_super);
-          result = stringFormat(vm, fmt, result,
-            toString(vm, map->entries[i].key, true),
-            toString(vm, map->entries[i].value, true));
-          vmPopTempRef(vm);
+
+          String* key_str = toString(vm, map->entries[i].key, true);
+          vmPushTempRef(vm, &key_str->_super); // key_str
+
+          String* val_str = toString(vm, map->entries[i].value, true);
+          vmPushTempRef(vm, &val_str->_super); // val_str
+
+          result = stringFormat(vm, fmt, result, key_str, val_str);
+          vmPopTempRef(vm); // val_str
+          vmPopTempRef(vm); // key_str
+
+          vmPopTempRef(vm); // result (old pointer)
+          vmPushTempRef(vm, &result->_super); // result (new pointer)
 
           _first = false;
           i++;
         } while (i < map->capacity);
 
-        return stringFormat(vm, "@}", result);
+        result = stringFormat(vm, "@}", result);
+        vmPopTempRef(vm); // result (last pointer)
+        return result;
       }
 
       case OBJ_RANGE:
       {
         Range* range = (Range*)obj;
 
-        String* from = toString(vm, VAR_NUM(range->from), false);
-        vmPushTempRef(vm, &from->_super);
+        // FIXME: Validate I might need some review on the below one.
+        char buff_from[50];
+        snprintf(buff_from, 50, "%f", range->from);
+        char buff_to[50];
+        snprintf(buff_to, 50, "%f", range->to);
 
-        String* to = toString(vm, VAR_NUM(range->to), false);
-        vmPushTempRef(vm, &from->_super);
-
-        String* str = stringFormat(vm, "[Range:@..@]", from, to);
-        vmPopTempRef(vm); // to.
-        vmPopTempRef(vm); // from.
-
-        return str;
+        return stringFormat(vm, "[Range:$..$]", buff_from, buff_to);
       }
 
       case OBJ_SCRIPT: {
@@ -904,7 +934,7 @@ String* stringFormat(PKVM* vm, const char* fmt, ...) {
         break;
 
       case '@':
-        total_length += AS_STRING(va_arg(arg_list, Var))->length;
+        total_length += va_arg(arg_list, String*)->length;
         break;
 
       default:
@@ -929,7 +959,7 @@ String* stringFormat(PKVM* vm, const char* fmt, ...) {
 
       case '@':
       {
-        String* string = AS_STRING(va_arg(arg_list, Var));
+        String* string = va_arg(arg_list, String*);
         memcpy(buff, string->data, string->length);
         buff += string->length;
       } break;

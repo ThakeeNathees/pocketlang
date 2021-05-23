@@ -34,8 +34,8 @@ Var varMultiply(PKVM* vm, Var v1, Var v2);
 Var varDivide(PKVM* vm, Var v1, Var v2);
 Var varModulo(PKVM* vm, Var v1, Var v2);
 
-bool varGreater(PKVM* vm, Var v1, Var v2);
-bool varLesser(PKVM* vm, Var v1, Var v2);
+bool varGreater(Var v1, Var v2);
+bool varLesser(Var v1, Var v2);
 
 Var varGetAttrib(PKVM* vm, Var on, String* attrib);
 void varSetAttrib(PKVM* vm, Var on, String* name, Var value);

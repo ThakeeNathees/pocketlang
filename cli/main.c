@@ -105,7 +105,6 @@ int main(int argc, char** argv) {
   config.load_script_fn = loadScript;
   config.resolve_path_fn = resolvePath;
 
-
   // FIXME: this is temp till arg parse implemented.
   if (argc >= 3 && strcmp(argv[1], "-c") == 0) {
     PKVM* vm = pkNewVM(&config);
