@@ -59,7 +59,7 @@ void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
 // Check for errors in before calling the get arg public api function.
 #define CHECK_GET_ARG_API_ERRORS()                                             \
   __ASSERT(vm->fiber != NULL, "This function can only be called at runtime."); \
-  __ASSERT(arg > 0 || arg < ARGC, "Invalid argument index.");                  \
+  __ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index.");                  \
   __ASSERT(value != NULL, "Parameter [value] was NULL.");                      \
   ((void*)0)
 
@@ -79,7 +79,7 @@ int pkGetArgc(PKVM* vm) {
 
 PkVar pkGetArg(PKVM* vm, int arg) {
   __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
-  __ASSERT(arg > 0 || arg < ARGC, "Invalid argument index.");
+  __ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index.");
 
   return &(ARG(arg));
 }
@@ -217,19 +217,23 @@ static inline bool validateIndex(PKVM* vm, int32_t index, int32_t size,
   return true;
 }
 
-// Check if [var] is string for argument at [arg_ind]. If not set error and
+// Check if [var] is string for argument at [arg]. If not set error and
 // return false.
-static bool validateArgString(PKVM* vm, Var var, String** value, int arg_ind) {
-  if (!IS_OBJ(var) || AS_OBJ(var)->type != OBJ_STRING) {
-    String* str_arg = toString(vm, VAR_NUM((double)arg_ind), false);
-    vmPushTempRef(vm, &str_arg->_super);
-    vm->fiber->error = stringFormat(vm, "Expected a string at argument @.",
-                                    str_arg, false);
-    vmPopTempRef(vm);
-  }
-  *value = (String*)AS_OBJ(var);
-  return true;
-}
+#define VALIDATE_ARG_OBJ(m_class, m_type, m_name)                            \
+  static bool validateArg##m_class(PKVM* vm, int arg, m_class** value) {     \
+    Var var = ARG(arg);                                                      \
+    ASSERT(arg > 0 && arg <= ARGC, OOPS);                                    \
+    if (!IS_OBJ(var) || AS_OBJ(var)->type != m_type) {                       \
+      char buff[12]; sprintf(buff, "%d", arg);                               \
+      vm->fiber->error = stringFormat(vm, "Expected a " m_name               \
+        " at argument $.", buff, false);                                     \
+    }                                                                        \
+    *value = (m_class*)AS_OBJ(var);                                          \
+    return true;                                                             \
+   }
+ VALIDATE_ARG_OBJ(String, OBJ_STRING, "string")
+ VALIDATE_ARG_OBJ(List, OBJ_LIST, "list")
+ VALIDATE_ARG_OBJ(Map, OBJ_MAP, "map")
 
 /*****************************************************************************/
 /* BUILTIN FUNCTIONS API                                                     */
@@ -283,6 +287,10 @@ FN_IS_OBJ_TYPE(Range,  OBJ_RANGE)
 FN_IS_OBJ_TYPE(Function,  OBJ_FUNC)
 FN_IS_OBJ_TYPE(Script,  OBJ_SCRIPT)
 FN_IS_OBJ_TYPE(UserObj,  OBJ_USER)
+
+void coreTypeName(PKVM* vm) {
+  RET(VAR_OBJ(&newString(vm, varTypeName(ARG1))->_super));
+}
 
 void coreAssert(PKVM* vm) {
   int argc = ARGC;
@@ -346,12 +354,12 @@ void corePrint(PKVM* vm) {
   vm->config.write_fn(vm, "\n");
 }
 
-// string functions
-// ----------------
+// String functions.
+// -----------------
 
 void coreStrLower(PKVM* vm) {
   String* str;
-  if (!validateArgString(vm, ARG1, &str, 1)) return;
+  if (!validateArgString(vm, 1, &str)) return;
 
   String* result = newStringLength(vm, str->data, str->length);
   char* data = result->data;
@@ -364,7 +372,7 @@ void coreStrLower(PKVM* vm) {
 
 void coreStrUpper(PKVM* vm) {
   String* str;
-  if (!validateArgString(vm, ARG1, &str, 1)) return;
+  if (!validateArgString(vm, 1, &str)) return;
 
   String* result = newStringLength(vm, str->data, str->length);
   char* data = result->data;
@@ -377,7 +385,7 @@ void coreStrUpper(PKVM* vm) {
 
 void coreStrStrip(PKVM* vm) {
   String* str;
-  if (!validateArgString(vm, ARG1, &str, 1)) return;
+  if (!validateArgString(vm, 1, &str)) return;
 
   const char* start = str->data;
   while (*start && isspace(*start)) start++;
@@ -387,6 +395,29 @@ void coreStrStrip(PKVM* vm) {
   while (isspace(*end)) end--;
 
   RET(VAR_OBJ(&newStringLength(vm, start, (uint32_t)(end - start + 1))->_super));
+}
+
+// List functions.
+// ---------------
+void coreListAppend(PKVM* vm) {
+  List* list;
+  if (!validateArgList(vm, 1, &list)) return;
+  Var elem = ARG(2);
+
+  varBufferWrite(&list->elements, vm, elem);
+  RET(VAR_OBJ(&list->_super));
+}
+
+// Map functions.
+// --------------
+
+void coreMapRemove(PKVM* vm) {
+  Map* map;
+  if (!validateArgMap(vm, 1, &map)) return;
+  Var key = ARG(2);
+
+  mapRemoveKey(vm, map, key);
+  RET(VAR_OBJ(&map->_super));
 }
 
 /*****************************************************************************/
@@ -456,6 +487,11 @@ void stdLangGC(PKVM* vm) {
   RET(VAR_NUM((double)garbage));
 }
 
+// A debug function for development (will be removed).
+void stdLangDebugBreak(PKVM* vm) {
+  DEBUG_BREAK();
+}
+
 // Write function, just like print function but it wont put space between args
 // and write a new line at the end.
 void stdLangWrite(PKVM* vm) {
@@ -488,6 +524,8 @@ void initializeCore(PKVM* vm) {
                       (int)strlen(name), argc, fn);
 
   // Initialize builtin functions.
+  INITALIZE_BUILTIN_FN("type_name",   coreTypeName,   1);
+
   INITALIZE_BUILTIN_FN("is_null",     coreIsNull,     1);
   INITALIZE_BUILTIN_FN("is_bool",     coreIsBool,     1);
   INITALIZE_BUILTIN_FN("is_num",      coreIsNum,      1);
@@ -510,12 +548,19 @@ void initializeCore(PKVM* vm) {
   INITALIZE_BUILTIN_FN("str_upper",   coreStrUpper,   1);
   INITALIZE_BUILTIN_FN("str_strip",   coreStrStrip,   1);
 
+  // List functions.
+  INITALIZE_BUILTIN_FN("list_append", coreListAppend, 2);
+
+  // Map functions.
+  INITALIZE_BUILTIN_FN("map_remove",  coreMapRemove,  2);
+
   // Core Modules /////////////////////////////////////////////////////////////
 
   Script* lang = newModuleInternal(vm, "lang");
   moduleAddFunctionInternal(vm, lang, "clock", stdLangClock,  0);
   moduleAddFunctionInternal(vm, lang, "gc",    stdLangGC,     0);
   moduleAddFunctionInternal(vm, lang, "write", stdLangWrite, -1);
+  moduleAddFunctionInternal(vm, lang, "debug_break", stdLangDebugBreak, 0);
 }
 
 /*****************************************************************************/
@@ -543,7 +588,7 @@ Var varAdd(PKVM* vm, Var v1, Var v2) {
       case OBJ_STRING:
       {
         if (o2->type == OBJ_STRING) {
-          return VAR_OBJ(stringFormat(vm, "@@", v1, v2));
+          return VAR_OBJ(stringFormat(vm, "@@", (String*)o1, (String*)o2));
         }
       } break;
 
@@ -623,7 +668,7 @@ Var varModulo(PKVM* vm, Var v1, Var v2) {
   return VAR_NULL;
 }
 
-bool varGreater(PKVM* vm, Var v1, Var v2) {
+bool varGreater(Var v1, Var v2) {
   double d1, d2;
   if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
     return d1 > d2;
@@ -633,7 +678,7 @@ bool varGreater(PKVM* vm, Var v1, Var v2) {
   return false;
 }
 
-bool varLesser(PKVM* vm, Var v1, Var v2) {
+bool varLesser(Var v1, Var v2) {
   double d1, d2;
   if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
     return d1 < d2;

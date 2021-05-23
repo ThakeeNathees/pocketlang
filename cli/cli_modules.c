@@ -36,8 +36,10 @@ void register_cli_modules(PKVM* vm) {
   PkHandle* path = pkNewModule(vm, "path");
   pkModuleAddFunction(vm, path, "abspath", stdPathAbspath, 1);
   pkModuleAddFunction(vm, path, "curdir", stdPathCurdir, 0);
+  pkReleaseHandle(vm, path);
 
   PkHandle* test = pkNewModule(vm, "test");
   pkModuleAddFunction(vm, test, "add", testAdd, 2);
+  pkReleaseHandle(vm, test);
 
 }

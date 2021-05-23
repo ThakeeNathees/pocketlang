@@ -29,7 +29,7 @@
 
 // The heap size for the next GC will be calculated as the bytes we have
 // allocated so far plus the fill factor of it.
-#define HEAP_FILL_PERCENT 50
+#define HEAP_FILL_PERCENT 75
 
 static void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
   if (new_size == 0) {
@@ -109,7 +109,7 @@ void pkFreeVM(PKVM* self) {
 
   // Tell the host application that it forget to release all of it's handles
   // before freeing the VM.
-  __ASSERT(self->handles != NULL, "Not all handles were released.");
+  __ASSERT(self->handles == NULL, "Not all handles were released.");
 
   DEALLOCATE(self, self);
 }
@@ -497,7 +497,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 #define PUSH(value)  (*vm->fiber->sp++ = (value))
 #define POP()        (*(--vm->fiber->sp))
 #define DROP()       (--vm->fiber->sp)
-#define PEEK()       (*(vm->fiber->sp - 1))
+#define PEEK(off)    (*(vm->fiber->sp + (off)))
 #define READ_BYTE()  (*IP++)
 #define READ_SHORT() (IP+=2, (uint16_t)((IP[-2] << 8) | IP[-1]))
 
@@ -533,11 +533,11 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 #endif
 
 #if  DEBUG_DUMP_CALL_STACK
-  #define DEBUG_CALL_STACK()      \
-    do {                          \
-      /*   system("cls");   */    \
-      dumpGlobalValues(vm);       \
-      dumpStackFrame(vm);         \
+  #define DEBUG_CALL_STACK()        \
+    do {                            \
+      system("cls");                \
+      dumpGlobalValues(vm);         \
+      dumpStackFrame(vm);           \
     } while (false)
 #else
   #define DEBUG_CALL_STACK() ((void*)0)
@@ -603,18 +603,19 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(LIST_APPEND):
     {
-      Var elem = POP();
-      Var list = PEEK();
+      Var elem = PEEK(-1); // Don't pop yet, we need the reference for gc.
+      Var list = PEEK(-2);
       ASSERT(IS_OBJ(list) && AS_OBJ(list)->type == OBJ_LIST, OOPS);
       varBufferWrite(&((List*)AS_OBJ(list))->elements, vm, elem);
+      POP(); // elem
       DISPATCH();
     }
 
     OPCODE(MAP_INSERT):
     {
-      Var value = POP();
-      Var key = POP();
-      Var on = PEEK();
+      Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
+      Var key = PEEK(-2);   // Don't pop yet, we need the reference for gc. 
+      Var on = PEEK(-3);
 
       ASSERT(IS_OBJ(on) && AS_OBJ(on)->type == OBJ_MAP, OOPS);
 
@@ -623,8 +624,11 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       } else {
         mapSet(vm, (Map*)AS_OBJ(on), key, value);
       }
-
       varsetSubscript(vm, on, key, value);
+
+      POP(); // value
+      POP(); // key
+
       CHECK_ERROR();
       DISPATCH();
     }
@@ -661,13 +665,13 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(STORE_LOCAL_8):
     {
       int index = (int)(instruction - OP_STORE_LOCAL_0);
-      rbp[index + 1] = PEEK();  // +1: rbp[0] is return value.
+      rbp[index + 1] = PEEK(-1);  // +1: rbp[0] is return value.
       DISPATCH();
     }
     OPCODE(STORE_LOCAL_N):
     {
       uint16_t index = READ_SHORT();
-      rbp[index + 1] = PEEK();  // +1: rbp[0] is return value.
+      rbp[index + 1] = PEEK(-1);  // +1: rbp[0] is return value.
       DISPATCH();
     }
 
@@ -683,7 +687,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     {
       uint16_t index = READ_SHORT();
       ASSERT(index < script->globals.count, OOPS);
-      script->globals.data[index] = PEEK();
+      script->globals.data[index] = PEEK(-1);
       DISPATCH();
     }
 
@@ -841,16 +845,19 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(GET_ATTRIB):
     {
-      Var on = POP();
+      Var on = PEEK(-1); // Don't pop yet, we need the reference for gc. 
       String* name = script->names.data[READ_SHORT()];
-      PUSH(varGetAttrib(vm, on, name));
+      Var value = varGetAttrib(vm, on, name);
+      POP(); // on
+      PUSH(value);
+
       CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(GET_ATTRIB_KEEP):
     {
-      Var on = PEEK();
+      Var on = PEEK(-1);
       String* name = script->names.data[READ_SHORT()];
       PUSH(varGetAttrib(vm, on, name));
       CHECK_ERROR();
@@ -859,28 +866,36 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(SET_ATTRIB):
     {
-      Var value = POP();
-      Var on = POP();
+      Var value = PEEK(-1); // Don't pop yet, we need the reference for gc. 
+      Var on = PEEK(-2);    // Don't pop yet, we need the reference for gc. 
       String* name = script->names.data[READ_SHORT()];
       varSetAttrib(vm, on, name, value);
+
+      POP(); // value
+      POP(); // on
       PUSH(value);
+
       CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(GET_SUBSCRIPT):
     {
-      Var key = POP();
-      Var on = POP();
-      PUSH(varGetSubscript(vm, on, key));
+      Var key = PEEK(-1); // Don't pop yet, we need the reference for gc.
+      Var on = PEEK(-2);  // Don't pop yet, we need the reference for gc.
+      Var value = varGetSubscript(vm, on, key);
+      POP(); // key
+      POP(); // on
+      PUSH(value);
+
       CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(GET_SUBSCRIPT_KEEP):
     {
-      Var key = *(vm->fiber->sp - 1);
-      Var on = *(vm->fiber->sp - 2);
+      Var key = PEEK(-1);
+      Var on = PEEK(-2);
       PUSH(varGetSubscript(vm, on, key));
       CHECK_ERROR();
       DISPATCH();
@@ -888,14 +903,16 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(SET_SUBSCRIPT):
     {
-      Var value = POP();
-      Var key = POP();
-      Var on = POP();
-
+      Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
+      Var key = PEEK(-2);   // Don't pop yet, we need the reference for gc.
+      Var on = PEEK(-3);    // Don't pop yet, we need the reference for gc.
       varsetSubscript(vm, on, key, value);
-      CHECK_ERROR();
+      POP(); // value
+      POP(); // key
+      POP(); // on
       PUSH(value);
 
+      CHECK_ERROR();
       DISPATCH();
     }
 
@@ -924,40 +941,60 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(ADD):
     {
-      Var r = POP(), l = POP();
-      PUSH(varAdd(vm, l, r));
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+      Var value = varAdd(vm, l, r);
+      POP(); POP(); // r, l
+      PUSH(value);
+
       CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(SUBTRACT):
     {
-      Var r = POP(), l = POP();
-      PUSH(varSubtract(vm, l, r));
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+      Var value = varSubtract(vm, l, r);
+      POP(); POP(); // r, l
+      PUSH(value);
+
       CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(MULTIPLY):
     {
-      Var r = POP(), l = POP();
-      PUSH(varMultiply(vm, l, r));
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+      Var value = varMultiply(vm, l, r);
+      POP(); POP(); // r, l
+      PUSH(value);
+
       CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(DIVIDE):
     {
-      Var r = POP(), l = POP();
-      PUSH(varDivide(vm, l, r));
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+      Var value = varMultiply(vm, l, r);
+      POP(); POP(); // r, l
+      PUSH(value);
+
       CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(MOD):
     {
-      Var r = POP(), l = POP();
-      PUSH(varModulo(vm, l, r));
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+      Var value = varModulo(vm, l, r);
+      POP(); POP(); // r, l
+      PUSH(value);
+
       CHECK_ERROR();
       DISPATCH();
     }
@@ -985,7 +1022,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(LT):
     {
       Var r = POP(), l = POP();
-      PUSH(VAR_BOOL(varLesser(vm, l, r)));
+      PUSH(VAR_BOOL(varLesser(l, r)));
       CHECK_ERROR();
       DISPATCH();
     }
@@ -993,7 +1030,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(LTEQ):
     {
       Var r = POP(), l = POP();
-      bool lteq = varLesser(vm, l, r);
+      bool lteq = varLesser(l, r);
       CHECK_ERROR();
 
       if (!lteq) {
@@ -1008,7 +1045,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(GT):
     {
       Var r = POP(), l = POP();
-      PUSH(VAR_BOOL(varGreater(vm, l, r)));
+      PUSH(VAR_BOOL(varGreater(l, r)));
       CHECK_ERROR();
       DISPATCH();
     }
@@ -1016,7 +1053,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(GTEQ):
     {
       Var r = POP(), l = POP();
-      bool gteq = varGreater(vm, l, r);
+      bool gteq = varGreater(l, r);
       CHECK_ERROR();
 
       if (!gteq) {
@@ -1030,11 +1067,13 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(RANGE):
     {
-      Var to = POP();
-      Var from = POP();
+      Var to = PEEK(-1);   // Don't pop yet, we need the reference for gc.
+      Var from = PEEK(-2); // Don't pop yet, we need the reference for gc.
       if (!IS_NUM(from) || !IS_NUM(to)) {
         RUNTIME_ERROR(newString(vm, "Range arguments must be number."));
       }
+      POP(); // to
+      POP(); // from
       PUSH(VAR_OBJ(newRange(vm, AS_NUM(from), AS_NUM(to))));
       DISPATCH();
     }

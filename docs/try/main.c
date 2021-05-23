@@ -14,7 +14,7 @@ extern void js_errorPrint(int type, int line, const char* message);
 extern void js_writeFunction(const char* message);
 extern const char* js_loadScript();
 
-void errorPrint(PKVM* vm, PKErrorType type, const char* file, int line,
+void errorPrint(PKVM* vm, PkErrorType type, const char* file, int line,
                 const char* message) {
   // No need to pass file (since there is only script that'll ever run on the 
   // browser.
@@ -47,7 +47,7 @@ int runSource(const char* source) {
   config.resolve_path_fn = resolvePath;
 
   PKVM* vm = pkNewVM(&config);
-  PKInterpretResult result = pkInterpretSource(vm, source, "@try");
+  PkInterpretResult result = pkInterpretSource(vm, source, "@try");
 
   pkFreeVM(vm);
 

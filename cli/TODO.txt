@@ -1,25 +1,30 @@
 
 // To implement.
 
-[ ] Implement argparse.
-[ ] Implement resolve path in cli.
+- Implement argparse.
+    - -v --version
+    - emit opcodes
+    - maybe write a similer .pyc file for pocket
 
-[ ] Structs.
-[ ] Implement math library.
-[ ] Single header for embedding.
-[ ] Implement fiber from script body and vm run fibers (not scripts).
+- Ignore line with '\' character.
+- Implement resolve path in cli.
+
+- Structs.
+- Implement math library.
+- Single header for embedding.
+- Implement fiber from script body and vm run fibers (not scripts).
     Then remove vm's root script.
-[ ] C Integration api (including add core lib from host application).
-[ ] REPL.
-    [ ] compile expression for a script.
-[ ] Var handler implement.
-[ ] Make it possible to override function names.
+- C Integration api (including add core lib from host application).
+- REPL.
+    - compile expression for a script.
+- Var handler implement.
+- Make it possible to override function names.
       - To do so the functions and global variables should be in the same
         buffer as the property of the script.
-[ ] Hex, binary literals and floats like ".5".
-[ ] Function docstring property.
-[ ] Union tagging alter in var.
-[ ] (future) add structs and maybe enums.
+- Hex, binary literals and floats like ".5".
+- Function docstring property.
+- Union tagging alter in var.
+- (future) add structs and maybe enums.
 
 // Add more.
 [ ] Compilte core methods.
