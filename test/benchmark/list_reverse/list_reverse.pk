@@ -1,0 +1,22 @@
+from lang import clock
+from math import floor
+
+def reverse_list(list)
+	count = floor(list.length / 2)
+	for i in 0..count
+		last_index = list.length - i - 1
+		last = list[last_index]
+		list[last_index] = list[i]
+		list[i] = last
+	end
+	return list
+end
+
+start = clock()
+
+N = 20000000
+l = (0..N).as_list
+reverse_list(l)
+
+print(clock() - start, 's')
+

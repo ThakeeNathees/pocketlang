@@ -59,13 +59,14 @@ void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
 // Check for errors in before calling the get arg public api function.
 #define CHECK_GET_ARG_API_ERRORS()                                             \
   __ASSERT(vm->fiber != NULL, "This function can only be called at runtime."); \
-  __ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index.");                  \
+  __ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index.");                 \
   __ASSERT(value != NULL, "Parameter [value] was NULL.");                      \
   ((void*)0)
 
 #define ERR_INVALID_ARG_TYPE(m_type)                           \
 do {                                                           \
-  /* 12 chars is enought for a 4 byte integer string.*/        \
+  /* 12 chars is enought for a 4 byte integer string */        \
+  /* including the negative sign.*/                            \
   char buff[12];                                               \
   sprintf(buff, "%d", arg);                                    \
   vm->fiber->error = stringFormat(vm, "Expected a " m_type     \
@@ -141,14 +142,12 @@ void pkReturnValue(PKVM* vm, PkVar value) {
   RET(*(Var*)value);
 }
 
-// ----------------------------------------------------------------------------
-
-
-// Convert number var as int32_t. Check if it's number before using it.
-#define _AS_INTEGER(var) (int32_t)trunc(AS_NUM(var))
+/*****************************************************************************/
+/* CORE INTERNAL                                                             */
+/*****************************************************************************/
 
 static void initializeBuiltinFN(PKVM* vm, BuiltinFn* bfn, const char* name,
-                               int length, int arity, pkNativeFn ptr) {
+                                int length, int arity, pkNativeFn ptr) {
   bfn->name = name;
   bfn->length = length;
 
@@ -239,7 +238,6 @@ static inline bool validateIndex(PKVM* vm, int32_t index, int32_t size,
 /* BUILTIN FUNCTIONS API                                                     */
 /*****************************************************************************/
 
-
 Function* getBuiltinFunction(PKVM* vm, int index) {
   ASSERT_INDEX(index, vm->builtins_count);
   return vm->builtins[index].fn;
@@ -288,10 +286,17 @@ FN_IS_OBJ_TYPE(Function,  OBJ_FUNC)
 FN_IS_OBJ_TYPE(Script,  OBJ_SCRIPT)
 FN_IS_OBJ_TYPE(UserObj,  OBJ_USER)
 
+PK_DOC(coreTypeName,
+  "type_name(value:var) -> string\n"
+  "Returns the type name of the of the value.");
 void coreTypeName(PKVM* vm) {
   RET(VAR_OBJ(&newString(vm, varTypeName(ARG1))->_super));
 }
 
+PK_DOC(coreAssert,
+  "assert(condition:bool [, msg:string]) -> void\n"
+  "If the condition is false it'll terminate the current fiber with the "
+  "optional error message");
 void coreAssert(PKVM* vm) {
   int argc = ARGC;
   if (argc != 1 && argc != 2) {
@@ -299,12 +304,13 @@ void coreAssert(PKVM* vm) {
     return;
   }
 
+
   if (!toBool(ARG1)) {
     String* msg = NULL;
 
     if (argc == 2) {
       if (AS_OBJ(ARG2)->type != OBJ_STRING) {
-        msg = toString(vm, ARG2, false);
+        msg = toString(vm, ARG2);
       } else {
         msg = (String*)AS_OBJ(ARG2);
       }
@@ -317,20 +323,17 @@ void coreAssert(PKVM* vm) {
   }
 }
 
-// Return the has value of the variable, if it's not hashable it'll return null.
-void coreHash(PKVM* vm) {
-  if (IS_OBJ(ARG1)) {
-    if (!isObjectHashable(AS_OBJ(ARG1)->type)) {
-      RET(VAR_NULL);
-    }
-  }
-  RET(VAR_NUM((double)varHashValue(ARG1)));
-}
-
+PK_DOC(coreToString,
+  "to_string(value:var) -> string\n"
+  "Returns the string representation of the value.");
 void coreToString(PKVM* vm) {
-  RET(VAR_OBJ(&toString(vm, ARG1, false)->_super));
+  RET(VAR_OBJ(&toString(vm, ARG1)->_super));
 }
 
+PK_DOC(corePrint,
+  "print(...) -> void\n"
+  "Write each argument as comma seperated to the stdout and ends with a "
+  "newline.");
 void corePrint(PKVM* vm) {
   // If the host appliaction donesn't provide any write function, discard the
   // output.
@@ -344,7 +347,7 @@ void corePrint(PKVM* vm) {
     if (IS_OBJ(arg) && AS_OBJ(arg)->type == OBJ_STRING) {
       str = (String*)AS_OBJ(arg);
     } else {
-      str = toString(vm, arg, false);
+      str = toString(vm, arg);
     }
 
     if (i != 1) vm->config.write_fn(vm, " ");
@@ -507,11 +510,41 @@ void stdLangWrite(PKVM* vm) {
     if (IS_OBJ(arg) && AS_OBJ(arg)->type == OBJ_STRING) {
       str = (String*)AS_OBJ(arg);
     } else {
-      str = toString(vm, arg, false);
+      str = toString(vm, arg);
     }
 
     vm->config.write_fn(vm, str->data);
   }
+}
+
+// 'math' library methods.
+// -----------------------
+
+void stdMathFloor(PKVM* vm) {
+  double num;
+  if (!validateNumeric(vm, ARG1, &num, "Parameter 1")) return;
+
+  RET(VAR_NUM(floor(num)));
+}
+
+void stdMathCeil(PKVM* vm) {
+  double num;
+  if (!validateNumeric(vm, ARG1, &num, "Parameter 1")) return;
+
+  RET(VAR_NUM(ceil(num)));
+}
+
+PK_DOC(stdMathHash,
+  "hash(value:var) -> num\n"
+  "Return the hash value of the variable, if it's not hashable it'll "
+  "return null.");
+void stdMathHash(PKVM* vm) {
+  if (IS_OBJ(ARG1)) {
+    if (!isObjectHashable(AS_OBJ(ARG1)->type)) {
+      RET(VAR_NULL);
+    }
+  }
+  RET(VAR_NUM((double)varHashValue(ARG1)));
 }
 
 /*****************************************************************************/
@@ -526,6 +559,7 @@ void initializeCore(PKVM* vm) {
   // Initialize builtin functions.
   INITALIZE_BUILTIN_FN("type_name",   coreTypeName,   1);
 
+  // TOOD: (maybe remove is_*() functions) suspend by type_name.
   INITALIZE_BUILTIN_FN("is_null",     coreIsNull,     1);
   INITALIZE_BUILTIN_FN("is_bool",     coreIsBool,     1);
   INITALIZE_BUILTIN_FN("is_num",      coreIsNum,      1);
@@ -539,11 +573,10 @@ void initializeCore(PKVM* vm) {
   INITALIZE_BUILTIN_FN("is_userobj",  coreIsUserObj,  1);
   
   INITALIZE_BUILTIN_FN("assert",      coreAssert,    -1);
-  INITALIZE_BUILTIN_FN("hash",        coreHash,       1);
   INITALIZE_BUILTIN_FN("to_string",   coreToString,   1);
   INITALIZE_BUILTIN_FN("print",       corePrint,     -1);
 
-  // string functions.
+  // String functions.
   INITALIZE_BUILTIN_FN("str_lower",   coreStrLower,   1);
   INITALIZE_BUILTIN_FN("str_upper",   coreStrUpper,   1);
   INITALIZE_BUILTIN_FN("str_strip",   coreStrStrip,   1);
@@ -560,7 +593,14 @@ void initializeCore(PKVM* vm) {
   moduleAddFunctionInternal(vm, lang, "clock", stdLangClock,  0);
   moduleAddFunctionInternal(vm, lang, "gc",    stdLangGC,     0);
   moduleAddFunctionInternal(vm, lang, "write", stdLangWrite, -1);
+#ifdef DEBUG
   moduleAddFunctionInternal(vm, lang, "debug_break", stdLangDebugBreak, 0);
+#endif
+
+  Script* math = newModuleInternal(vm, "math");
+  moduleAddFunctionInternal(vm, math, "floor", stdMathFloor,  1);
+  moduleAddFunctionInternal(vm, math, "ceil",  stdMathCeil,   1);
+  moduleAddFunctionInternal(vm, math, "hash",  stdMathHash,   1);
 }
 
 /*****************************************************************************/
@@ -588,7 +628,7 @@ Var varAdd(PKVM* vm, Var v1, Var v2) {
       case OBJ_STRING:
       {
         if (o2->type == OBJ_STRING) {
-          return VAR_OBJ(stringFormat(vm, "@@", (String*)o1, (String*)o2));
+          return VAR_OBJ(stringJoin(vm, (String*)o1, (String*)o2));
         }
       } break;
 
@@ -731,16 +771,35 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
     case OBJ_MAP:
     {
-      Var value = mapGet((Map*)obj, VAR_OBJ(&attrib->_super));
-      if (IS_UNDEF(value)) {
-        vm->fiber->error = stringFormat(vm, "Key (\"@\") not exists.", attrib);
-        return VAR_NULL;
-      }
-      return value;
+      TODO; // Not sure should I allow this(below).
+      //Var value = mapGet((Map*)obj, VAR_OBJ(&attrib->_super));
+      //if (IS_UNDEF(value)) {
+      //  vm->fiber->error = stringFormat(vm, "Key (\"@\") not exists.", attrib);
+      //  return VAR_NULL;
+      //}
+      //return value;
     }
 
     case OBJ_RANGE:
-      TODO;
+    {
+      Range* range = (Range*)obj;
+
+      if (IS_ATTRIB("as_list")) {
+        List* list;
+        if (range->from < range->to) {
+          list = newList(vm, (uint32_t)(range->to - range->from));
+          for (double i = range->from; i < range->to; i++) {
+            varBufferWrite(&list->elements, vm, VAR_NUM(i));
+          }
+        } else {
+          newList(vm, 0);
+        }
+        return VAR_OBJ(&list->_super);
+      }
+
+      ERR_NO_ATTRIB();
+      return VAR_NULL;
+    }
 
     case OBJ_SCRIPT: {
       Script* scr = (Script*)obj;
@@ -897,7 +956,7 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
       Var value = mapGet((Map*)obj, key);
       if (IS_UNDEF(value)) {
 
-        String* key_str = toString(vm, key, true);
+        String* key_str = toString(vm, key);
         vmPushTempRef(vm, &key_str->_super);
         if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
           vm->fiber->error = stringFormat(vm, "Invalid key '@'.", key_str);
@@ -968,108 +1027,4 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
   }
   CHECK_MISSING_OBJ_TYPE(7);
   UNREACHABLE();
-}
-
-bool varIterate(PKVM* vm, Var seq, Var* iterator, Var* value) {
-
-#ifdef DEBUG
-  int32_t _temp;
-  ASSERT(IS_NUM(*iterator) || IS_NULL(*iterator), OOPS);
-  if (IS_NUM(*iterator)) {
-    ASSERT(validateIngeger(vm, *iterator, &_temp, "Assetion."), OOPS);
-  }
-#endif
-
-  // Primitive types are not iterable.
-  if (!IS_OBJ(seq)) {
-    if (IS_NULL(seq)) {
-      vm->fiber->error = newString(vm, "Null is not iterable.");
-    } else if (IS_BOOL(seq)) {
-      vm->fiber->error = newString(vm, "Boolenan is not iterable.");
-    } else if (IS_NUM(seq)) {
-      vm->fiber->error = newString(vm, "Number is not iterable.");
-    } else {
-      UNREACHABLE();
-    }
-    *value = VAR_NULL;
-    return false;
-  }
-
-  Object* obj = AS_OBJ(seq);
-
-  uint32_t iter = 0; //< Nth iteration.
-  if (IS_NUM(*iterator)) {
-    iter = _AS_INTEGER(*iterator);
-  }
-
-  switch (obj->type) {
-    case OBJ_STRING: {
-      // TODO: // Need to consider utf8.
-      String* str = ((String*)obj);
-      if (iter >= str->length) {
-        return false; //< Stop iteration.
-      }
-      // TODO: Or I could add char as a type for efficiency.
-      *value = VAR_OBJ(newStringLength(vm, str->data + iter, 1));
-      *iterator = VAR_NUM((double)iter + 1);
-      return true;
-    }
-
-    case OBJ_LIST: {
-      VarBuffer* elems = &((List*)obj)->elements;
-      if (iter >= elems->count) {
-        return false; //< Stop iteration.
-      }
-      *value = elems->data[iter];
-      *iterator = VAR_NUM((double)iter + 1);
-      return true;
-    }
-
-    case OBJ_MAP: {
-      Map* map = (Map*)obj;
-
-      // Find the next valid key.
-      for (; iter < map->capacity; iter++) {
-        if (!IS_UNDEF(map->entries[iter].key)) {
-          break;
-        }
-      }
-      if (iter >= map->capacity) {
-        return false; //< Stop iteration.
-      }
-
-      *value = map->entries[iter].key;
-      *iterator = VAR_NUM((double)iter + 1);
-      return true;
-    }
-
-    case OBJ_RANGE: {
-      double from = ((Range*)obj)->from;
-      double to   = ((Range*)obj)->to;
-      if (from == to) return false;
-
-      double current;
-      if (from <= to) { //< Straight range.
-        current = from + (double)iter;
-      } else {          //< Reversed range.
-        current = from - (double)iter;
-      }
-      if (current == to) return false;
-      *value = VAR_NUM(current);
-      *iterator = VAR_NUM((double)iter + 1);
-      return true;
-    }
-
-    case OBJ_SCRIPT:
-    case OBJ_FUNC:
-    case OBJ_FIBER:
-    case OBJ_USER:
-      TODO;
-      break;
-    default:
-      UNREACHABLE();
-  }
-  CHECK_MISSING_OBJ_TYPE(7);
-  UNREACHABLE();
-  return false;
 }

@@ -5,9 +5,6 @@
 
 #include "compiler.h"
 
-#include <stdio.h>
-#include <string.h>
-
 #include "core.h"
 #include "buffers.h"
 #include "utils.h"
@@ -107,7 +104,6 @@ typedef enum {
   TK_END,        // end
 
   TK_NULL,       // null
-  TK_SELF,       // self
   TK_IN,         // in
   TK_AND,        // and
   TK_OR,         // or
@@ -170,7 +166,6 @@ static _Keyword _keywords[] = {
   { "func",     4, TK_FUNC },
   { "end",      3, TK_END },
   { "null",     4, TK_NULL },
-  { "self",     4, TK_SELF },
   { "in",       2, TK_IN },
   { "and",      3, TK_AND },
   { "or",       2, TK_OR },
@@ -993,7 +988,6 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_FUNC       */ { exprFunc,      NULL,             NO_INFIX },
   /* TK_END        */   NO_RULE,
   /* TK_NULL       */ { exprValue,     NULL,             NO_INFIX },
-  /* TK_SELF       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_IN         */ { NULL,          exprBinaryOp,     PREC_IN },
   /* TK_AND        */ { NULL,          exprAnd,          PREC_LOGICAL_AND },
   /* TK_OR         */ { NULL,          exprOr,           PREC_LOGICAL_OR },
@@ -1408,7 +1402,6 @@ static void exprValue(Compiler* compiler, bool can_assign) {
   TokenType op = compiler->previous.type;
   switch (op) {
     case TK_NULL:  emitOpcode(compiler, OP_PUSH_NULL); return;
-    case TK_SELF:  emitOpcode(compiler, OP_PUSH_SELF); return;
     case TK_TRUE:  emitOpcode(compiler, OP_PUSH_TRUE); return;
     case TK_FALSE: emitOpcode(compiler, OP_PUSH_FALSE); return;
     default:
@@ -1514,9 +1507,9 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
 
 static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
                                const char* name, int length, int line) {
-  if (compiler->forwards_count == MAX_VARIABLES) {
+  if (compiler->forwards_count == MAX_FORWARD_NAMES) {
     parseError(compiler, "A script should contain at most %d implict forward "
-               "function declarations.", MAX_VARIABLES);
+               "function declarations.", MAX_FORWARD_NAMES);
     return;
   }
 
@@ -1543,7 +1536,7 @@ static int compilerAddConstant(Compiler* compiler, Var value) {
     varBufferWrite(literals, compiler->vm, value);
   } else {
     parseError(compiler, "A script should contain at most %d "
-      "unique constants.", MAX_CONSTANTS);
+               "unique constants.", MAX_CONSTANTS);
   }
   return (int)literals->count - 1;
 }
@@ -2180,17 +2173,19 @@ static void compileForStatement(Compiler* compiler) {
   int container = compilerAddVariable(compiler, "@container", 10, iter_line);
   compileExpression(compiler);
 
-  // Add iterator to locals. It would initially be null and once the loop
-  // started it'll be an increasing integer indicating that the current 
-  // loop is nth.
+  // Add iterator to locals. It's an increasing integer indicating that the
+  // current loop is nth starting from 0.
   int iterator = compilerAddVariable(compiler, "@iterator", 9, iter_line);
-  emitOpcode(compiler, OP_PUSH_NULL);
+  emitOpcode(compiler, OP_PUSH_0);
 
   // Add the iteration value. It'll be updated to each element in an array of
   // each character in a string etc.
   int iter_value = compilerAddVariable(compiler, iter_name, iter_len,
                                        iter_line);
   emitOpcode(compiler, OP_PUSH_NULL);
+
+  // Start the iteration, and check if the sequence is iterable.
+  emitOpcode(compiler, OP_ITER_TEST);
 
   Loop loop;
   loop.start = (int)_FN->opcodes.count;
@@ -2205,8 +2200,8 @@ static void compileForStatement(Compiler* compiler) {
 
   compileBlockBody(compiler, BLOCK_LOOP);
 
-  emitLoopJump(compiler);
-  patchJump(compiler, forpatch);
+  emitLoopJump(compiler); //< Loop back to iteration.
+  patchJump(compiler, forpatch); //< Patch exit iteration address.
 
   // Patch break statement.
   for (int i = 0; i < compiler->loop->patch_count; i++) {
@@ -2356,7 +2351,6 @@ bool compile(PKVM* vm, Script* script, const char* source) {
     skipNewLines(compiler);
   }
 
-  // TODO: the stack already has a null remove one (at vm.c or here).
   emitOpcode(compiler, OP_PUSH_NULL);
   emitOpcode(compiler, OP_RETURN);
   emitOpcode(compiler, OP_END);

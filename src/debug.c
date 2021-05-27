@@ -3,10 +3,10 @@
  *  Licensed under: MIT License
  */
 
-#include <stdio.h>
-
-#include "core.h"
 #include "debug.h"
+
+#include <stdio.h>
+#include "core.h"
 #include "vm.h"
 
 // To limit maximum elements to be dumpin in a map or a list.
@@ -167,7 +167,7 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       }
 
       case OP_PUSH_NULL:
-      case OP_PUSH_SELF:
+      case OP_PUSH_0:
       case OP_PUSH_TRUE:
       case OP_PUSH_FALSE:
       case OP_SWAP:
@@ -250,6 +250,8 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_CALL:
         printf("%5d (argc)\n", READ_SHORT());
         break;
+
+      case OP_ITER_TEST: NO_ARGS(); break;
 
       case OP_ITER:
       case OP_JUMP:

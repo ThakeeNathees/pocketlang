@@ -1,0 +1,19 @@
+from lang import clock
+
+def is_prime(n)
+  if n < 2 then return false end
+  for i in 2..n
+    if n % i == 0 then return false end
+  end
+  return true
+end
+
+start = clock()
+
+N = 60000; primes = []
+for i in 0..N
+  if is_prime(i)
+    list_append(primes, i)
+  end
+end
+print("elapsed:", clock() - start, "s")

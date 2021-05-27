@@ -10,8 +10,8 @@
 extern "C" {
 #endif
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 /*****************************************************************************/
@@ -26,7 +26,7 @@ extern "C" {
 #define PK_VERSION_MINOR 1
 #define PK_VERSION_PATCH 0
 
-// String representation of the value.
+// String representation of the version.
 #define PK_VERSION_STRING "0.1.0"
 
 // Pocketlang visibility macros. define PK_DLL for using pocketlang as a 
@@ -54,17 +54,17 @@ extern "C" {
   #define PK_PUBLIC
 #endif
 
+// A convinent macro to define documentation of funcions. Use it to document 
+// your native functions.
+// 
+// PK_DOC(foo, "The function will print 'foo' on the console.");
+// void foo(PKVM* vm) { printf("foo\n"); }
+// 
+#define PK_DOC(func, doc) char __pkdoc__##func[] = doc
+
 /*****************************************************************************/
 /* POCKETLANG TYPES                                                          */
 /*****************************************************************************/
-
-// Nan-Tagging could be disable for debugging/portability purposes only when
-// compiling the compiler. Do not change this if using the pocketlang library
-// for embedding. To disable when compiling the compiler, define
-// `VAR_NAN_TAGGING 0`, otherwise it defaults to Nan-Tagging.
-#ifndef VAR_NAN_TAGGING
-  #define VAR_NAN_TAGGING 1
-#endif
 
 // PocketLang Virtual Machine. It'll contain the state of the execution, stack,
 // heap, and manage memory allocations.

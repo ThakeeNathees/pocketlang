@@ -7,28 +7,18 @@
 #define VAR_H
 
 /** @file
- * A simple single header dynamic type system library for small dynamic typed
- * languages using a technique called NaN-tagging (optional). The method is 
- * inspired from the wren (https://wren.io/) an awsome language written by the
- * author of "Crafting Interpreters" Bob Nystrom and it's contrbuters. 
+ * A simple dynamic type system library for small dynamic typed languages using
+ * a technique called NaN-tagging (optional). The method is inspired from the
+ * wren (https://wren.io/) an awsome language written by Bob Nystrom the author
+ * of "Crafting Interpreters" and it's contrbuters.
  * Reference:
  *     https://github.com/wren-lang/wren/blob/main/src/vm/wren_value.h
  *     https://leonardschuetz.ch/blog/nan-boxing/
  * 
- * The previous implementation was to add a type field to every \ref var
- * and use smart pointers(C++17) to object with custom destructors,
- * which makes the programme in effect for small types such null, bool,
- * int and float.
+ * The previous implementation was to add a type field to every var and use
+ * smart pointers(C++17) to object with custom destructors, which makes the
+ * programme inefficient for small types such null, bool, int and float.
  */
-
-/** __STDC_LIMIT_MACROS and __STDC_CONSTANT_MACROS are a workaround to
- * allow C++ programs to use stdint.h macros specified in the C99
- * standard that aren't in the C++ standard */
-#define __STDC_LIMIT_MACROS
-#include <stdint.h>
-
-#include <stdbool.h>
-#include <string.h>
 
 #include "common.h"
 #include "buffers.h"
@@ -205,7 +195,7 @@ typedef enum {
 struct Object {
   ObjectType type;  //< Type of the object in \ref var_Object_Type.
   bool is_marked;   //< Marked when garbage collection's marking phase.
-  //Class* is;      //< The class the object IS. // No OOP in PK (yet?).
+  //Class* is;      //< The class the object IS. // No OOP in PK.
 
   Object* next;     //< Next object in the heap allocated link list.
 };
@@ -267,6 +257,10 @@ struct Script {
   functions: [      fn1,       fn2 ]
                     0          1
   */
+
+  // TODO: (maybe) join the function buffer and variable buffers.
+  // and make if possible to override functions. (also have to allow builtin).
+
   VarBuffer globals;         //< Script level global variables.
   UintBuffer global_names;   //< Name map to index in globals.
   VarBuffer literals;        //< Script literal constant values.
@@ -451,9 +445,8 @@ uint32_t varHashValue(Var v);
 // Return true if the object type is hashable.
 bool isObjectHashable(ObjectType type);
 
-// Returns the string version of the value. Note: pass false as [_recursive]
-// It's for internal use (or may be I could make a wrapper around).
-String* toString(PKVM* vm, Var v, bool _recursive);
+// Returns the string version of the value.
+String* toString(PKVM* vm, Var v);
 
 // Returns the truthy value of the var.
 bool toBool(Var v);
@@ -463,6 +456,10 @@ bool toBool(Var v);
 // $ - a C string
 // @ - a String object
 String* stringFormat(PKVM* vm, const char* fmt, ...);
+
+// Create a new string by joining the 2 given string and return the result.
+// Which would be faster than using "@@" format.
+String* stringJoin(PKVM* vm, String* str1, String* str2);
 
 // Add the name (string literal) to the string buffer if not already exists and
 // return it's index in the buffer.

@@ -25,6 +25,13 @@ bool utilIsDigit(char c) {
   return ('0' <= c && c <= '9');
 }
 
+// A union to reinterpret a double as raw bits and back.
+typedef union {
+  uint64_t bits64;
+  uint32_t bits32[2];
+  double num;
+} _DoubleBitsConv;
+
 uint64_t utilDoubleToBits(double value) {
   _DoubleBitsConv bits;
   bits.num = value;

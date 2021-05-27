@@ -43,11 +43,5 @@ void varSetAttrib(PKVM* vm, Var on, String* name, Var value);
 Var varGetSubscript(PKVM* vm, Var on, Var key);
 void varsetSubscript(PKVM* vm, Var on, Var key, Var value);
 
-// Functions //////////////////////////////////////////////////////////////////
-
-// Parameter [iterator] should be VAR_NULL before starting the iteration.
-// If an element is obtained by iteration it'll return true otherwise returns
-// false indicating that the iteration is over.
-bool varIterate(PKVM* vm, Var seq, Var* iterator, Var* value);
 
 #endif // CORE_H
