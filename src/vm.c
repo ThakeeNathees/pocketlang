@@ -33,31 +33,13 @@
 // allocated so far plus the fill factor of it.
 #define HEAP_FILL_PERCENT 75
 
+/*****************************************************************************/
+/* VM PUBLIC API                                                             */
+/*****************************************************************************/
+
 // The default allocator that will be used to initialize the vm's configuration
 // if the host doesn't provided any allocators for us.
-static forceinline void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
-  if (new_size == 0) {
-    free(memory);
-    return NULL;
-  }
-  return realloc(memory, new_size);
-}
-
-void* vmRealloc(PKVM* self, void* memory, size_t old_size, size_t new_size) {
-
-  // TODO: Debug trace allocations here.
-
-  // Track the total allocated memory of the VM to trigger the GC.
-  // if vmRealloc is called for freeing, the old_size would be 0 since 
-  // deallocated bytes are traced by garbage collector.
-  self->bytes_allocated += new_size - old_size;
-
-  if (new_size > 0 && self->bytes_allocated > self->next_gc) {
-    vmCollectGarbage(self);
-  }
-
-  return self->config.realloc_fn(memory, new_size, self->config.user_data);
-}
+static void* defaultRealloc(void* memory, size_t new_size, void* user_data);
 
 pkConfiguration pkNewConfiguration() {
   pkConfiguration config;
@@ -118,6 +100,14 @@ void pkFreeVM(PKVM* self) {
   DEALLOCATE(self, self);
 }
 
+void* pkGetUserData(PKVM* vm) {
+  return vm->config.user_data;
+}
+
+void pkSetUserData(PKVM* vm, void* user_data) {
+  vm->config.user_data = user_data;
+}
+
 PkHandle* pkNewHandle(PKVM* vm, PkVar value) {
   return vmNewHandle(vm, *((Var*)value));
 }
@@ -142,10 +132,6 @@ void pkReleaseHandle(PKVM* vm, PkHandle* handle) {
   DEALLOCATE(vm, handle);
 }
 
-/*****************************************************************************/
-/* VM INTERNALS                                                              */
-/*****************************************************************************/
-
 PkHandle* vmNewHandle(PKVM* self, Var value) {
   PkHandle* handle = (PkHandle*)ALLOCATE(self, PkHandle);
   handle->value = value;
@@ -154,6 +140,35 @@ PkHandle* vmNewHandle(PKVM* self, Var value) {
   if (handle->next != NULL) handle->next->prev = handle;
   self->handles = handle;
   return handle;
+}
+
+
+void* vmRealloc(PKVM* self, void* memory, size_t old_size, size_t new_size) {
+
+  // TODO: Debug trace allocations here.
+
+  // Track the total allocated memory of the VM to trigger the GC.
+  // if vmRealloc is called for freeing, the old_size would be 0 since 
+  // deallocated bytes are traced by garbage collector.
+  self->bytes_allocated += new_size - old_size;
+
+  if (new_size > 0 && self->bytes_allocated > self->next_gc) {
+    vmCollectGarbage(self);
+  }
+
+  return self->config.realloc_fn(memory, new_size, self->config.user_data);
+}
+
+void vmPushTempRef(PKVM* self, Object* obj) {
+  ASSERT(obj != NULL, "Cannot reference to NULL.");
+  ASSERT(self->temp_reference_count < MAX_TEMP_REFERENCE,
+    "Too many temp references");
+  self->temp_reference[self->temp_reference_count++] = obj;
+}
+
+void vmPopTempRef(PKVM* self) {
+  ASSERT(self->temp_reference_count > 0, "Temporary reference is empty to pop.");
+  self->temp_reference_count--;
 }
 
 void vmCollectGarbage(PKVM* self) {
@@ -194,7 +209,7 @@ void vmCollectGarbage(PKVM* self) {
   if (self->fiber != NULL) {
     grayObject(self, &self->fiber->_super);
   }
-  
+
   blackenObjects(self);
 
   // Now sweep all the un-marked objects in then link list and remove them
@@ -222,34 +237,36 @@ void vmCollectGarbage(PKVM* self) {
   // Next GC heap size will be change depends on the byte we've left with now,
   // and the [heap_fill_percent].
   self->next_gc = self->bytes_allocated + (
-                 (self->bytes_allocated * self->heap_fill_percent) / 100);
+    (self->bytes_allocated * self->heap_fill_percent) / 100);
   if (self->next_gc < self->min_heap_size) self->next_gc = self->min_heap_size;
 }
 
-void* pkGetUserData(PKVM* vm) {
-  return vm->config.user_data;
+/*****************************************************************************/
+/* VM INTERNALS                                                              */
+/*****************************************************************************/
+
+// The default allocator that will be used to initialize the vm's configuration
+// if the host doesn't provided any allocators for us.
+static void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
+  if (new_size == 0) {
+    free(memory);
+    return NULL;
+  }
+  return realloc(memory, new_size);
 }
 
-void pkSetUserData(PKVM* vm, void* user_data) {
-  vm->config.user_data = user_data;
-}
-
-static forceinline Script* getScript(PKVM* vm, String* path) {
+static inline Script* getScript(PKVM* vm, String* path) {
   Var scr = mapGet(vm->scripts, VAR_OBJ(&path->_super));
   if (IS_UNDEF(scr)) return NULL;
   ASSERT(AS_OBJ(scr)->type == OBJ_SCRIPT, OOPS);
   return (Script*)AS_OBJ(scr);
 }
 
-/******************************************************************************
- * RUNTIME                                                                    *
- *****************************************************************************/
-
 // If failed to resolve it'll return false. Parameter [result] should be points
 // to the string which is the path that has to be resolved and once it resolved
 // the provided result's string's on_done() will be called and, it's string will 
 // be updated with the new resolved path string.
-static forceinline bool resolveScriptPath(PKVM* vm, pkStringPtr* path_string) {
+static inline bool resolveScriptPath(PKVM* vm, pkStringPtr* path_string) {
   if (vm->config.resolve_path_fn == NULL) return true;
 
   const char* path = path_string->string;
@@ -274,7 +291,7 @@ static forceinline bool resolveScriptPath(PKVM* vm, pkStringPtr* path_string) {
 // Import and return Script object as Var. If the script is imported and
 // compiled here it'll set [is_new_script] to true oterwise (using the cached
 // script) set to false.
-static forceinline Var importScript(PKVM* vm, String* path_name) {
+static inline Var importScript(PKVM* vm, String* path_name) {
 
   // Check in the core libs.
   Script* scr = getCoreLib(vm, path_name);
@@ -293,7 +310,7 @@ static forceinline Var importScript(PKVM* vm, String* path_name) {
   return VAR_NULL;
 }
 
-static forceinline void growStack(PKVM* vm, int size) {
+static inline void growStack(PKVM* vm, int size) {
   Fiber* fiber = vm->fiber;
   ASSERT(fiber->stack_size <= size, OOPS);
   int new_size = utilPowerOf2Ceil(size);
@@ -338,7 +355,7 @@ static forceinline void growStack(PKVM* vm, int size) {
   }
 }
 
-static forceinline void pushCallFrame(PKVM* vm, Function* fn) {
+static inline void pushCallFrame(PKVM* vm, Function* fn) {
     ASSERT(!fn->is_native, "Native function shouldn't use call frames.");
 
     /* Grow the stack frame if needed. */
@@ -385,7 +402,7 @@ void vmReportError(PKVM* vm) {
 
 // This function is responsible to call on_done function if it's done with the 
 // provided string pointers.
-static forceinline PkInterpretResult interpretSource(PKVM* vm, pkStringPtr source,
+static inline PkInterpretResult interpretSource(PKVM* vm, pkStringPtr source,
                                          pkStringPtr path) {
   String* path_name = newString(vm, path.string);
   if (path.on_done) path.on_done(vm, path);
@@ -448,6 +465,10 @@ PkInterpretResult pkInterpret(PKVM* vm, const char* path) {
 
   return interpretSource(vm, source, resolved);
 }
+
+/******************************************************************************
+ * RUNTIME                                                                    *
+ *****************************************************************************/
 
 PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 

@@ -176,6 +176,14 @@ def path_to_content(src):
 	
 	content = markdown(text, extensions=['codehilite', 'fenced_code'])
 	
+	## A wakey way to inject html overrides to highlight out language
+	## I'm not focusing on generating the pages and this is a wakey way to
+	## do so. This should be done with a good static page generater instead
+	## of this script.
+	return custom_html_override(src, content)
+
+## Inject our custom html overrides.
+def custom_html_override(src, content):
 	## FIXME: I should create a pygment lexer.
 	## A dirty way to inject our keyword (to ruby's).
 	addnl_keywords = [
@@ -193,6 +201,11 @@ def path_to_content(src):
 	for nk in not_keyword:
 		content = content.replace('<span class="k">%s</span>' % nk, 
 								  '<span class="n">%s</span>' % nk)
+	
+	## codehilite mark the compilation command as error.
+	if 'build from source' in src:
+		content = content.replace('<span class="err">', '<span>')
+	
 	return content
 
 def write_page(ctx, template, dst):
