@@ -7,13 +7,19 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "pocketlang.h"
+#include <pocketlang.h>
 
  // FIXME: everything below here is temproary and for testing.
 
-// TODO: include this.
-void register_cli_modules(PKVM* vm);
+void registerModules(PKVM* vm);
 
+// Path public functions (TODO: should I add a header for that?)
+void pathInit();
+bool pathIsAbsolute(const char* path);
+void pathGetDirName(const char* path, size_t* length);
+size_t pathNormalize(const char* path, char* buff, size_t buff_size);
+size_t pathJoin(const char* from, const char* path, char* buffer,
+                size_t buff_size);
 
 // ---------------------------------------
 
@@ -39,16 +45,39 @@ void onResultDone(PKVM* vm, pkStringPtr result) {
   }
 }
 
-// FIXME:
 pkStringPtr resolvePath(PKVM* vm, const char* from, const char* path) {
-  if (from == NULL) {
-    // TODO: name is the complete path.
-  }
-
   pkStringPtr result;
   result.on_done = onResultDone;
-  result.string = path;
-  result.user_data = (void*)false;
+
+  size_t from_dir_len;
+  pathGetDirName(from, &from_dir_len);
+
+  // FIXME: Should handle paths with size of more than FILENAME_MAX.
+
+  if (from_dir_len == 0 || pathIsAbsolute(path)) {
+    size_t length = strlen(path);
+
+    char* resolved = (char*)malloc(length + 1);
+    pathNormalize(path, resolved, length + 1);
+
+    result.string = resolved;
+    result.user_data = (void*)true;
+
+  } else {
+    char from_dir[FILENAME_MAX];
+    strncpy(from_dir, from, from_dir_len);
+    from_dir[from_dir_len] = '\0';
+
+    char fullpath[FILENAME_MAX];
+    size_t length = pathJoin(from_dir, path, fullpath, sizeof(fullpath));
+
+    char* resolved = (char*)malloc(length + 1);
+    pathNormalize(fullpath, resolved, length + 1);
+
+    result.string = resolved;
+    result.user_data = (void*)true;
+  }
+
   return result;
 }
 
@@ -92,12 +121,16 @@ int main(int argc, char** argv) {
     "Free and open source software under the terms of the MIT license.\n";
   const char* help = "Usage: pocketlang <source_path>\n";
 
-  // TODO: implement arg parse.
+
+  // TODO: implement arg parse, REPL.
 
   if (argc < 2) {
     printf("%s\n%s", notice, help);
     return 0;
   }
+
+  // Initialize cli.
+  pathInit();
 
   pkConfiguration config = pkNewConfiguration();
   config.error_fn = errorPrint;
@@ -114,7 +147,7 @@ int main(int argc, char** argv) {
   }
 
   PKVM* vm = pkNewVM(&config);
-  register_cli_modules(vm);
+  registerModules(vm);
 
   PkInterpretResult result = pkInterpret(vm, argv[1]);
   pkFreeVM(vm);

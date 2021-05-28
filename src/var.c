@@ -42,6 +42,11 @@ PkHandle* pkNewString(PKVM* vm, const char* value) {
   return vmNewHandle(vm, VAR_OBJ(&newString(vm, value)->_super));
 }
 
+PkHandle* pkNewStringLength(PKVM* vm, const char* value, size_t len) {
+  return vmNewHandle(vm, VAR_OBJ(&newStringLength(vm, value,
+                                                  (uint32_t)len)->_super));
+}
+
 PkHandle* pkNewList(PKVM* vm) {
   return vmNewHandle(vm, VAR_OBJ(&newList(vm, MIN_CAPACITY)->_super));
 }
@@ -53,7 +58,7 @@ PkHandle* pkNewMap(PKVM* vm) {
 const char* pkStringGetData(PkVar value) {
   Var str = (*(Var*)value);
   __ASSERT(IS_OBJ(str) && AS_OBJ(str)->type == OBJ_STRING,
-    "Value should be of type string.");
+           "Value should be of type string.");
   return ((String*)AS_OBJ(str))->data;
 }
 
@@ -309,6 +314,7 @@ Script* newScript(PKVM* vm, String* path) {
 
   script->path = path;
   script->moudle = NULL;
+  script->initialized = false;
 
   varBufferInit(&script->globals);
   uintBufferInit(&script->global_names);

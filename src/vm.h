@@ -33,6 +33,7 @@ typedef struct {
 } BuiltinFn;
 
 // A doubly link list of vars that have reference in the host application.
+// Handles are wrapper around Var that lives on the host application.
 struct PkHandle {
   Var value;
 
@@ -40,6 +41,8 @@ struct PkHandle {
   PkHandle* next;
 };
 
+// PocketLang Virtual Machine. It'll contain the state of the execution, stack,
+// heap, and manage memory allocations.
 struct PKVM {
 
   // The first object in the link list of all heap allocated objects.
@@ -69,7 +72,9 @@ struct PKVM {
   Object* temp_reference[MAX_TEMP_REFERENCE];
   int temp_reference_count;
 
-  // Pointer to the first handle in the doubly linked list of handles.
+  // Pointer to the first handle in the doubly linked list of handles. Handles
+  // are wrapper around Var that lives on the host application. This linked
+  // list will keep them alive till the host uses the variable.
   PkHandle* handles;
 
   // VM's configurations.
@@ -93,17 +98,15 @@ struct PKVM {
   BuiltinFn builtins[BUILTIN_FN_CAPACITY];
   int builtins_count;
 
-  // Execution variables ////////////////////////////////////////////////////
-
   // The root script of the runtime and it's one of the VM's reference root.
-  // VM is responsible to manage the memory (TODO: implement handlers).
+  // VM is responsible to manage the memory.
   Script* script;
 
   // Current fiber.
   Fiber* fiber;
 };
 
-// A realloc wrapper which handles memory allocations of the VM.
+// A realloc() function wrapper which handles memory allocations of the VM.
 // - To allocate new memory pass NULL to parameter [memory] and 0 to
 //   parameter [old_size] on failure it'll return NULL.
 // - To free an already allocated memory pass 0 to parameter [old_size]
@@ -117,10 +120,49 @@ void* vmRealloc(PKVM* self, void* memory, size_t old_size, size_t new_size);
 // Create and return a new handle for the [value].
 PkHandle* vmNewHandle(PKVM* self, Var value);
 
-// Trigger garbage collection manually.
+// Trigger garbage collection. This is an implementation of mark and sweep
+// garbage collection (https://en.wikipedia.org/wiki/Tracing_garbage_collection).
+// 
+// 1. MARKING PHASE
+// 
+//       |          |
+//       |  [obj0] -+---> [obj2] -> [obj6]    .------- Garbage --------.
+//       |  [obj3]  |       |                 |                        |
+//       |  [obj8]  |       '-----> [obj1]    |   [obj7] ---> [obj5]   |
+//       '----------'                         |       [obj4]           |
+//        working set                         '------------------------'
+// 
+//   First we preform a tree traversel from all the vm's root objects. such as
+//   temp references, handles, vm's running fiber, current compiler (if it has
+//   any) etc. Mark them (ie. is_marked = true) and add them to the working set
+//   (the gray_list). Pop the top object from the working set add all of it's
+//   referenced objects to the working set and mark it black (try-color marking)
+//   We'll keep doing this till the working set become empty, and at this point
+//   any object which isn't marked is a garbage.
+// 
+//   Every single heap allocated objects will be in the VM's link list. Those
+//   objects which are reachable have marked (ie. is_marked = true) once the
+//   marking phase is completed.
+//    .----------------. 
+//    |  VM            |
+//    | Object* first -+--------> [obj8] -> [obj7] -> [obj6] ... [obj0] -> NULL
+//    '----------------' marked =  true      false     true       true
+//
+// 2. SWEEPING PHASE
+// 
+//    .----------------.                .-------------.
+//    |  VM            |                |             V
+//    | Object* first -+--------> [obj8]    [obj7]    [obj6] ... [obj0] -> NULL
+//    '----------------' marked =  true      false     true       true
+//                                       '--free()--'
+//   
+//   Once the marking phase is done, we iterate through the objects and remove
+//   the objects which are not marked from the linked list and deallocate them.
+//
 void vmCollectGarbage(PKVM* self);
 
-// Push the object to temporary references stack.
+// Push the object to temporary references stack. This reference will prevent
+// the object from garbage collection.
 void vmPushTempRef(PKVM* self, Object* obj);
 
 // Pop the top most object from temporary reference stack.

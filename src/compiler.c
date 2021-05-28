@@ -1813,7 +1813,7 @@ static Script* importFile(Compiler* compiler, const char* path) {
   }
 
   // Load the script at the path.
-  pkStringPtr source = vm->config.load_script_fn(vm, resolved.string);
+  pkStringPtr source = vm->config.load_script_fn(vm, path_name->data);
   if (source.string == NULL) {
     parseError(compiler, "Error loading script at '%s'", path_name->data);
     return NULL;
@@ -2017,7 +2017,7 @@ static void compileFromImport(Compiler* compiler) {
 static void compileRegularImport(Compiler* compiler) {
   do {
 
-    // Import the library and push it on the stack. If it cannot import
+    // Import the library and push it on the stack. If it cannot import,
     // the lib would be null, but we're not terminating here, just continue
     // parsing for cascaded errors.
     Script* lib = compilerImport(compiler);

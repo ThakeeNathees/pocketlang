@@ -131,7 +131,8 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
   uint32_t* lines = func->fn->oplines.data;
   uint32_t line = 1, last_line = 0;
 
-  printf("Instruction Dump of function '%s'\n", func->name);
+  printf("Instruction Dump of function '%s' (%s)\n", func->name,
+         func->owner->path->data);
 #define READ_BYTE() (opcodes[i++])
 #define READ_SHORT() (i += 2, opcodes[i - 2] << 8 | opcodes[i-1])
 
@@ -275,8 +276,11 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_GET_ATTRIB:
       case OP_GET_ATTRIB_KEEP:
       case OP_SET_ATTRIB:
-        SHORT_ARG();
-        break;
+      {
+        int index = READ_SHORT();
+        String* name = func->owner->names.data[index];
+        printf("%5d '%s'\n", index, name->data);
+      } break;
 
       case OP_GET_SUBSCRIPT:
       case OP_GET_SUBSCRIPT_KEEP:
@@ -339,7 +343,7 @@ void dumpStackFrame(PKVM* vm) {
   CallFrame* frame = &fiber->frames[frame_ind];
   Var* sp = fiber->sp - 1;
 
-  printf("Frame: %d\n", frame_ind);
+  printf("Frame[%d]\n", frame_ind);
   for (; sp >= frame->rbp; sp--) {
     printf("       ");
     dumpValue(vm, *sp);
