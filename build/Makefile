@@ -9,14 +9,12 @@ SOURCES     = ../cli/*.c ../src/*.c
 
 all: debug
 
-init:
+debug:
 	@mkdir -p debug/
-	@mkdir -p release/
-
-debug: init
 	$(CC) -o debug/pocket $(SOURCES) $(INCLUDE_DIR) $(CFLAGS) -D DEBUG -g3 -Og
 
-release: init
+release:
+	@mkdir -p release/
 	$(CC) -o release/pocket $(SOURCES) $(INCLUDE_DIR) $(CFLAGS) -g -O3
 
 clean:

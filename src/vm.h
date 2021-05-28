@@ -103,20 +103,6 @@ struct PKVM {
   Fiber* fiber;
 };
 
-// Push the object to temporary references stack.
-forceinline void vmPushTempRef(PKVM* self, Object* obj) {
-  ASSERT(obj != NULL, "Cannot reference to NULL.");
-  ASSERT(self->temp_reference_count < MAX_TEMP_REFERENCE,
-    "Too many temp references");
-  self->temp_reference[self->temp_reference_count++] = obj;
-}
-
-// Pop the top most object from temporary reference stack.
-forceinline void vmPopTempRef(PKVM* self) {
-  ASSERT(self->temp_reference_count > 0, "Temporary reference is empty to pop.");
-  self->temp_reference_count--;
-}
-
 // A realloc wrapper which handles memory allocations of the VM.
 // - To allocate new memory pass NULL to parameter [memory] and 0 to
 //   parameter [old_size] on failure it'll return NULL.
@@ -133,6 +119,12 @@ PkHandle* vmNewHandle(PKVM* self, Var value);
 
 // Trigger garbage collection manually.
 void vmCollectGarbage(PKVM* self);
+
+// Push the object to temporary references stack.
+void vmPushTempRef(PKVM* self, Object* obj);
+
+// Pop the top most object from temporary reference stack.
+void vmPopTempRef(PKVM* self);
 
 // Runs the script and return result.
 PkInterpretResult vmRunScript(PKVM* vm, Script* script);
