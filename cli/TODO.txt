@@ -1,6 +1,9 @@
 
 // To implement.
 
+- Implement resolve path in cli.
+- Implement file IO
+
 - Implement argparse.
     - -v --version
     - emit opcodes
@@ -8,7 +11,6 @@
 	- --docs to generate docs from cstring.
 
 - Ignore line with '\' character.
-- Implement resolve path in cli.
 
 - Structs.
 - Implement math library.

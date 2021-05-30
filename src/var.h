@@ -269,6 +269,7 @@ struct Script {
   StringBuffer names;        //< Name literals, attribute names, etc.
 
   Function* body;            //< Script body is an anonymous function.
+  bool initialized;          //< Set to true if the source body executed.
 };
 
 // Script function pointer.

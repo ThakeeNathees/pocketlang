@@ -472,6 +472,10 @@ PkInterpretResult pkInterpret(PKVM* vm, const char* path) {
 
 PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
+  // Set script initialized to true before the execution ends to prevent cyclic
+  // inclusion cause a crash.
+  _script->initialized = true;
+
   // Reference to the instruction pointer in the call frame.
   register uint8_t** ip;
 #define IP (*ip) // Convinent macro to the instruction pointer.
@@ -722,7 +726,12 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     {
       String* name = script->names.data[READ_SHORT()];
       Var script = importScript(vm, name);
-      // TODO: initialize global variables.
+
+      // TODO: implement fiber bsed execution.
+      //ASSERT(IS_OBJ(script) && AS_OBJ(script)->type == OBJ_SCRIPT, OOPS);
+      //Script* scr = (Script*)AS_OBJ(script);
+      //if (!scr->initialized) vmRunScript(vm, scr);
+
       PUSH(script);
       CHECK_ERROR();
       DISPATCH();
@@ -748,6 +757,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
         // Next call frame starts here. (including return value).
         vm->fiber->ret = callable;
+        *(vm->fiber->ret) = VAR_NULL; //< Set the return value to null.
 
         if (fn->is_native) {
           if (fn->native == NULL) {
@@ -767,7 +777,8 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
         }
 
       } else {
-        RUNTIME_ERROR(newString(vm, "Expected a function in call."));
+        RUNTIME_ERROR(stringFormat(vm, "$ $(@).", "Expected a function in "
+        "call, instead got", varTypeName(*callable), toString(vm, *callable)));
       }
 
       DISPATCH();

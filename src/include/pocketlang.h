@@ -60,7 +60,7 @@ extern "C" {
 // PK_DOC(foo, "The function will print 'foo' on the console.");
 // void foo(PKVM* vm) { printf("foo\n"); }
 // 
-#define PK_DOC(func, doc) char __pkdoc__##func[] = doc
+#define PK_DOC(func, doc) static char __pkdoc__##func[] = doc
 
 /*****************************************************************************/
 /* POCKETLANG TYPES                                                          */
@@ -268,6 +268,7 @@ PK_PUBLIC PkVar pkGetArg(PKVM* vm, int arg);
 
 PK_PUBLIC bool pkGetArgBool(PKVM* vm, int arg, bool* vlaue);
 PK_PUBLIC bool pkGetArgNumber(PKVM* vm, int arg, double* value);
+PK_PUBLIC bool pkGetArgString(PKVM* vm, int arg, const char** value);
 PK_PUBLIC bool pkGetArgValue(PKVM* vm, int arg, PkVarType type, PkVar* value);
 
 // The below functions are used to set the return value of the current native
@@ -276,6 +277,8 @@ PK_PUBLIC bool pkGetArgValue(PKVM* vm, int arg, PkVarType type, PkVar* value);
 PK_PUBLIC void pkReturnNull(PKVM* vm);
 PK_PUBLIC void pkReturnBool(PKVM* vm, bool value);
 PK_PUBLIC void pkReturnNumber(PKVM* vm, double value);
+PK_PUBLIC void pkReturnString(PKVM* vm, const char* value);
+PK_PUBLIC void pkReturnStringLength(PKVM* vm, const char* value, size_t len);
 PK_PUBLIC void pkReturnValue(PKVM* vm, PkVar value);
 
 /*****************************************************************************/
@@ -286,6 +289,7 @@ PK_PUBLIC void pkReturnValue(PKVM* vm, PkVar value);
 // wrapped around a handler.
 
 PK_PUBLIC PkHandle* pkNewString(PKVM* vm, const char* value);
+PK_PUBLIC PkHandle* pkNewStringLength(PKVM* vm, const char* value, size_t len);
 PK_PUBLIC PkHandle* pkNewList(PKVM* vm);
 PK_PUBLIC PkHandle* pkNewMap(PKVM* vm);
 

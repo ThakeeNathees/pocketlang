@@ -85,6 +85,14 @@ PkVar pkGetArg(PKVM* vm, int arg) {
   return &(ARG(arg));
 }
 
+bool pkGetArgBool(PKVM* vm, int arg, bool* value) {
+  CHECK_GET_ARG_API_ERRORS();
+
+  Var val = ARG(arg);
+  *value = toBool(val);
+  return true;
+}
+
 bool pkGetArgNumber(PKVM* vm, int arg, double* value) {
   CHECK_GET_ARG_API_ERRORS();
 
@@ -103,11 +111,18 @@ bool pkGetArgNumber(PKVM* vm, int arg, double* value) {
   return true;
 }
 
-bool pkGetArgBool(PKVM* vm, int arg, bool* value) {
+bool pkGetArgString(PKVM* vm, int arg, const char** value) {
   CHECK_GET_ARG_API_ERRORS();
 
   Var val = ARG(arg);
-  *value = toBool(val);
+  if (IS_OBJ(val) && AS_OBJ(val)->type == OBJ_STRING) {
+    *value = ((String*)AS_OBJ(val))->data;
+
+  } else {
+    ERR_INVALID_ARG_TYPE("string");
+    return false;
+  }
+
   return true;
 }
 
@@ -136,6 +151,14 @@ void pkReturnBool(PKVM* vm, bool value) {
 
 void pkReturnNumber(PKVM* vm, double value) {
   RET(VAR_NUM(value));
+}
+
+void pkReturnString(PKVM* vm, const char* value) {
+  RET(VAR_OBJ(&newString(vm, value)->_super));
+}
+
+void pkReturnStringLength(PKVM* vm, const char* value, size_t length) {
+  RET(VAR_OBJ(&newStringLength(vm, value, (uint32_t)length)->_super));
 }
 
 void pkReturnValue(PKVM* vm, PkVar value) {
