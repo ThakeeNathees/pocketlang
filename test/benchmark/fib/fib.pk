@@ -8,8 +8,7 @@ end
 
 start = clock()
 for i in 0..10
-  print(fib(32))
+  print(fib(30))
 end
-
 print('elapsed:', clock() - start, 's')
 

@@ -1,5 +1,4 @@
 
-  
 class Fib {
   static get(n) {
     if (n < 2) return n
@@ -9,6 +8,6 @@ class Fib {
 
 var start = System.clock
 for (i in 0...10) {
-  System.print(Fib.get(32))
+  System.print(Fib.get(30))
 }
-System.print("elapsed: %(System.clock - start)")
+System.print("elapsed: %(System.clock - start) s")

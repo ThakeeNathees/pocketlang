@@ -12,4 +12,4 @@ start = clock()
 N = 20000000
 l = list(range(N))
 reverse_list(l)
-print(clock() - start, 's')
+print('elapsed: ', clock() - start, 's')

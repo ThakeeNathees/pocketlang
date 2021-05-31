@@ -759,6 +759,24 @@ bool isValuesEqual(Var v1, Var v2) {
              memcmp(s1->data, s2->data, s1->length) == 0;
     }
 
+    case OBJ_LIST: {
+      /*
+      * l1 = []; list_append(l1, l1) # [[...]]
+      * l2 = []; list_append(l2, l2) # [[...]]
+      * l1 == l2 ## This will cause a stack overflow but not handling that
+      *          ## (in python too).
+      */
+      List *l1 = (List*)o1, *l2 = (List*)o2;
+      if (l1->elements.count != l2->elements.count) return false;
+      Var* v1 = l1->elements.data;
+      Var* v2 = l2->elements.data;
+      for (uint32_t i = 0; i < l1->elements.count; i++) {
+        if (!isValuesEqual(*v1, *v2)) return false;
+        v1++, v2++;
+      }
+      return true;
+    }
+
     default:
       return false;
   }

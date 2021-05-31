@@ -8,7 +8,7 @@ def is_prime(n):
 
 start = clock()
 
-N = 60000; primes = []
+N = 30000; primes = []
 for i in range(N):
 	if is_prime(i):
 		primes.append(i)

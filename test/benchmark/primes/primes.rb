@@ -8,7 +8,7 @@ def is_prime(n)
 end
 
 start = Time.now
-N = 60000; primes = []
+N = 30000; primes = []
 for i in 0...N
   if is_prime(i)
     primes.append(i)
