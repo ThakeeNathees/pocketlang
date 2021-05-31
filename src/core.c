@@ -557,6 +557,37 @@ void stdMathCeil(PKVM* vm) {
   RET(VAR_NUM(ceil(num)));
 }
 
+void stdMathPow(PKVM* vm) {
+  double num, ex;
+  if (!validateNumeric(vm, ARG1, &num, "Parameter 1")) return;
+  if (!validateNumeric(vm, ARG2, &ex, "Parameter 2")) return;
+
+  RET(VAR_NUM(pow(num, ex)));
+}
+
+void stdMathSqrt(PKVM* vm) {
+  double num;
+  if (!validateNumeric(vm, ARG1, &num, "Parameter 1")) return;
+
+  RET(VAR_NUM(sqrt(num)));
+}
+
+void stdMathAbs(PKVM* vm) {
+  double num;
+  if (!validateNumeric(vm, ARG1, &num, "Parameter 1")) return;
+  if (num < 0) num = -num;
+  RET(VAR_NUM(num));
+}
+
+void stdMathSign(PKVM* vm) {
+  double num;
+  if (!validateNumeric(vm, ARG1, &num, "Parameter 1")) return;
+  if (num < 0) num = -1;
+  else if (num > 0) num = +1;
+  else num = 0;
+  RET(VAR_NUM(num));
+}
+
 PK_DOC(stdMathHash,
   "hash(value:var) -> num\n"
   "Return the hash value of the variable, if it's not hashable it'll "
@@ -623,6 +654,10 @@ void initializeCore(PKVM* vm) {
   Script* math = newModuleInternal(vm, "math");
   moduleAddFunctionInternal(vm, math, "floor", stdMathFloor,  1);
   moduleAddFunctionInternal(vm, math, "ceil",  stdMathCeil,   1);
+  moduleAddFunctionInternal(vm, math, "pow",   stdMathPow,    2);
+  moduleAddFunctionInternal(vm, math, "sqrt",  stdMathSqrt,   1);
+  moduleAddFunctionInternal(vm, math, "abs",   stdMathAbs,    1);
+  moduleAddFunctionInternal(vm, math, "sign",  stdMathSign,   1);
   moduleAddFunctionInternal(vm, math, "hash",  stdMathHash,   1);
 }
 
@@ -656,7 +691,12 @@ Var varAdd(PKVM* vm, Var v1, Var v2) {
       } break;
 
       case OBJ_LIST:
-        TODO;
+      {
+        if (o2->type == OBJ_LIST) {
+          TODO;
+        }
+      }
+      TODO;
 
       case OBJ_MAP:
       case OBJ_RANGE:

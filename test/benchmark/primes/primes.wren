@@ -9,12 +9,12 @@ var is_prime = Fn.new {|n|
 
 
 var start = System.clock
-var N = 60000
+var N = 30000
 var primes = []
 for (i in 0...N) {
   if (is_prime.call(i)) {
     primes.add(i)
   }
 }
-System.print("elapsed: %(System.clock - start)")
+System.print("elapsed: %(System.clock - start) s")
 

@@ -1,18 +1,16 @@
 
-## Fib test.
-
-res = ''
+## Iterative fibonacci function.
 
 def fib(n)
+  res = []
   a = 0; b = 1
   for _ in 0..n
-   res += to_string(a) + " "
-    temp = a;
-	a = b;
-	b += temp;
+    list_append(res, a)
+    temp = a; a = b; b += temp;
   end
+  return res
 end
 
-fib(10)
-print(res)
-assert(res == '0 1 1 2 3 5 8 13 21 34 ')
+fibs = fib(10)
+print('fibs =', fibs)
+assert(fibs == [0, 1, 1, 2, 3, 5, 8, 13, 21, 34])
