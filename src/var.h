@@ -203,7 +203,7 @@ struct Object {
 struct String {
   Object _super;
 
-  uint32_t hash;      //< Hash value of the string.
+  uint32_t hash;      //< 32 bit hash value of the string.
   uint32_t length;    //< Length of the string in \ref data.
   uint32_t capacity;  //< Size of allocated \ref data.
   char data[DYNAMIC_TAIL_ARRAY];

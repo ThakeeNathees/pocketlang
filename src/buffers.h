@@ -7,7 +7,16 @@
 #define BUFFERS_TEMPLATE_H
 
 #include "common.h"
-#include "include/pocketlang.h"
+
+// The macro 'DECLARE_BUFFER()' emulate the C++ template to declare and define
+// different types of buffer objects.
+
+// A buffer of type 'T' will contain a heap allocated array of 'T' with the
+// capacity of 'Tbuffer.capacity' as 'T* Tbuffer.data'. When the capacity is
+// filled with 'T' values (ie. Tbuffer.count == Tbuffer.capacity) the buffer's
+// internal data array will be reallocate to a capacity of 'GROW_FACTOR' times
+// it's last capacity.
+
 
 #define DECLARE_BUFFER(M__NAME, M__NAME_L, M__TYPE)                            \
   typedef struct {                                                             \

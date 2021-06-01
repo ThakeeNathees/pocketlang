@@ -64,14 +64,21 @@ uint32_t utilHashNumber(double num) {
 
 uint32_t utilHashString(const char* string) {
   // FNV-1a hash. See: http://www.isthe.com/chongo/tech/comp/fnv/
-  uint32_t hash = 2166136261u;
+
+#define FNV_prime_32_bit 16777619u
+#define FNV_offset_basis_32_bit 2166136261u
+
+  uint32_t hash = FNV_offset_basis_32_bit;
 
   for (const char* c = string; *c != '\0'; c++) {
     hash ^= *c;
-    hash *= 16777619;
+    hash *= FNV_prime_32_bit;
   }
 
   return hash;
+
+#undef FNV_prime_32_bit
+#undef FNV_offset_basis_32_bit
 }
 
 /****************************************************************************
