@@ -8,7 +8,7 @@ INDENTATION = '      | '
 test_files = [
   "lang/basics.pk",
   "lang/functions.pk",
-  "lang/if.pk",
+  "lang/controlflow.pk",
   "examples/fib.pk",
   "examples/prime.pk",
 ]

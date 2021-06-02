@@ -5,14 +5,12 @@ import lang, path
 import lang as o, path as p
 from lang import write
 from lang import clock as c
-from path import abspath, curdir
-from path import abspath as ap, curdir as cd
 
 from lang import *
 from path import *
 
 import "basics.pk" ## will import all
-import "if.pk" as if_test
+import "controlflow.pk" as if_test
 from "functions.pk" import fn1, fn2 as f2, fn3
 
 ## If it has a module name it'll bind to that name.

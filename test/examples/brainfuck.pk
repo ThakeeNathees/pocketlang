@@ -1,0 +1,116 @@
+from lang import write
+
+###############################################################################
+##               BRAINFUCK IMPLEMENTATION IN POCKETLANG                      ##
+###############################################################################
+
+## Reference: https://en.wikipedia.org/wiki/Brainfuck
+
+## Note that this interpreter implementation is just to test pocketlang and is
+## not an efficient one. This could be optimized by evaluvating the expressions
+## at "compile time" (AOT) to avoid re-evaluvating those expressions at runtime
+## and also we can pre compile the loop jump offsets.
+
+## Source: https://en.wikipedia.org/wiki/Brainfuck
+hello_world =  "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]
+                >>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++."
+
+## Source: https://github.com/fabianishere/brainfuck/blob/master/examples/asciiart/triangle.bf
+## Madeby: Nyyrikki(2002)
+triangle = ">++++[<++++++++>-]>++++++++[>++++<-]>>++>>>+>>>+<<<<<<<<<<[-[->+<]>
+           [-<+>>>.<<]>>>[[->++++++++[>++++<-]>.<<[->+<]+>[->++++++++++<<+>]>.
+		   [-]>]]+<<<[-[->+<]+>[-<+>>>-[->+<]++>[-<->]<<<]<<<<]++++++++++.+++.
+		   [-]<]+++++"
+
+## Source: https://github.com/fabianishere/brainfuck/blob/master/examples/math/fib.bf
+fibonacci = ">++++++++++>+>+[
+              [+++++[>++++++++<-]>.<++++++[>--------<-]+<<<]>.>>[
+                  [-]<[>+<-]>>[<<+>+>-]<[>+<-[>+<-[>+<-[>+<-[>+<-[>+<-
+                      [>+<-[>+<-[>+<-[>[-]>+>+<<<-[>+<-]]]]]]]]]]]+>>>
+              ]<<<
+             ]"
+
+execute(hello_world)
+execute(triangle)
+execute(fibonacci)
+
+###############################################################################
+##                                  INTERNAL                                 ##
+###############################################################################
+
+def execute(expr)
+  ptr = 0   ## Data pointer.
+  mem = [0] ## Data / Memory
+  
+  i = 0 ## Instruction pointer
+  while true
+    c = expr[i] ## Current char.
+  
+    ## Increment the data pointer (to point to the next cell to the right).
+    if c == '>'
+      ptr += 1
+      if ptr >= mem.length then list_append(mem, 0) end
+
+    ## Decrement the data pointer (to point to the next cell to the left).
+    elif c == '<'
+      ptr -= 1
+      if ptr < 0 then assert(false, "ip < 0") end
+
+    ## Increment (increase by one) the byte at the data pointer.
+    elif c == '+'
+      if mem[ptr] == 255 then mem[ptr] = 0
+      else mem[ptr] += 1 end
+
+    ## Decrement (decrease by one) the byte at the data pointer.
+    elif c == '-'
+      if mem[ptr] == 0 then mem[ptr] = 255
+      else mem[ptr] -= 1 end
+
+    ## output the byte at the data pointer.      
+    elif c == '.'
+      write(str_chr(mem[ptr]))
+
+    elif c == ','
+      assert(false, "Currently input isn't supported in pocketlang.")
+
+    ## if the byte at the data pointer is zero, then instead of moving the
+    ## instruction pointer forward to the next command, jump it forward to
+    ## the command after the matching ] command.
+    elif c == '[' and mem[ptr] == 0
+      open = 0
+      while true
+        i += 1
+        if expr[i] == ']' and open == 0 then break end
+
+        if expr[i] == '[' then open += 1
+        elif expr[i] == ']' then open -= 1
+        end assert(open >= 0)
+      end
+
+    ## if the byte at the data pointer is nonzero, then instead of moving the
+    ## instruction pointer forward to the next command, jump it back to the
+    ## command after the matching [ command
+    elif c == ']' and mem[ptr] != 0
+      open = 0
+      while true
+        i -= 1
+        if expr[i] == '[' and open == 0 then break end
+
+        if expr[i] == ']' then open -= 1
+        elif expr[i] == '[' then open += 1
+        end assert(open <= 0)
+      end
+
+	else
+      ## Any other characters are ignored in brainfuck interpreter.
+    end
+
+	## Increment the instruction pointer by one.
+	## If we reached the end terminate.
+    i += 1
+    if i == expr.length then break end
+
+  end
+
+end
+

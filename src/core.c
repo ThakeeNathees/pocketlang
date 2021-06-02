@@ -215,7 +215,7 @@ static inline bool validateNumeric(PKVM* vm, Var var, double* value,
 }
 
 // Check if [var] is integer. If not set error and return false.
-static inline bool validateIngeger(PKVM* vm, Var var, int32_t* value,
+static inline bool validateInteger(PKVM* vm, Var var, int32_t* value,
   const char* name) {
   double number;
   if (isNumeric(var, &number)) {
@@ -422,6 +422,29 @@ void coreStrStrip(PKVM* vm) {
 
   RET(VAR_OBJ(&newStringLength(vm, start, (uint32_t)(end - start + 1))->_super));
 }
+
+// Returns the ASCII string value of the integer argument.
+void coreStrChr(PKVM* vm) {
+  int32_t num;
+  if (!validateInteger(vm, ARG1, &num, "Argument 1"));
+
+  char c = (char)num;
+  RET(VAR_OBJ(&newStringLength(vm, &c, 1)->_super));
+}
+
+// Returns integer value of the given ASCII character.
+void coreStrOrd(PKVM* vm) {
+  String* c;
+  if (!validateArgString(vm, 1, &c));
+  if (c->length != 1) {
+    vm->fiber->error = newString(vm, "Expected a string of length 1.");
+    RET(VAR_NULL);
+  } else {
+    RET(VAR_NUM((double)c->data[0]));
+  }
+}
+
+
 
 // List functions.
 // ---------------
@@ -634,6 +657,8 @@ void initializeCore(PKVM* vm) {
   INITALIZE_BUILTIN_FN("str_lower",   coreStrLower,   1);
   INITALIZE_BUILTIN_FN("str_upper",   coreStrUpper,   1);
   INITALIZE_BUILTIN_FN("str_strip",   coreStrStrip,   1);
+  INITALIZE_BUILTIN_FN("str_chr",     coreStrChr,     1);
+  INITALIZE_BUILTIN_FN("str_ord",     coreStrOrd,     1);
 
   // List functions.
   INITALIZE_BUILTIN_FN("list_append", coreListAppend, 2);
@@ -991,7 +1016,7 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
     {
       int32_t index;
       String* str = ((String*)obj);
-      if (!validateIngeger(vm, key, &index, "List index")) {
+      if (!validateInteger(vm, key, &index, "List index")) {
         return VAR_NULL;
       }
       if (!validateIndex(vm, index, str->length, "String")) {
@@ -1005,7 +1030,7 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
     {
       int32_t index;
       VarBuffer* elems = &((List*)obj)->elements;
-      if (!validateIngeger(vm, key, &index, "List index")) {
+      if (!validateInteger(vm, key, &index, "List index")) {
         return VAR_NULL;
       }
       if (!validateIndex(vm, index, (int)elems->count, "List")) {
@@ -1063,7 +1088,7 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
     {
       int32_t index;
       VarBuffer* elems = &((List*)obj)->elements;
-      if (!validateIngeger(vm, key, &index, "List index")) return;
+      if (!validateInteger(vm, key, &index, "List index")) return;
       if (!validateIndex(vm, index, (int)elems->count, "List")) return;
       elems->data[index] = value;
       return;

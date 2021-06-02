@@ -9,9 +9,10 @@
 #include "core.h"
 #include "utils.h"
 
-#if DEBUG_DUMP_CALL_STACK
-  #include "debug.h" //< Wrap around debug macro.
-#endif
+//#if DEBUG_DUMP_CALL_STACK
+//  #include "debug.h"
+//#endif
+#include "debug.h"
 
 // Evaluvated to true if a runtime error set on the current fiber.
 #define HAS_ERROR() (vm->fiber->error != NULL)
@@ -1061,6 +1062,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var value = varSubtract(vm, l, r);
       POP(); POP(); // r, l
       PUSH(value);
+
 
       CHECK_ERROR();
       DISPATCH();
