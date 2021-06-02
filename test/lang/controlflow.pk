@@ -1,5 +1,5 @@
 
-## If statement tests.
+## If statements.
 variable = null ## Will be changed by the control flow.
 unreachable = func assert(false, 'Unreachable') end
 
@@ -29,3 +29,23 @@ elif true
 end
 assert(variable == 123, 'Nested if statement failed.')
 
+## While statements
+
+while true
+	variable = 1212
+	if true then break end
+end
+assert(variable == 1212)
+
+
+while true
+	variable = 22
+	if true then elif false then end	
+	if false
+	elif true
+		variable += 2300
+	end
+	variable += 1
+	break
+end
+assert(variable == 2323)

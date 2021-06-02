@@ -138,7 +138,13 @@
 
 #define TOSTRING(x) #x
 #define STRINGIFY(x) TOSTRING(x)
+
+// Double to string buffer size.
 #define STR_NUM_BUFF_SIZE (3 + DBL_MANT_DIG - DBL_MIN_EXP)
+
+// Integer to string buffer size (INT_MAX, INT_MIN are 10 characters long, a
+// negative sign, and a null byte at the end = 12 bytes).
+#define STR_INT_BUFF_SIZE 12
 
 /*****************************************************************************/
 /* INTERNAL TYPE DEFINES                                                     */

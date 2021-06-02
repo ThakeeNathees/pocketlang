@@ -9,10 +9,7 @@
 #include "buffers.h"
 #include "utils.h"
 #include "vm.h"
-
-#if DEBUG_DUMP_COMPILED_CODE
-  #include "debug.h"
-#endif
+#include "debug.h"
 
 // The maximum number of variables (or global if compiling top level script)
 // to lookup from the compiling context. Also it's limited by it's opcode
@@ -974,17 +971,17 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_STAR       */ { NULL,          exprBinaryOp,     PREC_FACTOR },
   /* TK_FSLASH     */ { NULL,          exprBinaryOp,     PREC_FACTOR },
   /* TK_BSLASH     */   NO_RULE,
-  /* TK_EQ         */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
+  /* TK_EQ         */   NO_RULE,
   /* TK_GT         */ { NULL,          exprBinaryOp,     PREC_COMPARISION },
   /* TK_LT         */ { NULL,          exprBinaryOp,     PREC_COMPARISION },
   /* TK_EQEQ       */ { NULL,          exprBinaryOp,     PREC_EQUALITY },
   /* TK_NOTEQ      */ { NULL,          exprBinaryOp,     PREC_EQUALITY },
   /* TK_GTEQ       */ { NULL,          exprBinaryOp,     PREC_COMPARISION },
   /* TK_LTEQ       */ { NULL,          exprBinaryOp,     PREC_COMPARISION },
-  /* TK_PLUSEQ     */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
-  /* TK_MINUSEQ    */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
-  /* TK_STAREQ     */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
-  /* TK_DIVEQ      */   NO_RULE, //    exprAssignment,   PREC_ASSIGNMENT
+  /* TK_PLUSEQ     */   NO_RULE,
+  /* TK_MINUSEQ    */   NO_RULE,
+  /* TK_STAREQ     */   NO_RULE,
+  /* TK_DIVEQ      */   NO_RULE,
   /* TK_SRIGHT     */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_SLEFT      */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_MODULE     */   NO_RULE,
@@ -1554,17 +1551,17 @@ static void compilerEnterBlock(Compiler* compiler) {
   compiler->scope_depth++;
 }
 
-// Pop all the locals at the [depth] or highter.
-static void compilerPopLocals(Compiler* compiler, int depth) {
+// Pop all the locals at the [depth] or highter. Returns the number of locals
+// that were poppedl
+static int compilerPopLocals(Compiler* compiler, int depth) {
   ASSERT(depth > (int)DEPTH_GLOBAL, "Cannot pop global variables.");
 
   int local = compiler->var_count - 1;
   while (local >= 0 && compiler->variables[local].depth >= depth) {
     emitOpcode(compiler, OP_POP);
-    compiler->var_count--;
-    compiler->stack_size--;
     local--;
   }
+  return (compiler->var_count - 1) - local;
 }
 
 // Exits a block.
@@ -1572,7 +1569,9 @@ static void compilerExitBlock(Compiler* compiler) {
   ASSERT(compiler->scope_depth > (int)DEPTH_GLOBAL, "Cannot exit toplevel.");
 
   // Discard all the locals at the current scope.
-  compilerPopLocals(compiler, compiler->scope_depth);
+  int popped = compilerPopLocals(compiler, compiler->scope_depth);
+  compiler->var_count -= popped;
+  compiler->stack_size -= popped;
   compiler->scope_depth--;
 }
 
@@ -1617,7 +1616,7 @@ static void emitConstant(Compiler* compiler, Var value) {
 
 // Update the jump offset.
 static void patchJump(Compiler* compiler, int addr_index) {
-  int offset = (int)_FN->opcodes.count - addr_index - 2;
+  int offset = (int)_FN->opcodes.count - (addr_index + 2 /*bytes index*/);
   ASSERT(offset < MAX_JUMP, "Too large address offset to jump to.");
 
   _FN->opcodes.data[addr_index] = (offset >> 8) & 0xff;
@@ -1644,7 +1643,6 @@ typedef enum {
   BLOCK_FUNC,
   BLOCK_LOOP,
   BLOCK_IF,
-  BLOCK_ELIF,
   BLOCK_ELSE,
 } BlockType;
 
@@ -1747,10 +1745,6 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
     consumeStartBlock(compiler, TK_THEN);
     skipNewLines(compiler);
 
-  } else if (type == BLOCK_ELIF) {
-    // Do nothing, because this will be parsed as a new if statement.
-    // and it's condition hasn't parsed yet.
-
   } else if (type == BLOCK_ELSE) {
     skipNewLines(compiler);
 
@@ -1764,11 +1758,9 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
     skipNewLines(compiler);
   }
 
-  bool if_body = (type == BLOCK_IF) || (type == BLOCK_ELIF);
-
   TokenType next = peek(compiler);
   while (!(next == TK_END || next == TK_EOF || (
-    if_body && (next == TK_ELSE || next == TK_ELIF)))) {
+    (type == BLOCK_IF) && (next == TK_ELSE || next == TK_ELIF)))) {
 
     compileStatement(compiler);
     skipNewLines(compiler);
@@ -2091,7 +2083,7 @@ static void compileExpression(Compiler* compiler) {
   parsePrecedence(compiler, PREC_LOWEST);
 }
 
-static void compileIfStatement(Compiler* compiler) {
+static void compileIfStatement(Compiler* compiler, bool elif) {
 
   skipNewLines(compiler);
   compileExpression(compiler); //< Condition.
@@ -2100,23 +2092,19 @@ static void compileIfStatement(Compiler* compiler) {
 
   compileBlockBody(compiler, BLOCK_IF);
 
-  // Elif statement's don't consume 'end' after they end since it's treated as
-  // else and if they require 2 'end' statements. But we're omitting the 'end'
-  // for the 'else' since it'll consumed by the 'if'.
-  bool elif = false;
-
-  if (peek(compiler) == TK_ELIF) {
-    elif = true;
-    // Override the elif to if so that it'll be parsed as a new if statement
-    // and that's why we're not consuming it here.
-    compiler->current.type = TK_IF;
+  if (match(compiler, TK_ELIF)) {
 
     // Jump pass else.
     emitOpcode(compiler, OP_JUMP);
     int exit_jump = emitShort(compiler, 0xffff); //< Will be patched.
 
+    // if (false) jump here.
     patchJump(compiler, ifpatch);
-    compileBlockBody(compiler, BLOCK_ELIF);
+
+    compilerEnterBlock(compiler);
+    compileIfStatement(compiler, true);
+    compilerExitBlock(compiler);
+
     patchJump(compiler, exit_jump);
 
   } else if (match(compiler, TK_ELSE)) {
@@ -2133,6 +2121,8 @@ static void compileIfStatement(Compiler* compiler) {
     patchJump(compiler, ifpatch);
   }
 
+  // elif will not consume the 'end' keyword as it'll be leaved to be consumed
+  // by it's 'if'.
   if (!elif) {
     skipNewLines(compiler);
     consume(compiler, TK_END, "Expected 'end' after statement end.");
@@ -2240,7 +2230,7 @@ static void compileStatement(Compiler* compiler) {
     compilerPopLocals(compiler, compiler->loop->depth + 1);
 
     emitOpcode(compiler, OP_JUMP);
-    int patch = emitByte(compiler, 0xffff); //< Will be patched.
+    int patch = emitShort(compiler, 0xffff); //< Will be patched.
     compiler->loop->patches[compiler->loop->patch_count++] = patch;
 
   } else if (match(compiler, TK_CONTINUE)) {
@@ -2271,7 +2261,7 @@ static void compileStatement(Compiler* compiler) {
       emitOpcode(compiler, OP_RETURN);
     }
   } else if (match(compiler, TK_IF)) {
-    compileIfStatement(compiler);
+    compileIfStatement(compiler, false);
 
   } else if (match(compiler, TK_WHILE)) {
     compileWhileStatement(compiler);

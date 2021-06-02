@@ -8,10 +8,7 @@
 #include <math.h>
 #include "core.h"
 #include "utils.h"
-
-#if DEBUG_DUMP_CALL_STACK
-  #include "debug.h" //< Wrap around debug macro.
-#endif
+#include "debug.h"
 
 // Evaluvated to true if a runtime error set on the current fiber.
 #define HAS_ERROR() (vm->fiber->error != NULL)
@@ -548,7 +545,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 #if  DEBUG_DUMP_CALL_STACK
   #define DEBUG_CALL_STACK()        \
     do {                            \
-      system("cls");                \
+      system("cls"); /* FIXME */    \
       dumpGlobalValues(vm);         \
       dumpStackFrame(vm);           \
     } while (false)
@@ -747,11 +744,9 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
         // -1 argument means multiple number of args.
         if (fn->arity != -1 && fn->arity != argc) {
-          String* arg_str = toString(vm, VAR_NUM(fn->arity));
-          vmPushTempRef(vm, &arg_str->_super);
-          String* msg = stringFormat(vm, "Expected excatly @ argument(s).",
-                                     arg_str);
-          vmPopTempRef(vm); // arg_str.
+          char buff[STR_NUM_BUFF_SIZE]; sprintf(buff, "%d", fn->arity);
+          String* msg = stringFormat(vm, "Expected excatly $ argument(s).",
+                                     buff);
           RUNTIME_ERROR(msg);
         }
 

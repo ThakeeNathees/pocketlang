@@ -26,7 +26,9 @@ const char* getBuiltinFunctionName(PKVM* vm, int index);
 // otherwise returns NULL.
 Script* getCoreLib(PKVM* vm, String* name);
 
-// Operators //////////////////////////////////////////////////////////////////
+/*****************************************************************************/
+/* OPERATORS                                                                 */
+/*****************************************************************************/
 
 Var varAdd(PKVM* vm, Var v1, Var v2);
 Var varSubtract(PKVM* vm, Var v1, Var v2);
@@ -42,6 +44,5 @@ void varSetAttrib(PKVM* vm, Var on, String* name, Var value);
 
 Var varGetSubscript(PKVM* vm, Var on, Var key);
 void varsetSubscript(PKVM* vm, Var on, Var key, Var value);
-
 
 #endif // CORE_H

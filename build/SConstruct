@@ -18,7 +18,8 @@ def CONFIGURE_ENV(env):
 	
 	## The executable to run with the current configuration.
 	env.RUN_TARGET = join(variant_dir, 'bin', binary_name)
-	
+	env.SOURCE_DIRS = ('../src/', '../src/include/', '../cli/', '../cli/modules/')
+
 	## PocketLang source files
 	PK_SOURCES = Glob(join(variant_dir, 'src/*.c'))
 	
@@ -170,12 +171,11 @@ if env['vsproj']:
 	
 	targets = [ env.RUN_TARGET ] * 4
 	variants = ["debug|Win32", "debug|x64", "release|Win32", "release|x64"]
-	source_dirs = ('../src/', '../src/include/', '../cli/', '../cli/modules/')
 	
 	env.MSVSProject(
 		target  = PROJECT_NAME + env['MSVSPROJECTSUFFIX'],
-		srcs    = collect_source_files(source_dirs, ('.c', '.cpp', '.cc', '.cxx')),
-		incs    = collect_source_files(source_dirs, ('.h', '.hpp')),
+		srcs    = collect_source_files(env.SOURCE_DIRS, ('.c', '.cpp', '.cc', '.cxx')),
+		incs    = collect_source_files(env.SOURCE_DIRS, ('.h', '.hpp')),
 		variant = variants,
 		runfile = targets,
 		buildtarget = targets,

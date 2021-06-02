@@ -30,5 +30,5 @@
 /*****************************************************************************/
 
 void registerModules(PKVM* vm) {
-	registerModulePath(vm);
+  registerModulePath(vm);
 }

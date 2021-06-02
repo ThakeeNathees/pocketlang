@@ -9,16 +9,13 @@
 #include <stdio.h> /* defines FILENAME_MAX */
 
 #include "../thirdparty/cwalk/cwalk.h"
-#if defined(_MSC_VER)
+#if defined(_WIN32) && (defined(_MSC_VER) || defined(__TINYC__))
   #include "../thirdparty/dirent/dirent.h"
 #else
   #include <dirent.h>
 #endif
 
- // TODO: No error is handled below. I should check for path with size more than
- // FILENAME_MAX.
-
-#if defined(_WIN32) || defined(_WIN64) || defined(WINDOWS)
+#if defined(_WIN32)
   #include <windows.h>
   #include <direct.h>
   #define get_cwd _getcwd
@@ -26,6 +23,10 @@
   #include <unistd.h>
   #define get_cwd getcwd
 #endif
+
+// TODO: No error is handled below. I should check for path with size more than
+// FILENAME_MAX.
+ 
 
 // TODO: this macros should be moved to a general place of in cli.
 #define TOSTRING(x) #x
