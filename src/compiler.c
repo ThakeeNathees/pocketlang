@@ -365,6 +365,7 @@ static OpInfo opcode_info[] = {
  * ERROR HANDLERS                                                            *
  *****************************************************************************/
 
+// Internal error report function of the parseError() function.
 static void reportError(Compiler* compiler, const char* file, int line,
                         const char* fmt, va_list args) {
   PKVM* vm = compiler->vm;

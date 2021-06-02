@@ -1,35 +1,35 @@
 
 // To implement.
-
-- Implement resolve path in cli.
-- Implement file IO
-
 - Implement argparse.
     - -v --version
     - emit opcodes
     - maybe write a similer .pyc file for pocket
-	- --docs to generate docs from cstring.
-
-- Ignore line with '\' character.
-
-- Structs.
-- Implement math library.
-- Single header for embedding.
+    - --docs to generate docs from cstring.
+    - dump compiled code to a file.
+- In keyword.
+- Structs (maybe enums).
+- Implement file IO (require structs).
+- Implement gdb like debugger (add color print for readability).
 - Implement fiber from script body and vm run fibers (not scripts).
     Then remove vm's root script.
-- C Integration api (including add core lib from host application).
-- REPL.
-    - compile expression for a script.
-- Var handler implement.
+- Initialize imported scripts (require fiber based vm).
+- REPL. compile expression for a script.
+- Hex, binary literals and floats like ".5".
+- Docs build to a single directory, and replace url space (%20) with a hyphen.
+- Complete all the TODO; macros.
+
+// Low priority.
+- Ignore line with '\' character.
 - Make it possible to override function names.
       - To do so the functions and global variables should be in the same
         buffer as the property of the script.
-- Hex, binary literals and floats like ".5".
 - Function docstring property.
 - Union tagging alter in var.
-- (future) add structs and maybe enums.
+- Github actions.
+
 
 // Add more.
+- Single header for embedding (script in pk, require file IO).
 [ ] Compilte core methods.
 [ ] Complete var methods.
 [ ] Complete core functions.

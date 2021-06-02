@@ -17,16 +17,22 @@
 /* PUBLIC API                                                                */
 /*****************************************************************************/
 
-// Declare internal functions of public api.
+// Create a new module with the given [name] and returns as a Script* for
+// internal. Which will be wrapped by pkNewModule to return a pkHandle*.
 static Script* newModuleInternal(PKVM* vm, const char* name);
-static void moduleAddFunctionInternal(PKVM* vm, Script* script,
-                                 const char* name, pkNativeFn fptr, int arity);
 
+// The internal function to add functions to a module.
+static void moduleAddFunctionInternal(PKVM* vm, Script* script,
+                                      const char* name, pkNativeFn fptr,
+                                      int arity);
+
+// pkNewModule implementation (see pocketlang.h for description).
 PkHandle* pkNewModule(PKVM* vm, const char* name) {
   Script* module = newModuleInternal(vm, name);
   return vmNewHandle(vm, VAR_OBJ(&module->_super));
 }
 
+// pkModuleAddFunction implementation (see pocketlang.h for description).
 void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
                          pkNativeFn fptr, int arity) {
   __ASSERT(module != NULL, "Argument module was NULL.");
@@ -38,18 +44,18 @@ void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
   moduleAddFunctionInternal(vm, (Script*)AS_OBJ(scr), name, fptr, arity);
 }
 
-// Argument getter (1 based).
+// A convinent macro to get the nth (1 based) argument of the current function.
 #define ARG(n) vm->fiber->ret[n]
 
-// Convinent macros.
+// Convinent macros to get the 1st, 2nd, 3rd arguments.
 #define ARG1 ARG(1)
 #define ARG2 ARG(2)
 #define ARG3 ARG(3)
 
-// Argument count used in variadic functions.
+// Evaluvates to the current function's argument count.
 #define ARGC ((int)(vm->fiber->sp - vm->fiber->ret) - 1)
 
-// Set return value and return.
+// Set return value for the current native function and return.
 #define RET(value)             \
   do {                         \
     *(vm->fiber->ret) = value; \
@@ -63,6 +69,7 @@ void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
   __ASSERT(value != NULL, "Parameter [value] was NULL.");                      \
   ((void*)0)
 
+// Set error for incompatible type provided as an argument.
 #define ERR_INVALID_ARG_TYPE(m_type)                           \
 do {                                                           \
   char buff[STR_INT_BUFF_SIZE];                                \
@@ -71,11 +78,13 @@ do {                                                           \
                                   " at argument $.", buff);    \
 } while (false)
 
+// pkGetArgc implementation (see pocketlang.h for description).
 int pkGetArgc(PKVM* vm) {
   __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
   return ARGC;
 }
 
+// pkGetArg implementation (see pocketlang.h for description).
 PkVar pkGetArg(PKVM* vm, int arg) {
   __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
   __ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index.");
@@ -83,6 +92,7 @@ PkVar pkGetArg(PKVM* vm, int arg) {
   return &(ARG(arg));
 }
 
+// pkGetArgBool implementation (see pocketlang.h for description).
 bool pkGetArgBool(PKVM* vm, int arg, bool* value) {
   CHECK_GET_ARG_API_ERRORS();
 
@@ -91,6 +101,7 @@ bool pkGetArgBool(PKVM* vm, int arg, bool* value) {
   return true;
 }
 
+// pkGetArgNumber implementation (see pocketlang.h for description).
 bool pkGetArgNumber(PKVM* vm, int arg, double* value) {
   CHECK_GET_ARG_API_ERRORS();
 
@@ -109,6 +120,7 @@ bool pkGetArgNumber(PKVM* vm, int arg, double* value) {
   return true;
 }
 
+// pkGetArgString implementation (see pocketlang.h for description).
 bool pkGetArgString(PKVM* vm, int arg, const char** value) {
   CHECK_GET_ARG_API_ERRORS();
 
@@ -124,6 +136,7 @@ bool pkGetArgString(PKVM* vm, int arg, const char** value) {
   return true;
 }
 
+// pkGetArgValue implementation (see pocketlang.h for description).
 bool pkGetArgValue(PKVM* vm, int arg, PkVarType type, PkVar* value) {
   CHECK_GET_ARG_API_ERRORS();
 
@@ -139,52 +152,34 @@ bool pkGetArgValue(PKVM* vm, int arg, PkVarType type, PkVar* value) {
   return true;
 }
 
+// pkReturnNull implementation (see pocketlang.h for description).
 void pkReturnNull(PKVM* vm) {
   RET(VAR_NULL);
 }
 
+// pkReturnBool implementation (see pocketlang.h for description).
 void pkReturnBool(PKVM* vm, bool value) {
   RET(VAR_BOOL(value));
 }
 
+// pkReturnNumber implementation (see pocketlang.h for description).
 void pkReturnNumber(PKVM* vm, double value) {
   RET(VAR_NUM(value));
 }
 
+// pkReturnString implementation (see pocketlang.h for description).
 void pkReturnString(PKVM* vm, const char* value) {
   RET(VAR_OBJ(&newString(vm, value)->_super));
 }
 
+// pkReturnStringLength implementation (see pocketlang.h for description).
 void pkReturnStringLength(PKVM* vm, const char* value, size_t length) {
   RET(VAR_OBJ(&newStringLength(vm, value, (uint32_t)length)->_super));
 }
 
+// pkReturnValue implementation (see pocketlang.h for description).
 void pkReturnValue(PKVM* vm, PkVar value) {
   RET(*(Var*)value);
-}
-
-/*****************************************************************************/
-/* CORE INTERNAL                                                             */
-/*****************************************************************************/
-
-static void initializeBuiltinFN(PKVM* vm, BuiltinFn* bfn, const char* name,
-                                int length, int arity, pkNativeFn ptr) {
-  bfn->name = name;
-  bfn->length = length;
-
-  bfn->fn = newFunction(vm, name, length, NULL, true);
-  bfn->fn->arity = arity;
-  bfn->fn->native = ptr;
-}
-
-int findBuiltinFunction(PKVM* vm, const char* name, uint32_t length) {
-  for (int i = 0; i < vm->builtins_count; i++) {
-    if (length == vm->builtins[i].length &&
-        strncmp(name, vm->builtins[i].name, length) == 0) {
-      return i;
-    }
-  }
-  return -1;
 }
 
 /*****************************************************************************/
@@ -259,16 +254,30 @@ static inline bool validateIndex(PKVM* vm, int32_t index, int32_t size,
 /* BUILTIN FUNCTIONS API                                                     */
 /*****************************************************************************/
 
+// findBuiltinFunction implementation (see core.h for description).
+int findBuiltinFunction(PKVM* vm, const char* name, uint32_t length) {
+   for (int i = 0; i < vm->builtins_count; i++) {
+     if (length == vm->builtins[i].length &&
+       strncmp(name, vm->builtins[i].name, length) == 0) {
+       return i;
+     }
+   }
+   return -1;
+ }
+
+// getBuiltinFunction implementation (see core.h for description).
 Function* getBuiltinFunction(PKVM* vm, int index) {
   ASSERT_INDEX(index, vm->builtins_count);
   return vm->builtins[index].fn;
 }
 
+// getBuiltinFunctionName implementation (see core.h for description).
 const char* getBuiltinFunctionName(PKVM* vm, int index) {
   ASSERT_INDEX(index, vm->builtins_count);
   return vm->builtins[index].name;
 }
 
+// getCoreLib implementation (see core.h for description).
 Script* getCoreLib(PKVM* vm, String* name) {
   Var lib = mapGet(vm->core_libs, VAR_OBJ(&name->_super));
   if (IS_UNDEF(lib)) return NULL;
@@ -309,16 +318,14 @@ FN_IS_OBJ_TYPE(UserObj,  OBJ_USER)
 
 PK_DOC(coreTypeName,
   "type_name(value:var) -> string\n"
-  "Returns the type name of the of the value.");
-void coreTypeName(PKVM* vm) {
+  "Returns the type name of the of the value.") {
   RET(VAR_OBJ(&newString(vm, varTypeName(ARG1))->_super));
 }
 
 PK_DOC(coreAssert,
   "assert(condition:bool [, msg:string]) -> void\n"
   "If the condition is false it'll terminate the current fiber with the "
-  "optional error message");
-void coreAssert(PKVM* vm) {
+  "optional error message") {
   int argc = ARGC;
   if (argc != 1 && argc != 2) {
     vm->fiber->error = newString(vm, "Invalid argument count.");
@@ -345,16 +352,14 @@ void coreAssert(PKVM* vm) {
 
 PK_DOC(coreToString,
   "to_string(value:var) -> string\n"
-  "Returns the string representation of the value.");
-void coreToString(PKVM* vm) {
+  "Returns the string representation of the value.") {
   RET(VAR_OBJ(&toString(vm, ARG1)->_super));
 }
 
 PK_DOC(corePrint,
   "print(...) -> void\n"
   "Write each argument as comma seperated to the stdout and ends with a "
-  "newline.");
-void corePrint(PKVM* vm) {
+  "newline.") {
   // If the host appliaction donesn't provide any write function, discard the
   // output.
   if (vm->config.write_fn == NULL) return;
@@ -379,8 +384,9 @@ void corePrint(PKVM* vm) {
 
 // String functions.
 // -----------------
-
-void coreStrLower(PKVM* vm) {
+PK_DOC(coreStrLower,
+  "str_lower(value:string) -> string\n"
+  "Returns a lower-case version of the given string.") {
   String* str;
   if (!validateArgString(vm, 1, &str)) return;
 
@@ -393,7 +399,9 @@ void coreStrLower(PKVM* vm) {
   RET(VAR_OBJ(&result->_super));
 }
 
-void coreStrUpper(PKVM* vm) {
+PK_DOC(coreStrUpper,
+  "str_upper(value:string) -> string\n"
+  "Returns a upper-case version of the given string.") {
   String* str;
   if (!validateArgString(vm, 1, &str)) return;
 
@@ -406,7 +414,10 @@ void coreStrUpper(PKVM* vm) {
   RET(VAR_OBJ(&result->_super));
 }
 
-void coreStrStrip(PKVM* vm) {
+PK_DOC(coreStrStrip,
+  "str_strip(value:string) -> string\n"
+  "Returns a copy of the string as the leading and trailing white spaces are"
+  "trimed.") {
   String* str;
   if (!validateArgString(vm, 1, &str)) return;
 
@@ -420,19 +431,21 @@ void coreStrStrip(PKVM* vm) {
   RET(VAR_OBJ(&newStringLength(vm, start, (uint32_t)(end - start + 1))->_super));
 }
 
-// Returns the ASCII string value of the integer argument.
-void coreStrChr(PKVM* vm) {
+PK_DOC(coreStrChr,
+  "str_chr(value:number) -> string\n"
+  "Returns the ASCII string value of the integer argument.") {
   int32_t num;
-  if (!validateInteger(vm, ARG1, &num, "Argument 1"));
+  if (!validateInteger(vm, ARG1, &num, "Argument 1")) return;
 
   char c = (char)num;
   RET(VAR_OBJ(&newStringLength(vm, &c, 1)->_super));
 }
 
-// Returns integer value of the given ASCII character.
-void coreStrOrd(PKVM* vm) {
+PK_DOC(coreStrOrd, 
+  "str_ord(value:string) -> number\n"
+  "Returns integer value of the given ASCII character.") {
   String* c;
-  if (!validateArgString(vm, 1, &c));
+  if (!validateArgString(vm, 1, &c)) return;
   if (c->length != 1) {
     vm->fiber->error = newString(vm, "Expected a string of length 1.");
     RET(VAR_NULL);
@@ -442,10 +455,12 @@ void coreStrOrd(PKVM* vm) {
 }
 
 
-
 // List functions.
 // ---------------
-void coreListAppend(PKVM* vm) {
+
+PK_DOC(coreListAppend,
+  "list_append(self:List, value:var) -> List\n"
+  "Append the [value] to the list [self] and return the list.") {
   List* list;
   if (!validateArgList(vm, 1, &list)) return;
   Var elem = ARG(2);
@@ -457,13 +472,15 @@ void coreListAppend(PKVM* vm) {
 // Map functions.
 // --------------
 
-void coreMapRemove(PKVM* vm) {
+PK_DOC(coreMapRemove,
+  "map_remove(self:map, key:var) -> var\n"
+  "Remove the [key] from the map [self] and return it's value if the key "
+  "exists, otherwise it'll return null.") {
   Map* map;
   if (!validateArgMap(vm, 1, &map)) return;
   Var key = ARG(2);
 
-  mapRemoveKey(vm, map, key);
-  RET(VAR_OBJ(&map->_super));
+  RET(mapRemoveKey(vm, map, key));
 }
 
 /*****************************************************************************/
@@ -497,8 +514,10 @@ static Script* newModuleInternal(PKVM* vm, const char* name) {
   return scr;
 }
 
+// An internal function to add a function to the given [script].
 static void moduleAddFunctionInternal(PKVM* vm, Script* script,
-                                const char* name, pkNativeFn fptr, int arity) {
+                                      const char* name, pkNativeFn fptr,
+                                      int arity) {
 
   // Check if function with the same name already exists.
   if (scriptSearchFunc(script, name, (uint32_t)strlen(name)) != -1) {
@@ -624,6 +643,17 @@ void stdMathHash(PKVM* vm) {
 /*****************************************************************************/
 /* CORE INITIALIZATION                                                       */
 /*****************************************************************************/
+
+static void initializeBuiltinFN(PKVM* vm, BuiltinFn* bfn, const char* name,
+                                int length, int arity, pkNativeFn ptr) {
+  bfn->name = name;
+  bfn->length = length;
+
+  bfn->fn = newFunction(vm, name, length, NULL, true);
+  bfn->fn->arity = arity;
+  bfn->fn->native = ptr;
+}
+
 void initializeCore(PKVM* vm) {
 
 #define INITALIZE_BUILTIN_FN(name, fn, argc)                         \
@@ -817,6 +847,7 @@ bool varLesser(Var v1, Var v2) {
 #define IS_ATTRIB(name) \
   (attrib->length == strlen(name) && strcmp(name, attrib->data) == 0)
 
+// Set error for accessing non-existed attribute.
 #define ERR_NO_ATTRIB()                                               \
   vm->fiber->error = stringFormat(vm, "'$' objects has no attribute " \
                                        "named '$'",                   \

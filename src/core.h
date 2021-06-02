@@ -30,19 +30,25 @@ Script* getCoreLib(PKVM* vm, String* name);
 /* OPERATORS                                                                 */
 /*****************************************************************************/
 
-Var varAdd(PKVM* vm, Var v1, Var v2);
-Var varSubtract(PKVM* vm, Var v1, Var v2);
-Var varMultiply(PKVM* vm, Var v1, Var v2);
-Var varDivide(PKVM* vm, Var v1, Var v2);
-Var varModulo(PKVM* vm, Var v1, Var v2);
+Var varAdd(PKVM* vm, Var v1, Var v2);      // Returns v1 + v2.
+Var varSubtract(PKVM* vm, Var v1, Var v2); // Returns v1 - v2.
+Var varMultiply(PKVM* vm, Var v1, Var v2); // Returns v1 * v2.
+Var varDivide(PKVM* vm, Var v1, Var v2);	 // Returns v1 / v2.
+Var varModulo(PKVM* vm, Var v1, Var v2);	 // Returns v1 % v2.
 
-bool varGreater(Var v1, Var v2);
-bool varLesser(Var v1, Var v2);
+bool varGreater(Var v1, Var v2); // Returns v1 > v2.
+bool varLesser(Var v1, Var v2);	 // Returns v1 < v2.
 
+// Returns the attribute named [attrib] on the variable [on].
 Var varGetAttrib(PKVM* vm, Var on, String* attrib);
+
+// Set the attribute named [attrib] on the variable [on] with the given [value].
 void varSetAttrib(PKVM* vm, Var on, String* name, Var value);
 
+// Returns the subscript value (ie. on[key]).
 Var varGetSubscript(PKVM* vm, Var on, Var key);
+
+// Set subscript [value] with the [key] (ie. on[key] = value).
 void varsetSubscript(PKVM* vm, Var on, Var key, Var value);
 
 #endif // CORE_H

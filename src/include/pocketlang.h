@@ -57,10 +57,13 @@ extern "C" {
 // A convinent macro to define documentation of funcions. Use it to document 
 // your native functions.
 // 
-// PK_DOC(foo, "The function will print 'foo' on the console.");
-// void foo(PKVM* vm) { printf("foo\n"); }
+// PK_DOC(foo,
+//   "The function will print 'foo' on the console.") {
+//   printf("foo\n");
+// }
 // 
-#define PK_DOC(func, doc) static char __pkdoc__##func[] = doc
+#define PK_DOC(func, doc) \
+  static char __pkdoc__##func[] = doc;  void func(PKVM* vm)
 
 /*****************************************************************************/
 /* POCKETLANG TYPES                                                          */

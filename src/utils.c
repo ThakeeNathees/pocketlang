@@ -5,6 +5,7 @@
 
 #include "utils.h"
 
+// Function implementation, see utils.h for description.
 int utilPowerOf2Ceil(int n) {
   n--;
   n |= n >> 1;
@@ -17,10 +18,12 @@ int utilPowerOf2Ceil(int n) {
   return n;
 }
 
+// Function implementation, see utils.h for description.
 bool utilIsName(char c) {
   return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || (c == '_');
 }
 
+// Function implementation, see utils.h for description.
 bool utilIsDigit(char c) {
   return ('0' <= c && c <= '9');
 }
@@ -32,18 +35,21 @@ typedef union {
   double num;
 } _DoubleBitsConv;
 
+// Function implementation, see utils.h for description.
 uint64_t utilDoubleToBits(double value) {
   _DoubleBitsConv bits;
   bits.num = value;
   return bits.bits64;
 }
 
+// Function implementation, see utils.h for description.
 double utilDoubleFromBits(uint64_t value) {
   _DoubleBitsConv bits;
   bits.bits64 = value;
   return bits.num;
 }
 
+// Function implementation, see utils.h for description.
 uint32_t utilHashBits(uint64_t hash) {
   // From v8's ComputeLongHash() which in turn cites:
   // Thomas Wang, Integer Hash Functions.
@@ -57,11 +63,13 @@ uint32_t utilHashBits(uint64_t hash) {
   return (uint32_t)(hash & 0x3fffffff);
 }
 
+// Function implementation, see utils.h for description.
 uint32_t utilHashNumber(double num) {
   // Hash the raw bits of the value.
   return utilHashBits(utilDoubleToBits(num));
 }
 
+// Function implementation, see utils.h for description.
 uint32_t utilHashString(const char* string) {
   // FNV-1a hash. See: http://www.isthe.com/chongo/tech/comp/fnv/
 
@@ -85,6 +93,7 @@ uint32_t utilHashString(const char* string) {
  * UTF8                                                                     *
  ****************************************************************************/
 
+ // Function implementation, see utils.h for description.
 int utf8_encodeBytesCount(int value) {
   if (value <= 0x7f) return 1;
   if (value <= 0x7ff) return 2;
@@ -95,6 +104,7 @@ int utf8_encodeBytesCount(int value) {
   return 0;
 }
 
+// Function implementation, see utils.h for description.
 int utf8_decodeBytesCount(uint8_t byte) {
 
   if ((byte >> 7) == 0b0) return 1;
@@ -107,6 +117,7 @@ int utf8_decodeBytesCount(uint8_t byte) {
   return 1;
 }
 
+// Function implementation, see utils.h for description.
 int utf8_encodeValue(int value, uint8_t* bytes) {
 
   if (value <= 0x7f) {
@@ -145,6 +156,7 @@ int utf8_encodeValue(int value, uint8_t* bytes) {
   return 0;
 }
 
+// Function implementation, see utils.h for description.
 int utf8_decodeBytes(uint8_t* bytes, int* value) {
 
   int continue_bytes = 0;
