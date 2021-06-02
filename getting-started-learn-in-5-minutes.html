@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Learn-In-5-Minutes - PocketLang</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="stylesheet" type="text/css" href="static/main.css">
+	<link rel="stylesheet" type="text/css" href="static/pygments.css">
+	<link rel="stylesheet" type="text/css" href="static/rage_font/style.css" />
+	
+	<!-- Additional javascript css files for wasm try. -->
+	
+
+</head>
+	
+	<body>
+	
+	<!-- Title header. -->
+	<div class="container">
+	<div id="header">
+		<div id="header_content" class="container">
+		<a href="index.html">
+		<h1>pocketlang</h1>
+		<h2>A small and fast language</h2>
+		</a>
+		</div>
+	</div>
+	</div>
+
+	<div id="page">
+	<div id="main-wrapper" class="container">
+	<div id="main">
+	
+		<div id="content-wrapper">
+		<div id="content">
+			<h1>Learn pocketlang in 5 minutes</h1>
+<div class="codehilite"><pre><span></span><span class="c1"># This is a comment.</span>
+
+<span class="n">x</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Creating a variable.</span>
+       <span class="c1"># The value &#39;0&#39; is a type of number.</span>
+
+<span class="c1"># In pocketlang statements should end with a new line</span>
+<span class="c1"># or a semicollon. White space characters except for new</span>
+<span class="c1"># lines are ignored in pocketlang.</span>
+<span class="n">a</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">b</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>
+
+<span class="c1"># Data types.</span>
+<span class="c1"># -----------</span>
+
+<span class="c1"># Primitive types</span>
+<span class="k">null</span>                   <span class="c1"># A null type.</span>
+<span class="kp">true</span><span class="p">;</span> <span class="kp">false</span>            <span class="c1"># Booleans.</span>
+<span class="mi">42</span><span class="p">;</span> <span class="mi">3</span><span class="o">.</span><span class="mi">14</span>               <span class="c1"># Numbers.</span>
+<span class="mi">0</span><span class="o">..</span><span class="mi">10</span><span class="p">;</span> <span class="mi">10</span><span class="o">..</span><span class="mi">0</span>           <span class="c1"># Range (0..10 = 0 &lt;= r &lt; 10).</span>
+
+<span class="c1"># Object types</span>
+<span class="s2">&quot;hello&quot;</span><span class="p">;</span> <span class="s1">&#39;world&#39;</span>       <span class="c1"># Strings.</span>
+<span class="o">[</span><span class="mi">42</span><span class="p">,</span> <span class="s1">&#39;foo&#39;</span><span class="p">,</span> <span class="k">null</span><span class="o">]</span>      <span class="c1"># Lists.</span>
+<span class="p">{</span> <span class="s1">&#39;Key&#39;</span><span class="ss">:&#39;value&#39;</span> <span class="p">}</span>      <span class="c1"># Maps.</span>
+<span class="k">func</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">return</span> <span class="n">x</span><span class="o">*</span><span class="n">x</span> <span class="k">end</span> <span class="c1"># Lambda/literal functions.</span>
+<span class="k">import</span> <span class="n">lang</span>            <span class="c1"># Module (imported scripts).</span>
+
+<span class="c1"># Control flow.</span>
+<span class="c1"># -------------</span>
+
+<span class="c1"># If condition.</span>
+<span class="k">if</span> <span class="n">x</span> <span class="o">==</span> <span class="s1">&#39;foo&#39;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;bar&#39;</span><span class="p">)</span>
+<span class="k">elif</span> <span class="n">x</span> <span class="o">==</span> <span class="s1">&#39;bar&#39;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;baz&#39;</span><span class="p">)</span>
+<span class="k">end</span>
+
+<span class="c1"># In a single line (should add &#39;then&#39; keyword).</span>
+<span class="k">if</span> <span class="n">x</span> <span class="o">==</span> <span class="s1">&#39;foo&#39;</span> <span class="k">then</span> <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;bar&#39;</span><span class="p">)</span> <span class="k">end</span>
+
+<span class="c1"># For loops, here &#39;do&#39; keyword is optional if we have a</span>
+<span class="c1"># newline after the sequence (like &#39;then&#39; in if statements).</span>
+<span class="k">for</span> <span class="n">i</span> <span class="k">in</span> <span class="mi">0</span><span class="o">..</span><span class="mi">10</span> <span class="k">do</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+<span class="k">end</span>
+
+<span class="c1"># While statement.</span>
+<span class="k">while</span> <span class="n">x</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">do</span> <span class="nb">print</span><span class="p">(</span><span class="n">x</span> <span class="o">-=</span> <span class="mi">1</span><span class="p">)</span> <span class="k">end</span>
+
+<span class="c1"># In pocketlang variable&#39;s lifetime are scope based.</span>
+<span class="k">if</span> <span class="kp">false</span>
+    <span class="n">local</span> <span class="o">=</span> <span class="k">null</span>
+<span class="k">end</span>
+<span class="c1">#print(local) # Error: Name &#39;local&#39; is not defined.</span>
+
+<span class="c1"># Functions.</span>
+<span class="c1">#-----------</span>
+
+<span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span>
+<span class="k">end</span>
+
+<span class="c1"># Functions can be assigned to a variable.</span>
+<span class="n">fn</span> <span class="o">=</span> <span class="k">func</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">return</span> <span class="n">x</span><span class="o">*</span><span class="n">x</span> <span class="k">end</span>
+
+<span class="c1"># Functions can be passed as an argument and can be returned.</span>
+<span class="k">def</span> <span class="nf">call</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+    <span class="n">fn</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="k">return</span> <span class="k">func</span> <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;foo&#39;</span><span class="p">)</span> <span class="k">end</span>
+<span class="k">end</span>
+
+<span class="c1"># Concanative call operator &#39;-&gt;&#39;</span>
+
+<span class="n">str_lower</span><span class="p">(</span><span class="n">str_strip</span><span class="p">(</span><span class="s1">&#39;FOO &#39;</span><span class="p">))</span> <span class="c1"># This can be written as below</span>
+<span class="s1">&#39;FOO &#39;</span> <span class="o">-&gt;</span> <span class="n">str_strip</span> <span class="o">-&gt;</span> <span class="n">str_lower</span>
+
+<span class="s1">&#39;foo&#39;</span> <span class="o">-&gt;</span> <span class="nb">print</span> <span class="c1"># similer as print(&#39;foo&#39;)</span>
+</pre></div>
+		</div>
+		</div>
+
+		<div id="sidebar-wrapper">
+		<div id="sidebar">
+			<!-- <img src=" $sttaicdir/ icon.png" style="width:120px"> -->
+			<div class="navigation">
+<h3><strong>Getting Started</strong></h3>
+<ul class="menu">
+<li><a href="getting-started-try-it-now.html">Try It Now</a></li>
+<li><a href="getting-started-learn-in-5-minutes.html">Learn In 5 Minutes</a></li>
+<li><a href="getting-started-build-from-source.html">Build From Source</a></li>
+<li><a href="getting-started-contributing.html">Contributing</a></li>
+</ul>
+</div>
+<div class="navigation">
+<h3><strong>Language Api</strong></h3>
+<ul class="menu">
+<li><a href="language-api-variables.html">Variables</a></li>
+<li><a href="language-api-functions.html">Functions</a></li>
+<li><a href="language-api-modules.html">Modules</a></li>
+</ul>
+</div>
+
+		</div>
+		</div>
+
+	</div>
+	</div>
+	</div>
+
+	<br>
+	
+	<div class="container">
+	<div id="footer">
+        <p>Made by <a href="https://github.com/ThakeeNathees">Thakee Nathees</a>
+		on <a href="https://github.com/ThakeeNathees/pocketlang">github</a>.</p>
+	</div>
+	</div>
+
+
+	</body>
+</html>
