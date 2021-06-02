@@ -8,8 +8,8 @@
 #include "utils.h"
 #include "vm.h"
 
-// TODO: Replace bufferFill  with bufferWrite, and (maybe) shrink the buffer if
-// it's more than enough.
+// The buffer "template" implementation of diferent types, defined in the
+// buffers.h header.
 
 #define DEFINE_BUFFER(M__NAME, M__NAME_L, M__TYPE)                              \
   void M__NAME_L##BufferInit(M__NAME##Buffer* self) {                           \

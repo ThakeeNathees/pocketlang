@@ -133,12 +133,12 @@ PkHandle* vmNewHandle(PKVM* self, Var value);
 //        working set                         '------------------------'
 // 
 //   First we preform a tree traversel from all the vm's root objects. such as
-//   temp references, handles, vm's running fiber, current compiler (if it has
-//   any) etc. Mark them (ie. is_marked = true) and add them to the working set
-//   (the gray_list). Pop the top object from the working set add all of it's
-//   referenced objects to the working set and mark it black (try-color marking)
-//   We'll keep doing this till the working set become empty, and at this point
-//   any object which isn't marked is a garbage.
+//   stack values, temp references, handles, vm's running fiber, current
+//   compiler (if it has any) etc. Mark them (ie. is_marked = true) and add
+//   them to the working set (the gray_list). Pop the top object from the
+//   working set add all of it's referenced objects to the working set and mark
+//   it black (try-color marking) We'll keep doing this till the working set
+//   become empty, and at this point any object which isn't marked is a garbage.
 // 
 //   Every single heap allocated objects will be in the VM's link list. Those
 //   objects which are reachable have marked (ie. is_marked = true) once the

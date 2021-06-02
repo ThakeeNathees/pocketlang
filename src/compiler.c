@@ -39,6 +39,10 @@
 // available in C++98.
 #define ERROR_MESSAGE_SIZE 256
 
+/*****************************************************************************
+ * TOKENS                                                                    *
+ *****************************************************************************/
+
 typedef enum {
 
   TK_ERROR = 0,
@@ -157,40 +161,44 @@ typedef struct {
 
 // List of keywords mapped into their identifiers.
 static _Keyword _keywords[] = {
-  { "module",   6, TK_MODULE },
-  { "from",     4, TK_FROM },
-  { "import",   6, TK_IMPORT },
-  { "as",       2, TK_AS },
-  { "def",      3, TK_DEF },
-  { "native",   6, TK_NATIVE },
-  { "func",     4, TK_FUNC },
-  { "end",      3, TK_END },
-  { "null",     4, TK_NULL },
-  { "in",       2, TK_IN },
-  { "and",      3, TK_AND },
-  { "or",       2, TK_OR },
-  { "not",      3, TK_NOT },
-  { "true",     4, TK_TRUE },
-  { "false",    5, TK_FALSE },
-  { "do",       2, TK_DO },
-  { "then",     4, TK_THEN },
-  { "while",    5, TK_WHILE },
-  { "for",      3, TK_FOR },
-  { "if",       2, TK_IF },
-  { "elif",     4, TK_ELIF },
-  { "else",     4, TK_ELSE },
-  { "break",    5, TK_BREAK },
+  { "module",   6, TK_MODULE   },
+  { "from",     4, TK_FROM     },
+  { "import",   6, TK_IMPORT   },
+  { "as",       2, TK_AS       },
+  { "def",      3, TK_DEF      },
+  { "native",   6, TK_NATIVE   },
+  { "func",     4, TK_FUNC     },
+  { "end",      3, TK_END      },
+  { "null",     4, TK_NULL     },
+  { "in",       2, TK_IN       },
+  { "and",      3, TK_AND      },
+  { "or",       2, TK_OR       },
+  { "not",      3, TK_NOT      },
+  { "true",     4, TK_TRUE     },
+  { "false",    5, TK_FALSE    },
+  { "do",       2, TK_DO       },
+  { "then",     4, TK_THEN     },
+  { "while",    5, TK_WHILE    },
+  { "for",      3, TK_FOR      },
+  { "if",       2, TK_IF       },
+  { "elif",     4, TK_ELIF     },
+  { "else",     4, TK_ELSE     },
+  { "break",    5, TK_BREAK    },
   { "continue", 8, TK_CONTINUE },
-  { "return",   6, TK_RETURN },
+  { "return",   6, TK_RETURN   },
 
   { NULL,       0, (TokenType)(0) }, // Sentinal to mark the end of the array
 };
 
 
-// Compiler Types ////////////////////////////////////////////////////////////
+/*****************************************************************************
+ * COMPILIER INTERNAL TYPES                                                  *
+ *****************************************************************************/
 
 // Precedence parsing references:
 // https://en.wikipedia.org/wiki/Shunting-yard_algorithm
+// http://mathcenter.oxford.emory.edu/site/cs171/shuntingYardAlgorithm/
+// http://journal.stuffwithstuff.com/2011/03/19/pratt-parsers-expression-parsing-made-easy/
 
 typedef enum {
   PREC_NONE,
