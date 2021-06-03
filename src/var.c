@@ -32,6 +32,7 @@ PkVarType pkGetValueType(PkVar value) {
     case OBJ_SCRIPT: return PK_SCRIPT;
     case OBJ_FUNC:   return PK_FUNCTION;
     case OBJ_FIBER:  return PK_FIBER;
+    case OBJ_USER:   TODO; break;
   }
 
   UNREACHABLE();

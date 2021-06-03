@@ -18,7 +18,7 @@ ROOT_URL      = 'https://thakeenathees.github.io/pocketlang/'
 
 ## Home page should be in the SOURCE_DIR.
 HOME_PAGE  = 'home.md'
-TRY_PAGE   = 'try it now.html'
+TRY_PAGE   = 'try-it-now.html'
 SOURCE_DIR = 'pages/'
 TARGET_DIR = 'build/'
 STATIC_DIR = 'static/'
@@ -36,14 +36,16 @@ WASM_SOURCE_FILES = '''\
 '''
 
 ## Navigation pages in order. Should match the path names.
+## Any file/folder name shouldn't contain white space.
 PAGES = [
-	('Getting Started', [
+	('Getting-Started', [
 		TRY_PAGE,
-		'build from source.md',
+		'learn-in-5-minutes.md',
+		'build-from-source.md',
 		'contributing.md',
 	]),
 	
-	('Language API', [
+	('Language-API', [
 		'variables.md',
 		'functions.md',
 		'modules.md',
@@ -85,15 +87,17 @@ def main():
 	ctx = generate_page_context(join(SOURCE_DIR, HOME_PAGE), index_html, navigation)
 	write_page(ctx, template, index_html)
 	
-	for entry in PAGES:
+	for entry in PAGES: ## entry = ('dirname', [files...])
 		_dir = entry[0]
 		for file in entry[1]:
 			ext = get_validated_ext(file)
 			path = join(SOURCE_DIR, _dir, file)
 			
-			dst = ''
-			if ext == '.md' : dst = join(TARGET_DIR, _dir, file.replace('.md', '.html'))
-			else: dst = join(TARGET_DIR, _dir, file)
+			dst = ''; path_prefix = _dir.lower().replace(' ', '-') + '-'
+			if ext == '.md':
+				dst = join(TARGET_DIR, path_prefix + file.replace('.md', '.html'))
+			else:
+				dst = join(TARGET_DIR, path_prefix + file)
 			ctx = generate_page_context(path, dst, navigation)
 			
 			_template = template
@@ -108,22 +112,27 @@ def generate_navigation():
 	for entry in PAGES:
 		_dir = entry[0]
 		navigation += '<div class="navigation">\n'
-		navigation += '<h3><strong>%s</strong></h3>\n' % (_dir)
+		navigation += '<h3><strong>%s</strong></h3>\n' % (_dir.replace('-', ' ').title())
 		navigation += '<ul class="menu">\n'
 		
 		for file in entry[1]:
 			ext = get_validated_ext(file)
 			
 			link = '' ## Assuming that file name don't contain '.md' at the middle.
-			if ext == '.md': link = join(ROOT_URL, _dir, file.replace('.md', '.html'))
-			else: link = join(ROOT_URL, _dir, file)
+			
+			path_prefix = _dir.lower().replace(' ', '-') + '-'
+			if ext == '.md':
+				link = join(ROOT_URL, path_prefix + file.replace('.md', '.html'))
+			else:
+				link = join(ROOT_URL, path_prefix + file)
 			link = link.replace('\\', '/')
 			
-			title = file.replace(ext, '')
+			title = file.replace(ext, '').replace('-', ' ').title()
 			navigation += '<li><a href="%s">%s</a></li>\n' % (link, title)
 			
 		navigation += '</ul>\n'
 		navigation += '</div>\n'
+		
 	return navigation
 	
 
@@ -155,6 +164,9 @@ def path_to_title(path):
 
 ## Return the static dir relative path.
 def relative_static_dir(dst):
+
+	return STATIC_DIR ## No more relative paths.
+	
 	_dir = os.path.dirname(dst)
 	static_dir = os.path.relpath(join(TARGET_DIR, STATIC_DIR), _dir)
 	static_dir = static_dir.replace('\\', '/')
@@ -203,8 +215,7 @@ def custom_html_override(src, content):
 								  '<span class="n">%s</span>' % nk)
 	
 	## codehilite mark the compilation command as error.
-	if 'build from source' in src:
-		content = content.replace('<span class="err">', '<span>')
+	content = content.replace('<span class="err">', '<span>')
 	
 	return content
 
@@ -227,9 +238,11 @@ if __name__ == '__main__':
 	_local = False
 	if len(sys.argv) >= 2:
 		if sys.argv[1] == 'local':
-			ROOT_URL = 'http://localhost:8000/'
 			_local = True
-			
+			#ROOT_URL = 'http://localhost:8000/'
+	
+	ROOT_URL = '' ## No more nested directory pages.
+	
 	main()
 	
 	## Write a batch file to start the server in windows.

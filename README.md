@@ -5,9 +5,10 @@
 
 **Pocketlang** is a small (~3000 semicollons) and fast functional programming
 language written in C. It's syntactically similar to Ruby and it can be learned
-in less than an hour. Including the compiler, bytecode VM and runtime, it's a
-standalone executable with zero external dependecies just as it's self descriptive
-name. The pocketlang VM can be embedded in another hosting program very easily.
+in [less than an hour](https://thakeenathees.github.io/pocketlang/getting-started-learn-in-5-minutes.html).
+Including the compiler, bytecode VM and runtime, it's a standalone executable
+with zero external dependecies just as it's self descriptive name. The pocketlang
+VM can be embedded in another hosting program very easily.
 
 The language is written using [Wren Language](https://wren.io/) and their
 wonderful book [craftinginterpreters](http://www.craftinginterpreters.com/) as

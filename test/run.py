@@ -2,17 +2,22 @@ import subprocess, os, sys
 import json, re
 from os.path import join
 
-FMT_PATH = "%-25s"
-INDENTATION = '      | '
-
+## All the test files.
 test_files = [
   "lang/basics.pk",
   "lang/functions.pk",
   "lang/controlflow.pk",
+  "lang/import.pk",
+  
+  "examples/helloworld.pk",
+  "examples/brainfuck.pk",
   "examples/fib.pk",
   "examples/prime.pk",
+  "examples/fizzbuzz.pk",
+  "examples/pi.pk",
 ]
 
+## All benchmark files. ## TODO: pass args for iterations.
 benchmarks = {
 	"factors"      : ['.pk', '.py', '.rb', '.wren'],
 	"fib"          : ['.pk', '.py', '.rb', '.wren'],
@@ -21,10 +26,14 @@ benchmarks = {
 	"primes"       : ['.pk', '.py', '.rb', ".wren"],
 }
 
+
+def main():
+	run_all_tests()
+	run_all_benchmarks()
+
+
 def run_all_benchmarks():
-	print("--------------------------------")
-	print(" BENCHMARKS ")
-	print("--------------------------------")
+	print_title("BENCHMARKS")
 	
 	def get_interpreter(file):
 		if file.endswith('.pk'  ) : return 'pocket'
@@ -47,23 +56,21 @@ def run_all_benchmarks():
 			print('%10ss'%time[0])
 
 def run_all_tests():
-	print("--------------------------------")
-	print(" TESTS ")
-	print("--------------------------------")
-	for path in test_files:
-		run_file(path)
+	print_title("TESTS")
 	
-def run_file(path):
-	print(FMT_PATH % path, end='')
-	result = run_command(['pocket', path])
-	if result.returncode != 0:
-		print('-- Failed')
-		err = INDENTATION + result.stderr \
-		      .decode('utf8')             \
-			  .replace('\n', '\n' + INDENTATION)
-		print(err)
-	else:
-		print('-- OK')
+	FMT_PATH = "%-25s"
+	INDENTATION = '      | '
+	for path in test_files:
+		print(FMT_PATH % path, end='')
+		result = run_command(['pocket', path])
+		if result.returncode != 0:
+			print('-- Failed')
+			err = INDENTATION + result.stderr \
+				  .decode('utf8')             \
+				  .replace('\n', '\n' + INDENTATION)
+			print(err)
+		else:
+			print('-- OK')
 
 
 def run_command(command):
@@ -71,6 +78,10 @@ def run_command(command):
                           stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE)
 
-
-run_all_tests()
-run_all_benchmarks()
+def print_title(title):
+	print("--------------------------------")
+	print(" %s " % title)
+	print("--------------------------------")
+	
+if __name__ == '__main__':
+	main()
