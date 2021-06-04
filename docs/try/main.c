@@ -3,21 +3,18 @@
  *  Licensed under: MIT License
  */
 
-// var rs = Module.cwrap('runSource', 'number', ['string'])
-
+#include <emscripten.h>
+#include <pocketlang.h>
 #include <string.h>
 
-#include <emscripten.h>
-#include "pocketlang.h"
-
+// IO api functions.
 extern void js_errorPrint(int type, int line, const char* message);
 extern void js_writeFunction(const char* message);
-extern const char* js_loadScript();
 
 void errorPrint(PKVM* vm, PkErrorType type, const char* file, int line,
                 const char* message) {
-  // No need to pass file (since there is only script that'll ever run on the 
-  // browser.
+  // No need to pass the file (since there is only script that'll ever run on
+  // the browser.
   js_errorPrint((int)type, line, message);
 }
 

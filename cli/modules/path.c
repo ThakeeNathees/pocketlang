@@ -98,7 +98,7 @@ static inline bool pathIsExists(const char* path) {
 
 static void _pathGetCWD(PKVM* vm) {
   char cwd[FILENAME_MAX];
-  char* res = get_cwd(cwd, sizeof(cwd)); // Check if res is NULL.
+  get_cwd(cwd, sizeof(cwd)); // Check if res is NULL.
   pkReturnString(vm, cwd);
 }
 
@@ -107,7 +107,7 @@ static void _pathAbspath(PKVM* vm) {
   if (!pkGetArgString(vm, 1, &path)) return;
 
   char cwd[FILENAME_MAX];
-  char* res = get_cwd(cwd, sizeof(cwd)); // Check if res is NULL.
+  get_cwd(cwd, sizeof(cwd)); // Check if res is NULL.
 
   char abspath[FILENAME_MAX];
   size_t len = cwk_path_get_absolute(cwd, path, abspath, sizeof(abspath));

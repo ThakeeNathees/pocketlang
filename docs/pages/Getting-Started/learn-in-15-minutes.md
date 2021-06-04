@@ -1,12 +1,11 @@
 
-# Learn pocketlang in 5 minutes
+# %% Learn pocketlang in 15 minutes %%
 
 ```ruby
 
 # This is a comment.
 
 x = 0  # Creating a variable.
-       # The value '0' is a type of number.
 
 # In pocketlang statements should end with a new line
 # or a semicollon. White space characters except for new
@@ -16,13 +15,10 @@ a = 1; b = 2;
 # Data types.
 # -----------
 
-# Primitive types
 null                   # A null type.
 true; false            # Booleans.
 42; 3.14               # Numbers.
 0..10; 10..0           # Range (0..10 = 0 <= r < 10).
-
-# Object types
 "hello"; 'world'       # Strings (support multiline).
 [42, 'foo', null]      # Lists.
 { 'Key':'value' }      # Maps.

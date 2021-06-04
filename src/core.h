@@ -14,17 +14,17 @@ void initializeCore(PKVM* vm);
 
 // Find the builtin function name and returns it's index in the builtins array
 // if not found returns -1.
-int findBuiltinFunction(PKVM* vm, const char* name, uint32_t length);
+int findBuiltinFunction(const PKVM* vm, const char* name, uint32_t length);
 
 // Returns the builtin function at index [index].
-Function* getBuiltinFunction(PKVM* vm, int index);
+Function* getBuiltinFunction(const PKVM* vm, int index);
 
 // Returns the builtin function's name at index [index].
-const char* getBuiltinFunctionName(PKVM* vm, int index);
+const char* getBuiltinFunctionName(const PKVM* vm, int index);
 
 // Return the core library with the [name] if exists in the core libs,
 // otherwise returns NULL.
-Script* getCoreLib(PKVM* vm, String* name);
+Script* getCoreLib(const PKVM* vm, String* name);
 
 /*****************************************************************************/
 /* OPERATORS                                                                 */
@@ -42,7 +42,8 @@ bool varLesser(Var v1, Var v2);	 // Returns v1 < v2.
 // Returns the attribute named [attrib] on the variable [on].
 Var varGetAttrib(PKVM* vm, Var on, String* attrib);
 
-// Set the attribute named [attrib] on the variable [on] with the given [value].
+// Set the attribute named [attrib] on the variable [on] with the given
+// [value].
 void varSetAttrib(PKVM* vm, Var on, String* name, Var value);
 
 // Returns the subscript value (ie. on[key]).

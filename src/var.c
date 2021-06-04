@@ -9,21 +9,21 @@
 #include "utils.h"
 #include "vm.h"
 
- /*****************************************************************************/
- /* PUBLIC API                                                                */
- /*****************************************************************************/
+/*****************************************************************************/
+/* PUBLIC API                                                                */
+/*****************************************************************************/
 
-PkVarType pkGetValueType(PkVar value) {
+PkVarType pkGetValueType(const PkVar value) {
   __ASSERT(value != NULL, "Given value was NULL.");
 
-  if (IS_NULL(*(Var*)(value))) return PK_NULL;
-  if (IS_BOOL(*(Var*)(value))) return PK_BOOL;
-  if (IS_NUM(*(Var*)(value))) return PK_NUMBER;
+  if (IS_NULL(*(const Var*)(value))) return PK_NULL;
+  if (IS_BOOL(*(const Var*)(value))) return PK_BOOL;
+  if (IS_NUM(*(const Var*)(value))) return PK_NUMBER;
 
-  __ASSERT(IS_OBJ(*(Var*)(value)),
+  __ASSERT(IS_OBJ(*(const Var*)(value)),
            "Invalid var pointer. Might be a dangling pointer");
 
-  Object* obj = AS_OBJ(*(Var*)(value));
+  const Object* obj = AS_OBJ(*(const Var*)(value));
   switch (obj->type) {
     case OBJ_STRING: return PK_STRING;
     case OBJ_LIST:   return PK_LIST;
@@ -40,26 +40,24 @@ PkVarType pkGetValueType(PkVar value) {
 }
 
 PkHandle* pkNewString(PKVM* vm, const char* value) {
-  return vmNewHandle(vm, VAR_OBJ(&newString(vm, value)->_super));
+  return vmNewHandle(vm, VAR_OBJ(newString(vm, value)));
 }
 
 PkHandle* pkNewStringLength(PKVM* vm, const char* value, size_t len) {
-  return vmNewHandle(vm, VAR_OBJ(&newStringLength(vm, value,
-                                                  (uint32_t)len)->_super));
+  return vmNewHandle(vm, VAR_OBJ(newStringLength(vm, value, (uint32_t)len)));
 }
 
 PkHandle* pkNewList(PKVM* vm) {
-  return vmNewHandle(vm, VAR_OBJ(&newList(vm, MIN_CAPACITY)->_super));
+  return vmNewHandle(vm, VAR_OBJ(newList(vm, MIN_CAPACITY)));
 }
 
 PkHandle* pkNewMap(PKVM* vm) {
-  return vmNewHandle(vm, VAR_OBJ(&newMap(vm)->_super));
+  return vmNewHandle(vm, VAR_OBJ(newMap(vm)));
 }
 
-const char* pkStringGetData(PkVar value) {
-  Var str = (*(Var*)value);
-  __ASSERT(IS_OBJ(str) && AS_OBJ(str)->type == OBJ_STRING,
-           "Value should be of type string.");
+const char* pkStringGetData(const PkVar value) {
+  const Var str = (*(const Var*)value);
+  __ASSERT(IS_OBJ_TYPE(str, OBJ_STRING), "Value should be of type string.");
   return ((String*)AS_OBJ(str))->data;
 }
 
@@ -75,9 +73,9 @@ const char* pkStringGetData(PkVar value) {
 // but take more memory.
 #define MAP_LOAD_PERCENT 75
 
-// The factor a collection would grow by when it's exceeds the current capacity.
-// The new capacity will be calculated by multiplying it's old capacity by the
-// GROW_FACTOR.
+// The factor a collection would grow by when it's exceeds the current
+// capacity. The new capacity will be calculated by multiplying it's old
+// capacity by the GROW_FACTOR.
 #define GROW_FACTOR 2
 
 void varInitObject(Object* self, PKVM* vm, ObjectType type) {
@@ -161,31 +159,31 @@ static void blackenObject(Object* obj, PKVM* vm) {
 
     case OBJ_SCRIPT:
     {
-      Script* script = (Script*)obj;
+      Script* scr = (Script*)obj;
       vm->bytes_allocated += sizeof(Script);
 
-      grayObject(vm, &script->path->_super);
-      grayObject(vm, &script->moudle->_super);
+      grayObject(vm, &scr->path->_super);
+      grayObject(vm, &scr->moudle->_super);
 
-      grayVarBuffer(vm, &script->globals);
-      vm->bytes_allocated += sizeof(Var) * script->globals.capacity;
-
-      // Integer buffer have no gray call.
-      vm->bytes_allocated += sizeof(uint32_t) * script->global_names.capacity;
-
-      grayVarBuffer(vm, &script->literals);
-      vm->bytes_allocated += sizeof(Var) * script->literals.capacity;
-
-      grayFunctionBuffer(vm, &script->functions);
-      vm->bytes_allocated += sizeof(Function*) * script->functions.capacity;
+      grayVarBuffer(vm, &scr->globals);
+      vm->bytes_allocated += sizeof(Var) * scr->globals.capacity;
 
       // Integer buffer have no gray call.
-      vm->bytes_allocated += sizeof(uint32_t) * script->function_names.capacity;
+      vm->bytes_allocated += sizeof(uint32_t) * scr->global_names.capacity;
 
-      grayStringBuffer(vm, &script->names);
-      vm->bytes_allocated += sizeof(String*) * script->names.capacity;
+      grayVarBuffer(vm, &scr->literals);
+      vm->bytes_allocated += sizeof(Var) * scr->literals.capacity;
 
-      grayObject(vm, &script->body->_super);
+      grayFunctionBuffer(vm, &scr->functions);
+      vm->bytes_allocated += sizeof(Function*) * scr->functions.capacity;
+
+      // Integer buffer have no gray call.
+      vm->bytes_allocated += sizeof(uint32_t) * scr->function_names.capacity;
+
+      grayStringBuffer(vm, &scr->names);
+      vm->bytes_allocated += sizeof(String*) * scr->names.capacity;
+
+      grayObject(vm, &scr->body->_super);
     } break;
 
     case OBJ_FUNC:
@@ -217,7 +215,7 @@ static void blackenObject(Object* obj, PKVM* vm) {
 
       // Blacken call frames.
       for (int i = 0; i < fiber->frame_count; i++) {
-        grayObject(vm, &fiber->frames[i].fn->_super);
+        grayObject(vm, (Object*)&fiber->frames[i].fn->_super);
         grayObject(vm, &fiber->frames[i].fn->owner->_super);
       }
       vm->bytes_allocated += sizeof(CallFrame) * fiber->frame_capacity;
@@ -793,11 +791,11 @@ bool isObjectHashable(ObjectType type) {
 struct OuterSequence {
   struct OuterSequence* outer;
   // If false it'll be map. If we have multiple sequence we should use an enum
-  // here but we only ever support list and map as builtin sequence (thus bool).
+  // here but we only ever support list and map as builtin sequence (so bool).
   bool is_list;
   union {
-    List* list;
-    Map* map;
+    const List* list;
+    const Map* map;
   };
 };
 typedef struct OuterSequence OuterSequence;
@@ -821,12 +819,12 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
 
   } else if (IS_OBJ(v)) {
 
-    Object* obj = AS_OBJ(v);
+    const Object* obj = AS_OBJ(v);
     switch (obj->type) {
 
       case OBJ_STRING:
       {
-        String* str = (String*)obj;
+        const String* str = (const String*)obj;
         if (outer == NULL) {
           ByteBufferAddString(buff, vm, str->data, str->length);
           return;
@@ -841,7 +839,7 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
 
       case OBJ_LIST:
       {
-        List* list = (List*)obj;
+        const List* list = (const List*)obj;
         if (list->elements.count == 0) {
           ByteBufferAddString(buff, vm, "[]", 2);
           return;
@@ -872,7 +870,7 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
 
       case OBJ_MAP:
       {
-        Map* map = (Map*)obj;
+        const Map* map = (const Map*)obj;
         if (map->entries == NULL) {
           ByteBufferAddString(buff, vm, "{}", 2);
           return;
@@ -898,7 +896,7 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
         do {
 
           // Get the next valid key index.
-          bool _done = false; //< To break from inner loop if we don't have anymore keys.
+          bool _done = false;
           while (IS_UNDEF(map->entries[i].key)) {
             if (++i >= map->capacity) {
               _done = true;
@@ -916,18 +914,20 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
           toStringInternal(vm, map->entries[i].value, buff, &seq_map);
           i++;
         } while (i < map->capacity);
+
         byteBufferWrite(buff, vm, '}');
         return;
       }
 
       case OBJ_RANGE:
       {
-        Range* range = (Range*)obj;
+        const Range* range = (const Range*)obj;
 
         char buff_from[STR_NUM_BUFF_SIZE];
-        int len_from = snprintf(buff_from, sizeof(buff_from), "%f", range->from);
+        const int len_from = snprintf(buff_from, sizeof(buff_from), "%f",
+                                      range->from);
         char buff_to[STR_NUM_BUFF_SIZE];
-        int len_to = snprintf(buff_to, sizeof(buff_to), "%f", range->to);
+        const int len_to = snprintf(buff_to, sizeof(buff_to), "%f", range->to);
         ByteBufferAddString(buff, vm, "[Range:", 7);
         ByteBufferAddString(buff, vm, buff_from, len_from);
         ByteBufferAddString(buff, vm, "..", 2);
@@ -937,10 +937,11 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
       }
 
       case OBJ_SCRIPT: {
-        Script* scr = ((Script*)obj);
+        const Script* scr = (const Script*)obj;
         ByteBufferAddString(buff, vm, "[Module:", 8);
         if (scr->moudle != NULL) {
-          ByteBufferAddString(buff, vm, scr->moudle->data, scr->moudle->length);
+          ByteBufferAddString(buff, vm, scr->moudle->data,
+                              scr->moudle->length);
         } else {
           byteBufferWrite(buff, vm, '"');
           ByteBufferAddString(buff, vm, scr->path->data, scr->path->length);
@@ -951,9 +952,9 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
       }
 
       case OBJ_FUNC: {
-        Function* func = (Function*)obj;
+        const Function* fn = (const Function*)obj;
         ByteBufferAddString(buff, vm, "[Func:", 6);
-        ByteBufferAddString(buff, vm, func->name, (uint32_t)strlen(func->name));
+        ByteBufferAddString(buff, vm, fn->name, (uint32_t)strlen(fn->name));
         byteBufferWrite(buff, vm, ']');
         return;
       }

@@ -18,30 +18,30 @@
 // it's last capacity.
 
 
-#define DECLARE_BUFFER(M__NAME, M__NAME_L, M__TYPE)                            \
-  typedef struct {                                                             \
-    M__TYPE* data;                                                             \
-    uint32_t count;                                                            \
-    uint32_t capacity;                                                         \
-  } M__NAME##Buffer;                                                           \
-                                                                               \
-  /* Initialize a new buffer int instance. */                                  \
-  void M__NAME_L##BufferInit(M__NAME##Buffer* self);                           \
-                                                                               \
-  /* Clears the allocated elementes from the VM's realloc function. */         \
-  void M__NAME_L##BufferClear(M__NAME##Buffer* self, PKVM* vm);                \
-                                                                               \
-  /* Ensure the capacity is greater than [size], if not resize. */             \
-  void M__NAME_L##BufferReserve(M__NAME##Buffer* self, PKVM* vm, size_t size); \
-                                                                               \
-  /* Fill the buffer at the end of it with provided data if the capacity */    \
-  /*  isn't enough using VM's realloc function. */                             \
-  void M__NAME_L##BufferFill(M__NAME##Buffer* self, PKVM* vm,                  \
-                             M__TYPE data, int count);                         \
-                                                                               \
-  /* Write to the buffer with provided data at the end of the buffer.*/        \
-  void M__NAME_L##BufferWrite(M__NAME##Buffer* self,                           \
-                              PKVM* vm, M__TYPE data);                         \
+#define DECLARE_BUFFER(m_name, m_name_l, m_type)                              \
+  typedef struct {                                                            \
+    m_type* data;                                                             \
+    uint32_t count;                                                           \
+    uint32_t capacity;                                                        \
+  } m_name##Buffer;                                                           \
+                                                                              \
+  /* Initialize a new buffer int instance. */                                 \
+  void m_name_l##BufferInit(m_name##Buffer* self);                            \
+                                                                              \
+  /* Clears the allocated elementes from the VM's realloc function. */        \
+  void m_name_l##BufferClear(m_name##Buffer* self, PKVM* vm);                 \
+                                                                              \
+  /* Ensure the capacity is greater than [size], if not resize. */            \
+  void m_name_l##BufferReserve(m_name##Buffer* self, PKVM* vm, size_t size);  \
+                                                                              \
+  /* Fill the buffer at the end of it with provided data if the capacity */   \
+  /*  isn't enough using VM's realloc function. */                            \
+  void m_name_l##BufferFill(m_name##Buffer* self, PKVM* vm,                   \
+                             m_type data, int count);                         \
+                                                                              \
+  /* Write to the buffer with provided data at the end of the buffer.*/       \
+  void m_name_l##BufferWrite(m_name##Buffer* self,                            \
+                              PKVM* vm, m_type data);                         \
 
 
 DECLARE_BUFFER(Uint, uint, uint32_t)
