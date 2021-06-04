@@ -1,7 +1,7 @@
 
-# Build From Source
+# %% Build From Source %%
 
-## Without a build script
+## %% Without a build script %%
 
 It can be build from source easily without any depencency, or additional
 requirenments except for a c99 compatible compiler. And build systems are
@@ -27,14 +27,14 @@ For other compiler/IDE
 
 If you weren't able to compile it, please report by [opening an issue](https://github.com/ThakeeNathees/pocketlang/issues/new).
 
-## Using a build script
+## %% Using a build script %%
 
 You could find some of the build script for different build system in the `build/`
 direcroty. If you don't find a scirpt for your prifered system, request on github
 by [opening an issue](https://github.com/ThakeeNathees/pocketlang/issues/new) or
 feel free to contribute one.
 
-## Makefile
+## %% Makefile %%
 
 ```
 cd build && make
@@ -45,7 +45,7 @@ And the makefile is still need to be imporved. If you find any problems with the
 have any improvements, let us know in [github](https://github.com/ThakeeNathees/pocketlang).
 
 
-## Batch script with MSVC
+## %% Batch script with MSVC %%
 
 ```
 cd build && build
@@ -55,7 +55,7 @@ You don't need to run the script from a Visual Studio .NET Command Prompt,
 It'll search for the MSVS installation path and use it to compile. But if it
 can't, try running on VS command prompt.
 
-## SCons
+## %% SCons %%
 
 pocketlang mainly focused on [scons](https://www.scons.org/), and it's
 recommended to use it for contributions since it has various configurations

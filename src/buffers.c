@@ -11,45 +11,45 @@
 // The buffer "template" implementation of diferent types, defined in the
 // buffers.h header.
 
-#define DEFINE_BUFFER(M__NAME, M__NAME_L, M__TYPE)                              \
-  void M__NAME_L##BufferInit(M__NAME##Buffer* self) {                           \
-    self->data = NULL;                                                          \
-    self->count = 0;                                                            \
-    self->capacity = 0;                                                         \
-  }                                                                             \
-                                                                                \
-  void M__NAME_L##BufferClear(M__NAME##Buffer* self,                            \
-              PKVM* vm) {                                                       \
-    vmRealloc(vm, self->data, self->capacity * sizeof(M__TYPE), 0);             \
-    self->data = NULL;                                                          \
-    self->count = 0;                                                            \
-    self->capacity = 0;                                                         \
-  }                                                                             \
-                                                                                \
-  void M__NAME_L##BufferReserve(M__NAME##Buffer* self, PKVM* vm, size_t size) { \
-    if (self->capacity < size) {                                                \
-      int capacity = utilPowerOf2Ceil((int)size);                               \
-      if (capacity < MIN_CAPACITY) capacity = MIN_CAPACITY;                     \
-      self->data = (M__TYPE*)vmRealloc(vm, self->data,                          \
-        self->capacity * sizeof(M__TYPE), capacity * sizeof(M__TYPE));          \
-      self->capacity = capacity;                                                \
-    }                                                                           \
-  }                                                                             \
-                                                                                \
-  void M__NAME_L##BufferFill(M__NAME##Buffer* self, PKVM* vm,                   \
-              M__TYPE data, int count) {                                        \
-                                                                                \
-    M__NAME_L##BufferReserve(self, vm, self->count + count);                    \
-                                                                                \
-    for (int i = 0; i < count; i++) {                                           \
-      self->data[self->count++] = data;                                         \
-    }                                                                           \
-  }                                                                             \
-                                                                                \
-  void M__NAME_L##BufferWrite(M__NAME##Buffer* self,                            \
-              PKVM* vm, M__TYPE data) {                                         \
-    M__NAME_L##BufferFill(self, vm, data, 1);                                   \
-  }                                                                             \
+#define DEFINE_BUFFER(m_name, m_name_l, m_type)                               \
+  void m_name_l##BufferInit(m_name##Buffer* self) {                           \
+    self->data = NULL;                                                        \
+    self->count = 0;                                                          \
+    self->capacity = 0;                                                       \
+  }                                                                           \
+                                                                              \
+  void m_name_l##BufferClear(m_name##Buffer* self,                            \
+              PKVM* vm) {                                                     \
+    vmRealloc(vm, self->data, self->capacity * sizeof(m_type), 0);            \
+    self->data = NULL;                                                        \
+    self->count = 0;                                                          \
+    self->capacity = 0;                                                       \
+  }                                                                           \
+                                                                              \
+  void m_name_l##BufferReserve(m_name##Buffer* self, PKVM* vm, size_t size) { \
+    if (self->capacity < size) {                                              \
+      int capacity = utilPowerOf2Ceil((int)size);                             \
+      if (capacity < MIN_CAPACITY) capacity = MIN_CAPACITY;                   \
+      self->data = (m_type*)vmRealloc(vm, self->data,                         \
+        self->capacity * sizeof(m_type), capacity * sizeof(m_type));          \
+      self->capacity = capacity;                                              \
+    }                                                                         \
+  }                                                                           \
+                                                                              \
+  void m_name_l##BufferFill(m_name##Buffer* self, PKVM* vm,                   \
+              m_type data, int count) {                                       \
+                                                                              \
+    m_name_l##BufferReserve(self, vm, self->count + count);                   \
+                                                                              \
+    for (int i = 0; i < count; i++) {                                         \
+      self->data[self->count++] = data;                                       \
+    }                                                                         \
+  }                                                                           \
+                                                                              \
+  void m_name_l##BufferWrite(m_name##Buffer* self,                            \
+              PKVM* vm, m_type data) {                                        \
+    m_name_l##BufferFill(self, vm, data, 1);                                  \
+  }                                                                           \
 
 void ByteBufferAddString(ByteBuffer* self, PKVM* vm, const char* str,
                          uint32_t length) {

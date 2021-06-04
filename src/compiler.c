@@ -322,7 +322,7 @@ struct Compiler {
   const char* current_char; //< Current char position in the source.
   int current_line;         //< Line number of the current char.
   Token previous, current, next; //< Currently parsed tokens.
-  bool has_errors;          //< True if any syntex error occured at compile time.
+  bool has_errors;          //< True if any syntex error occured at.
 
   // Current depth the compiler in (-1 means top level) 0 means function
   // level and > 0 is inner scope.
@@ -372,8 +372,8 @@ static void reportError(Compiler* compiler, const char* file, int line,
   compiler->has_errors = true;
   char message[ERROR_MESSAGE_SIZE];
   int length = vsprintf(message, fmt, args);
-  ASSERT(length < ERROR_MESSAGE_SIZE, "Error message buffer should not exceed "
-    "the buffer");
+  __ASSERT(length < ERROR_MESSAGE_SIZE, "Error message buffer should not exceed "
+           "the buffer");
 
   if (vm->config.error_fn == NULL) return;
   vm->config.error_fn(vm, PK_ERROR_COMPILE, file, line, message);
@@ -465,8 +465,8 @@ static void eatString(Compiler* compiler, bool single_quote) {
   }
 
   // '\0' will be added by varNewSring();
-  Var string = VAR_OBJ(&newStringLength(compiler->vm, (const char*)buff.data,
-    (uint32_t)buff.count)->_super);
+  Var string = VAR_OBJ(newStringLength(compiler->vm, (const char*)buff.data,
+    (uint32_t)buff.count));
 
   byteBufferClear(&buff, compiler->vm);
 
@@ -578,10 +578,11 @@ static void setNextTwoCharToken(Compiler* compiler, char c, TokenType one,
 
 // Initialize the next token as the type.
 static void setNextToken(Compiler* compiler, TokenType type) {
-  compiler->next.type = type;
-  compiler->next.start = compiler->token_start;
-  compiler->next.length = (int)(compiler->current_char - compiler->token_start);
-  compiler->next.line = compiler->current_line - ((type == TK_LINE) ? 1 : 0);
+  Token* next = &compiler->next;
+  next->type = type;
+  next->start = compiler->token_start;
+  next->length = (int)(compiler->current_char - compiler->token_start);
+  next->line = compiler->current_line - ((type == TK_LINE) ? 1 : 0);
 }
 
 // Initialize the next token as the type and assign the value.
@@ -711,12 +712,12 @@ static void lexToken(Compiler* compiler) {
  * PARSING                                                                   *
  *****************************************************************************/
 
-// Returns current token type.
+// Returns current token type without lexing a new token.
 static TokenType peek(Compiler* self) {
   return self->current.type;
 }
 
-// Returns next token type.
+// Returns next token type without lexing a new token.
 static TokenType peekNext(Compiler* self) {
   return self->next.type;
 }
@@ -905,7 +906,7 @@ static int emitByte(Compiler* compiler, int byte);
 static int emitShort(Compiler* compiler, int arg);
 
 static void patchJump(Compiler* compiler, int addr_index);
-static void patchForward(Compiler* compiler, Fn* fn, int addr_index, int name);
+static void patchForward(Compiler* compiler, Fn* fn, int index, int name);
 
 static int compilerAddConstant(Compiler* compiler, Var value);
 static int compilerGetVariable(Compiler* compiler, const char* name,
@@ -1066,15 +1067,15 @@ static void exprFunc(Compiler* compiler, bool can_assign) {
 // Local/global variables, script/native/builtin functions name.
 static void exprName(Compiler* compiler, bool can_assign) {
 
-  const char* name_start = compiler->previous.start;
-  int name_len = compiler->previous.length;
-  int name_line = compiler->previous.line;
-  NameSearchResult result = compilerSearchName(compiler, name_start, name_len);
+  const char* start = compiler->previous.start;
+  int length = compiler->previous.length;
+  int line = compiler->previous.line;
+  NameSearchResult result = compilerSearchName(compiler, start, length);
 
   if (result.type == NAME_NOT_DEFINED) {
     if (can_assign && match(compiler, TK_EQ)) {
-      int index = compilerAddVariable(compiler, name_start, name_len,
-                                      name_line);
+      int index = compilerAddVariable(compiler, start, length,
+                                      line);
       compileExpression(compiler);
       if (compiler->scope_depth == DEPTH_GLOBAL) {
         emitStoreVariable(compiler, index, true);
@@ -1091,10 +1092,10 @@ static void exprName(Compiler* compiler, bool can_assign) {
       if (peek(compiler) == TK_LPARAN) {
         emitOpcode(compiler, OP_PUSH_FN);
         int index = emitShort(compiler, result.index);
-        compilerAddForward(compiler, index, _FN, name_start, name_len,
-                           name_line);
+        compilerAddForward(compiler, index, _FN, start, length,
+                           line);
       } else {
-        parseError(compiler, "Name '%.*s' is not defined.", name_len, name_start);
+        parseError(compiler, "Name '%.*s' is not defined.", length, start);
       }
 
     }
@@ -1104,12 +1105,12 @@ static void exprName(Compiler* compiler, bool can_assign) {
   switch (result.type) {
     case NAME_LOCAL_VAR:
     case NAME_GLOBAL_VAR: {
+      const bool is_global = result.type == NAME_GLOBAL_VAR;
 
       if (can_assign && matchAssignment(compiler)) {
         TokenType assignment = compiler->previous.type;
         if (assignment != TK_EQ) {
-          emitPushVariable(compiler, result.index,
-                           result.type == NAME_GLOBAL_VAR);
+          emitPushVariable(compiler, result.index, is_global);
           compileExpression(compiler);
 
           switch (assignment) {
@@ -1126,10 +1127,10 @@ static void exprName(Compiler* compiler, bool can_assign) {
           compileExpression(compiler);
         }
 
-        emitStoreVariable(compiler, result.index, result.type == NAME_GLOBAL_VAR);
+        emitStoreVariable(compiler, result.index, is_global);
 
       } else {
-        emitPushVariable(compiler, result.index, result.type == NAME_GLOBAL_VAR);
+        emitPushVariable(compiler, result.index, is_global);
       }
       return;
     }
@@ -1607,14 +1608,6 @@ static void emitOpcode(Compiler* compiler, Opcode opcode) {
   }
 }
 
-// Emits a constant value if it doesn't exists on the current script it'll
-// make one.
-static void emitConstant(Compiler* compiler, Var value) {
-  int index = compilerAddConstant(compiler, value);
-  emitOpcode(compiler, OP_PUSH_CONSTANT);
-  emitShort(compiler, index);
-}
-
 // Update the jump offset.
 static void patchJump(Compiler* compiler, int addr_index) {
   int offset = (int)_FN->opcodes.count - (addr_index + 2 /*bytes index*/);
@@ -1624,9 +1617,9 @@ static void patchJump(Compiler* compiler, int addr_index) {
   _FN->opcodes.data[addr_index + 1] = offset & 0xff;
 }
 
-static void patchForward(Compiler* compiler, Fn* fn, int addr_index, int name) {
-  fn->opcodes.data[addr_index] = (name >> 8) & 0xff;
-  fn->opcodes.data[addr_index + 1] = name & 0xff;
+static void patchForward(Compiler* compiler, Fn* fn, int index, int name) {
+  fn->opcodes.data[index] = (name >> 8) & 0xff;
+  fn->opcodes.data[index + 1] = name & 0xff;
 }
 
 // Jump back to the start of the loop.
@@ -1781,7 +1774,8 @@ static Script* importFile(Compiler* compiler, const char* path) {
   // Resolve the path.
   pkStringPtr resolved = { path, NULL, NULL };
   if (vm->config.resolve_path_fn != NULL) {
-    resolved = vm->config.resolve_path_fn(vm, compiler->script->path->data, path);
+    resolved = vm->config.resolve_path_fn(vm, compiler->script->path->data,
+                                          path);
   }
 
   if (resolved.string == NULL) {
@@ -1796,7 +1790,7 @@ static Script* importFile(Compiler* compiler, const char* path) {
   if (resolved.on_done != NULL) resolved.on_done(vm, resolved);
 
   // Check if the script already exists.
-  Var entry = mapGet(vm->scripts, VAR_OBJ(&path_name->_super));
+  Var entry = mapGet(vm->scripts, VAR_OBJ(path_name));
   if (!IS_UNDEF(entry)) {
     ASSERT(AS_OBJ(entry)->type == OBJ_SCRIPT, OOPS);
 
@@ -1823,8 +1817,7 @@ static Script* importFile(Compiler* compiler, const char* path) {
   // Make a new script and to compile it.
   Script* scr = newScript(vm, path_name);
   vmPushTempRef(vm, &scr->_super); // scr.
-  mapSet(vm, vm->scripts, VAR_OBJ(&path_name->_super),
-         VAR_OBJ(&scr->_super));
+  mapSet(vm, vm->scripts, VAR_OBJ(path_name), VAR_OBJ(scr));
   vmPopTempRef(vm); // scr.
 
   // Push the script on the stack.
@@ -1851,7 +1844,7 @@ static Script* importCoreLib(Compiler* compiler, const char* name_start,
                                  name_start, name_length);
   String* module = compiler->script->names.data[index];
 
-  Var entry = mapGet(compiler->vm->core_libs, VAR_OBJ(&module->_super));
+  Var entry = mapGet(compiler->vm->core_libs, VAR_OBJ(module));
   if (IS_UNDEF(entry)) {
     parseError(compiler, "No module named '%s' exists.", module->data);
     return NULL;
@@ -1876,7 +1869,7 @@ static inline Script* compilerImport(Compiler* compiler) {
 
   } else if (match(compiler, TK_STRING)) { //< Local library.
     Var var_path = compiler->previous.value;
-    ASSERT(IS_OBJ(var_path) && AS_OBJ(var_path)->type == OBJ_STRING, OOPS);
+    ASSERT(IS_OBJ_TYPE(var_path, OBJ_STRING), OOPS);
     String* path = (String*)AS_OBJ(var_path);
     return importFile(compiler, path->data);
   }
@@ -2168,19 +2161,18 @@ static void compileForStatement(Compiler* compiler) {
 
   consume(compiler, TK_IN, "Expected 'in' after iterator name.");
 
-  // Compile and store container.
-  int container = compilerAddVariable(compiler, "@container", 10, iter_line);
+  // Compile and store sequence.
+  compilerAddVariable(compiler, "@Sequence", 9, iter_line); // Sequence
   compileExpression(compiler);
 
   // Add iterator to locals. It's an increasing integer indicating that the
   // current loop is nth starting from 0.
-  int iterator = compilerAddVariable(compiler, "@iterator", 9, iter_line);
+  compilerAddVariable(compiler, "@iterator", 9, iter_line); // Iterator.
   emitOpcode(compiler, OP_PUSH_0);
 
   // Add the iteration value. It'll be updated to each element in an array of
   // each character in a string etc.
-  int iter_value = compilerAddVariable(compiler, iter_name, iter_len,
-                                       iter_line);
+  compilerAddVariable(compiler, iter_name, iter_len, iter_line); // Iter value.
   emitOpcode(compiler, OP_PUSH_NULL);
 
   // Start the iteration, and check if the sequence is iterable.
@@ -2363,7 +2355,8 @@ bool compile(PKVM* vm, Script* script, const char* source) {
     if (index != -1) {
       patchForward(compiler, forward->func, forward->instruction, index);
     } else {
-      resolveError(compiler, forward->line, "Name '%.*s' is not defined.", length, name);
+      resolveError(compiler, forward->line, "Name '%.*s' is not defined.",
+                   length, name);
     }
   }
 

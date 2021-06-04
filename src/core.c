@@ -29,7 +29,7 @@ static void moduleAddFunctionInternal(PKVM* vm, Script* script,
 // pkNewModule implementation (see pocketlang.h for description).
 PkHandle* pkNewModule(PKVM* vm, const char* name) {
   Script* module = newModuleInternal(vm, name);
-  return vmNewHandle(vm, VAR_OBJ(&module->_super));
+  return vmNewHandle(vm, VAR_OBJ(module));
 }
 
 // pkModuleAddFunction implementation (see pocketlang.h for description).
@@ -38,8 +38,7 @@ void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
   __ASSERT(module != NULL, "Argument module was NULL.");
 
   Var scr = module->value;
-  __ASSERT(IS_OBJ(scr) && AS_OBJ(scr)->type == OBJ_SCRIPT,
-           "Given handle is not a module");
+  __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
   
   moduleAddFunctionInternal(vm, (Script*)AS_OBJ(scr), name, fptr, arity);
 }
@@ -63,11 +62,13 @@ void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
   } while (false)
 
 // Check for errors in before calling the get arg public api function.
-#define CHECK_GET_ARG_API_ERRORS()                                             \
-  __ASSERT(vm->fiber != NULL, "This function can only be called at runtime."); \
-  __ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index.");                 \
-  __ASSERT(value != NULL, "Parameter [value] was NULL.");                      \
-  ((void*)0)
+#define CHECK_GET_ARG_API_ERRORS()                               \
+  do {                                                           \
+    __ASSERT(vm->fiber != NULL,                                  \
+             "This function can only be called at runtime.");    \
+    __ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index."); \
+    __ASSERT(value != NULL, "Parameter [value] was NULL.");      \
+  } while (false)
 
 // Set error for incompatible type provided as an argument.
 #define ERR_INVALID_ARG_TYPE(m_type)                           \
@@ -79,13 +80,13 @@ do {                                                           \
 } while (false)
 
 // pkGetArgc implementation (see pocketlang.h for description).
-int pkGetArgc(PKVM* vm) {
+int pkGetArgc(const PKVM* vm) {
   __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
   return ARGC;
 }
 
 // pkGetArg implementation (see pocketlang.h for description).
-PkVar pkGetArg(PKVM* vm, int arg) {
+PkVar pkGetArg(const PKVM* vm, int arg) {
   __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
   __ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index.");
 
@@ -125,7 +126,7 @@ bool pkGetArgString(PKVM* vm, int arg, const char** value) {
   CHECK_GET_ARG_API_ERRORS();
 
   Var val = ARG(arg);
-  if (IS_OBJ(val) && AS_OBJ(val)->type == OBJ_STRING) {
+  if (IS_OBJ_TYPE(val, OBJ_STRING)) {
     *value = ((String*)AS_OBJ(val))->data;
 
   } else {
@@ -169,12 +170,12 @@ void pkReturnNumber(PKVM* vm, double value) {
 
 // pkReturnString implementation (see pocketlang.h for description).
 void pkReturnString(PKVM* vm, const char* value) {
-  RET(VAR_OBJ(&newString(vm, value)->_super));
+  RET(VAR_OBJ(newString(vm, value)));
 }
 
 // pkReturnStringLength implementation (see pocketlang.h for description).
 void pkReturnStringLength(PKVM* vm, const char* value, size_t length) {
-  RET(VAR_OBJ(&newStringLength(vm, value, (uint32_t)length)->_super));
+  RET(VAR_OBJ(newStringLength(vm, value, (uint32_t)length)));
 }
 
 // pkReturnValue implementation (see pocketlang.h for description).
@@ -255,7 +256,7 @@ static inline bool validateIndex(PKVM* vm, int32_t index, int32_t size,
 /*****************************************************************************/
 
 // findBuiltinFunction implementation (see core.h for description).
-int findBuiltinFunction(PKVM* vm, const char* name, uint32_t length) {
+int findBuiltinFunction(const PKVM* vm, const char* name, uint32_t length) {
    for (int i = 0; i < vm->builtins_count; i++) {
      if (length == vm->builtins[i].length &&
        strncmp(name, vm->builtins[i].name, length) == 0) {
@@ -266,22 +267,22 @@ int findBuiltinFunction(PKVM* vm, const char* name, uint32_t length) {
  }
 
 // getBuiltinFunction implementation (see core.h for description).
-Function* getBuiltinFunction(PKVM* vm, int index) {
+Function* getBuiltinFunction(const PKVM* vm, int index) {
   ASSERT_INDEX(index, vm->builtins_count);
   return vm->builtins[index].fn;
 }
 
 // getBuiltinFunctionName implementation (see core.h for description).
-const char* getBuiltinFunctionName(PKVM* vm, int index) {
+const char* getBuiltinFunctionName(const PKVM* vm, int index) {
   ASSERT_INDEX(index, vm->builtins_count);
   return vm->builtins[index].name;
 }
 
 // getCoreLib implementation (see core.h for description).
-Script* getCoreLib(PKVM* vm, String* name) {
-  Var lib = mapGet(vm->core_libs, VAR_OBJ(&name->_super));
+Script* getCoreLib(const PKVM* vm, String* name) {
+  Var lib = mapGet(vm->core_libs, VAR_OBJ(name));
   if (IS_UNDEF(lib)) return NULL;
-  ASSERT(IS_OBJ(lib) && AS_OBJ(lib)->type == OBJ_SCRIPT, OOPS);
+  ASSERT(IS_OBJ_TYPE(lib, OBJ_SCRIPT), OOPS);
   return (Script*)AS_OBJ(lib);
 }
 
@@ -294,14 +295,14 @@ Script* getCoreLib(PKVM* vm, String* name) {
     RET(VAR_BOOL(check(ARG1)));               \
   }
 
-#define FN_IS_OBJ_TYPE(name, _enum)                     \
-  void coreIs##name(PKVM* vm) {                         \
-    Var arg1 = ARG1;                                    \
-    if (IS_OBJ(arg1) && AS_OBJ(arg1)->type == _enum) {  \
-      RET(VAR_TRUE);                                    \
-    } else {                                            \
-      RET(VAR_FALSE);                                   \
-    }                                                   \
+#define FN_IS_OBJ_TYPE(name, _enum)           \
+  void coreIs##name(PKVM* vm) {               \
+    Var arg1 = ARG1;                          \
+    if (IS_OBJ_TYPE(arg1, _enum)) {           \
+      RET(VAR_TRUE);                          \
+    } else {                                  \
+      RET(VAR_FALSE);                         \
+    }                                         \
   }
 
 FN_IS_PRIMITE_TYPE(Null, IS_NULL)
@@ -319,7 +320,7 @@ FN_IS_OBJ_TYPE(UserObj,  OBJ_USER)
 PK_DOC(coreTypeName,
   "type_name(value:var) -> string\n"
   "Returns the type name of the of the value.") {
-  RET(VAR_OBJ(&newString(vm, varTypeName(ARG1))->_super));
+  RET(VAR_OBJ(newString(vm, varTypeName(ARG1))));
 }
 
 PK_DOC(coreAssert,
@@ -353,7 +354,7 @@ PK_DOC(coreAssert,
 PK_DOC(coreToString,
   "to_string(value:var) -> string\n"
   "Returns the string representation of the value.") {
-  RET(VAR_OBJ(&toString(vm, ARG1)->_super));
+  RET(VAR_OBJ(toString(vm, ARG1)));
 }
 
 PK_DOC(corePrint,
@@ -369,7 +370,7 @@ PK_DOC(corePrint,
   for (int i = 1; i <= ARGC; i++) {
     Var arg = ARG(i);
     // If it's already a string don't allocate a new string instead use it.
-    if (IS_OBJ(arg) && AS_OBJ(arg)->type == OBJ_STRING) {
+    if (IS_OBJ_TYPE(arg, OBJ_STRING)) {
       str = (String*)AS_OBJ(arg);
     } else {
       str = toString(vm, arg);
@@ -396,7 +397,7 @@ PK_DOC(coreStrLower,
   // Since the string is modified re-hash it.
   result->hash = utilHashString(result->data);
 
-  RET(VAR_OBJ(&result->_super));
+  RET(VAR_OBJ(result));
 }
 
 PK_DOC(coreStrUpper,
@@ -411,7 +412,7 @@ PK_DOC(coreStrUpper,
   // Since the string is modified re-hash it.
   result->hash = utilHashString(result->data);
   
-  RET(VAR_OBJ(&result->_super));
+  RET(VAR_OBJ(result));
 }
 
 PK_DOC(coreStrStrip,
@@ -423,12 +424,12 @@ PK_DOC(coreStrStrip,
 
   const char* start = str->data;
   while (*start && isspace(*start)) start++;
-  if (*start == '\0') RET(VAR_OBJ(&newStringLength(vm, NULL, 0)->_super));
+  if (*start == '\0') RET(VAR_OBJ(newStringLength(vm, NULL, 0)));
 
   const char* end = str->data + str->length - 1;
   while (isspace(*end)) end--;
 
-  RET(VAR_OBJ(&newStringLength(vm, start, (uint32_t)(end - start + 1))->_super));
+  RET(VAR_OBJ(newStringLength(vm, start, (uint32_t)(end - start + 1))));
 }
 
 PK_DOC(coreStrChr,
@@ -438,7 +439,7 @@ PK_DOC(coreStrChr,
   if (!validateInteger(vm, ARG1, &num, "Argument 1")) return;
 
   char c = (char)num;
-  RET(VAR_OBJ(&newStringLength(vm, &c, 1)->_super));
+  RET(VAR_OBJ(newStringLength(vm, &c, 1)));
 }
 
 PK_DOC(coreStrOrd, 
@@ -466,7 +467,7 @@ PK_DOC(coreListAppend,
   Var elem = ARG(2);
 
   varBufferWrite(&list->elements, vm, elem);
-  RET(VAR_OBJ(&list->_super));
+  RET(VAR_OBJ(list));
 }
 
 // Map functions.
@@ -496,7 +497,7 @@ static Script* newModuleInternal(PKVM* vm, const char* name) {
 
   // Check if any module with the same name already exists and assert to the
   // hosting application.
-  if (!IS_UNDEF(mapGet(vm->core_libs, VAR_OBJ(&_name->_super)))) {
+  if (!IS_UNDEF(mapGet(vm->core_libs, VAR_OBJ(_name)))) {
     vmPopTempRef(vm); // _name
     __ASSERT(false, stringFormat(vm, "A module named '$' already exists",
       name)->data);
@@ -508,7 +509,7 @@ static Script* newModuleInternal(PKVM* vm, const char* name) {
 
   // Add the script to core_libs.
   vmPushTempRef(vm, &scr->_super);
-  mapSet(vm, vm->core_libs, VAR_OBJ(&_name->_super), VAR_OBJ(&scr->_super));
+  mapSet(vm, vm->core_libs, VAR_OBJ(_name), VAR_OBJ(scr));
   vmPopTempRef(vm);
 
   return scr;
@@ -569,7 +570,7 @@ void stdLangWrite(PKVM* vm) {
   for (int i = 1; i <= ARGC; i++) {
     Var arg = ARG(i);
     // If it's already a string don't allocate a new string instead use it.
-    if (IS_OBJ(arg) && AS_OBJ(arg)->type == OBJ_STRING) {
+    if (IS_OBJ_TYPE(arg, OBJ_STRING)) {
       str = (String*)AS_OBJ(arg);
     } else {
       str = toString(vm, arg);
@@ -814,8 +815,8 @@ Var varModulo(PKVM* vm, Var v1, Var v2) {
     return VAR_NULL;
   }
 
-  if (IS_OBJ(v1) && AS_OBJ(v1)->type == OBJ_STRING) {
-    String* str = (String*)AS_OBJ(v1);
+  if (IS_OBJ_TYPE(v1, OBJ_STRING)) {
+    //const String* str = (const String*)AS_OBJ(v1);
     TODO; // "fmt" % v2.
   }
 
@@ -888,9 +889,10 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     case OBJ_MAP:
     {
       TODO; // Not sure should I allow this(below).
-      //Var value = mapGet((Map*)obj, VAR_OBJ(&attrib->_super));
+      //Var value = mapGet((Map*)obj, VAR_OBJ(attrib));
       //if (IS_UNDEF(value)) {
-      //  vm->fiber->error = stringFormat(vm, "Key (\"@\") not exists.", attrib);
+      //  vm->fiber->error = stringFormat(vm, "Key (\"@\") not exists.",
+      //                                  attrib);
       //  return VAR_NULL;
       //}
       //return value;
@@ -910,7 +912,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
         } else {
           newList(vm, 0);
         }
-        return VAR_OBJ(&list->_super);
+        return VAR_OBJ(list);
       }
 
       ERR_NO_ATTRIB();
@@ -1102,7 +1104,8 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
 
 void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
   if (!IS_OBJ(on)) {
-    vm->fiber->error = stringFormat(vm, "$ type is not subscriptable.", varTypeName(on));
+    vm->fiber->error = stringFormat(vm, "$ type is not subscriptable.",
+                                    varTypeName(on));
     return;
   }
 
@@ -1125,7 +1128,8 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
     case OBJ_MAP:
     {
       if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
-        vm->fiber->error = stringFormat(vm, "$ type is not hashable.", varTypeName(key));
+        vm->fiber->error = stringFormat(vm, "$ type is not hashable.",
+                                        varTypeName(key));
       } else {
         mapSet(vm, (Map*)obj, key, value);
       }

@@ -1,5 +1,5 @@
 
-## PocketLang is a small, fast and friendly language for scripting and embedding.
+## %% PocketLang is a small, fast and friendly language for scripting and embedding. %%
 
 With mixed syntax of ruby and python, that can be learned in less than an hour, and it's easy to embed into another application for scripting.
 

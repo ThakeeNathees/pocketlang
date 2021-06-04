@@ -63,7 +63,7 @@ extern "C" {
 // }
 // 
 #define PK_DOC(func, doc) \
-  static char __pkdoc__##func[] = doc;  void func(PKVM* vm)
+  /* TODO: static char __pkdoc__##func[] = doc;*/ void func(PKVM* vm)
 
 /*****************************************************************************/
 /* POCKETLANG TYPES                                                          */
@@ -179,7 +179,7 @@ PK_PUBLIC void pkFreeVM(PKVM* vm);
 PK_PUBLIC void pkSetUserData(PKVM* vm, void* user_data);
 
 // Returns the associated user data.
-PK_PUBLIC void* pkGetUserData(PKVM* vm);
+PK_PUBLIC void* pkGetUserData(const PKVM* vm);
 
 // Create a new handle for the [value]. This is usefull to keep the [value]
 // alive once it aquired from the stack. Do not use the [value] once creating
@@ -189,7 +189,7 @@ PK_PUBLIC PkHandle* pkNewHandle(PKVM* vm, PkVar value);
 
 // Return the PkVar pointer in the handle, the returned pointer will be valid
 // till the handle is released.
-PK_PUBLIC PkVar pkGetHandleValue(PkHandle* handle);
+PK_PUBLIC PkVar pkGetHandleValue(const PkHandle* handle);
 
 // Release the handle and allow it's value to be garbage collected. Always call
 // this for every handles before freeing the VM.
@@ -251,17 +251,17 @@ PK_PUBLIC void pkSetRuntimeError(PKVM* vm, const char* message);
 
 // Return the type of the [value] this will help to get the type of the
 // variable that was extracted from pkGetArg() earlier.
-PK_PUBLIC PkVarType pkGetValueType(PkVar value);
+PK_PUBLIC PkVarType pkGetValueType(const PkVar value);
 
 // Return the current functions argument count. This is needed for functions
 // registered with -1 argument count (which means variadic arguments).
-PK_PUBLIC int pkGetArgc(PKVM* vm);
+PK_PUBLIC int pkGetArgc(const PKVM* vm);
 
 // Return the [arg] th argument as a PkVar. This pointer will only be
 // valid till the current function ends, because it points to the var at the
 // stack and it'll popped when the current call frame ended. Use handlers to
 // keep the var alive even after that.
-PK_PUBLIC PkVar pkGetArg(PKVM* vm, int arg);
+PK_PUBLIC PkVar pkGetArg(const PKVM* vm, int arg);
 
 // The below functions are used to extract the function arguments from the
 // stack as a type. They will first validate the argument's type and set a
@@ -296,7 +296,7 @@ PK_PUBLIC PkHandle* pkNewStringLength(PKVM* vm, const char* value, size_t len);
 PK_PUBLIC PkHandle* pkNewList(PKVM* vm);
 PK_PUBLIC PkHandle* pkNewMap(PKVM* vm);
 
-PK_PUBLIC const char* pkStringGetData(PkVar value);
+PK_PUBLIC const char* pkStringGetData(const PkVar value);
 
 
 //      TODO:

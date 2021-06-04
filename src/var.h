@@ -113,7 +113,8 @@
 #define VAR_BOOL(value) ((value)? VAR_TRUE : VAR_FALSE)
 #define VAR_INT(value)  (_MASK_INTEGER | (uint32_t)(int32_t)(value))
 #define VAR_NUM(value)  (doubleToVar(value))
-#define VAR_OBJ(value)  ((Var)(_MASK_OBJECT | (uint64_t)(uintptr_t)(value)))
+#define VAR_OBJ(value) /* [value] is an instance of Object */ \
+  ((Var)(_MASK_OBJECT | (uint64_t)(uintptr_t)(&value->_super)))
 
 // Const casting.
 #define ADD_CONST(value)    ((value) | _MASK_CONST)
@@ -129,6 +130,7 @@
 #define IS_INT(value)   ((value & _MASK_INTEGER) == _MASK_INTEGER)
 #define IS_NUM(value)   ((value & _MASK_QNAN) != _MASK_QNAN)
 #define IS_OBJ(value)   ((value & _MASK_OBJECT) == _MASK_OBJECT)
+#define IS_OBJ_TYPE(obj, obj_type) IS_OBJ(obj) && AS_OBJ(obj)->type == obj_type
 
 // Decode types.
 #define AS_BOOL(value) ((value) == VAR_TRUE)
@@ -294,9 +296,9 @@ struct Function {
 };
 
 typedef struct {
-  uint8_t* ip;  //< Pointer to the next instruction byte code.
-  Function* fn; //< Function of the frame.
-  Var* rbp;     //< Stack base pointer. (%rbp)
+  const uint8_t* ip;  //< Pointer to the next instruction byte code.
+  const Function* fn; //< Function of the frame.
+  Var* rbp;           //< Stack base pointer. (%rbp)
 } CallFrame;
 
 struct Fiber {
@@ -338,7 +340,9 @@ struct Fiber {
   String* error;
 };
 
-// Methods ////////////////////////////////////////////////////////////////////
+/*****************************************************************************/
+/* METHODS                                                                   */
+/*****************************************************************************/
 
 // Initialize the object with it's default value.
 void varInitObject(Object* self, PKVM* vm, ObjectType type);
@@ -423,7 +427,9 @@ Var mapRemoveKey(PKVM* vm, Map* self, Var key);
 // Release all the object owned by the [self] including itself.
 void freeObject(PKVM* vm, Object* self);
 
-// Utility functions //////////////////////////////////////////////////////////
+/*****************************************************************************/
+/* UTILITY FUNCTIONS                                                         */
+/*****************************************************************************/
 
 // Returns the type name of the PkVarType enum value.
 const char* getPkVarTypeName(PkVarType type);

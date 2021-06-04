@@ -119,7 +119,7 @@ int main(int argc, char** argv) {
     "PocketLang " PK_VERSION_STRING " (https://github.com/ThakeeNathees/pocketlang/)\n"
     "Copyright(c) 2020 - 2021 ThakeeNathees.\n"
     "Free and open source software under the terms of the MIT license.\n";
-  const char* help = "Usage: pocketlang <source_path>\n";
+  const char* help = "usage: pocket [-c cmd | file]\n";
 
 
   // TODO: implement arg parse, REPL.

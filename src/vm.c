@@ -97,7 +97,7 @@ void pkFreeVM(PKVM* self) {
   DEALLOCATE(self, self);
 }
 
-void* pkGetUserData(PKVM* vm) {
+void* pkGetUserData(const PKVM* vm) {
   return vm->config.user_data;
 }
 
@@ -109,7 +109,7 @@ PkHandle* pkNewHandle(PKVM* vm, PkVar value) {
   return vmNewHandle(vm, *((Var*)value));
 }
 
-PkVar pkGetHandleValue(PkHandle* handle) {
+PkVar pkGetHandleValue(const PkHandle* handle) {
   return (PkVar)&handle->value;
 }
 
@@ -164,7 +164,8 @@ void vmPushTempRef(PKVM* self, Object* obj) {
 }
 
 void vmPopTempRef(PKVM* self) {
-  ASSERT(self->temp_reference_count > 0, "Temporary reference is empty to pop.");
+  ASSERT(self->temp_reference_count > 0,
+         "Temporary reference is empty to pop.");
   self->temp_reference_count--;
 }
 
@@ -189,8 +190,8 @@ void vmCollectGarbage(PKVM* self) {
   }
 
   // Mark the handles.
-  for (PkHandle* handle = self->handles; handle != NULL; handle = handle->next) {
-    grayValue(self, handle->value);
+  for (PkHandle* h = self->handles; h != NULL; h = h->next) {
+    grayValue(self, h->value);
   }
 
   // Garbage collection triggered at the middle of a compilation.
@@ -253,7 +254,7 @@ static void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
 }
 
 static inline Script* getScript(PKVM* vm, String* path) {
-  Var scr = mapGet(vm->scripts, VAR_OBJ(&path->_super));
+  Var scr = mapGet(vm->scripts, VAR_OBJ(path));
   if (IS_UNDEF(scr)) return NULL;
   ASSERT(AS_OBJ(scr)->type == OBJ_SCRIPT, OOPS);
   return (Script*)AS_OBJ(scr);
@@ -261,8 +262,8 @@ static inline Script* getScript(PKVM* vm, String* path) {
 
 // If failed to resolve it'll return false. Parameter [result] should be points
 // to the string which is the path that has to be resolved and once it resolved
-// the provided result's string's on_done() will be called and, it's string will 
-// be updated with the new resolved path string.
+// the provided result's string's on_done() will be called and, it's string
+// will be updated with the new resolved path string.
 static inline bool resolveScriptPath(PKVM* vm, pkStringPtr* path_string) {
   if (vm->config.resolve_path_fn == NULL) return true;
 
@@ -274,7 +275,7 @@ static inline bool resolveScriptPath(PKVM* vm, pkStringPtr* path_string) {
     // fiber == NULL => vm haven't started yet and it's a root script.
     resolved = vm->config.resolve_path_fn(vm, NULL, path);
   } else {
-    Function* fn = fiber->frames[fiber->frame_count - 1].fn;
+    const Function* fn = fiber->frames[fiber->frame_count - 1].fn;
     resolved = vm->config.resolve_path_fn(vm, fn->owner->path->data, path);
   }
 
@@ -292,10 +293,10 @@ static inline Var importScript(PKVM* vm, String* path_name) {
 
   // Check in the core libs.
   Script* scr = getCoreLib(vm, path_name);
-  if (scr != NULL) return VAR_OBJ(&scr->_super);
+  if (scr != NULL) return VAR_OBJ(scr);
 
   // Check in the scripts cache.
-  Var entry = mapGet(vm->scripts, VAR_OBJ(&path_name->_super));
+  Var entry = mapGet(vm->scripts, VAR_OBJ(path_name));
   if (!IS_UNDEF(entry)) {
     ASSERT(AS_OBJ(entry)->type == OBJ_SCRIPT, OOPS);
     return entry;
@@ -325,20 +326,20 @@ static inline void growStack(PKVM* vm, int size) {
   // If we reached here that means the stack is moved by the reallocation and
   // we have to update all the pointers that pointing to the old stack slots.
 
-  /*
-                                         '        '
-                 '        '              '        '
-                 '        '              |        | <new_rsp
-        old_rsp> |        |              |        |
-                 |        |       .----> | value  | <new_ptr
-                 |        |       |      |        |
-        old_ptr> | value  | ------'      |________| <new_rbp
-                 |        | ^            new stack
-        old_rbp> |________| | height
-                 old stack
-
-                new_ptr = new_rbp      + height
-                        = fiber->stack + ( old_ptr  - old_rbp )  */
+  //
+  //                                     '        '
+  //             '        '              '        '
+  //             '        '              |        | <new_rsp
+  //    old_rsp> |        |              |        |
+  //             |        |       .----> | value  | <new_ptr
+  //             |        |       |      |        |
+  //    old_ptr> | value  | ------'      |________| <new_rbp
+  //             |        | ^            new stack
+  //    old_rbp> |________| | height
+  //             old stack
+  //
+  //            new_ptr = new_rbp      + height
+  //                    = fiber->stack + ( old_ptr  - old_rbp )
 #define MAP_PTR(old_ptr) (fiber->stack + ((old_ptr) - old_rbp))
 
   // Update the stack top pointer and the return pointer.
@@ -352,7 +353,7 @@ static inline void growStack(PKVM* vm, int size) {
   }
 }
 
-static inline void pushCallFrame(PKVM* vm, Function* fn) {
+static inline void pushCallFrame(PKVM* vm, const Function* fn) {
     ASSERT(!fn->is_native, "Native function shouldn't use call frames.");
 
     /* Grow the stack frame if needed. */
@@ -389,7 +390,7 @@ void vmReportError(PKVM* vm) {
   vm->config.error_fn(vm, PK_ERROR_RUNTIME, NULL, -1, fiber->error->data);
   for (int i = fiber->frame_count - 1; i >= 0; i--) {
     CallFrame* frame = &fiber->frames[i];
-    Function* fn = frame->fn;
+    const Function* fn = frame->fn;
     ASSERT(!fn->is_native, OOPS);
     int line = fn->fn->oplines.data[frame->ip - fn->fn->opcodes.data - 1];
     vm->config.error_fn(vm, PK_ERROR_STACKTRACE, fn->owner->path->data, line,
@@ -410,8 +411,7 @@ static inline PkInterpretResult interpretSource(PKVM* vm, pkStringPtr source,
   if (scr == NULL) {
     scr = newScript(vm, path_name);
     vmPushTempRef(vm, &scr->_super); // scr.
-    mapSet(vm, vm->scripts, VAR_OBJ(&path_name->_super),
-      VAR_OBJ(&scr->_super));
+    mapSet(vm, vm->scripts, VAR_OBJ(path_name), VAR_OBJ(scr));
     vmPopTempRef(vm); // scr.
   }
   vmPopTempRef(vm); // path_name.
@@ -474,7 +474,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
   _script->initialized = true;
 
   // Reference to the instruction pointer in the call frame.
-  register uint8_t** ip;
+  register const uint8_t** ip;
 #define IP (*ip) // Convinent macro to the instruction pointer.
 
   register Var* rbp;         //< Stack base pointer register.
@@ -550,7 +550,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       dumpStackFrame(vm);           \
     } while (false)
 #else
-  #define DEBUG_CALL_STACK() ((void*)0)
+  #define DEBUG_CALL_STACK() NO_OP
 #endif
 
 #define SWITCH() Opcode instruction; switch (instruction = (Opcode)READ_BYTE())
@@ -599,14 +599,14 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(PUSH_LIST):
     {
       List* list = newList(vm, (uint32_t)READ_SHORT());
-      PUSH(VAR_OBJ(&list->_super));
+      PUSH(VAR_OBJ(list));
       DISPATCH();
     }
 
     OPCODE(PUSH_MAP):
     {
       Map* map = newMap(vm);
-      PUSH(VAR_OBJ(&map->_super));
+      PUSH(VAR_OBJ(map));
       DISPATCH();
     }
 
@@ -614,9 +614,9 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     {
       Var elem = PEEK(-1); // Don't pop yet, we need the reference for gc.
       Var list = PEEK(-2);
-      ASSERT(IS_OBJ(list) && AS_OBJ(list)->type == OBJ_LIST, OOPS);
+      ASSERT(IS_OBJ_TYPE(list, OBJ_LIST), OOPS);
       varBufferWrite(&((List*)AS_OBJ(list))->elements, vm, elem);
-      POP(); // elem
+      DROP(); // elem
       DISPATCH();
     }
 
@@ -626,15 +626,16 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var key = PEEK(-2);   // Don't pop yet, we need the reference for gc. 
       Var on = PEEK(-3);
 
-      ASSERT(IS_OBJ(on) && AS_OBJ(on)->type == OBJ_MAP, OOPS);
+      ASSERT(IS_OBJ_TYPE(on, OBJ_MAP), OOPS);
 
       if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
-        RUNTIME_ERROR(stringFormat(vm, "$ type is not hashable.", varTypeName(key)));
+        RUNTIME_ERROR(stringFormat(vm, "$ type is not hashable.",
+                      varTypeName(key)));
       }
       mapSet(vm, (Map*)AS_OBJ(on), key, value);
 
-      POP(); // value
-      POP(); // key
+      DROP(); // value
+      DROP(); // key
 
       DISPATCH();
     }
@@ -702,7 +703,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       uint16_t index = READ_SHORT();
       ASSERT(index < script->functions.count, OOPS);
       Function* fn = script->functions.data[index];
-      PUSH(VAR_OBJ(&fn->_super));
+      PUSH(VAR_OBJ(fn));
       DISPATCH();
     }
 
@@ -711,7 +712,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       uint16_t index = READ_SHORT();
       ASSERT_INDEX(index, vm->builtins_count);
       Function* fn = vm->builtins[index].fn;
-      PUSH(VAR_OBJ(&fn->_super));
+      PUSH(VAR_OBJ(fn));
       DISPATCH();
     }
 
@@ -725,7 +726,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var script = importScript(vm, name);
 
       // TODO: implement fiber bsed execution.
-      //ASSERT(IS_OBJ(script) && AS_OBJ(script)->type == OBJ_SCRIPT, OOPS);
+      //ASSERT(IS_OBJ_TYPE(script, OBJ_SCRIPT), OOPS);
       //Script* scr = (Script*)AS_OBJ(script);
       //if (!scr->initialized) vmRunScript(vm, scr);
 
@@ -736,11 +737,11 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(CALL):
     {
-      uint16_t argc = READ_SHORT();
+      const uint16_t argc = READ_SHORT();
       Var* callable = vm->fiber->sp - argc - 1;
 
-      if (IS_OBJ(*callable) && AS_OBJ(*callable)->type == OBJ_FUNC) {
-        Function* fn = (Function*)AS_OBJ(*callable);
+      if (IS_OBJ_TYPE(*callable, OBJ_FUNC)) {
+        const Function* fn = (const Function*)AS_OBJ(*callable);
 
         // -1 argument means multiple number of args.
         if (fn->arity != -1 && fn->arity != argc) {
@@ -946,7 +947,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var on = PEEK(-1); // Don't pop yet, we need the reference for gc. 
       String* name = script->names.data[READ_SHORT()];
       Var value = varGetAttrib(vm, on, name);
-      POP(); // on
+      DROP(); // on
       PUSH(value);
 
       CHECK_ERROR();
@@ -969,8 +970,8 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       String* name = script->names.data[READ_SHORT()];
       varSetAttrib(vm, on, name, value);
 
-      POP(); // value
-      POP(); // on
+      DROP(); // value
+      DROP(); // on
       PUSH(value);
 
       CHECK_ERROR();
@@ -982,8 +983,8 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var key = PEEK(-1); // Don't pop yet, we need the reference for gc.
       Var on = PEEK(-2);  // Don't pop yet, we need the reference for gc.
       Var value = varGetSubscript(vm, on, key);
-      POP(); // key
-      POP(); // on
+      DROP(); // key
+      DROP(); // on
       PUSH(value);
 
       CHECK_ERROR();
@@ -1005,9 +1006,9 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var key = PEEK(-2);   // Don't pop yet, we need the reference for gc.
       Var on = PEEK(-3);    // Don't pop yet, we need the reference for gc.
       varsetSubscript(vm, on, key, value);
-      POP(); // value
-      POP(); // key
-      POP(); // on
+      DROP(); // value
+      DROP(); // key
+      DROP(); // on
       PUSH(value);
 
       CHECK_ERROR();
@@ -1042,7 +1043,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
       Var value = varAdd(vm, l, r);
-      POP(); POP(); // r, l
+      DROP(); DROP(); // r, l
       PUSH(value);
 
       CHECK_ERROR();
@@ -1054,7 +1055,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
       Var value = varSubtract(vm, l, r);
-      POP(); POP(); // r, l
+      DROP(); DROP(); // r, l
       PUSH(value);
 
       CHECK_ERROR();
@@ -1066,7 +1067,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
       Var value = varMultiply(vm, l, r);
-      POP(); POP(); // r, l
+      DROP(); DROP(); // r, l
       PUSH(value);
 
       CHECK_ERROR();
@@ -1078,7 +1079,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
       Var value = varDivide(vm, l, r);
-      POP(); POP(); // r, l
+      DROP(); DROP(); // r, l
       PUSH(value);
 
       CHECK_ERROR();
@@ -1090,7 +1091,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
       Var value = varModulo(vm, l, r);
-      POP(); POP(); // r, l
+      DROP(); DROP(); // r, l
       PUSH(value);
 
       CHECK_ERROR();
@@ -1171,8 +1172,8 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       if (!IS_NUM(from) || !IS_NUM(to)) {
         RUNTIME_ERROR(newString(vm, "Range arguments must be number."));
       }
-      POP(); // to
-      POP(); // from
+      DROP(); // to
+      DROP(); // from
       PUSH(VAR_OBJ(newRange(vm, AS_NUM(from), AS_NUM(to))));
       DISPATCH();
     }

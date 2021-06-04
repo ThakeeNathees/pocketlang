@@ -89,6 +89,8 @@
     }                                                                \
   } while (false)
 
+#define NO_OP do {} while (false)
+
 #ifdef DEBUG
 
 #ifdef _MSC_VER
@@ -111,9 +113,9 @@
 
 #else
 
-#define DEBUG_BREAK() ((void*)0)
-#define ASSERT(condition, message) ((void*)0)
-#define ASSERT_INDEX(index, size) ((void*)0)
+#define DEBUG_BREAK() NO_OP
+#define ASSERT(condition, message) NO_OP
+#define ASSERT_INDEX(index, size) NO_OP
 
 // Reference : https://github.com/wren-lang/
 #if defined( _MSC_VER )
@@ -121,7 +123,7 @@
 #elif (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 5))
   #define UNREACHABLE() __builtin_unreachable()
 #else
-  #define UNREACHABLE() ((void*)0)
+  #define UNREACHABLE() NO_OP
 #endif
 
 #endif // DEBUG

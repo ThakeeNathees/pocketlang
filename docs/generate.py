@@ -4,7 +4,7 @@
 
 from markdown import markdown
 from os.path import join
-import os, sys, shutil
+import os, sys, shutil, re
 
 ## TODO: This is a quick and dirty script to generate html
 ##       from markdown. Refactor this file in the future.
@@ -40,7 +40,7 @@ WASM_SOURCE_FILES = '''\
 PAGES = [
 	('Getting-Started', [
 		TRY_PAGE,
-		'learn-in-5-minutes.md',
+		'learn-in-15-minutes.md',
 		'build-from-source.md',
 		'contributing.md',
 	]),
@@ -179,13 +179,15 @@ def relative_static_dir(dst):
 def path_to_content(src):
 	
 	text = ''
-	with open(src, 'r') as home_md:
-		text = home_md.read()
+	with open(src, 'r') as f:
+		text = f.read()
 		
 	## If html file we're done.
 	if get_validated_ext(src) == '.html':
 		return text
 	
+	assert(src.endswith('.md'))
+	text = custom_md_override(text)
 	content = markdown(text, extensions=['codehilite', 'fenced_code'])
 	
 	## A wakey way to inject html overrides to highlight out language
@@ -193,6 +195,17 @@ def path_to_content(src):
 	## do so. This should be done with a good static page generater instead
 	## of this script.
 	return custom_html_override(src, content)
+
+## Inject our custom markdown text override.
+def custom_md_override(text):
+
+	## Add html anchor.
+	for pre in ('#', '##', '###'):
+		pattern = '(^' + pre + r' \s*%%(.*)%%\n)'
+		for match, title in re.findall(pattern, text, flags=re.MULTILINE):
+			link = title.strip().lower().replace(' ', '-')
+			text = text.replace(match, f'{pre} {title} <a href="#{link}" name="{link}" class="anchor">#</a>')
+	return text
 
 ## Inject our custom html overrides.
 def custom_html_override(src, content):

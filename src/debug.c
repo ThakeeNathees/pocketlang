@@ -70,7 +70,7 @@ static void _dumpValue(PKVM* vm, Var value, bool recursive) {
         bool first = true;
         for (uint32_t i = 0; i < map->capacity; i++) {
           if (IS_UNDEF(map->entries[i].key)) continue;
-          if (!first) printf(", "); first = false;
+          if (!first) { printf(", "); first = false; }
 
           _dumpValue(vm, map->entries[i].key, true);
           printf(":");
