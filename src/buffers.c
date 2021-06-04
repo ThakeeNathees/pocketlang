@@ -51,7 +51,7 @@
     m_name_l##BufferFill(self, vm, data, 1);                                  \
   }                                                                           \
 
-void ByteBufferAddString(ByteBuffer* self, PKVM* vm, const char* str,
+void byteBufferAddString(ByteBuffer* self, PKVM* vm, const char* str,
                          uint32_t length) {
   byteBufferReserve(self, vm, self->count + length);
   for (uint32_t i = 0; i < length; i++) {

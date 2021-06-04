@@ -98,8 +98,8 @@ typedef enum {
   PK_FIBER,
 } PkVarType;
 
-typedef struct pkStringPtr pkStringPtr;
-typedef struct pkConfiguration pkConfiguration;
+typedef struct PkStringPtr PkStringPtr;
+typedef struct PkConfiguration PkConfiguration;
 
 // Type of the error message that pocketlang will provide with the pkErrorFn
 // callback.
@@ -146,19 +146,19 @@ typedef void (*pkErrorFn) (PKVM* vm, PkErrorType type,
 typedef void (*pkWriteFn) (PKVM* vm, const char* text);
 
 // A function callback symbol for clean/free the pkStringResult.
-typedef void (*pkResultDoneFn) (PKVM* vm, pkStringPtr result);
+typedef void (*pkResultDoneFn) (PKVM* vm, PkStringPtr result);
 
 // A function callback to resolve the import script name from the [from] path
 // to an absolute (or relative to the cwd). This is required to solve same
 // script imported with different relative path. Set the string attribute to
 // NULL to indicate if it's failed to resolve.
-typedef pkStringPtr(*pkResolvePathFn) (PKVM* vm, const char* from,
-                                       const char* path);
+typedef PkStringPtr (*pkResolvePathFn) (PKVM* vm, const char* from,
+                                        const char* path);
 
 // Load and return the script. Called by the compiler to fetch initial source
 // code and source for import statements. Set the string attribute to NULL
 // to indicate if it's failed to load the script.
-typedef pkStringPtr(*pkLoadScriptFn) (PKVM* vm, const char* path);
+typedef PkStringPtr (*pkLoadScriptFn) (PKVM* vm, const char* path);
 
 /*****************************************************************************/
 /* POCKETLANG PUBLIC API                                                     */
@@ -167,10 +167,10 @@ typedef pkStringPtr(*pkLoadScriptFn) (PKVM* vm, const char* path);
 // Create a new pkConfiguraition with the default values and return it.
 // Override those default configuration to adopt to another hosting
 // application.
-PK_PUBLIC pkConfiguration pkNewConfiguration();
+PK_PUBLIC PkConfiguration pkNewConfiguration();
 
 // Allocate initialize and returns a new VM
-PK_PUBLIC PKVM* pkNewVM(pkConfiguration* config);
+PK_PUBLIC PKVM* pkNewVM(PkConfiguration* config);
 
 // Clean the VM and dispose all the resources allocated by the VM.
 PK_PUBLIC void pkFreeVM(PKVM* vm);
@@ -205,13 +205,11 @@ PK_PUBLIC void pkModuleAddFunction(PKVM* vm, PkHandle* module,
                                    const char* name,
                                    pkNativeFn fptr, int arity);
 
-// Interpret the source and return the result.
+// Interpret the source and return the result. Once It's done with the source
+// and path 'on_done' will be called to clean the string if it's not NULL.
 PK_PUBLIC PkInterpretResult pkInterpretSource(PKVM* vm,
-                                              const char* source,
-                                              const char* path);
-
-// Compile and execut file at given path.
-PK_PUBLIC PkInterpretResult pkInterpret(PKVM* vm, const char* path);
+                                              PkStringPtr source,
+                                              PkStringPtr path);
 
 /*****************************************************************************/
 /* POCKETLANG PUBLIC TYPE DEFINES                                            */
@@ -220,13 +218,13 @@ PK_PUBLIC PkInterpretResult pkInterpret(PKVM* vm, const char* path);
 // A string pointer wrapper to pass cstring from host application to pocketlang
 // vm, with a on_done() callback to clean it when the pocketlang vm done with
 // the string.
-struct pkStringPtr {
+struct PkStringPtr {
   const char* string;     //< The string result.
   pkResultDoneFn on_done; //< Called once vm done with the string.
   void* user_data;        //< User related data.
 };
 
-struct pkConfiguration {
+struct PkConfiguration {
 
   // The callback used to allocate, reallocate, and free. If the function
   // pointer is NULL it defaults to the VM's realloc(), free() wrappers.

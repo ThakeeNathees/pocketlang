@@ -52,7 +52,7 @@ DECLARE_BUFFER(Function, function, Function*)
 
 // Add all the characters to the buffer, byte buffer can also be used as a
 // buffer to write string (like a string stream).
-void ByteBufferAddString(ByteBuffer* self, PKVM* vm, const char* str,
+void byteBufferAddString(ByteBuffer* self, PKVM* vm, const char* str,
                          uint32_t length);
 
 #undef DECLARE_BUFFER

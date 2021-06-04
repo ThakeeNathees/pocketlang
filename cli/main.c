@@ -26,11 +26,13 @@ size_t pathJoin(const char* from, const char* path, char* buffer,
 void errorPrint(PKVM* vm, PkErrorType type, const char* file, int line,
   const char* message) {
   if (type == PK_ERROR_COMPILE) {
-    fprintf(stderr, "Error: %s\n       at %s:%i\n", message, file, line);
+    fprintf(stderr, "Error: %s\n       at \"%s\":%i\n", message, file, line);
+
   } else if (type == PK_ERROR_RUNTIME) {
     fprintf(stderr, "Error: %s\n", message);
+
   } else if (type == PK_ERROR_STACKTRACE) {
-    fprintf(stderr, "  %s() [%s:%i]\n", message, file, line);
+    fprintf(stderr, "  %s() [\"%s\":%i]\n", message, file, line);
   }
 }
 
@@ -38,15 +40,15 @@ void writeFunction(PKVM* vm, const char* text) {
   fprintf(stdout, "%s", text);
 }
 
-void onResultDone(PKVM* vm, pkStringPtr result) {
+void onResultDone(PKVM* vm, PkStringPtr result) {
 
   if ((bool)result.user_data) {
     free((void*)result.string);
   }
 }
 
-pkStringPtr resolvePath(PKVM* vm, const char* from, const char* path) {
-  pkStringPtr result;
+PkStringPtr resolvePath(PKVM* vm, const char* from, const char* path) {
+  PkStringPtr result;
   result.on_done = onResultDone;
 
   size_t from_dir_len;
@@ -81,9 +83,9 @@ pkStringPtr resolvePath(PKVM* vm, const char* from, const char* path) {
   return result;
 }
 
-pkStringPtr loadScript(PKVM* vm, const char* path) {
+PkStringPtr loadScript(PKVM* vm, const char* path) {
 
-  pkStringPtr result;
+  PkStringPtr result;
   result.on_done = onResultDone;
 
   // Open the file.
@@ -132,25 +134,40 @@ int main(int argc, char** argv) {
   // Initialize cli.
   pathInit();
 
-  pkConfiguration config = pkNewConfiguration();
+  PkConfiguration config = pkNewConfiguration();
   config.error_fn = errorPrint;
   config.write_fn = writeFunction;
   config.load_script_fn = loadScript;
   config.resolve_path_fn = resolvePath;
 
+  PKVM* vm = pkNewVM(&config);
+  registerModules(vm);
+  PkInterpretResult result;
+
   // FIXME: this is temp till arg parse implemented.
   if (argc >= 3 && strcmp(argv[1], "-c") == 0) {
-    PKVM* vm = pkNewVM(&config);
-    PkInterpretResult result = pkInterpretSource(vm, argv[2], "$(Source)");
+
+    PkStringPtr source = { argv[2], NULL, NULL };
+    PkStringPtr path = { "$(Source)", NULL, NULL };
+
+    result = pkInterpretSource(vm, source, path);
     pkFreeVM(vm);
     return result;
   }
 
-  PKVM* vm = pkNewVM(&config);
-  registerModules(vm);
+  PkStringPtr resolved = resolvePath(vm, ".", argv[1]);
+  PkStringPtr source = loadScript(vm, resolved.string);
 
-  PkInterpretResult result = pkInterpret(vm, argv[1]);
+  if (source.string != NULL) {
+    result = pkInterpretSource(vm, source, resolved);
+
+  } else {
+    result = PK_RESULT_COMPILE_ERROR;
+    fprintf(stderr, "Error: cannot open file at \"%s\"\n", resolved.string);
+    if (resolved.on_done != NULL) resolved.on_done(vm, resolved);
+    if (source.on_done != NULL) source.on_done(vm, source);
+  }
+
   pkFreeVM(vm);
-
   return result;
 }

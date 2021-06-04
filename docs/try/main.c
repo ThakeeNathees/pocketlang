@@ -22,14 +22,14 @@ void writeFunction(PKVM* vm, const char* text) {
   js_writeFunction(text);
 }
 
-pkStringPtr resolvePath(PKVM* vm, const char* from, const char* name) {
-  pkStringPtr result;
+PkStringPtr resolvePath(PKVM* vm, const char* from, const char* name) {
+  PkStringPtr result;
   result.string = NULL;
   return result;
 }
 
-pkStringPtr loadScript(PKVM* vm, const char* path) {
-  pkStringPtr result;
+PkStringPtr loadScript(PKVM* vm, const char* path) {
+  PkStringPtr result;
   result.string = NULL;
   return result;
 }
@@ -37,7 +37,7 @@ pkStringPtr loadScript(PKVM* vm, const char* path) {
 EMSCRIPTEN_KEEPALIVE
 int runSource(const char* source) {
   
-  pkConfiguration config = pkNewConfiguration();
+  PkConfiguration config = pkNewConfiguration();
   config.error_fn = errorPrint;
   config.write_fn = writeFunction;
   config.load_script_fn = loadScript;

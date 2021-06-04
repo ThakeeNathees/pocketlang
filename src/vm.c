@@ -38,8 +38,8 @@
 // if the host doesn't provided any allocators for us.
 static void* defaultRealloc(void* memory, size_t new_size, void* user_data);
 
-pkConfiguration pkNewConfiguration() {
-  pkConfiguration config;
+PkConfiguration pkNewConfiguration() {
+  PkConfiguration config;
   config.realloc_fn = defaultRealloc;
 
   config.error_fn = NULL;
@@ -52,9 +52,9 @@ pkConfiguration pkNewConfiguration() {
   return config;
 }
 
-PKVM* pkNewVM(pkConfiguration* config) {
+PKVM* pkNewVM(PkConfiguration* config) {
 
-  pkConfiguration default_config = pkNewConfiguration();
+  PkConfiguration default_config = pkNewConfiguration();
 
   if (config == NULL) config = &default_config;
 
@@ -264,11 +264,11 @@ static inline Script* getScript(PKVM* vm, String* path) {
 // to the string which is the path that has to be resolved and once it resolved
 // the provided result's string's on_done() will be called and, it's string
 // will be updated with the new resolved path string.
-static inline bool resolveScriptPath(PKVM* vm, pkStringPtr* path_string) {
+static inline bool resolveScriptPath(PKVM* vm, PkStringPtr* path_string) {
   if (vm->config.resolve_path_fn == NULL) return true;
 
   const char* path = path_string->string;
-  pkStringPtr resolved;
+  PkStringPtr resolved;
 
   Fiber* fiber = vm->fiber;
   if (fiber == NULL || fiber->frame_count <= 0) {
@@ -400,8 +400,8 @@ void vmReportError(PKVM* vm) {
 
 // This function is responsible to call on_done function if it's done with the 
 // provided string pointers.
-static inline PkInterpretResult interpretSource(PKVM* vm, pkStringPtr source,
-                                         pkStringPtr path) {
+PkInterpretResult pkInterpretSource(PKVM* vm, PkStringPtr source,
+                                    PkStringPtr path) {
   String* path_name = newString(vm, path.string);
   if (path.on_done) path.on_done(vm, path);
   vmPushTempRef(vm, &path_name->_super); // path_name.
@@ -426,43 +426,6 @@ static inline PkInterpretResult interpretSource(PKVM* vm, pkStringPtr source,
   return vmRunScript(vm, scr);
 }
 
-PkInterpretResult pkInterpretSource(PKVM* vm, const char* source,
-                                    const char* path) {
-  // Call the internal interpretSource implementation.
-  pkStringPtr source_ptr = { source, NULL, NULL };
-  pkStringPtr path_ptr = { path, NULL, NULL };
-  return interpretSource(vm, source_ptr, path_ptr);
-}
-
-PkInterpretResult pkInterpret(PKVM* vm, const char* path) {
-
-  pkStringPtr resolved;
-  resolved.string = path;
-  resolved.on_done = NULL;
-
-  // The provided path should already be resolved.
-  //if (!resolveScriptPath(vm, &resolved)) {
-  //  if (vm->config.error_fn != NULL) {
-  //    vm->config.error_fn(vm, PK_ERROR_COMPILE, NULL, -1,
-  //      stringFormat(vm, "Failed to resolve path '$'.", path)->data);
-  //  }
-  //  return PK_RESULT_COMPILE_ERROR;
-  //}
-
-  // Load the script source.
-  pkStringPtr source = vm->config.load_script_fn(vm, resolved.string);
-  if (source.string == NULL) {
-    if (vm->config.error_fn != NULL) {
-      vm->config.error_fn(vm, PK_ERROR_COMPILE, NULL, -1,
-        stringFormat(vm, "Failed to load script '$'.", resolved.string)->data);
-    }
-
-    return PK_RESULT_COMPILE_ERROR;
-  }
-
-  return interpretSource(vm, source, resolved);
-}
-
 /******************************************************************************
  * RUNTIME                                                                    *
  *****************************************************************************/
@@ -473,9 +436,11 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
   // inclusion cause a crash.
   _script->initialized = true;
 
-  // Reference to the instruction pointer in the call frame.
-  register const uint8_t** ip;
-#define IP (*ip) // Convinent macro to the instruction pointer.
+  // The instruction pointer.
+  // Note: sing 'uint8_t** ip' as reference to the instruction pointer in the
+  // call frame seems a bit slower because of the dereferencing (~0.1 sec for
+  // 100 million calls).
+  register const uint8_t* ip;
 
   register Var* rbp;         //< Stack base pointer register.
   register CallFrame* frame; //< Current call frame.
@@ -508,24 +473,26 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 #define POP()        (*(--vm->fiber->sp))
 #define DROP()       (--vm->fiber->sp)
 #define PEEK(off)    (*(vm->fiber->sp + (off)))
-#define READ_BYTE()  (*IP++)
-#define READ_SHORT() (IP+=2, (uint16_t)((IP[-2] << 8) | IP[-1]))
+#define READ_BYTE()  (*ip++)
+#define READ_SHORT() (ip+=2, (uint16_t)((ip[-2] << 8) | ip[-1]))
 
 // Check if any runtime error exists and if so returns RESULT_RUNTIME_ERROR.
 #define CHECK_ERROR()                 \
   do {                                \
     if (HAS_ERROR()) {                \
+      UPDATE_FRAME();                 \
       vmReportError(vm);              \
       return PK_RESULT_RUNTIME_ERROR; \
     }                                 \
   } while (false)
 
 // [err_msg] must be of type String.
-#define RUNTIME_ERROR(err_msg)                 \
-  do {                                         \
-    vm->fiber->error = err_msg;                \
-    vmReportError(vm);                         \
-    return PK_RESULT_RUNTIME_ERROR;            \
+#define RUNTIME_ERROR(err_msg)       \
+  do {                               \
+    vm->fiber->error = err_msg;      \
+    UPDATE_FRAME();                  \
+    vmReportError(vm);               \
+    return PK_RESULT_RUNTIME_ERROR;  \
   } while (false)
 
 // Load the last call frame to vm's execution variables to resume/run the
@@ -533,10 +500,13 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 #define LOAD_FRAME()                                       \
   do {                                                     \
     frame = &vm->fiber->frames[vm->fiber->frame_count-1];  \
-    ip = &(frame->ip);                                     \
+    ip = frame->ip;                                        \
     rbp = frame->rbp;                                      \
     script = frame->fn->owner;                             \
   } while (false)
+
+// Update the frame's execution variables before pushing another call frame.
+#define UPDATE_FRAME() frame->ip = ip;
 
 #ifdef OPCODE
   #error "OPCODE" should not be deifined here.
@@ -656,7 +626,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     }
     OPCODE(PUSH_LOCAL_N):
     {
-      uint16_t index = READ_SHORT();
+      uint8_t index = READ_BYTE();
       PUSH(rbp[index + 1]);  // +1: rbp[0] is return value.
       DISPATCH();
     }
@@ -677,14 +647,14 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     }
     OPCODE(STORE_LOCAL_N):
     {
-      uint16_t index = READ_SHORT();
+      uint8_t index = READ_BYTE();
       rbp[index + 1] = PEEK(-1);  // +1: rbp[0] is return value.
       DISPATCH();
     }
 
     OPCODE(PUSH_GLOBAL):
     {
-      uint16_t index = READ_SHORT();
+      uint8_t index = READ_BYTE();
       ASSERT(index < script->globals.count, OOPS);
       PUSH(script->globals.data[index]);
       DISPATCH();
@@ -692,7 +662,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(STORE_GLOBAL):
     {
-      uint16_t index = READ_SHORT();
+      uint8_t index = READ_BYTE();
       ASSERT(index < script->globals.count, OOPS);
       script->globals.data[index] = PEEK(-1);
       DISPATCH();
@@ -700,7 +670,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(PUSH_FN):
     {
-      uint16_t index = READ_SHORT();
+      uint8_t index = READ_BYTE();
       ASSERT(index < script->functions.count, OOPS);
       Function* fn = script->functions.data[index];
       PUSH(VAR_OBJ(fn));
@@ -709,7 +679,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(PUSH_BUILTIN_FN):
     {
-      uint16_t index = READ_SHORT();
+      uint8_t index = READ_BYTE();
       ASSERT_INDEX(index, vm->builtins_count);
       Function* fn = vm->builtins[index].fn;
       PUSH(VAR_OBJ(fn));
@@ -737,7 +707,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(CALL):
     {
-      const uint16_t argc = READ_SHORT();
+      const uint8_t argc = READ_BYTE();
       Var* callable = vm->fiber->sp - argc - 1;
 
       if (IS_OBJ_TYPE(*callable, OBJ_FUNC)) {
@@ -767,9 +737,9 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
           DISPATCH(); //< This will save 2 jumps.
 
         } else {
+          UPDATE_FRAME(); //< Update the current frame's ip.
           pushCallFrame(vm, fn);
-          LOAD_FRAME(); //< Load the top frame to vm's execution variables.
-          DISPATCH();   //< This will save 2 jumps.
+          LOAD_FRAME();  //< Load the top frame to vm's execution variables.
         }
 
       } else {
@@ -809,7 +779,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     #define JUMP_ITER_EXIT() \
       do {                   \
-        IP += jump_offset;   \
+        ip += jump_offset;   \
         DISPATCH();          \
       } while (false)
 
@@ -890,14 +860,14 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(JUMP):
     {
       uint16_t offset = READ_SHORT();
-      IP += offset;
+      ip += offset;
       DISPATCH();
     }
 
     OPCODE(LOOP):
     {
       uint16_t offset = READ_SHORT();
-      IP -= offset;
+      ip -= offset;
       DISPATCH();
     }
 
@@ -906,7 +876,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var cond = POP();
       uint16_t offset = READ_SHORT();
       if (toBool(cond)) {
-        IP += offset;
+        ip += offset;
       }
       DISPATCH();
     }
@@ -916,7 +886,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
       Var cond = POP();
       uint16_t offset = READ_SHORT();
       if (!toBool(cond)) {
-        IP += offset;
+        ip += offset;
       }
       DISPATCH();
     }

@@ -78,7 +78,7 @@ struct PKVM {
   PkHandle* handles;
 
   // VM's configurations.
-  pkConfiguration config;
+  PkConfiguration config;
 
   // Current compiler reference to mark it's heap allocated objects. Note that
   // The compiler isn't heap allocated. It'll be a link list of all the

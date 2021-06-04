@@ -12,11 +12,11 @@
 // To limit maximum elements to be dumpin in a map or a list.
 #define MAX_DUMP_ELEMENTS 30
 
+// Opcode names array.
 static const char* op_name[] = {
   #define OPCODE(name, params, stack) #name,
   #include "opcodes.h"
   #undef OPCODE
-  NULL,
 };
 
 static void _dumpValue(PKVM* vm, Var value, bool recursive) {
@@ -137,6 +137,7 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
 #define READ_SHORT() (i += 2, opcodes[i - 2] << 8 | opcodes[i-1])
 
 #define NO_ARGS() printf("\n")
+#define BYTE_ARG() printf("%5d\n", READ_BYTE())
 #define SHORT_ARG() printf("%5d\n", READ_SHORT())
 #define INDENTATION "  "
 
@@ -194,7 +195,7 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         break;
 
       case OP_PUSH_LOCAL_N:
-        SHORT_ARG();
+        READ_BYTE();
         break;
 
       case OP_STORE_LOCAL_0:
@@ -210,13 +211,13 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         break;
 
       case OP_STORE_LOCAL_N:
-        SHORT_ARG();
+        READ_BYTE();
         break;
 
       case OP_PUSH_GLOBAL:
       case OP_STORE_GLOBAL:
       {
-        int index = READ_SHORT();
+        int index = READ_BYTE();
         int name_index = func->owner->global_names.data[index];
         String* name = func->owner->names.data[name_index];
         printf("%5d '%s'\n", index, name->data);
@@ -225,7 +226,7 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
 
       case OP_PUSH_FN:
       {
-        int fn_index = READ_SHORT();
+        int fn_index = READ_BYTE();
         int name_index = func->owner->function_names.data[fn_index];
         String* name = func->owner->names.data[name_index];
         printf("%5d [Fn:%s]\n", fn_index, name->data);
@@ -234,7 +235,7 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
 
       case OP_PUSH_BUILTIN_FN:
       {
-        int index = READ_SHORT();
+        int index = READ_BYTE();
         printf("%5d [Fn:%s]\n", index, getBuiltinFunctionName(vm, index));
         break;
       }
@@ -249,7 +250,7 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       }
 
       case OP_CALL:
-        printf("%5d (argc)\n", READ_SHORT());
+        printf("%5d (argc)\n", READ_BYTE());
         break;
 
       case OP_ITER_TEST: NO_ARGS(); break;

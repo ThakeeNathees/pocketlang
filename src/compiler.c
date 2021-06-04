@@ -16,6 +16,10 @@
 // which is using a single byte value to identify the local.
 #define MAX_VARIABLES 256
 
+// The maximum number of functions a script could contain. Also it's limited by
+// it's opcode which is using a single byte value to identify the local.
+#define MAX_FUNCTIONS 256
+
 // The maximum number of names that were used before defined. Its just the size
 // of the Forward buffer of the compiler. Feel free to increase it if it
 // require more.
@@ -222,7 +226,7 @@ typedef enum {
   PREC_PRIMARY,
 } Precedence;
 
-typedef void (*GrammarFn)(Compiler* compiler, bool can_assign);
+typedef void (*GrammarFn)(Compiler* compiler);
 
 typedef struct {
   GrammarFn prefix;
@@ -247,7 +251,7 @@ typedef struct {
   int length;       //< Length of the name.
   int depth;        //< The depth the local is defined in.
   int line;         //< The line variable declared for debugging.
-} Variable;
+} Local;
 
 typedef struct sLoop {
 
@@ -328,11 +332,10 @@ struct Compiler {
   // level and > 0 is inner scope.
   int scope_depth;
 
-  Variable variables[MAX_VARIABLES]; //< Variables in the current context.
-  int var_count;                     //< Number of locals in [variables].
-  int global_count;                  //< Number of globals in [variables].
+  Local locals[MAX_VARIABLES]; //< Variables in the current context.
+  int local_count; //< Number of locals in [locals].
 
-  int stack_size; //< Current size including locals ind temps.=
+  int stack_size;  //< Current size including locals ind temps.
 
   Script* script;  //< Current script (a weak pointer).
   Loop* loop;      //< Current loop.
@@ -348,6 +351,16 @@ struct Compiler {
   // to tell the compiler that dont pop it's assigned value because the value
   // itself is the local.
   bool new_local;
+
+  // Will be true when parsing an "l-value" which can be assigned to a value
+  // using the assignment operator ('='). ie. 'a = 42' here a is an "l-value"
+  // and the 42 is a "r-value" so the assignment is consumed and compiled.
+  // Consider '42 = a' where 42 is a "r-value" which cannot be assigned.
+  // Similerly 'a = 1 + b = 2' the expression '(1 + b)' is a "r value" and
+  // the assignment here is invalid, however 'a = 1 + (b = 2)' is valid because
+  // the 'b' is an "l-value" and can be assigned but the '(b = 2)' is a
+  // "r-value".
+  bool l_value;
 };
 
 typedef struct {
@@ -369,13 +382,13 @@ static OpInfo opcode_info[] = {
 static void reportError(Compiler* compiler, const char* file, int line,
                         const char* fmt, va_list args) {
   PKVM* vm = compiler->vm;
+  if (vm->config.error_fn == NULL) return;
+
   compiler->has_errors = true;
   char message[ERROR_MESSAGE_SIZE];
   int length = vsprintf(message, fmt, args);
   __ASSERT(length < ERROR_MESSAGE_SIZE, "Error message buffer should not exceed "
            "the buffer");
-
-  if (vm->config.error_fn == NULL) return;
   vm->config.error_fn(vm, PK_ERROR_COMPILE, file, line, message);
 }
 
@@ -843,40 +856,36 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
 
   NameSearchResult result;
   result.type = NAME_NOT_DEFINED;
-  int index;
 
-  // Search through local and global valriables.
-  NameDefnType type = NAME_LOCAL_VAR; //< Will change to local.
-
-  // [index] will points to the ith local or ith global (will update).
-  index = compiler->var_count - compiler->global_count - 1;
-
-  for (int i = compiler->var_count - 1; i >= 0; i--) {
-    Variable* variable = &compiler->variables[i];
+  for (int i = compiler->local_count - 1; i >= 0; i--) {
+    Local* local = &compiler->locals[i];
+    ASSERT(local->depth != DEPTH_GLOBAL, OOPS);
 
     // Literal functions are not closures and ignore it's outer function's
     // local variables.
-    if (variable->depth != DEPTH_GLOBAL &&
-        compiler->func->depth >= variable->depth) {
+    if (compiler->func->depth >= local->depth) {
       continue;
     }
 
-    if (type == NAME_LOCAL_VAR && variable->depth == DEPTH_GLOBAL) {
-      type = NAME_GLOBAL_VAR;
-      index = compiler->global_count - 1;
-    }
-
-    if (length == variable->length) {
-      if (strncmp(variable->name, name, length) == 0) {
-        result.type = type;
-        result.index = index;
+    if (length == local->length) {
+      if (strncmp(local->name, name, length) == 0) {
+        result.type = NAME_LOCAL_VAR;
+        result.index = i;
         return result;
       }
     }
-
-    index--;
   }
 
+  int index; // For storing the search result below.
+
+  // Search through globals.
+  index = scriptSearchGlobals(compiler->script, name, length);
+  if (index != -1) {
+    result.type = NAME_GLOBAL_VAR;
+    result.index = index;
+    return result;
+  }
+  
   // Search through functions.
   index = scriptSearchFunc(compiler->script, name, length);
   if (index != -1) {
@@ -921,27 +930,27 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence);
 static int compileFunction(Compiler* compiler, FuncType fn_type);
 static void compileExpression(Compiler* compiler);
 
-static void exprLiteral(Compiler* compiler, bool can_assign);
-static void exprFunc(Compiler* compiler, bool can_assign);
-static void exprName(Compiler* compiler, bool can_assign);
+static void exprLiteral(Compiler* compiler);
+static void exprFunc(Compiler* compiler);
+static void exprName(Compiler* compiler);
 
-static void exprOr(Compiler* compiler, bool can_assign);
-static void exprAnd(Compiler* compiler, bool can_assign);
+static void exprOr(Compiler* compiler);
+static void exprAnd(Compiler* compiler);
 
-static void exprChainCall(Compiler* compiler, bool can_assign);
-static void exprBinaryOp(Compiler* compiler, bool can_assign);
-static void exprUnaryOp(Compiler* compiler, bool can_assign);
+static void exprChainCall(Compiler* compiler);
+static void exprBinaryOp(Compiler* compiler);
+static void exprUnaryOp(Compiler* compiler);
 
-static void exprGrouping(Compiler* compiler, bool can_assign);
-static void exprList(Compiler* compiler, bool can_assign);
-static void exprMap(Compiler* compiler, bool can_assign);
+static void exprGrouping(Compiler* compiler);
+static void exprList(Compiler* compiler);
+static void exprMap(Compiler* compiler);
 
-static void exprCall(Compiler* compiler, bool can_assign);
-static void exprAttrib(Compiler* compiler, bool can_assign);
-static void exprSubscript(Compiler* compiler, bool can_assign);
+static void exprCall(Compiler* compiler);
+static void exprAttrib(Compiler* compiler);
+static void exprSubscript(Compiler* compiler);
 
 // true, false, null, self.
-static void exprValue(Compiler* compiler, bool can_assign);
+static void exprValue(Compiler* compiler);
 
 #define NO_RULE { NULL,          NULL,          PREC_NONE }
 #define NO_INFIX PREC_NONE
@@ -1024,14 +1033,14 @@ static GrammarRule* getRule(TokenType type) {
 static void emitStoreVariable(Compiler* compiler, int index, bool global) {
   if (global) {
     emitOpcode(compiler, OP_STORE_GLOBAL);
-    emitShort(compiler, index);
+    emitByte(compiler, index);
 
   } else {
     if (index < 9) { //< 0..8 locals have single opcode.
       emitOpcode(compiler, (Opcode)(OP_STORE_LOCAL_0 + index));
     } else {
       emitOpcode(compiler, OP_STORE_LOCAL_N);
-      emitShort(compiler, index);
+      emitByte(compiler, index);
     }
   }
 }
@@ -1039,33 +1048,33 @@ static void emitStoreVariable(Compiler* compiler, int index, bool global) {
 static void emitPushVariable(Compiler* compiler, int index, bool global) {
   if (global) {
     emitOpcode(compiler, OP_PUSH_GLOBAL);
-    emitShort(compiler, index);
+    emitByte(compiler, index);
 
   } else {
     if (index < 9) { //< 0..8 locals have single opcode.
       emitOpcode(compiler, (Opcode)(OP_PUSH_LOCAL_0 + index));
     } else {
       emitOpcode(compiler, OP_PUSH_LOCAL_N);
-      emitShort(compiler, index);
+      emitByte(compiler, index);
     }
   }
 }
 
-static void exprLiteral(Compiler* compiler, bool can_assign) {
+static void exprLiteral(Compiler* compiler) {
   Token* value = &compiler->previous;
   int index = compilerAddConstant(compiler, value->value);
   emitOpcode(compiler, OP_PUSH_CONSTANT);
   emitShort(compiler, index);
 }
 
-static void exprFunc(Compiler* compiler, bool can_assign) {
+static void exprFunc(Compiler* compiler) {
   int fn_index = compileFunction(compiler, FN_LITERAL);
   emitOpcode(compiler, OP_PUSH_FN);
-  emitShort(compiler, fn_index);
+  emitByte(compiler, fn_index);
 }
 
 // Local/global variables, script/native/builtin functions name.
-static void exprName(Compiler* compiler, bool can_assign) {
+static void exprName(Compiler* compiler) {
 
   const char* start = compiler->previous.start;
   int length = compiler->previous.length;
@@ -1073,10 +1082,13 @@ static void exprName(Compiler* compiler, bool can_assign) {
   NameSearchResult result = compilerSearchName(compiler, start, length);
 
   if (result.type == NAME_NOT_DEFINED) {
-    if (can_assign && match(compiler, TK_EQ)) {
-      int index = compilerAddVariable(compiler, start, length,
-                                      line);
+    if (compiler->l_value && match(compiler, TK_EQ)) {
+      int index = compilerAddVariable(compiler, start, length, line);
+
+      // Compile the assigned value.
       compileExpression(compiler);
+
+      // Store the value to the variable.
       if (compiler->scope_depth == DEPTH_GLOBAL) {
         emitStoreVariable(compiler, index, true);
 
@@ -1084,16 +1096,15 @@ static void exprName(Compiler* compiler, bool can_assign) {
         // This will prevent the assignment from poped out from the stack
         // since the assigned value itself is the local and not a temp.
         compiler->new_local = true;
-        emitStoreVariable(compiler, (index - compiler->global_count), false);
+        emitStoreVariable(compiler, index, false);
       }
     } else {
 
       // The name could be a function which hasn't been defined at this point.
       if (peek(compiler) == TK_LPARAN) {
         emitOpcode(compiler, OP_PUSH_FN);
-        int index = emitShort(compiler, result.index);
-        compilerAddForward(compiler, index, _FN, start, length,
-                           line);
+        int index = emitByte(compiler, 0xff);
+        compilerAddForward(compiler, index, _FN, start, length, line);
       } else {
         parseError(compiler, "Name '%.*s' is not defined.", length, start);
       }
@@ -1107,7 +1118,7 @@ static void exprName(Compiler* compiler, bool can_assign) {
     case NAME_GLOBAL_VAR: {
       const bool is_global = result.type == NAME_GLOBAL_VAR;
 
-      if (can_assign && matchAssignment(compiler)) {
+      if (compiler->l_value && matchAssignment(compiler)) {
         TokenType assignment = compiler->previous.type;
         if (assignment != TK_EQ) {
           emitPushVariable(compiler, result.index, is_global);
@@ -1137,12 +1148,12 @@ static void exprName(Compiler* compiler, bool can_assign) {
 
     case NAME_FUNCTION:
       emitOpcode(compiler, OP_PUSH_FN);
-      emitShort(compiler, result.index);
+      emitByte(compiler, result.index);
       return;
 
     case NAME_BUILTIN:
       emitOpcode(compiler, OP_PUSH_BUILTIN_FN);
-      emitShort(compiler, result.index);
+      emitByte(compiler, result.index);
       return;
 
     case NAME_NOT_DEFINED:
@@ -1162,7 +1173,7 @@ static void exprName(Compiler* compiler, bool can_assign) {
      '----> (...)                |    '----> (...)
 */                                  
 
-void exprOr(Compiler* compiler, bool can_assign) {
+void exprOr(Compiler* compiler) {
   emitOpcode(compiler, OP_JUMP_IF);
   int true_offset_a = emitShort(compiler, 0xffff); //< Will be patched.
 
@@ -1181,7 +1192,7 @@ void exprOr(Compiler* compiler, bool can_assign) {
   patchJump(compiler, end_offset);
 }
 
-void exprAnd(Compiler* compiler, bool can_assign) {
+void exprAnd(Compiler* compiler) {
   emitOpcode(compiler, OP_JUMP_IF_NOT);
   int false_offset_a = emitShort(compiler, 0xffff); //< Will be patched.
 
@@ -1200,7 +1211,7 @@ void exprAnd(Compiler* compiler, bool can_assign) {
   patchJump(compiler, end_offset);
 }
 
-static void exprChainCall(Compiler* compiler, bool can_assign) {
+static void exprChainCall(Compiler* compiler) {
   skipNewLines(compiler);
   parsePrecedence(compiler, (Precedence)(PREC_CHAIN_CALL + 1));
   emitOpcode(compiler, OP_SWAP); // Swap the data with the function.
@@ -1220,11 +1231,13 @@ static void exprChainCall(Compiler* compiler, bool can_assign) {
     }
   }
 
+  // TOOD: ensure argc < 256 (MAX_ARGC) 1byte.
+
   emitOpcode(compiler, OP_CALL);
-  emitShort(compiler, argc);
+  emitByte(compiler, argc);
 }
 
-static void exprBinaryOp(Compiler* compiler, bool can_assign) {
+static void exprBinaryOp(Compiler* compiler) {
   TokenType op = compiler->previous.type;
   skipNewLines(compiler);
   parsePrecedence(compiler, (Precedence)(getRule(op)->precedence + 1));
@@ -1253,7 +1266,7 @@ static void exprBinaryOp(Compiler* compiler, bool can_assign) {
   }
 }
 
-static void exprUnaryOp(Compiler* compiler, bool can_assign) {
+static void exprUnaryOp(Compiler* compiler) {
   TokenType op = compiler->previous.type;
   skipNewLines(compiler);
   parsePrecedence(compiler, (Precedence)(PREC_UNARY + 1));
@@ -1267,14 +1280,14 @@ static void exprUnaryOp(Compiler* compiler, bool can_assign) {
   }
 }
 
-static void exprGrouping(Compiler* compiler, bool can_assign) {
+static void exprGrouping(Compiler* compiler) {
   skipNewLines(compiler);
   compileExpression(compiler);
   skipNewLines(compiler);
   consume(compiler, TK_RPARAN, "Expected ')' after expression.");
 }
 
-static void exprList(Compiler* compiler, bool can_assign) {
+static void exprList(Compiler* compiler) {
 
   emitOpcode(compiler, OP_PUSH_LIST);
   int size_index = emitShort(compiler, 0);
@@ -1298,7 +1311,7 @@ static void exprList(Compiler* compiler, bool can_assign) {
   _FN->opcodes.data[size_index + 1] = size & 0xff;
 }
 
-static void exprMap(Compiler* compiler, bool can_assign) {
+static void exprMap(Compiler* compiler) {
   emitOpcode(compiler, OP_PUSH_MAP);
 
   do {
@@ -1318,7 +1331,7 @@ static void exprMap(Compiler* compiler, bool can_assign) {
   consume(compiler, TK_RBRACE, "Expected '}' after map elements.");
 }
 
-static void exprCall(Compiler* compiler, bool can_assign) {
+static void exprCall(Compiler* compiler) {
 
   // Compile parameters.
   int argc = 0;
@@ -1333,10 +1346,10 @@ static void exprCall(Compiler* compiler, bool can_assign) {
   }
 
   emitOpcode(compiler, OP_CALL);
-  emitShort(compiler, argc);
+  emitByte(compiler, argc);
 }
 
-static void exprAttrib(Compiler* compiler, bool can_assign) {
+static void exprAttrib(Compiler* compiler) {
   consume(compiler, TK_NAME, "Expected an attribute name after '.'.");
   const char* name = compiler->previous.start;
   int length = compiler->previous.length;
@@ -1344,7 +1357,7 @@ static void exprAttrib(Compiler* compiler, bool can_assign) {
   // Store the name in script's names.
   int index = scriptAddName(compiler->script, compiler->vm, name, length);
 
-  if (can_assign && matchAssignment(compiler)) {
+  if (compiler->l_value && matchAssignment(compiler)) {
 
     TokenType assignment = compiler->previous.type;
     if (assignment != TK_EQ) {
@@ -1374,11 +1387,11 @@ static void exprAttrib(Compiler* compiler, bool can_assign) {
   }
 }
 
-static void exprSubscript(Compiler* compiler, bool can_assign) {
+static void exprSubscript(Compiler* compiler) {
   compileExpression(compiler);
   consume(compiler, TK_RBRACKET, "Expected ']' after subscription ends.");
 
-  if (can_assign && matchAssignment(compiler)) {
+  if (compiler->l_value && matchAssignment(compiler)) {
 
     TokenType assignment = compiler->previous.type;
     if (assignment != TK_EQ) {
@@ -1405,7 +1418,7 @@ static void exprSubscript(Compiler* compiler, bool can_assign) {
   }
 }
 
-static void exprValue(Compiler* compiler, bool can_assign) {
+static void exprValue(Compiler* compiler) {
   TokenType op = compiler->previous.type;
   switch (op) {
     case TK_NULL:  emitOpcode(compiler, OP_PUSH_NULL); return;
@@ -1425,13 +1438,13 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
     return;
   }
 
-  bool can_assign = precedence <= PREC_LOWEST;
-  prefix(compiler, can_assign);
+  compiler->l_value = precedence <= PREC_LOWEST;
+  prefix(compiler);
 
   while (getRule(compiler->current.type)->precedence >= precedence) {
     lexToken(compiler);
     GrammarFn infix = getRule(compiler->previous.type)->infix;
-    infix(compiler, can_assign);
+    infix(compiler);
   }
 }
 
@@ -1459,8 +1472,7 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
   compiler->next.value = VAR_UNDEFINED;
 
   compiler->scope_depth = DEPTH_GLOBAL;
-  compiler->var_count = 0;
-  compiler->global_count = 0;
+  compiler->local_count = 0;
   compiler->stack_size = 0;
 
   compiler->loop = NULL;
@@ -1474,10 +1486,9 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
 // scope otherwise returns -1.
 static int compilerGetVariable(Compiler* compiler, const char* name,
                                int length) {
-  for (int i = compiler->var_count - 1; i >= 0; i--) {
-    Variable* variable = &compiler->variables[i];
-    if (length == variable->length && strncmp(name, variable->name,
-                                              length) == 0) {
+  for (int i = compiler->local_count - 1; i >= 0; i--) {
+    Local* local = &compiler->locals[i];
+    if (length == local->length && strncmp(name, local->name, length) == 0) {
       return i;
     }
   }
@@ -1491,25 +1502,45 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
 
   // TODO: should I validate the name for pre-defined, etc?
 
-  if (compiler->var_count == MAX_VARIABLES) {
-    parseError(compiler, "A script should contain at most %d variables.",
-               MAX_VARIABLES);
+  // Check if maximum variable count is reached.
+  bool max_vars_reached = false;
+  const char* var_type; // For max variables reached error message.
+  if (compiler->scope_depth == DEPTH_GLOBAL) {
+    if (compiler->local_count == MAX_VARIABLES) {
+      max_vars_reached = true;
+      var_type = "locals";
+    }
+  } else {
+    if (compiler->script->globals.count == MAX_VARIABLES) {
+      max_vars_reached = true;
+      var_type = "globals";
+    }
+  }
+  if (max_vars_reached) {
+    parseError(compiler, "A script should contain at most %d %s.",
+               MAX_VARIABLES, var_type);
     return -1;
   }
 
-  Variable* variable = &compiler->variables[compiler->var_count];
-  variable->name = name;
-  variable->length = length;
-  variable->depth = compiler->scope_depth;
-  variable->line = line;
-  if (variable->depth == DEPTH_GLOBAL) {
-    compiler->global_count++;
+  // Add the variable and return it's index.
+
+  if (compiler->scope_depth == DEPTH_GLOBAL) {
     uint32_t name_index = scriptAddName(compiler->script, compiler->vm,
                                         name, length);
     uintBufferWrite(&compiler->script->global_names, compiler->vm, name_index);
+    varBufferWrite(&compiler->script->globals, compiler->vm, VAR_NULL);
+    return compiler->script->globals.count - 1;
+
+  } else {
+    Local* local = &compiler->locals [compiler->local_count];
+    local->name = name;
+    local->length = length;
+    local->depth = compiler->scope_depth;
+    local->line = line;
+    return compiler->local_count++;
   }
 
-  return compiler->var_count++;
+  UNREACHABLE();
 }
 
 static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
@@ -1558,12 +1589,12 @@ static void compilerEnterBlock(Compiler* compiler) {
 static int compilerPopLocals(Compiler* compiler, int depth) {
   ASSERT(depth > (int)DEPTH_GLOBAL, "Cannot pop global variables.");
 
-  int local = compiler->var_count - 1;
-  while (local >= 0 && compiler->variables[local].depth >= depth) {
+  int local = compiler->local_count - 1;
+  while (local >= 0 && compiler->locals[local].depth >= depth) {
     emitOpcode(compiler, OP_POP);
     local--;
   }
-  return (compiler->var_count - 1) - local;
+  return (compiler->local_count - 1) - local;
 }
 
 // Exits a block.
@@ -1572,7 +1603,7 @@ static void compilerExitBlock(Compiler* compiler) {
 
   // Discard all the locals at the current scope.
   int popped = compilerPopLocals(compiler, compiler->scope_depth);
-  compiler->var_count -= popped;
+  compiler->local_count -= popped;
   compiler->stack_size -= popped;
   compiler->scope_depth--;
 }
@@ -1618,8 +1649,7 @@ static void patchJump(Compiler* compiler, int addr_index) {
 }
 
 static void patchForward(Compiler* compiler, Fn* fn, int index, int name) {
-  fn->opcodes.data[index] = (name >> 8) & 0xff;
-  fn->opcodes.data[index + 1] = name & 0xff;
+  fn->opcodes.data[index] = name & 0xff;
 }
 
 // Jump back to the start of the loop.
@@ -1666,6 +1696,10 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   Function* func = newFunction(compiler->vm, name, name_length,
                                compiler->script, fn_type == FN_NATIVE);
   int fn_index = (int)compiler->script->functions.count - 1;
+  if (fn_index == MAX_FUNCTIONS) {
+    parseError(compiler, "A script should contain at most %d functions.",
+               MAX_FUNCTIONS);
+  }
 
   Func curr_func;
   curr_func.outer_func = compiler->func;
@@ -1688,18 +1722,20 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
       const char* param_name = compiler->previous.start;
       int param_len = compiler->previous.length;
 
+      // TODO: move this to a functions.
       bool predefined = false;
-      for (int i = compiler->var_count - 1; i >= 0; i--) {
-        Variable* variable = &compiler->variables[i];
-        if (compiler->scope_depth != variable->depth) break;
-        if (variable->length == param_len &&
-          strncmp(variable->name, param_name, param_len) == 0) {
+      for (int i = compiler->local_count - 1; i >= 0; i--) {
+        Local* local = &compiler->locals[i];
+        if (compiler->scope_depth != local->depth) break;
+        if (local->length == param_len &&
+            strncmp(local->name, param_name, param_len) == 0) {
           predefined = true;
           break;
         }
       }
-      if (predefined)
+      if (predefined) {
         parseError(compiler, "Multiple definition of a parameter.");
+      }
 
       compilerAddVariable(compiler, param_name, param_len,
                           compiler->previous.line);
@@ -1772,7 +1808,7 @@ static Script* importFile(Compiler* compiler, const char* path) {
   PKVM* vm = compiler->vm;
 
   // Resolve the path.
-  pkStringPtr resolved = { path, NULL, NULL };
+  PkStringPtr resolved = { path, NULL, NULL };
   if (vm->config.resolve_path_fn != NULL) {
     resolved = vm->config.resolve_path_fn(vm, compiler->script->path->data,
                                           path);
@@ -1808,9 +1844,9 @@ static Script* importFile(Compiler* compiler, const char* path) {
   }
 
   // Load the script at the path.
-  pkStringPtr source = vm->config.load_script_fn(vm, path_name->data);
+  PkStringPtr source = vm->config.load_script_fn(vm, path_name->data);
   if (source.string == NULL) {
-    parseError(compiler, "Error loading script at '%s'", path_name->data);
+    parseError(compiler, "Error loading script at \"%s\"", path_name->data);
     return NULL;
   }
 
@@ -1885,6 +1921,8 @@ static void compilerImportAll(Compiler* compiler, Script* script) {
 
   // Line number of the variables which will be bind to the imported sybmols.
   int line = compiler->previous.line;
+
+  // TODO: Refactor this to a loop rather than jumping with goto.
 
   //                           !!! WARNING !!!
   //
@@ -2358,12 +2396,6 @@ bool compile(PKVM* vm, Script* script, const char* source) {
       resolveError(compiler, forward->line, "Name '%.*s' is not defined.",
                    length, name);
     }
-  }
-
-  // Create script globals.
-  for (int i = 0; i < compiler->var_count; i++) {
-    ASSERT(compiler->variables[i].depth == (int)DEPTH_GLOBAL, OOPS);
-    varBufferWrite(&script->globals, vm, VAR_NULL);
   }
 
   vm->compiler = compiler->next_compiler;

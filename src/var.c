@@ -803,19 +803,19 @@ typedef struct OuterSequence OuterSequence;
 static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
                              OuterSequence* outer) {
   if (IS_NULL(v)) {
-    ByteBufferAddString(buff, vm, "null", 4);
+    byteBufferAddString(buff, vm, "null", 4);
     return;
 
   } else if (IS_BOOL(v)) {
-    if (AS_BOOL(v)) ByteBufferAddString(buff, vm, "true", 4);
-    else ByteBufferAddString(buff, vm, "false", 5);
+    if (AS_BOOL(v)) byteBufferAddString(buff, vm, "true", 4);
+    else byteBufferAddString(buff, vm, "false", 5);
     return;
 
   } else if (IS_NUM(v)) {
     char num_buff[TO_STRING_BUFF_SIZE];
     int length = sprintf(num_buff, "%.14g", AS_NUM(v));
     __ASSERT(length < TO_STRING_BUFF_SIZE, "Buffer overflowed.");
-    ByteBufferAddString(buff, vm, num_buff, length); return;
+    byteBufferAddString(buff, vm, num_buff, length); return;
 
   } else if (IS_OBJ(v)) {
 
@@ -826,13 +826,13 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
       {
         const String* str = (const String*)obj;
         if (outer == NULL) {
-          ByteBufferAddString(buff, vm, str->data, str->length);
+          byteBufferAddString(buff, vm, str->data, str->length);
           return;
         }
 
         // If recursive return with quotes (ex: [42, "hello", 0..10]).
         byteBufferWrite(buff, vm, '"');
-        ByteBufferAddString(buff, vm, str->data, str->length);
+        byteBufferAddString(buff, vm, str->data, str->length);
         byteBufferWrite(buff, vm, '"');
         return;
       }
@@ -841,7 +841,7 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
       {
         const List* list = (const List*)obj;
         if (list->elements.count == 0) {
-          ByteBufferAddString(buff, vm, "[]", 2);
+          byteBufferAddString(buff, vm, "[]", 2);
           return;
         }
 
@@ -850,7 +850,7 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
         while (seq != NULL) {
           if (seq->is_list) {
             if (seq->list == list) {
-              ByteBufferAddString(buff, vm, "[...]", 5);
+              byteBufferAddString(buff, vm, "[...]", 5);
               return;
             }
           }
@@ -861,7 +861,7 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
 
         byteBufferWrite(buff, vm, '[');
         for (uint32_t i = 0; i < list->elements.count; i++) {
-          if (i != 0) ByteBufferAddString(buff, vm, ", ", 2);
+          if (i != 0) byteBufferAddString(buff, vm, ", ", 2);
           toStringInternal(vm, list->elements.data[i], buff, &seq_list);
         }
         byteBufferWrite(buff, vm, ']');
@@ -872,7 +872,7 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
       {
         const Map* map = (const Map*)obj;
         if (map->entries == NULL) {
-          ByteBufferAddString(buff, vm, "{}", 2);
+          byteBufferAddString(buff, vm, "{}", 2);
           return;
         }
 
@@ -881,7 +881,7 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
         while (seq != NULL) {
           if (!seq->is_list) {
             if (seq->map == map) {
-              ByteBufferAddString(buff, vm, "{...}", 5);
+              byteBufferAddString(buff, vm, "{...}", 5);
               return;
             }
           }
@@ -906,7 +906,7 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
           if (_done) break;
 
           if (!_first) {
-            ByteBufferAddString(buff, vm, ", ", 2);
+            byteBufferAddString(buff, vm, ", ", 2);
             _first = false;
           }
           toStringInternal(vm, map->entries[i].key, buff, &seq_map);
@@ -928,23 +928,23 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
                                       range->from);
         char buff_to[STR_NUM_BUFF_SIZE];
         const int len_to = snprintf(buff_to, sizeof(buff_to), "%f", range->to);
-        ByteBufferAddString(buff, vm, "[Range:", 7);
-        ByteBufferAddString(buff, vm, buff_from, len_from);
-        ByteBufferAddString(buff, vm, "..", 2);
-        ByteBufferAddString(buff, vm, buff_to, len_to);
+        byteBufferAddString(buff, vm, "[Range:", 7);
+        byteBufferAddString(buff, vm, buff_from, len_from);
+        byteBufferAddString(buff, vm, "..", 2);
+        byteBufferAddString(buff, vm, buff_to, len_to);
         byteBufferWrite(buff, vm, ']');
         return;
       }
 
       case OBJ_SCRIPT: {
         const Script* scr = (const Script*)obj;
-        ByteBufferAddString(buff, vm, "[Module:", 8);
+        byteBufferAddString(buff, vm, "[Module:", 8);
         if (scr->moudle != NULL) {
-          ByteBufferAddString(buff, vm, scr->moudle->data,
+          byteBufferAddString(buff, vm, scr->moudle->data,
                               scr->moudle->length);
         } else {
           byteBufferWrite(buff, vm, '"');
-          ByteBufferAddString(buff, vm, scr->path->data, scr->path->length);
+          byteBufferAddString(buff, vm, scr->path->data, scr->path->length);
           byteBufferWrite(buff, vm, '"');
         }
         byteBufferWrite(buff, vm, ']');
@@ -953,15 +953,15 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
 
       case OBJ_FUNC: {
         const Function* fn = (const Function*)obj;
-        ByteBufferAddString(buff, vm, "[Func:", 6);
-        ByteBufferAddString(buff, vm, fn->name, (uint32_t)strlen(fn->name));
+        byteBufferAddString(buff, vm, "[Func:", 6);
+        byteBufferAddString(buff, vm, fn->name, (uint32_t)strlen(fn->name));
         byteBufferWrite(buff, vm, ']');
         return;
       }
 
       // TODO: Maybe add address with %p.
-      case OBJ_FIBER:  ByteBufferAddString(buff, vm, "[Fiber]", 7); return;
-      case OBJ_USER:   ByteBufferAddString(buff, vm, "[UserObj]", 9); return;
+      case OBJ_FIBER:  byteBufferAddString(buff, vm, "[Fiber]", 7); return;
+      case OBJ_USER:   byteBufferAddString(buff, vm, "[UserObj]", 9); return;
         break;
     }
 
