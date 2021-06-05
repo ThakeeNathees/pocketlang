@@ -13,23 +13,6 @@
 // Evaluvated to true if a runtime error set on the current fiber.
 #define HAS_ERROR() (vm->fiber->error != NULL)
 
-// Initially allocated call frame capacity. Will grow dynamically.
-#define INITIAL_CALL_FRAMES 4
-
-// Minimum size of the stack.
-#define MIN_STACK_SIZE 128
-
-// The allocated size the'll trigger the first GC. (~10MB).
-#define INITIAL_GC_SIZE (1024 * 1024 * 10)
-
-// The heap size might shrink if the remaining allocated bytes after a GC 
-// is less than the one before the last GC. So we need a minimum size.
-#define MIN_HEAP_SIZE (1024 * 1024)
-
-// The heap size for the next GC will be calculated as the bytes we have
-// allocated so far plus the fill factor of it.
-#define HEAP_FILL_PERCENT 75
-
 /*****************************************************************************/
 /* VM PUBLIC API                                                             */
 /*****************************************************************************/
@@ -78,23 +61,23 @@ PKVM* pkNewVM(PkConfiguration* config) {
   return vm;
 }
 
-void pkFreeVM(PKVM* self) {
+void pkFreeVM(PKVM* vm) {
 
-  Object* obj = self->first;
+  Object* obj = vm->first;
   while (obj != NULL) {
     Object* next = obj->next;
-    freeObject(self, obj);
+    freeObject(vm, obj);
     obj = next;
   }
 
-  self->gray_list = (Object**)self->config.realloc_fn(
-    self->gray_list, 0, self->config.user_data);
+  vm->gray_list = (Object**)vm->config.realloc_fn(
+    vm->gray_list, 0, vm->config.user_data);
 
   // Tell the host application that it forget to release all of it's handles
   // before freeing the VM.
-  __ASSERT(self->handles == NULL, "Not all handles were released.");
+  __ASSERT(vm->handles == NULL, "Not all handles were released.");
 
-  DEALLOCATE(self, self);
+  DEALLOCATE(vm, vm);
 }
 
 void* pkGetUserData(const PKVM* vm) {
@@ -129,93 +112,88 @@ void pkReleaseHandle(PKVM* vm, PkHandle* handle) {
   DEALLOCATE(vm, handle);
 }
 
-PkHandle* vmNewHandle(PKVM* self, Var value) {
-  PkHandle* handle = (PkHandle*)ALLOCATE(self, PkHandle);
+PkHandle* vmNewHandle(PKVM* vm, Var value) {
+  PkHandle* handle = (PkHandle*)ALLOCATE(vm, PkHandle);
   handle->value = value;
   handle->prev = NULL;
-  handle->next = self->handles;
+  handle->next = vm->handles;
   if (handle->next != NULL) handle->next->prev = handle;
-  self->handles = handle;
+  vm->handles = handle;
   return handle;
 }
 
 
-void* vmRealloc(PKVM* self, void* memory, size_t old_size, size_t new_size) {
+void* vmRealloc(PKVM* vm, void* memory, size_t old_size, size_t new_size) {
 
   // TODO: Debug trace allocations here.
 
   // Track the total allocated memory of the VM to trigger the GC.
   // if vmRealloc is called for freeing, the old_size would be 0 since 
   // deallocated bytes are traced by garbage collector.
-  self->bytes_allocated += new_size - old_size;
+  vm->bytes_allocated += new_size - old_size;
 
-  if (new_size > 0 && self->bytes_allocated > self->next_gc) {
-    vmCollectGarbage(self);
+  if (new_size > 0 && vm->bytes_allocated > vm->next_gc) {
+    vmCollectGarbage(vm);
   }
 
-  return self->config.realloc_fn(memory, new_size, self->config.user_data);
+  return vm->config.realloc_fn(memory, new_size, vm->config.user_data);
 }
 
-void vmPushTempRef(PKVM* self, Object* obj) {
+void vmPushTempRef(PKVM* vm, Object* obj) {
   ASSERT(obj != NULL, "Cannot reference to NULL.");
-  ASSERT(self->temp_reference_count < MAX_TEMP_REFERENCE,
+  ASSERT(vm->temp_reference_count < MAX_TEMP_REFERENCE,
     "Too many temp references");
-  self->temp_reference[self->temp_reference_count++] = obj;
+  vm->temp_reference[vm->temp_reference_count++] = obj;
 }
 
-void vmPopTempRef(PKVM* self) {
-  ASSERT(self->temp_reference_count > 0,
+void vmPopTempRef(PKVM* vm) {
+  ASSERT(vm->temp_reference_count > 0,
          "Temporary reference is empty to pop.");
-  self->temp_reference_count--;
+  vm->temp_reference_count--;
 }
 
-void vmCollectGarbage(PKVM* self) {
+void vmCollectGarbage(PKVM* vm) {
 
   // Reset VM's bytes_allocated value and count it again so that we don't
   // required to know the size of each object that'll be freeing.
-  self->bytes_allocated = 0;
+  vm->bytes_allocated = 0;
 
   // Mark the core libs and builtin functions.
-  grayObject(self, &self->core_libs->_super);
-  for (int i = 0; i < self->builtins_count; i++) {
-    grayObject(self, &self->builtins[i].fn->_super);
+  grayObject(vm, &vm->core_libs->_super);
+  for (int i = 0; i < vm->builtins_count; i++) {
+    grayObject(vm, &vm->builtins[i].fn->_super);
   }
 
   // Mark the scripts cache.
-  grayObject(self, &self->scripts->_super);
+  grayObject(vm, &vm->scripts->_super);
 
   // Mark temp references.
-  for (int i = 0; i < self->temp_reference_count; i++) {
-    grayObject(self, self->temp_reference[i]);
+  for (int i = 0; i < vm->temp_reference_count; i++) {
+    grayObject(vm, vm->temp_reference[i]);
   }
 
   // Mark the handles.
-  for (PkHandle* h = self->handles; h != NULL; h = h->next) {
-    grayValue(self, h->value);
+  for (PkHandle* h = vm->handles; h != NULL; h = h->next) {
+    grayValue(vm, h->value);
   }
 
   // Garbage collection triggered at the middle of a compilation.
-  if (self->compiler != NULL) {
-    compilerMarkObjects(self, self->compiler);
+  if (vm->compiler != NULL) {
+    compilerMarkObjects(vm, vm->compiler);
   }
 
-  // Garbage collection triggered at the middle of runtime.
-  if (self->script != NULL) {
-    grayObject(self, &self->script->_super);
+  if (vm->fiber != NULL) {
+    grayObject(vm, &vm->fiber->_super);
   }
 
-  if (self->fiber != NULL) {
-    grayObject(self, &self->fiber->_super);
-  }
-
-  blackenObjects(self);
+  blackenObjects(vm);
 
   // Now sweep all the un-marked objects in then link list and remove them
   // from the chain.
 
   // [ptr] is an Object* reference that should be equal to the next
   // non-garbage Object*.
-  Object** ptr = &self->first;
+  Object** ptr = &vm->first;
   while (*ptr != NULL) {
 
     // If the object the pointer points to wasn't marked it's unreachable.
@@ -223,7 +201,7 @@ void vmCollectGarbage(PKVM* self) {
     if (!(*ptr)->is_marked) {
       Object* garbage = *ptr;
       *ptr = garbage->next;
-      freeObject(self, garbage);
+      freeObject(vm, garbage);
 
     } else {
       // Unmark the object for the next garbage collection.
@@ -234,9 +212,9 @@ void vmCollectGarbage(PKVM* self) {
 
   // Next GC heap size will be change depends on the byte we've left with now,
   // and the [heap_fill_percent].
-  self->next_gc = self->bytes_allocated + (
-    (self->bytes_allocated * self->heap_fill_percent) / 100);
-  if (self->next_gc < self->min_heap_size) self->next_gc = self->min_heap_size;
+  vm->next_gc = vm->bytes_allocated + (
+    (vm->bytes_allocated * vm->heap_fill_percent) / 100);
+  if (vm->next_gc < vm->min_heap_size) vm->next_gc = vm->min_heap_size;
 }
 
 /*****************************************************************************/
@@ -406,6 +384,8 @@ PkInterpretResult pkInterpretSource(PKVM* vm, PkStringPtr source,
   if (path.on_done) path.on_done(vm, path);
   vmPushTempRef(vm, &path_name->_super); // path_name.
 
+  // TODO: Should I clean the script if it already exists before compiling it?
+
   // Load a new script to the vm's scripts cache.
   Script* scr = getScript(vm, path_name);
   if (scr == NULL) {
@@ -421,20 +401,26 @@ PkInterpretResult pkInterpretSource(PKVM* vm, PkStringPtr source,
   if (source.on_done) source.on_done(vm, source);
 
   if (!success) return PK_RESULT_COMPILE_ERROR;
-  vm->script = scr;
 
-  return vmRunScript(vm, scr);
+  // Set script initialized to true before the execution ends to prevent cyclic
+  // inclusion cause a crash.
+  scr->initialized = true;
+
+  return vmRunFiber(vm, newFiber(vm, scr->body));
 }
 
 /******************************************************************************
  * RUNTIME                                                                    *
  *****************************************************************************/
 
-PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
+PkInterpretResult vmRunFiber(PKVM* vm, Fiber* fiber) {
 
-  // Set script initialized to true before the execution ends to prevent cyclic
-  // inclusion cause a crash.
-  _script->initialized = true;
+  // Set the fiber as the vm's current fiber (another root object) to prevent
+  // it from garbage collection and get the reference from native functions.
+  vm->fiber = fiber;
+
+  ASSERT(fiber->state == FIBER_NEW, OOPS);
+  fiber->state = FIBER_RUNNING;
 
   // The instruction pointer.
   // Note: sing 'uint8_t** ip' as reference to the instruction pointer in the
@@ -445,29 +431,6 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
   register Var* rbp;         //< Stack base pointer register.
   register CallFrame* frame; //< Current call frame.
   register Script* script;   //< Currently executing script.
-
-  // TODO: implement fiber from script body.
-
-  vm->fiber = newFiber(vm);
-  vm->fiber->func = _script->body;
-
-  // Allocate stack.
-  int stack_size = utilPowerOf2Ceil(vm->fiber->func->fn->stack_size + 1);
-  if (stack_size < MIN_STACK_SIZE) stack_size = MIN_STACK_SIZE;
-  vm->fiber->stack_size = stack_size;
-  vm->fiber->stack = ALLOCATE_ARRAY(vm, Var, vm->fiber->stack_size);
-  vm->fiber->sp = vm->fiber->stack;
-  vm->fiber->ret = vm->fiber->stack;
-
-  // Allocate call frames.
-  vm->fiber->frame_capacity = INITIAL_CALL_FRAMES;
-  vm->fiber->frames = ALLOCATE_ARRAY(vm, CallFrame, vm->fiber->frame_capacity);
-  vm->fiber->frame_count = 1;
-
-  // Initialize VM's first frame.
-  vm->fiber->frames[0].ip = _script->body->fn->opcodes.data;
-  vm->fiber->frames[0].fn = _script->body;
-  vm->fiber->frames[0].rbp = vm->fiber->stack;
 
 #define PUSH(value)  (*vm->fiber->sp++ = (value))
 #define POP()        (*(--vm->fiber->sp))
@@ -506,7 +469,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
   } while (false)
 
 // Update the frame's execution variables before pushing another call frame.
-#define UPDATE_FRAME() frame->ip = ip;
+#define UPDATE_FRAME() frame->ip = ip
 
 #ifdef OPCODE
   #error "OPCODE" should not be deifined here.
@@ -527,6 +490,7 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 #define OPCODE(code) case OP_##code
 #define DISPATCH()   goto L_vm_main_loop
 
+  // TODO: remove the below push null and add it from the compiler.
   PUSH(VAR_NULL); // Return value of the script body.
   LOAD_FRAME();
 
@@ -708,7 +672,11 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
     OPCODE(CALL):
     {
       const uint8_t argc = READ_BYTE();
-      Var* callable = vm->fiber->sp - argc - 1;
+
+      // The call might change the vm->fiber so we need the reference to the
+      // fiber that actually called the function.
+      Fiber* call_fiber = vm->fiber;
+      Var* callable = call_fiber->sp - argc - 1;
 
       if (IS_OBJ_TYPE(*callable, OBJ_FUNC)) {
         const Function* fn = (const Function*)AS_OBJ(*callable);
@@ -722,19 +690,33 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
         }
 
         // Next call frame starts here. (including return value).
-        vm->fiber->ret = callable;
-        *(vm->fiber->ret) = VAR_NULL; //< Set the return value to null.
+        call_fiber->ret = callable;
+        *(call_fiber->ret) = VAR_NULL; //< Set the return value to null.
 
         if (fn->is_native) {
+
           if (fn->native == NULL) {
             RUNTIME_ERROR(stringFormat(vm,
               "Native function pointer of $ was NULL.", fn->name));
           }
-          fn->native(vm);
+
+          // Update the current frame's ip.
+          UPDATE_FRAME();
+
+          fn->native(vm); //< Call the native function.
+
+          // Calling yield() will change vm->fiber to it's caller fiber, which
+          // would be null if we're not running the function with a fiber.
+          if (vm->fiber == NULL) return PK_RESULT_SUCCESS;
+
+          // Load the top frame to vm's execution variables.
+          if (vm->fiber != call_fiber) LOAD_FRAME();
+
           // Pop function arguments except for the return value.
-          vm->fiber->sp = vm->fiber->ret + 1;
+          // Don't use 'vm->fiber' because calling fiber_new() and yield()
+          // would change the fiber.
+          call_fiber->sp = call_fiber->ret + 1;
           CHECK_ERROR();
-          DISPATCH(); //< This will save 2 jumps.
 
         } else {
           UPDATE_FRAME(); //< Update the current frame's ip.
@@ -893,20 +875,36 @@ PkInterpretResult vmRunScript(PKVM* vm, Script* _script) {
 
     OPCODE(RETURN):
     {
-      // TODO: handle caller fiber.
 
       // Set the return value.
-      *(frame->rbp) = POP();
+      Var ret_value = POP();
 
-      // Pop the last frame, and if no more call frames, we're done.
+      // Pop the last frame, and if no more call frames, we're done with the
+      // current fiber.
       if (--vm->fiber->frame_count == 0) {
-        vm->fiber->sp = vm->fiber->stack;
-        return PK_RESULT_SUCCESS;
-      }
+        vm->fiber->state = FIBER_DONE;
 
-      // Pop the params (locals should have popped at this point) and update
-      // stack pointer.
-      vm->fiber->sp = frame->rbp + 1; // +1: rbp is returned value.
+        // TODO:
+        //vm->fiber->sp = vm->fiber->stack;.
+
+        if (vm->fiber->caller == NULL) {
+          return PK_RESULT_SUCCESS;
+
+        } else {
+          Fiber* caller = vm->fiber->caller;
+          ASSERT(caller->state == FIBER_RUNNING, OOPS);
+
+          vm->fiber->caller = NULL;
+          vm->fiber = caller;
+          *caller->ret = ret_value;
+        }
+
+      } else {
+        *rbp = ret_value;
+        // Pop the params (locals should have popped at this point) and update
+        // stack pointer.
+        vm->fiber->sp = rbp + 1; // +1: rbp is returned value.
+      }
 
       LOAD_FRAME();
       DISPATCH();

@@ -7,6 +7,7 @@ test_files = [
   "lang/basics.pk",
   "lang/functions.pk",
   "lang/controlflow.pk",
+  "lang/fibers.pk",
   "lang/import.pk",
   
   "examples/helloworld.pk",

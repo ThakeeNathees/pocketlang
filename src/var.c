@@ -356,7 +356,6 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
     func->is_native = is_native;
   }
 
-
   if (is_native) {
     func->native = NULL;
   } else {
@@ -370,10 +369,43 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
   return func;
 }
 
-Fiber* newFiber(PKVM* vm) {
+Fiber* newFiber(PKVM* vm, Function* fn) {
   Fiber* fiber = ALLOCATE(vm, Fiber);
   memset(fiber, 0, sizeof(Fiber));
   varInitObject(&fiber->_super, vm, OBJ_FIBER);
+
+  fiber->state = FIBER_NEW;
+  fiber->func = fn;
+
+  if (fn->is_native) {
+    // For native functions we're only using stack for parameters, there wont
+    // be any locals or temps (which are belongs to the native "C" stack).
+    int stack_size = utilPowerOf2Ceil(fn->arity + 1);
+    fiber->stack = ALLOCATE_ARRAY(vm, Var, stack_size);
+    fiber->stack_size = stack_size;
+    fiber->sp = fiber->stack;
+    fiber->ret = fiber->stack;
+
+  } else {
+    // Allocate stack.
+    int stack_size = utilPowerOf2Ceil(fn->fn->stack_size + 1);
+    if (stack_size < MIN_STACK_SIZE) stack_size = MIN_STACK_SIZE;
+    fiber->stack = ALLOCATE_ARRAY(vm, Var, stack_size);
+    fiber->stack_size = stack_size;
+    fiber->sp = fiber->stack;
+    fiber->ret = fiber->stack;
+
+    // Allocate call frames.
+    fiber->frame_capacity = INITIAL_CALL_FRAMES;
+    fiber->frames = ALLOCATE_ARRAY(vm, CallFrame, fiber->frame_capacity);
+    fiber->frame_count = 1;
+
+    // Initialize the first frame.
+    fiber->frames[0].fn = fn;
+    fiber->frames[0].ip = fn->fn->opcodes.data;
+    fiber->frames[0].rbp = fiber->ret;
+  }
+
   return fiber;
 }
 
@@ -625,6 +657,10 @@ Var mapRemoveKey(PKVM* vm, Map* self, Var key) {
   if (IS_OBJ(value)) vmPopTempRef(vm);
 
   return value;
+}
+
+bool fiberHasError(Fiber* fiber) {
+  return fiber->error != NULL;
 }
 
 void freeObject(PKVM* vm, Object* self) {
@@ -959,10 +995,19 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
         return;
       }
 
-      // TODO: Maybe add address with %p.
-      case OBJ_FIBER:  byteBufferAddString(buff, vm, "[Fiber]", 7); return;
-      case OBJ_USER:   byteBufferAddString(buff, vm, "[UserObj]", 9); return;
-        break;
+      case OBJ_FIBER: {
+        const Fiber* fb = (const Fiber*)obj;
+        byteBufferAddString(buff, vm, "[Fiber:", 7);
+        byteBufferAddString(buff, vm, fb->func->name, strlen(fb->func->name));
+        byteBufferWrite(buff, vm, ']');
+        return;
+      }
+
+      case OBJ_USER: {
+        // TODO:
+        byteBufferAddString(buff, vm, "[UserObj]", 9);
+        return;
+      }
     }
 
   }

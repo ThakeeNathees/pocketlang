@@ -42,3 +42,7 @@
 // Bugs.
 It's at pre-alpha and every thing is left to
 implement, and nothing would be work as expected.
+
+- f = func print() end; print(f) # semicollon should be there.
+  def f() print() end print(f)   # semicollon should be there.
+  make it okey to use semicollon freely like new lines.

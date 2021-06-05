@@ -17,6 +17,24 @@
 // The capacity of the builtin function array in the VM.
 #define BUILTIN_FN_CAPACITY 50
 
+// Initially allocated call frame capacity. Will grow dynamically.
+#define INITIAL_CALL_FRAMES 4
+
+// The minimum size of the stack that will be initialized for a fiber before
+// running one.
+#define MIN_STACK_SIZE 128
+
+// The allocated size the'll trigger the first GC. (~10MB).
+#define INITIAL_GC_SIZE (1024 * 1024 * 10)
+
+// The heap size might shrink if the remaining allocated bytes after a GC 
+// is less than the one before the last GC. So we need a minimum size.
+#define MIN_HEAP_SIZE (1024 * 1024)
+
+// The heap size for the next GC will be calculated as the bytes we have
+// allocated so far plus the fill factor of it.
+#define HEAP_FILL_PERCENT 75
+
 typedef enum {
   #define OPCODE(name, _, __) OP_##name,
   #include "opcodes.h"
@@ -98,10 +116,6 @@ struct PKVM {
   BuiltinFn builtins[BUILTIN_FN_CAPACITY];
   int builtins_count;
 
-  // The root script of the runtime and it's one of the VM's reference root.
-  // VM is responsible to manage the memory.
-  Script* script;
-
   // Current fiber.
   Fiber* fiber;
 };
@@ -115,10 +129,10 @@ struct PKVM {
 //    allocations to trigger the garbage collections.
 // If deallocating (free) using vmRealloc the old_size should be 0 as it's not
 // going to track deallocated bytes, instead use garbage collector to do it.
-void* vmRealloc(PKVM* self, void* memory, size_t old_size, size_t new_size);
+void* vmRealloc(PKVM* vm, void* memory, size_t old_size, size_t new_size);
 
 // Create and return a new handle for the [value].
-PkHandle* vmNewHandle(PKVM* self, Var value);
+PkHandle* vmNewHandle(PKVM* vm, Var value);
 
 // Trigger garbage collection. This is an implementation of mark and sweep
 // garbage collection (https://en.wikipedia.org/wiki/Tracing_garbage_collection).
@@ -159,16 +173,17 @@ PkHandle* vmNewHandle(PKVM* self, Var value);
 //   Once the marking phase is done, we iterate through the objects and remove
 //   the objects which are not marked from the linked list and deallocate them.
 //
-void vmCollectGarbage(PKVM* self);
+void vmCollectGarbage(PKVM* vm);
 
 // Push the object to temporary references stack. This reference will prevent
 // the object from garbage collection.
-void vmPushTempRef(PKVM* self, Object* obj);
+void vmPushTempRef(PKVM* vm, Object* obj);
 
 // Pop the top most object from temporary reference stack.
-void vmPopTempRef(PKVM* self);
+void vmPopTempRef(PKVM* vm);
 
-// Runs the script and return result.
-PkInterpretResult vmRunScript(PKVM* vm, Script* script);
+// Runs the [fiber] if it's at yielded state, this will resume the execution
+// till the next yield or return statement, and return result.
+PkInterpretResult vmRunFiber(PKVM* vm, Fiber* fiber);
 
 #endif // VM_H

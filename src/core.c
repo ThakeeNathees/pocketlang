@@ -61,6 +61,12 @@ void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
     return;                    \
   } while (false)
 
+#define RET_ERR(err)           \
+  do {                         \
+    vm->fiber->error = err;    \
+    RET(VAR_NULL);             \
+  } while(false)
+
 // Check for errors in before calling the get arg public api function.
 #define CHECK_GET_ARG_API_ERRORS()                               \
   do {                                                           \
@@ -250,6 +256,8 @@ static inline bool validateIndex(PKVM* vm, int32_t index, int32_t size,
  VALIDATE_ARG_OBJ(String, OBJ_STRING, "string")
  VALIDATE_ARG_OBJ(List, OBJ_LIST, "list")
  VALIDATE_ARG_OBJ(Map, OBJ_MAP, "map")
+ VALIDATE_ARG_OBJ(Function, OBJ_FUNC, "function")
+ VALIDATE_ARG_OBJ(Fiber, OBJ_FIBER, "fiber")
 
 /*****************************************************************************/
 /* BUILTIN FUNCTIONS API                                                     */
@@ -329,8 +337,7 @@ PK_DOC(coreAssert,
   "optional error message") {
   int argc = ARGC;
   if (argc != 1 && argc != 2) {
-    vm->fiber->error = newString(vm, "Invalid argument count.");
-    return;
+    RET_ERR(newString(vm, "Invalid argument count."));
   }
 
   if (!toBool(ARG1)) {
@@ -349,6 +356,34 @@ PK_DOC(coreAssert,
       vm->fiber->error = newString(vm, "Assertion failed.");
     }
   }
+}
+
+PK_DOC(coreYield,
+  "yield([value]) -> var\n"
+  "Return the current function with the yield [value] to current running "
+  "fiber. If the fiber is resumed, it'll run from the next statement of the "
+  "yield() call. If the fiber resumed with with a value, the return value of "
+  "the yield() would be that value otherwise null.") {
+
+  int argc = ARGC;
+  if (argc > 1) { // yield() or yield(val).
+    RET_ERR(newString(vm, "Invalid argument count."));
+  }
+
+  Fiber* caller = vm->fiber->caller;
+
+  // Return the yield value to the caller fiber.
+  if (caller != NULL) {
+    if (argc == 0) *caller->ret = VAR_NULL;
+    else *caller->ret = ARG1;
+  }
+
+  // Can be resumed by another caller fiber.
+  vm->fiber->caller = NULL;
+  vm->fiber->state = FIBER_YIELDED;
+  vm->fiber = caller;
+
+  return;
 }
 
 PK_DOC(coreToString,
@@ -448,13 +483,12 @@ PK_DOC(coreStrOrd,
   String* c;
   if (!validateArgString(vm, 1, &c)) return;
   if (c->length != 1) {
-    vm->fiber->error = newString(vm, "Expected a string of length 1.");
-    RET(VAR_NULL);
+    RET_ERR(newString(vm, "Expected a string of length 1."));
+
   } else {
     RET(VAR_NUM((double)c->data[0]));
   }
 }
-
 
 // List functions.
 // ---------------
@@ -484,6 +518,142 @@ PK_DOC(coreMapRemove,
   RET(mapRemoveKey(vm, map, key));
 }
 
+// Fiber functions.
+// ----------------
+
+PK_DOC(coreFiberNew,
+  "fiber_new(fn:function) -> fiber\n"
+  "Create and return a new fiber from the given function [fn].") {
+  Function* fn;
+  if (!validateArgFunction(vm, 1, &fn)) return;
+  RET(VAR_OBJ(newFiber(vm, fn)));
+}
+
+PK_DOC(coreFiberGetFunc,
+  "fiber_get_func(fb:fiber) -> function\n"
+  "Retruns the fiber's functions. Which is usefull if you wan't to re-run the "
+  "fiber, you can get the function and crate a new fiber.") {
+  Fiber* fb;
+  if (!validateArgFiber(vm, 1, &fb)) return;
+  RET(VAR_OBJ(fb->func));
+}
+
+PK_DOC(coreFiberIsDone,
+  "fiber_is_done(fb:fiber) -> bool\n"
+  "Returns true if the fiber [fb] is done running and can no more resumed.") {
+  Fiber* fb;
+  if (!validateArgFiber(vm, 1, &fb)) return;
+  RET(VAR_BOOL(fb->state == FIBER_DONE));
+}
+
+PK_DOC(coreFiberRun,
+  "fiber_run(fb:fiber, ...) -> var\n"
+  "Runs the fiber's function with the provided arguments and returns it's "
+  "return value or the yielded value if it's yielded.") {
+
+  int argc = ARGC;
+  if (argc == 0) // Missing the fiber argument.
+    RET_ERR(newString(vm, "Missing argument - fiber."));
+
+  Fiber* fb;
+  if (!validateArgFiber(vm, 1, &fb)) return;
+
+  if (argc - 1 != fb->func->arity) {
+    char buff[STR_NUM_BUFF_SIZE]; sprintf(buff, "%d", fb->func->arity);
+    RET_ERR(stringFormat(vm, "Expected excatly $ argument(s).", buff));
+  }
+
+  if (fb->state != FIBER_NEW) {
+    switch (fb->state) {
+      case FIBER_NEW: UNREACHABLE();
+      case FIBER_RUNNING:
+        RET_ERR(newString(vm, "The fiber has already been running."));
+      case FIBER_YIELDED:
+        RET_ERR(newString(vm, "Cannot run a fiber which is yielded, use "
+                "fiber_resume() instead."));
+      case FIBER_DONE:
+        RET_ERR(newString(vm, "The fiber has done running."));
+    }
+    UNREACHABLE();
+  }
+
+  ASSERT(fb->stack != NULL && fb->sp == fb->stack, OOPS);
+  ASSERT(fb->ret == fb->sp, OOPS);
+
+  fb->state = FIBER_RUNNING;
+  fb->caller = vm->fiber;
+
+  // Pass the function arguments.
+
+  // Assert we have the first frame (to push the arguments). And assert we have
+  // enought stack space for parameters.
+  ASSERT(fb->frame_count == 1, OOPS);
+  ASSERT(fb->frames[0].rbp == fb->ret, OOPS);
+  ASSERT((fb->stack + fb->stack_size) - fb->sp >= argc, OOPS);
+
+  // ARG1 is fiber, function arguments are ARG(2), ARG(3), ... ARG(argc).
+  // And ret[0] is the return value, parameters starts at ret[1], ...
+  for (int i = 1; i < argc; i++) {
+    fb->ret[i] = ARG(i + 1);
+  }
+  fb->sp += argc; // Parameters and return value.
+
+  // Set the new fiber as the vm's fiber.
+  vm->fiber = fb;
+
+  // fb->ret is "un initialized" and will be initialized by the fiber_resume()
+  // call. But we're setting the value to VAR_NULL below to make it initialized
+  // for the debugger, it'll prevent from crashing when we're trying to read
+  // the value to dump.
+  RET(VAR_NULL);
+}
+
+PK_DOC(coreFiberResume,
+  "fiber_resume(fb:fiber) -> var\n"
+  "Resumes a yielded function from a previous call of fiber_run() function. "
+  "Return it's return value or the yielded value if it's yielded." ) {
+
+  int argc = ARGC;
+  if (argc == 0) // Missing the fiber argument.
+    RET_ERR(newString(vm, "Expected at least 1 argument(s)."));
+  if (argc > 2) // Can only accept 1 argument for resume.
+    RET_ERR(newString(vm, "Expected at most 2 argument(s)."));
+
+  Fiber* fb;
+  if (!validateArgFiber(vm, 1, &fb)) return;
+
+  if (fb->state != FIBER_YIELDED) {
+    switch (fb->state) {
+      case FIBER_NEW:
+        RET_ERR(newString(vm, "The fiber hasn't started. call fiber_run() to "
+                "start."));
+      case FIBER_RUNNING:
+        RET_ERR(newString(vm, "The fiber has already been running."));
+      case FIBER_YIELDED: UNREACHABLE();
+      case FIBER_DONE:
+        RET_ERR(newString(vm, "The fiber has done running."));
+    }
+    UNREACHABLE();
+  }
+
+  fb->state = FIBER_RUNNING;
+  fb->caller = vm->fiber;
+
+  // Pass the resume argument if it has any.
+
+  // Assert if we have a call frame and the stack size enough for the return
+  // value and the resumed value.
+  ASSERT(fb->frame_count != 0, OOPS);
+  ASSERT((fb->stack + fb->stack_size) - fb->sp >= 2, OOPS);
+
+  // fb->ret will points to the return value of the 'yield()' call.
+  if (argc == 1) *fb->ret = VAR_NULL;
+  else *fb->ret = ARG(2);
+
+  // Set the new fiber as the vm's fiber.
+  vm->fiber = fb;
+}
+
 /*****************************************************************************/
 /* CORE MODULE METHODS                                                       */
 /*****************************************************************************/
@@ -499,8 +669,8 @@ static Script* newModuleInternal(PKVM* vm, const char* name) {
   // hosting application.
   if (!IS_UNDEF(mapGet(vm->core_libs, VAR_OBJ(_name)))) {
     vmPopTempRef(vm); // _name
-    __ASSERT(false, stringFormat(vm, "A module named '$' already exists",
-      name)->data);
+    __ASSERT(false, stringFormat(vm, 
+             "A module named '$' already exists", name)->data);
   }
 
   Script* scr = newScript(vm, _name);
@@ -678,6 +848,7 @@ void initializeCore(PKVM* vm) {
   INITALIZE_BUILTIN_FN("is_userobj",  coreIsUserObj,  1);
   
   INITALIZE_BUILTIN_FN("assert",      coreAssert,    -1);
+  INITALIZE_BUILTIN_FN("yield",       coreYield,     -1);
   INITALIZE_BUILTIN_FN("to_string",   coreToString,   1);
   INITALIZE_BUILTIN_FN("print",       corePrint,     -1);
 
@@ -693,6 +864,13 @@ void initializeCore(PKVM* vm) {
 
   // Map functions.
   INITALIZE_BUILTIN_FN("map_remove",  coreMapRemove,  2);
+
+  // Fiber functions.
+  INITALIZE_BUILTIN_FN("fiber_new",      coreFiberNew,     1);
+  INITALIZE_BUILTIN_FN("fiber_get_func", coreFiberGetFunc, 1);
+  INITALIZE_BUILTIN_FN("fiber_run",      coreFiberRun,    -1);
+  INITALIZE_BUILTIN_FN("fiber_is_done",  coreFiberIsDone,  1);
+  INITALIZE_BUILTIN_FN("fiber_resume",   coreFiberResume, -1);
 
   // Core Modules /////////////////////////////////////////////////////////////
 
