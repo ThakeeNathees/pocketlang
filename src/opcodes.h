@@ -49,7 +49,7 @@ OPCODE(MAP_INSERT, 0, -2)
 
 // Push stack local on top of the stack. Locals at 0 to 8 marked explicitly
 // since it's performance criticle.
-// params: PUSH_LOCAL_N -> 2 bytes (uint16_t) count value.
+// params: PUSH_LOCAL_N -> 1 byte count value.
 OPCODE(PUSH_LOCAL_0, 0, 1)
 OPCODE(PUSH_LOCAL_1, 0, 1)
 OPCODE(PUSH_LOCAL_2, 0, 1)
@@ -59,11 +59,11 @@ OPCODE(PUSH_LOCAL_5, 0, 1)
 OPCODE(PUSH_LOCAL_6, 0, 1)
 OPCODE(PUSH_LOCAL_7, 0, 1)
 OPCODE(PUSH_LOCAL_8, 0, 1)
-OPCODE(PUSH_LOCAL_N, 2, 1)
+OPCODE(PUSH_LOCAL_N, 1, 1)
 
 // Store the stack top value to another stack local index and don't pop since
 // it's the result of the assignment.
-// params: STORE_LOCAL_N -> 2 bytes (uint16_t) count value.
+// params: STORE_LOCAL_N -> 1 byte count value.
 OPCODE(STORE_LOCAL_0, 0, 0)
 OPCODE(STORE_LOCAL_1, 0, 0)
 OPCODE(STORE_LOCAL_2, 0, 0)
@@ -73,25 +73,25 @@ OPCODE(STORE_LOCAL_5, 0, 0)
 OPCODE(STORE_LOCAL_6, 0, 0)
 OPCODE(STORE_LOCAL_7, 0, 0)
 OPCODE(STORE_LOCAL_8, 0, 0)
-OPCODE(STORE_LOCAL_N, 2, 0)
+OPCODE(STORE_LOCAL_N, 1, 0)
 
 // Push the script global value on the stack.
-// params: 2 bytes (uint16_t) index.
-OPCODE(PUSH_GLOBAL, 2, 1)
+// params: 1 byte index.
+OPCODE(PUSH_GLOBAL, 1, 1)
 
 // Store the stack top value to a global value and don't pop since it's the
 // result of the assignment.
-// params: 2 bytes (uint16_t) index.
-OPCODE(STORE_GLOBAL, 2, 0)
+// params: 1 byte index.
+OPCODE(STORE_GLOBAL, 1, 0)
 
 // Push the script's function on the stack. It could later be called. But a
 // function can't be stored i.e. can't assign a function with something else.
-// params: 2 bytes index.
-OPCODE(PUSH_FN, 2, 1)
+// params: 1 byte index.
+OPCODE(PUSH_FN, 1, 1)
 
 // Push a built in function.
-// params: 2 bytes index of the script.
-OPCODE(PUSH_BUILTIN_FN, 2, 1)
+// params: 1 bytes index.
+OPCODE(PUSH_BUILTIN_FN, 1, 1)
 
 // Pop the stack top.
 OPCODE(POP, 0, -1)
@@ -104,8 +104,8 @@ OPCODE(IMPORT, 0, 0)
 // Calls a function using stack's top N values as the arguments and once it
 // done the stack top should be stored otherwise it'll be disregarded. The
 // function should set the 0 th argment to return value.
-// params: n bytes argc.
-OPCODE(CALL, 2, -0) //< Will calculated at compile time.
+// params: 1 byte argc.
+OPCODE(CALL, 1, -0) //< Stack size will calculated at compile time.
 
 // Starts the iteration and test the sequence if it's iterable, before the
 // iteration instead of checking it everytime.
