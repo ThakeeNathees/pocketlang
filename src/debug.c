@@ -111,11 +111,14 @@ static void _dumpValue(PKVM* vm, Var value, bool recursive) {
       return;
 
     case OBJ_FIBER:
-      printf("[Fn:%p]", obj);
+    {
+      const Fiber* fb = (const Fiber*)obj;
+      printf("[Fiber:%s]", fb->func->name);
       return;
+    }
 
     case OBJ_USER:
-      printf("[UserObj:%p]", obj);
+      printf("[UserObj:0X%p]", obj);
       return;
   }
 }

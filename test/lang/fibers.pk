@@ -1,0 +1,33 @@
+
+def f0()
+	yield("yield value")
+end
+
+fiber = fiber_new(f0)
+yield_value = fiber_run(fiber)
+assert(yield_value == "yield value")
+assert(!fiber_is_done(fiber))
+
+def f1()
+	assert(yield("y") == "r")
+	yield()
+end
+fiber = fiber_new(f1)
+assert(fiber_run(fiber) == "y")
+fiber_resume(fiber, "r")
+assert(!fiber_is_done(fiber))
+
+def f2(p1, p2, p3)
+	r1 = yield(p3); assert(r1 == 'r1')
+	r2 = yield(p2); assert(r2 == 'r2')
+	r3 = yield(p1); assert(r3 == 'r3')
+	
+	return p1 + p2 * p3
+end
+
+fiber = fiber_new(f2)
+p3 = fiber_run(fiber, 1, 2, 3); assert(p3 == 3)
+p2 = fiber_resume(fiber, 'r1'); assert(p2 == 2)
+p1 = fiber_resume(fiber, 'r2'); assert(p1 == 1)
+pa = fiber_resume(fiber, 'r3'); assert(pa == 7)
+assert(fiber_is_done(fiber))

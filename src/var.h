@@ -265,13 +265,14 @@ struct Script {
 
   VarBuffer globals;         //< Script level global variables.
   UintBuffer global_names;   //< Name map to index in globals.
-  VarBuffer literals;        //< Script literal constant values.
   FunctionBuffer functions;  //< Script level functions.
   UintBuffer function_names; //< Name map to index in functions.
+
   StringBuffer names;        //< Name literals, attribute names, etc.
+  VarBuffer literals;        //< Script literal constant values.
 
   Function* body;            //< Script body is an anonymous function.
-  bool initialized;          //< Set to true if the source body executed.
+  bool initialized;          //< Set to true just before the body executed.
 };
 
 // Script function pointer.
@@ -301,8 +302,17 @@ typedef struct {
   Var* rbp;           //< Stack base pointer. (%rbp)
 } CallFrame;
 
+typedef enum {
+  FIBER_NEW,       //< Fiber haven't started yet.
+  FIBER_RUNNING,   //< Fiber is currently running.
+  FIBER_YIELDED,   //< Yielded fiber, can be resumed.
+  FIBER_DONE,      //< Fiber finished and cannot be resumed.
+} FiberState;
+
 struct Fiber {
   Object _super;
+
+  FiberState state;
 
   // The root function of the fiber. (For script it'll be the script's implicit
   // body function).
@@ -311,6 +321,7 @@ struct Fiber {
   // The stack of the execution holding locals and temps. A heap will be
   // allocated and grow as needed.
   Var* stack;
+  int stack_size; //< Capacity of the allocated stack.
 
   // The stack pointer (%rsp) pointing to the stack top.
   Var* sp;
@@ -321,17 +332,10 @@ struct Fiber {
   // overflowed.
   Var* ret;
 
-  // Size of the allocated stack.
-  int stack_size;
-
   // Heap allocated array of call frames will grow as needed.
   CallFrame* frames;
-
-  // Capacity of the frames array.
-  int frame_capacity;
-
-  // Number of frame entry in frames.
-  int frame_count;
+  int frame_capacity; //< Capacity of the frames array.
+  int frame_count; //< Number of frame entry in frames.
 
   // Caller of this fiber if it has one, NULL otherwise.
   Fiber* caller;
@@ -341,11 +345,46 @@ struct Fiber {
 };
 
 /*****************************************************************************/
-/* METHODS                                                                   */
+/* "CONSTRUCTORS"                                                            */
 /*****************************************************************************/
 
 // Initialize the object with it's default value.
 void varInitObject(Object* self, PKVM* vm, ObjectType type);
+
+// Allocate new String object with from [text] with a given [length] and return
+// String*.
+String* newStringLength(PKVM* vm, const char* text, uint32_t length);
+
+// Allocate new string using the cstring [text].
+static inline String* newString(PKVM* vm, const char* text) {
+  return newStringLength(vm, text, (uint32_t)strlen(text));
+}
+
+// Allocate new List and return List*.
+List* newList(PKVM* vm, uint32_t size);
+
+// Allocate new Map and return Map*.
+Map* newMap(PKVM* vm);
+
+// Allocate new Range object and return Range*.
+Range* newRange(PKVM* vm, double from, double to);
+
+// Allocate new Script object and return Script*.
+Script* newScript(PKVM* vm, String* path);
+
+// Allocate new Function object and return Function*. Parameter [name] should
+// be the name in the Script's nametable. If the [owner] is NULL the function
+// would be builtin function. For builtin function arity and the native
+// function pointer would be initialized after calling this function.
+Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
+  bool is_native);
+
+// Allocate new Fiber object around the function [fn] and return Fiber*.
+Fiber* newFiber(PKVM* vm, Function* fn);
+
+/*****************************************************************************/
+/* METHODS                                                                   */
+/*****************************************************************************/
 
 // Mark the reachable objects at the mark-and-sweep phase of the garbage
 // collection.
@@ -371,38 +410,6 @@ void grayFunctionBuffer(PKVM* vm, FunctionBuffer* self);
 // working list to traverse and update the vm's [bytes_allocated] value.
 void blackenObjects(PKVM* vm);
 
-// Instead use VAR_NUM(value) and AS_NUM(value)
-Var doubleToVar(double value);
-double varToDouble(Var value);
-
-// Allocate new String object and return String*.
-String* newStringLength(PKVM* vm, const char* text, uint32_t length);
-static inline String* newString(PKVM* vm, const char* text) {
-  return newStringLength(vm, text, (uint32_t)strlen(text));
-}
-
-// Allocate new List and return List*.
-List* newList(PKVM* vm, uint32_t size);
-
-// Allocate new Map and return Map*.
-Map* newMap(PKVM* vm);
-
-// Allocate new Range object and return Range*.
-Range* newRange(PKVM* vm, double from, double to);
-
-// Allocate new Script object and return Script*.
-Script* newScript(PKVM* vm, String* path);
-
-// Allocate new Function object and return Function*. Parameter [name] should
-// be the name in the Script's nametable. If the [owner] is NULL the function
-// would be builtin function. For builtin function arity and the native
-// function pointer would be initialized after calling this function.
-Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
-                      bool is_native);
-
-// Allocate new Fiber object and return Fiber*.
-Fiber* newFiber(PKVM* vm);
-
 // Insert [value] to the list at [index] and shift down the rest of the
 // elements.
 void listInsert(PKVM* vm, List* self, uint32_t index, Var value);
@@ -424,12 +431,22 @@ void mapClear(PKVM* vm, Map* self);
 // otherwise return VAR_NULL.
 Var mapRemoveKey(PKVM* vm, Map* self, Var key);
 
+// Returns true if the fiber has error, and if it has any the fiber cannot be
+// resumed anymore.
+bool fiberHasError(Fiber* fiber);
+
 // Release all the object owned by the [self] including itself.
 void freeObject(PKVM* vm, Object* self);
 
 /*****************************************************************************/
 /* UTILITY FUNCTIONS                                                         */
 /*****************************************************************************/
+
+// Internal method behind VAR_NUM(value) don't use it directly.
+Var doubleToVar(double value);
+
+// Internal method behind AS_NUM(value) don't use it directly.
+double varToDouble(Var value);
 
 // Returns the type name of the PkVarType enum value.
 const char* getPkVarTypeName(PkVarType type);

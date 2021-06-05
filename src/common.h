@@ -11,7 +11,7 @@
 // Commenly used c standard headers across the sources. Don't include any
 // headers that are specific to a single source here, instead include them in
 // their source files explicitly (canno't be implicitly included by another
-// header). And don't include any C standard headers in any of the pocket lang
+// header). And don't include any C standard headers in any of the pocketlang
 // headers.
 #include <assert.h>
 #include <errno.h>
@@ -141,11 +141,27 @@
 #define TOSTRING(x) #x
 #define STRINGIFY(x) TOSTRING(x)
 
-// Double to string buffer size.
-#define STR_NUM_BUFF_SIZE (3 + DBL_MANT_DIG - DBL_MIN_EXP)
+// The formated string to convert double to string. It'll be with the minimum
+// length string representation of either a regular float or a scientific
+// notation (at most 15 decimal points).
+#define DOUBLE_FMT "%.16g"
 
-// Integer to string buffer size (INT_MAX, INT_MIN are 10 characters long, a
-// negative sign, and a null byte at the end = 12 bytes).
+// Double number to string buffer size, used in sprintf with DOUBLE_FMT.
+//  A largest number : "-1.234567890123456e+308"
+// +  1 fot sign '+' or '-'
+// + 16 fot significant digits
+// +  1 for decimal point '.'
+// +  1 for exponent char 'e'
+// +  1 for sign of exponent
+// +  3 for the exponent digits
+// +  1 for null byte '\0'
+#define STR_DBL_BUFF_SIZE 24
+
+// Integer number to string buffer size, used in sprintf with format "%d".
+// The minimum 32 bit integer = -2147483648
+// +  1 for sign '-'
+// + 10 for digits
+// +  1 for null byte '\0'
 #define STR_INT_BUFF_SIZE 12
 
 /*****************************************************************************/

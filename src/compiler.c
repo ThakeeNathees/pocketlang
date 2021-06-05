@@ -2408,8 +2408,6 @@ bool compile(PKVM* vm, Script* script, const char* source) {
   return !(compiler->has_errors);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-
 void compilerMarkObjects(PKVM* vm, Compiler* compiler) {
   
   // Mark the script which is currently being compiled.

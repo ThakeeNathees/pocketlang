@@ -11,10 +11,10 @@ with zero external dependecies just as it's self descriptive name. The pocketlan
 VM can be embedded in another hosting program very easily.
 
 The language is written using [Wren Language](https://wren.io/) and their
-wonderful book [craftinginterpreters](http://www.craftinginterpreters.com/) as
+wonderful book [Crafting Interpreters](http://www.craftinginterpreters.com/) as
 a reference.
 
-### What pocketlang looks like
+## What pocketlang looks like
 
 ```ruby
 # Python like import statement.
