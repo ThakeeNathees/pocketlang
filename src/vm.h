@@ -35,12 +35,6 @@
 // allocated so far plus the fill factor of it.
 #define HEAP_FILL_PERCENT 75
 
-typedef enum {
-  #define OPCODE(name, _, __) OP_##name,
-  #include "opcodes.h"
-  #undef OPCODE
-} Opcode;
-
 // Builtin functions are stored in an array in the VM (unlike script functions
 // they're member of function buffer of the script) and this struct is a single
 // entry of the array.

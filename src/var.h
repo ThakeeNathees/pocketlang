@@ -6,6 +6,9 @@
 #ifndef VAR_H
 #define VAR_H
 
+#include "buffers.h"
+#include "common.h"
+
 /** @file
  * A simple dynamic type system library for small dynamic typed languages using
  * a technique called NaN-tagging (optional). The method is inspired from the
@@ -20,9 +23,6 @@
  * programme inefficient for small types such null, bool, int and float.
  */
 
-#include "common.h"
-#include "buffers.h"
-
 // To use dynamic variably-sized struct with a tail array add an array at the
 // end of the struct with size \ref DYNAMIC_TAIL_ARRAY. This method was a
 // legacy standard called "struct hack".
@@ -35,6 +35,14 @@
 
 // Number of maximum import statements in a script.
 #define MAX_IMPORT_SCRIPTS 16
+
+// There are 2 main implemenation of Var's internal representation. First one
+// is NaN-tagging, and the second one is union-tagging. (read below for more).
+#if VAR_NAN_TAGGING
+  typedef uint64_t Var;
+#else
+  typedef struct Var Var;
+#endif
 
 /**
  * The IEEE 754 double precision float bit representation.
@@ -160,7 +168,7 @@ typedef enum {
   VAR_OBJECT,    //< Base type for all \ref var_Object types.
 } VarType;
 
-typedef struct {
+struct Var {
   VarType type;
   union {
     bool _bool;
@@ -168,9 +176,32 @@ typedef struct {
     double _float;
     Object* _obj;
   };
-} var;
+};
 
 #endif // VAR_NAN_TAGGING
+
+// Type definition of pocketlang heap allocated types.
+typedef struct Object Object;
+typedef struct String String;
+typedef struct List List;
+typedef struct Map Map;
+typedef struct Range Range;
+typedef struct Script Script;
+typedef struct Function Function;
+typedef struct Fiber Fiber;
+
+// Declaration of buffer objects of different types.
+DECLARE_BUFFER(Uint, uint, uint32_t)
+DECLARE_BUFFER(Byte, byte, uint8_t)
+DECLARE_BUFFER(Var, var, Var)
+DECLARE_BUFFER(String, string, String*)
+DECLARE_BUFFER(Function, function, Function*)
+
+// Add all the characters to the buffer, byte buffer can also be used as a
+// buffer to write string (like a string stream).
+void byteBufferAddString(ByteBuffer* self, PKVM* vm, const char* str,
+  uint32_t length);
+
 
 typedef enum {
   OBJ_STRING,

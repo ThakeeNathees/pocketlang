@@ -9,6 +9,12 @@
 #include "common.h"
 #include "var.h"
 
+typedef enum {
+  #define OPCODE(name, _, __) OP_##name,
+  #include "opcodes.h"
+  #undef OPCODE
+} Opcode;
+
 // Pocketlang compiler is a single pass compiler, which means it doesn't go
 // throught the basic compilation pipline such as lexing, parsing (AST),
 // analyzing, intermediate codegeneration, and target codegeneration one by one

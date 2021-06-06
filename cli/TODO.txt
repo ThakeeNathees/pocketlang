@@ -9,6 +9,7 @@
 - In keyword.
 - Structs (maybe enums).
 - Implement file IO (require structs).
+- Implement utf8 support.
 - Implement gdb like debugger (add color print for readability).
 - Implement fiber from script body and vm run fibers (not scripts).
     Then remove vm's root script.

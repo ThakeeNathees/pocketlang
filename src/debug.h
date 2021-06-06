@@ -7,6 +7,7 @@
 #define DEBUG_H
 
 #include "common.h"
+#include "var.h"
 
 // Dump the value of the [value] without a new line at the end.
 void dumpValue(PKVM* vm, Var value);

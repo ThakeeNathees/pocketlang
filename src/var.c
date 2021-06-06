@@ -75,6 +75,21 @@ const char* pkStringGetData(const PkVar value) {
 // capacity by the GROW_FACTOR.
 #define GROW_FACTOR 2
 
+// Buffer implementations.
+DEFINE_BUFFER(Uint, uint, uint32_t)
+DEFINE_BUFFER(Byte, byte, uint8_t)
+DEFINE_BUFFER(Var, var, Var)
+DEFINE_BUFFER(String, string, String*)
+DEFINE_BUFFER(Function, function, Function*)
+
+void byteBufferAddString(ByteBuffer* self, PKVM* vm, const char* str,
+  uint32_t length) {
+  byteBufferReserve(self, vm, self->count + length);
+  for (uint32_t i = 0; i < length; i++) {
+    self->data[self->count++] = *(str++);
+  }
+}
+
 void varInitObject(Object* self, PKVM* vm, ObjectType type) {
   self->type = type;
   self->is_marked = false;
@@ -121,7 +136,6 @@ void grayVarBuffer(PKVM* vm, VarBuffer* self) {
 
 GRAY_OBJ_BUFFER(String)
 GRAY_OBJ_BUFFER(Function)
-
 
 static void blackenObject(Object* obj, PKVM* vm) {
   // TODO: trace here.
@@ -1012,7 +1026,8 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
       case OBJ_FIBER: {
         const Fiber* fb = (const Fiber*)obj;
         byteBufferAddString(buff, vm, "[Fiber:", 7);
-        byteBufferAddString(buff, vm, fb->func->name, strlen(fb->func->name));
+        byteBufferAddString(buff, vm, fb->func->name,
+                            (uint32_t)strlen(fb->func->name));
         byteBufferWrite(buff, vm, ']');
         return;
       }

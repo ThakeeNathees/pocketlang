@@ -168,19 +168,5 @@
 /* INTERNAL TYPE DEFINES                                                     */
 /*****************************************************************************/
 
-#if VAR_NAN_TAGGING
-  typedef uint64_t Var;
-#else
-  typedef struct Var Var;
-#endif
-
-typedef struct Object Object;
-typedef struct String String;
-typedef struct List List;
-typedef struct Map Map;
-typedef struct Range Range;
-typedef struct Script Script;
-typedef struct Function Function;
-typedef struct Fiber Fiber;
 
 #endif //PK_COMMON_H

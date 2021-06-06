@@ -44,7 +44,10 @@ int runSource(const char* source) {
   config.resolve_path_fn = resolvePath;
 
   PKVM* vm = pkNewVM(&config);
-  PkInterpretResult result = pkInterpretSource(vm, source, "@try");
+  
+  PkStringPtr src = { source, NULL, NULL };
+  PkStringPtr module = { "@try", NULL, NULL };
+  PkInterpretResult result = pkInterpretSource(vm, src, module);
 
   pkFreeVM(vm);
 

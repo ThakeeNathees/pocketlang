@@ -6,8 +6,8 @@
 #ifndef CORE_H
 #define CORE_H
 
-#include "var.h"
 #include "common.h"
+#include "var.h"
 
 // Initialize core language, builtin function and core libs.
 void initializeCore(PKVM* vm);
