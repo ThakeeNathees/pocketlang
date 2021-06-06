@@ -195,12 +195,12 @@ void pkReturnValue(PKVM* vm, PkVar value) {
 
 // Check if a numeric value bool/number and set [value].
 static inline bool isNumeric(Var var, double* value) {
-  if (IS_BOOL(var)) {
-    *value = AS_BOOL(var);
-    return true;
-  }
   if (IS_NUM(var)) {
     *value = AS_NUM(var);
+    return true;
+  }
+  if (IS_BOOL(var)) {
+    *value = AS_BOOL(var);
     return true;
   }
   return false;
@@ -208,7 +208,7 @@ static inline bool isNumeric(Var var, double* value) {
 
 // Check if [var] is bool/number. If not set error and return false.
 static inline bool validateNumeric(PKVM* vm, Var var, double* value,
-  const char* name) {
+                                   const char* name) {
   if (isNumeric(var, value)) return true;
   vm->fiber->error = stringFormat(vm, "$ must be a numeric value.", name);
   return false;
@@ -216,7 +216,7 @@ static inline bool validateNumeric(PKVM* vm, Var var, double* value,
 
 // Check if [var] is integer. If not set error and return false.
 static inline bool validateInteger(PKVM* vm, Var var, int32_t* value,
-  const char* name) {
+                                   const char* name) {
   double number;
   if (isNumeric(var, &number)) {
     double truncated = floor(number);

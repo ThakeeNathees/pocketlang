@@ -23,7 +23,6 @@ true; false            # Booleans.
 [42, 'foo', null]      # Lists.
 { 'Key':'value' }      # Maps.
 func(x) return x*x end # Lambda/literal functions.
-import lang            # Module (imported scripts).
 
 # Control flow.
 # -------------
@@ -71,9 +70,20 @@ end
 
 # Concanative call operator '->'
 
-str_lower(str_strip('FOO ')) # This can be written as below
-'FOO ' -> str_strip -> str_lower
+str_lower(str_strip('Foo ')) # This can be written as below
+'Foo ' -> str_strip -> str_lower
 
 'foo' -> print # similer as print('foo')
 
+# Fibers & Coroutine
+#-------------------
+
+def fn(p1, p2)
+	print(yield(42)) # Prints 3.14
+end
+
+fb = fiber_new(fn)
+val = fiber_run(fb, 1, 2)
+print(val) ## Prints 42
+fiber_resume(fb, 3.14)
 ```
