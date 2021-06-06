@@ -53,7 +53,6 @@
 <span class="o">[</span><span class="mi">42</span><span class="p">,</span> <span class="s1">&#39;foo&#39;</span><span class="p">,</span> <span class="k">null</span><span class="o">]</span>      <span class="c1"># Lists.</span>
 <span class="p">{</span> <span class="s1">&#39;Key&#39;</span><span class="ss">:&#39;value&#39;</span> <span class="p">}</span>      <span class="c1"># Maps.</span>
 <span class="k">func</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">return</span> <span class="n">x</span><span class="o">*</span><span class="n">x</span> <span class="k">end</span> <span class="c1"># Lambda/literal functions.</span>
-<span class="k">import</span> <span class="n">lang</span>            <span class="c1"># Module (imported scripts).</span>
 
 <span class="c1"># Control flow.</span>
 <span class="c1"># -------------</span>
@@ -101,10 +100,22 @@
 
 <span class="c1"># Concanative call operator &#39;-&gt;&#39;</span>
 
-<span class="n">str_lower</span><span class="p">(</span><span class="n">str_strip</span><span class="p">(</span><span class="s1">&#39;FOO &#39;</span><span class="p">))</span> <span class="c1"># This can be written as below</span>
-<span class="s1">&#39;FOO &#39;</span> <span class="o">-&gt;</span> <span class="n">str_strip</span> <span class="o">-&gt;</span> <span class="n">str_lower</span>
+<span class="n">str_lower</span><span class="p">(</span><span class="n">str_strip</span><span class="p">(</span><span class="s1">&#39;Foo &#39;</span><span class="p">))</span> <span class="c1"># This can be written as below</span>
+<span class="s1">&#39;Foo &#39;</span> <span class="o">-&gt;</span> <span class="n">str_strip</span> <span class="o">-&gt;</span> <span class="n">str_lower</span>
 
 <span class="s1">&#39;foo&#39;</span> <span class="o">-&gt;</span> <span class="nb">print</span> <span class="c1"># similer as print(&#39;foo&#39;)</span>
+
+<span class="c1"># Fibers &amp; Coroutine</span>
+<span class="c1">#-------------------</span>
+
+<span class="k">def</span> <span class="nf">fn</span><span class="p">(</span><span class="n">p1</span><span class="p">,</span> <span class="n">p2</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="k">yield</span><span class="p">(</span><span class="mi">42</span><span class="p">))</span> <span class="c1"># Prints 3.14</span>
+<span class="k">end</span>
+
+<span class="n">fb</span> <span class="o">=</span> <span class="n">fiber_new</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+<span class="n">val</span> <span class="o">=</span> <span class="n">fiber_run</span><span class="p">(</span><span class="n">fb</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="c1">## Prints 42</span>
+<span class="n">fiber_resume</span><span class="p">(</span><span class="n">fb</span><span class="p">,</span> <span class="mi">3</span><span class="o">.</span><span class="mi">14</span><span class="p">)</span>
 </pre></div>
 		</div>
 		</div>
@@ -126,6 +137,7 @@
 <ul class="menu">
 <li><a href="language-api-variables.html">Variables</a></li>
 <li><a href="language-api-functions.html">Functions</a></li>
+<li><a href="language-api-fibers.html">Fibers</a></li>
 <li><a href="language-api-modules.html">Modules</a></li>
 </ul>
 </div>
