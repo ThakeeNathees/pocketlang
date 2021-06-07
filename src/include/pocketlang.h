@@ -67,7 +67,7 @@ extern "C" {
 
 // Name of the implicit function for a module. When a module is parsed all of
 // it's statements are wrapped around an implicit function with this name.
-#define PK_BODY_FN_NAME "$(SourceBody)"
+#define PK_IMPLICIT_MAIN_NAME "$(SourceBody)"
 
 /*****************************************************************************/
 /* POCKETLANG TYPES                                                          */
@@ -177,12 +177,12 @@ typedef PkStringPtr (*pkLoadScriptFn) (PKVM* vm, const char* path);
 // Create a new pkConfiguraition with the default values and return it.
 // Override those default configuration to adopt to another hosting
 // application.
-PK_PUBLIC PkConfiguration pkNewConfiguration();
+PK_PUBLIC PkConfiguration pkNewConfiguration(void);
 
 // Create a new pkCompilerOptions with the default values and return it.
 // Override those default configuration to adopt to another hosting
 // application.
-PK_PUBLIC PkCompileOptions pkNewCompilerOptions();
+PK_PUBLIC PkCompileOptions pkNewCompilerOptions(void);
 
 // Allocate initialize and returns a new VM
 PK_PUBLIC PKVM* pkNewVM(PkConfiguration* config);
@@ -221,9 +221,8 @@ PK_PUBLIC void pkModuleAddFunction(PKVM* vm, PkHandle* module,
 PK_PUBLIC PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
                                   const char* name);
 
-// Compile the [module] with the provided [source] and return true if the
-// compilation is success. Set the compiler options with the the [options]
-// argument or it can be set to NULL for default options.
+// Compile the [module] with the provided [source]. Set the compiler options
+// with the the [options] argument or set to NULL for default options.
 PK_PUBLIC PkResult pkCompileModule(PKVM* vm, PkHandle* module,
                                PkStringPtr source,
                                const PkCompileOptions* options);
@@ -237,9 +236,18 @@ PK_PUBLIC PkResult pkInterpretSource(PKVM* vm,
                                      PkStringPtr path,
                                      const PkCompileOptions* options);
 
+// Runs the fiber's function with the provided arguments (param [arc] is the
+// argument count and [argv] are the values). It'll returns it's run status
+// reslt (success or failure) if you need the yielded or returned value use the
+// pkFiberGetReturnValue() function, and use pkFiberIsDone() function to check
+// if the fiber can be resumed with pkFiberResume() function.
+PK_PUBLIC PkResult pkRunFiber(PKVM* vm, PkHandle* fiber,
+                              int argc, PkHandle** argv);
 
-//PK_PUBLIC PkResult pkRunFiber(PKVM* vm, PkHandle* fiber,
-//                              int argc, PkHandle** argv);
+// Resume a yielded fiber with an optional [value]. (could be set to NULL)
+// It'll returns it's run status reslt (success or failure) if you need the
+// yielded or returned value use the pkFiberGetReturnValue() function.
+PK_PUBLIC PkResult pkResumeFiber(PKVM* vm, PkHandle* fiber, PkVar value);
 
 /*****************************************************************************/
 /* POCKETLANG PUBLIC TYPE DEFINES                                            */
@@ -336,6 +344,19 @@ PK_PUBLIC void pkReturnString(PKVM* vm, const char* value);
 PK_PUBLIC void pkReturnStringLength(PKVM* vm, const char* value, size_t len);
 PK_PUBLIC void pkReturnValue(PKVM* vm, PkVar value);
 
+// Returns the cstring pointer of the given string. Make sure if the [value] is
+// a string before calling this function, otherwise it'll fail an assertion.
+PK_PUBLIC const char* pkStringGetData(const PkVar value);
+
+// Returns the return value or if it's yielded, the yielded value of the fiber
+// as PkVar, this value lives on stack and will die (popped) once the fiber
+// resumed use handle to keep it alive.
+PK_PUBLIC PkVar pkFiberGetReturnValue(const PkHandle* fiber);
+
+// Returns true if the fiber is finished it's execution and cannot be resumed
+// anymore.
+PK_PUBLIC bool pkFiberIsDone(const PkHandle* fiber);
+
 /*****************************************************************************/
 /* POCKETLANG TYPE FUNCTIONS                                                 */
 /*****************************************************************************/
@@ -354,8 +375,6 @@ PK_PUBLIC PkHandle* pkNewModule(PKVM* vm, const char* name);
 
 // Create and return a new fiber around the function [fn].
 PK_PUBLIC PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn);
-
-PK_PUBLIC const char* pkStringGetData(const PkVar value);
 
 //      TODO:
 // The below functions will push the primitive values on the stack and return

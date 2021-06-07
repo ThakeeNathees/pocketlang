@@ -218,6 +218,28 @@ void pkReturnValue(PKVM* vm, PkVar value) {
   RET(*(Var*)value);
 }
 
+const char* pkStringGetData(const PkVar value) {
+  const Var str = (*(const Var*)value);
+  __ASSERT(IS_OBJ_TYPE(str, OBJ_STRING), "Value should be of type string.");
+  return ((String*)AS_OBJ(str))->data;
+}
+
+PkVar pkFiberGetReturnValue(const PkHandle* fiber) {
+  __ASSERT(fiber != NULL, "Handle fiber was NULL.");
+  Var fb = fiber->value;
+  __ASSERT(IS_OBJ_TYPE(fb, OBJ_FIBER), "Given handle is not a fiber");
+  Fiber* _fiber = (Fiber*)AS_OBJ(fb);
+  return (PkVar)_fiber->ret;
+}
+
+bool pkFiberIsDone(const PkHandle* fiber) {
+  __ASSERT(fiber != NULL, "Handle fiber was NULL.");
+  Var fb = fiber->value;
+  __ASSERT(IS_OBJ_TYPE(fb, OBJ_FIBER), "Given handle is not a fiber");
+  Fiber* _fiber = (Fiber*)AS_OBJ(fb);
+  return _fiber->state == FIBER_DONE;
+}
+
 /*****************************************************************************/
 /* VALIDATORS                                                                */
 /*****************************************************************************/
@@ -294,7 +316,7 @@ static inline bool validateIndex(PKVM* vm, int32_t index, int32_t size,
 
 // findBuiltinFunction implementation (see core.h for description).
 int findBuiltinFunction(const PKVM* vm, const char* name, uint32_t length) {
-   for (int i = 0; i < vm->builtins_count; i++) {
+   for (uint32_t i = 0; i < vm->builtins_count; i++) {
      if (length == vm->builtins[i].length &&
        strncmp(name, vm->builtins[i].name, length) == 0) {
        return i;
@@ -456,7 +478,7 @@ PK_DOC(coreStrLower,
 
   String* result = newStringLength(vm, str->data, str->length);
   char* data = result->data;
-  for (; *data; ++data) *data = tolower(*data);
+  for (; *data; ++data) *data = (char)tolower(*data);
   // Since the string is modified re-hash it.
   result->hash = utilHashString(result->data);
 
@@ -471,7 +493,7 @@ PK_DOC(coreStrUpper,
 
   String* result = newStringLength(vm, str->data, str->length);
   char* data = result->data;
-  for (; *data; ++data) *data = toupper(*data);
+  for (; *data; ++data) *data = (char)toupper(*data);
   // Since the string is modified re-hash it.
   result->hash = utilHashString(result->data);
   
@@ -586,56 +608,19 @@ PK_DOC(coreFiberRun,
   Fiber* fb;
   if (!validateArgFiber(vm, 1, &fb)) return;
 
-  ASSERT(fb->func->arity >= -1 , OOPS " (Forget to initialize arity.)");
+  // Buffer of argument to call vmPrepareFiber().
+  Var* args[MAX_ARGC];
 
-  if (argc - 1 != fb->func->arity) {
-    char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", fb->func->arity);
-    RET_ERR(stringFormat(vm, "Expected excatly $ argument(s).", buff));
-  }
-
-  if (fb->state != FIBER_NEW) {
-    switch (fb->state) {
-      case FIBER_NEW: UNREACHABLE();
-      case FIBER_RUNNING:
-        RET_ERR(newString(vm, "The fiber has already been running."));
-      case FIBER_YIELDED:
-        RET_ERR(newString(vm, "Cannot run a fiber which is yielded, use "
-                "fiber_resume() instead."));
-      case FIBER_DONE:
-        RET_ERR(newString(vm, "The fiber has done running."));
-    }
-    UNREACHABLE();
-  }
-
-  ASSERT(fb->stack != NULL && fb->sp == fb->stack, OOPS);
-  ASSERT(fb->ret == fb->sp, OOPS);
-
-  fb->state = FIBER_RUNNING;
-  fb->caller = vm->fiber;
-
-  // Pass the function arguments.
-
-  // Assert we have the first frame (to push the arguments). And assert we have
-  // enought stack space for parameters.
-  ASSERT(fb->frame_count == 1, OOPS);
-  ASSERT(fb->frames[0].rbp == fb->ret, OOPS);
-  ASSERT((fb->stack + fb->stack_size) - fb->sp >= argc, OOPS);
-
-  // ARG1 is fiber, function arguments are ARG(2), ARG(3), ... ARG(argc).
-  // And ret[0] is the return value, parameters starts at ret[1], ...
+  // ARG(1) is fiber, function arguments are ARG(2), ARG(3), ... ARG(argc).
   for (int i = 1; i < argc; i++) {
-    fb->ret[i] = ARG(i + 1);
+    args[i - 1] = &ARG(i + 1);
   }
-  fb->sp += argc; // Parameters and return value.
 
-  // Set the new fiber as the vm's fiber.
-  vm->fiber = fb;
-
-  // fb->ret is "un initialized" and will be initialized by the fiber_resume()
-  // call. But we're setting the value to VAR_NULL below to make it initialized
-  // for the debugger, it'll prevent from crashing when we're trying to read
-  // the value to dump.
-  RET(VAR_NULL);
+  // Switch fiber and start execution.
+  if (vmPrepareFiber(vm, fb, argc - 1, args)) {
+    ASSERT(fb == vm->fiber, OOPS);
+    fb->state = FIBER_RUNNING;
+  }
 }
 
 PK_DOC(coreFiberResume,
@@ -652,36 +637,13 @@ PK_DOC(coreFiberResume,
   Fiber* fb;
   if (!validateArgFiber(vm, 1, &fb)) return;
 
-  if (fb->state != FIBER_YIELDED) {
-    switch (fb->state) {
-      case FIBER_NEW:
-        RET_ERR(newString(vm, "The fiber hasn't started. call fiber_run() to "
-                "start."));
-      case FIBER_RUNNING:
-        RET_ERR(newString(vm, "The fiber has already been running."));
-      case FIBER_YIELDED: UNREACHABLE();
-      case FIBER_DONE:
-        RET_ERR(newString(vm, "The fiber has done running."));
-    }
-    UNREACHABLE();
+  Var value = (argc == 1) ? VAR_NULL : ARG(2);
+
+  // Switch fiber and resume execution.
+  if (vmSwitchFiber(vm, fb, &value)) {
+    ASSERT(fb == vm->fiber, OOPS);
+    fb->state = FIBER_RUNNING;
   }
-
-  fb->state = FIBER_RUNNING;
-  fb->caller = vm->fiber;
-
-  // Pass the resume argument if it has any.
-
-  // Assert if we have a call frame and the stack size enough for the return
-  // value and the resumed value.
-  ASSERT(fb->frame_count != 0, OOPS);
-  ASSERT((fb->stack + fb->stack_size) - fb->sp >= 2, OOPS);
-
-  // fb->ret will points to the return value of the 'yield()' call.
-  if (argc == 1) *fb->ret = VAR_NULL;
-  else *fb->ret = ARG(2);
-
-  // Set the new fiber as the vm's fiber.
-  vm->fiber = fb;
 }
 
 /*****************************************************************************/
@@ -1126,7 +1088,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
             varBufferWrite(&list->elements, vm, VAR_NUM(i));
           }
         } else {
-          newList(vm, 0);
+          list = newList(vm, 0);
         }
         return VAR_OBJ(list);
       }
@@ -1139,7 +1101,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
       Script* scr = (Script*)obj;
 
       // Search in functions.
-      uint32_t index = scriptGetFunc(scr, attrib->data, attrib->length);
+      int index = scriptGetFunc(scr, attrib->data, attrib->length);
       if (index != -1) {
         ASSERT_INDEX(index, scr->functions.count);
         return VAR_OBJ(scr->functions.data[index]);
@@ -1167,7 +1129,6 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
   CHECK_MISSING_OBJ_TYPE(7);
 
   UNREACHABLE();
-  return VAR_NULL;
 }
 
 void varSetAttrib(PKVM* vm, Var on, String* attrib, Var value) {
@@ -1211,7 +1172,7 @@ do {                                                                          \
       Script* scr = (Script*)obj;
 
       // Check globals.
-      uint32_t index = scriptGetGlobals(scr, attrib->data, attrib->length);
+      int index = scriptGetGlobals(scr, attrib->data, attrib->length);
       if (index != -1) {
         ASSERT_INDEX(index, scr->globals.count);
         scr->globals.data[index] = value;
@@ -1315,7 +1276,6 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
 
   CHECK_MISSING_OBJ_TYPE(7);
   UNREACHABLE();
-  return VAR_NULL;
 }
 
 void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {

@@ -26,7 +26,7 @@ static void _dumpValue(PKVM* vm, Var value, bool recursive) {
     return;
   }
   if (IS_BOOL(value)) {
-    printf((AS_BOOL(value)) ? "true" : "false");
+    printf("%s", (AS_BOOL(value)) ? "true" : "false");
     return;
   }
   if (IS_NUM(value)) {
@@ -199,7 +199,7 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         break;
 
       case OP_PUSH_LOCAL_N:
-        READ_BYTE();
+        BYTE_ARG();
         break;
 
       case OP_STORE_LOCAL_0:
@@ -215,7 +215,7 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         break;
 
       case OP_STORE_LOCAL_N:
-        READ_BYTE();
+        BYTE_ARG();
         break;
 
       case OP_PUSH_GLOBAL:
@@ -315,7 +315,6 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_RANGE:
       case OP_IN:
       case OP_REPL_PRINT:
-      case OP_YIELD:
       case OP_END:
         NO_ARGS();
         break;

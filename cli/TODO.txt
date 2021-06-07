@@ -28,6 +28,8 @@
 - Hex, binary literals and floats like ".5".
 - Docs build to a single directory, and replace url space (%20) with a hyphen.
 - Complete all the TODO; macros.
+- implement MAX_ARGC checks (would cause a buffer overflow if not)
+  when compiling and calling a function (also in fibers).
 
 // Low priority.
 - Ignore line with '\' character.

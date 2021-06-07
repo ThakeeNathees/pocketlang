@@ -40,7 +40,7 @@
 /* PUBLIC FUNCTIONS                                                          */
 /*****************************************************************************/
 
-void pathInit() {
+void pathInit(void) {
   cwk_path_set_style(CWK_STYLE_UNIX);
 }
 

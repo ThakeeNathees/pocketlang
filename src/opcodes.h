@@ -192,9 +192,6 @@ OPCODE(IN, 0, -1)
 // This will not pop the value.
 OPCODE(REPL_PRINT, 0, 0)
 
-// Yield the current fiber. Used in REPL mode.
-OPCODE(YIELD, 0, 0)
-
 // A sudo instruction which will never be called. A function's last opcode
 // used for debugging.
 OPCODE(END, 0, 0)

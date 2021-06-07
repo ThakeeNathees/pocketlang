@@ -40,7 +40,7 @@
 // entry of the array.
 typedef struct {
   const char* name; //< Name of the function.
-  int length;       //< Length of the name.
+  uint32_t length;  //< Length of the name.
   Function* fn;     //< Native function pointer.
 } BuiltinFn;
 
@@ -108,7 +108,7 @@ struct PKVM {
 
   // Array of all builtin functions.
   BuiltinFn builtins[BUILTIN_FN_CAPACITY];
-  int builtins_count;
+  uint32_t builtins_count;
 
   // Current fiber.
   Fiber* fiber;
@@ -179,6 +179,19 @@ void vmPopTempRef(PKVM* vm);
 // Returns the scrpt with the resolved [path] (also the key) in the vm's script
 // cache. If not found itll return NULL.
 Script* vmGetScript(PKVM* vm, String* path);
+
+// ((Context switching - start))
+// Prepare a new fiber for execution with the given arguments. That can be used
+// different fiber_run apis. Return true on success, otherwise it'll set the
+// error to the vm's current fiber (if it has any).
+bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var** argv);
+
+// ((Context switching - resume))
+// Switch the running fiber of the vm from the current fiber to the provided
+// [fiber]. with an optional [value] (could be set to NULL). used in different
+// fiber_resume apis. Return true on success, otherwise it'll set the error to
+// the vm's current fiber (if it has any).
+bool vmSwitchFiber(PKVM* vm, Fiber* fiber, Var* value);
 
 // Yield from the current fiber. If the [value] isn't NULL it'll set it as the
 // yield value.

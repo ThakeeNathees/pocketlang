@@ -128,17 +128,17 @@ int utf8_encodeValue(int value, uint8_t* bytes) {
   // 2 byte character 110xxxxx 10xxxxxx -> last 6 bits write to 2nd byte and
   // first 5 bit write to first byte
   if (value <= 0x7ff) {
-    *(bytes++) = 0b11000000 | ((value & 0b11111000000) >> 6);
-    *(bytes) = 0b10000000 | ((value & 111111));
+    *(bytes++) = (uint8_t)(0b11000000 | ((value & 0b11111000000) >> 6));
+    *(bytes) = (uint8_t)(0b10000000 | ((value & 111111)));
     return 2;
   }
 
   // 3 byte character 1110xxxx 10xxxxxx 10xxxxxx -> from last, 6 bits write
   // to  3rd byte, next 6 bits write to 2nd byte, and 4 bits to first byte.
   if (value <= 0xffff) {
-    *(bytes++) = 0b11100000 | ((value & 0b1111000000000000) >> 12);
-    *(bytes++) = 0b10000000 | ((value & 0b111111000000) >> 6);
-    *(bytes) = 0b10000000 | ((value & 0b111111));
+    *(bytes++) = (uint8_t)(0b11100000 | ((value & 0b1111000000000000) >> 12));
+    *(bytes++) = (uint8_t)(0b10000000 | ((value & 0b111111000000) >> 6));
+    *(bytes) =   (uint8_t)(0b10000000 | ((value & 0b111111)));
     return 3;
   }
 
@@ -146,10 +146,10 @@ int utf8_encodeValue(int value, uint8_t* bytes) {
   // to 4th byte, next 6 bits to 3rd byte, next 6 bits to 2nd byte, 3 bits
   // first byte.
   if (value <= 0x10ffff) {
-    *(bytes++) = 0b11110000 | ((value & 0b111000000000000000000) >> 18);
-    *(bytes++) = 0b10000000 | ((value & 0b111111000000000000) >> 12);
-    *(bytes++) = 0b10000000 | ((value & 0b111111000000) >> 6);
-    *(bytes)   = 0b10000000 | ((value & 0b111111));
+    *(bytes++) = (uint8_t)(0b11110000 | ((value & 0b111000000000000000000) >> 18));
+    *(bytes++) = (uint8_t)(0b10000000 | ((value & 0b111111000000000000) >> 12));
+    *(bytes++) = (uint8_t)(0b10000000 | ((value & 0b111111000000) >> 6));
+    *(bytes)   = (uint8_t)(0b10000000 | ((value & 0b111111)));
     return 4;
   }
 

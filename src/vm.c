@@ -25,7 +25,7 @@ static void* defaultRealloc(void* memory, size_t new_size, void* user_data);
 // till the next yield or return statement, and return result.
 static PkResult runFiber(PKVM* vm, Fiber* fiber);
 
-PkConfiguration pkNewConfiguration() {
+PkConfiguration pkNewConfiguration(void) {
   PkConfiguration config;
   config.realloc_fn = defaultRealloc;
 
@@ -40,7 +40,7 @@ PkConfiguration pkNewConfiguration() {
   return config;
 }
 
-PkCompileOptions pkNewCompilerOptions() {
+PkCompileOptions pkNewCompilerOptions(void) {
   PkCompileOptions options;
   options.debug = false;
   // TODO:
@@ -161,6 +161,39 @@ PkResult pkInterpretSource(PKVM* vm, PkStringPtr source, PkStringPtr path,
   return runFiber(vm, newFiber(vm, scr->body));
 }
 
+PkResult pkRunFiber(PKVM* vm, PkHandle* fiber,
+                    int argc, PkHandle** argv) {
+  __ASSERT(fiber != NULL, "Handle fiber was NULL.");
+  Var fb = fiber->value;
+  __ASSERT(IS_OBJ_TYPE(fb, OBJ_FIBER), "Given handle is not a fiber.");
+  Fiber* _fiber = (Fiber*)AS_OBJ(fb);
+
+  Var* args[MAX_ARGC];
+  for (int i = 0; i < argc; i++) {
+    args[i] = &(argv[i]->value);
+  }
+
+  if (!vmPrepareFiber(vm, _fiber, argc, args)) {
+    return PK_RESULT_RUNTIME_ERROR;
+  }
+
+  ASSERT(_fiber->frame_count == 1, OOPS);
+  return runFiber(vm, _fiber);
+}
+
+PkResult pkResumeFiber(PKVM* vm, PkHandle* fiber, PkVar value) {
+  __ASSERT(fiber != NULL, "Handle fiber was NULL.");
+  Var fb = fiber->value;
+  __ASSERT(IS_OBJ_TYPE(fb, OBJ_FIBER), "Given handle is not a fiber.");
+  Fiber* _fiber = (Fiber*)AS_OBJ(fb);
+
+  if (!vmSwitchFiber(vm, _fiber, (Var*)value)) {
+    return PK_RESULT_RUNTIME_ERROR;
+  }
+
+  return runFiber(vm, _fiber);
+}
+
 void pkSetRuntimeError(PKVM* vm, const char* message) {
   __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
   vm->fiber->error = newString(vm, message);
@@ -224,7 +257,7 @@ void vmCollectGarbage(PKVM* vm) {
 
   // Mark the core libs and builtin functions.
   grayObject(vm, &vm->core_libs->_super);
-  for (int i = 0; i < vm->builtins_count; i++) {
+  for (uint32_t i = 0; i < vm->builtins_count; i++) {
     grayObject(vm, &vm->builtins[i].fn->_super);
   }
 
@@ -280,6 +313,96 @@ void vmCollectGarbage(PKVM* vm) {
     (vm->bytes_allocated * vm->heap_fill_percent) / 100);
   if (vm->next_gc < vm->min_heap_size) vm->next_gc = vm->min_heap_size;
 }
+
+#define _ERR_FAIL(msg)                             \
+  do {                                             \
+    if (vm->fiber != NULL) vm->fiber->error = msg; \
+    return false;                                  \
+  } while (false)
+
+bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var** argv) {
+  ASSERT(fiber->func->arity >= -1, OOPS " (Forget to initialize arity.)");
+
+  if (argc != fiber->func->arity) {
+    char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", fiber->func->arity);
+    _ERR_FAIL(stringFormat(vm, "Expected excatly $ argument(s).", buff));
+  }
+
+  if (fiber->state != FIBER_NEW) {
+    switch (fiber->state) {
+      case FIBER_NEW: UNREACHABLE();
+      case FIBER_RUNNING:
+        _ERR_FAIL(newString(vm, "The fiber has already been running."));
+      case FIBER_YIELDED:
+        _ERR_FAIL(newString(vm, "Cannot run a fiber which is yielded, use "
+          "fiber_resume() instead."));
+      case FIBER_DONE:
+        _ERR_FAIL(newString(vm, "The fiber has done running."));
+    }
+    UNREACHABLE();
+  }
+
+  ASSERT(fiber->stack != NULL && fiber->sp == fiber->stack + 1, OOPS);
+  ASSERT(fiber->ret + 1 == fiber->sp, OOPS);
+
+  // Pass the function arguments.
+
+  // Assert we have the first frame (to push the arguments). And assert we have
+  // enought stack space for parameters.
+  ASSERT(fiber->frame_count == 1, OOPS);
+  ASSERT(fiber->frames[0].rbp == fiber->ret, OOPS);
+  ASSERT((fiber->stack + fiber->stack_size) - fiber->sp >= argc, OOPS);
+
+  // ARG1 is fiber, function arguments are ARG(2), ARG(3), ... ARG(argc).
+  // And ret[0] is the return value, parameters starts at ret[1], ...
+  for (int i = 0; i < argc; i++) {
+    fiber->ret[1 + i] = *argv[i]; // +1: ret[0] is return value.
+  }
+  fiber->sp += argc; // Parameters.
+
+  // Set the new fiber as the vm's fiber.
+  fiber->caller = vm->fiber;
+  vm->fiber = fiber;
+
+  // On success return true.
+  return true;
+}
+
+bool vmSwitchFiber(PKVM* vm, Fiber* fiber, Var* value) {
+  if (fiber->state != FIBER_YIELDED) {
+    switch (fiber->state) {
+      case FIBER_NEW:
+        _ERR_FAIL(newString(vm, "The fiber hasn't started. call fiber_run() "
+          "to start."));
+      case FIBER_RUNNING:
+        _ERR_FAIL(newString(vm, "The fiber has already been running."));
+      case FIBER_YIELDED: UNREACHABLE();
+      case FIBER_DONE:
+        _ERR_FAIL(newString(vm, "The fiber has done running."));
+    }
+    UNREACHABLE();
+  }
+
+  // Pass the resume argument if it has any.
+
+  // Assert if we have a call frame and the stack size enough for the return
+  // value and the resumed value.
+  ASSERT(fiber->frame_count != 0, OOPS);
+  ASSERT((fiber->stack + fiber->stack_size) - fiber->sp >= 2, OOPS);
+
+  // fb->ret will points to the return value of the 'yield()' call.
+  if (value == NULL) *fiber->ret = VAR_NULL;
+  else *fiber->ret = *value;
+
+  // Switch fiber.
+  fiber->caller = vm->fiber;
+  vm->fiber = fiber;
+
+  // On success return true.
+  return true;
+}
+
+#undef _ERR_FAIL
 
 void vmYieldFiber(PKVM* vm, Var* value) {
 
@@ -454,7 +577,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
   // it from garbage collection and get the reference from native functions.
   vm->fiber = fiber;
 
-  ASSERT(fiber->state == FIBER_NEW, OOPS);
+  ASSERT(fiber->state == FIBER_NEW || fiber->state == FIBER_YIELDED, OOPS);
   fiber->state = FIBER_RUNNING;
 
   // The instruction pointer.
@@ -471,12 +594,24 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
 #define READ_BYTE()  (*ip++)
 #define READ_SHORT() (ip+=2, (uint16_t)((ip[-2] << 8) | ip[-1]))
 
+// Switch back to the caller of the current fiber, will be called when we're
+// done with the fiber or aborting it for runtime errors.
+#define FIBER_SWITCH_BACK()                                         \
+  do {                                                              \
+    Fiber* caller = vm->fiber->caller;                              \
+    ASSERT(caller == NULL || caller->state == FIBER_RUNNING, OOPS); \
+    vm->fiber->state = FIBER_DONE;                                  \
+    vm->fiber->caller = NULL;                                       \
+    vm->fiber = caller;                                             \
+  } while (false)
+
 // Check if any runtime error exists and if so returns RESULT_RUNTIME_ERROR.
 #define CHECK_ERROR()                 \
   do {                                \
     if (HAS_ERROR()) {                \
       UPDATE_FRAME();                 \
       reportError(vm);                \
+      FIBER_SWITCH_BACK();            \
       return PK_RESULT_RUNTIME_ERROR; \
     }                                 \
   } while (false)
@@ -487,6 +622,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     vm->fiber->error = err_msg;      \
     UPDATE_FRAME();                  \
     reportError(vm);                 \
+    FIBER_SWITCH_BACK();             \
     return PK_RESULT_RUNTIME_ERROR;  \
   } while (false)
 
@@ -522,8 +658,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
 #define OPCODE(code) case OP_##code
 #define DISPATCH()   goto L_vm_main_loop
 
-  // TODO: remove the below push null and add it from the compiler.
-  PUSH(VAR_NULL); // Return value of the script body.
+  // Load the fiber's top call frame to the vm's execution variables.
   LOAD_FRAME();
 
   L_vm_main_loop:
@@ -689,14 +824,14 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     OPCODE(IMPORT):
     {
       String* name = script->names.data[READ_SHORT()];
-      Var script = importScript(vm, name);
+      Var scr = importScript(vm, name);
 
       // TODO: implement fiber bsed execution.
       //ASSERT(IS_OBJ_TYPE(script, OBJ_SCRIPT), OOPS);
       //Script* scr = (Script*)AS_OBJ(script);
       //if (!scr->initialized) vmRunScript(vm, scr);
 
-      PUSH(script);
+      PUSH(scr);
       CHECK_ERROR();
       DISPATCH();
     }
@@ -914,21 +1049,20 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
       // Pop the last frame, and if no more call frames, we're done with the
       // current fiber.
       if (--vm->fiber->frame_count == 0) {
-        vm->fiber->state = FIBER_DONE;
+        // TODO: if we're evaluvating an expressoin we need to set it's
+        // value on the stack.
+        //vm->fiber->sp = vm->fiber->stack; ??
 
-        // TODO:
-        //vm->fiber->sp = vm->fiber->stack;.
+        // Assert all the stack locals were popped.
+        ASSERT(vm->fiber->sp == vm->fiber->stack, OOPS);
 
-        if (vm->fiber->caller == NULL) {
+        FIBER_SWITCH_BACK();
+
+        if (vm->fiber == NULL) {
           return PK_RESULT_SUCCESS;
 
         } else {
-          Fiber* caller = vm->fiber->caller;
-          ASSERT(caller->state == FIBER_RUNNING, OOPS);
-
-          vm->fiber->caller = NULL;
-          vm->fiber = caller;
-          *caller->ret = ret_value;
+          *vm->fiber->ret = ret_value;
         }
 
       } else {
@@ -1186,24 +1320,11 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     {
       if (vm->config.write_fn != NULL) {
         Var tmp = PEEK(-1);
-        vm->config.write_fn(vm, toRepr(vm, tmp)->data);
-        vm->config.write_fn(vm, "\n");
+        if (!IS_NULL(tmp)) {
+          vm->config.write_fn(vm, toRepr(vm, tmp)->data);
+          vm->config.write_fn(vm, "\n");
+        }
       }
-      DISPATCH();
-    }
-
-    OPCODE(YIELD):
-    {
-      Fiber* call_fiber = vm->fiber;
-
-      UPDATE_FRAME();
-      vmYieldFiber(vm, NULL);
-      if (vm->fiber == NULL) return PK_RESULT_SUCCESS;
-      LOAD_FRAME();
-
-      // Pop function arguments except for the return value of the call fiber.
-      call_fiber->sp = call_fiber->ret + 1;
-
       DISPATCH();
     }
 
