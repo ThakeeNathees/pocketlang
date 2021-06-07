@@ -14,7 +14,7 @@
 #include "vm.h"
 
 /*****************************************************************************/
-/* PUBLIC API                                                                */
+/* CORE PUBLIC API                                                           */
 /*****************************************************************************/
 
 // Create a new module with the given [name] and returns as a Script* for
@@ -36,15 +36,44 @@ PkHandle* pkNewModule(PKVM* vm, const char* name) {
 void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
                          pkNativeFn fptr, int arity) {
   __ASSERT(module != NULL, "Argument module was NULL.");
-
   Var scr = module->value;
   __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
-  
   moduleAddFunctionInternal(vm, (Script*)AS_OBJ(scr), name, fptr, arity);
 }
 
+PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
+                                  const char* name) {
+  __ASSERT(module != NULL, "Argument module was NULL.");
+  Var scr = module->value;
+  __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
+  Script* script = (Script*)AS_OBJ(scr);
+
+  // TODO: Currently it's O(n) and could be optimized to O(log(n)) but does it
+  //       worth it?
+  // 
+  // 'function_names' buffer is un-necessary since the function itself has the
+  // reference to the function name and it can be refactored into a index buffer
+  // in an "increasing-name" order which can be used to binary search. Similer
+  // for 'global_names' refactor them from VarBuffer to GlobalVarBuffer where
+  // GlobalVar is struct { const char* name, Var value };
+  // 
+  // "nicreasing-name" order index buffer:
+  //   A buffer of int where each is an index in the function buffer and each
+  //   points to different functions in an "increasing-name" (could be hash
+  //   value) order. If we have more than some threshold number of function
+  //   use binary search. (remember to skip literal functions).
+  for (uint32_t i = 0; i < script->functions.count; i++) {
+    const char* fn_name = script->functions.data[i]->name;
+    if (strcmp(name, fn_name) == 0) {
+      return vmNewHandle(vm, VAR_OBJ(script->functions.data[i]));
+    }
+  }
+
+  return NULL;
+}
+
 // A convinent macro to get the nth (1 based) argument of the current function.
-#define ARG(n) vm->fiber->ret[n]
+#define ARG(n) (vm->fiber->ret[n])
 
 // Convinent macros to get the 1st, 2nd, 3rd arguments.
 #define ARG1 ARG(1)
@@ -260,7 +289,7 @@ static inline bool validateIndex(PKVM* vm, int32_t index, int32_t size,
  VALIDATE_ARG_OBJ(Fiber, OBJ_FIBER, "fiber")
 
 /*****************************************************************************/
-/* BUILTIN FUNCTIONS API                                                     */
+/* SHARED FUNCTIONS                                                          */
 /*****************************************************************************/
 
 // findBuiltinFunction implementation (see core.h for description).
@@ -299,12 +328,12 @@ Script* getCoreLib(const PKVM* vm, String* name) {
 /*****************************************************************************/
 
 #define FN_IS_PRIMITE_TYPE(name, check) \
-  void coreIs##name(PKVM* vm) {         \
+  static void coreIs##name(PKVM* vm) {  \
     RET(VAR_BOOL(check(ARG1)));         \
   }
 
 #define FN_IS_OBJ_TYPE(name, _enum)     \
-  void coreIs##name(PKVM* vm) {         \
+  static void coreIs##name(PKVM* vm) {  \
     Var arg1 = ARG1;                    \
     if (IS_OBJ_TYPE(arg1, _enum)) {     \
       RET(VAR_TRUE);                    \
@@ -370,20 +399,7 @@ PK_DOC(coreYield,
     RET_ERR(newString(vm, "Invalid argument count."));
   }
 
-  Fiber* caller = vm->fiber->caller;
-
-  // Return the yield value to the caller fiber.
-  if (caller != NULL) {
-    if (argc == 0) *caller->ret = VAR_NULL;
-    else *caller->ret = ARG1;
-  }
-
-  // Can be resumed by another caller fiber.
-  vm->fiber->caller = NULL;
-  vm->fiber->state = FIBER_YIELDED;
-  vm->fiber = caller;
-
-  return;
+  vmYieldFiber(vm, (argc == 1) ? &ARG1 : NULL);
 }
 
 PK_DOC(coreToString,
@@ -400,22 +416,34 @@ PK_DOC(corePrint,
   // output.
   if (vm->config.write_fn == NULL) return;
 
-  String* str; //< Will be cleaned by garbage collector;
-
   for (int i = 1; i <= ARGC; i++) {
-    Var arg = ARG(i);
-    // If it's already a string don't allocate a new string instead use it.
-    if (IS_OBJ_TYPE(arg, OBJ_STRING)) {
-      str = (String*)AS_OBJ(arg);
-    } else {
-      str = toString(vm, arg);
-    }
-
     if (i != 1) vm->config.write_fn(vm, " ");
-    vm->config.write_fn(vm, str->data);
+    vm->config.write_fn(vm, toString(vm, ARG(i))->data);
   }
 
   vm->config.write_fn(vm, "\n");
+}
+
+PK_DOC(coreInput,
+  "input([msg:var]) -> string\n"
+  "Read a line from stdin and returns it without the line ending. Accepting "
+  "an optional argument [msg] and prints it before reading.") {
+  int argc = ARGC;
+  if (argc != 1 && argc != 2) {
+    RET_ERR(newString(vm, "Invalid argument count."));
+  }
+
+  // If the host appliaction donesn't provide any write function, return.
+  if (vm->config.read_fn == NULL) return;
+
+  if (argc == 1) {
+    vm->config.write_fn(vm, toString(vm, ARG1)->data);
+  }
+
+  PkStringPtr result = vm->config.read_fn(vm);
+  String* line = newString(vm, result.string);
+  if (result.on_done) result.on_done(vm, result);
+  RET(VAR_OBJ(line));
 }
 
 // String functions.
@@ -558,6 +586,8 @@ PK_DOC(coreFiberRun,
   Fiber* fb;
   if (!validateArgFiber(vm, 1, &fb)) return;
 
+  ASSERT(fb->func->arity >= -1 , OOPS " (Forget to initialize arity.)");
+
   if (argc - 1 != fb->func->arity) {
     char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", fb->func->arity);
     RET_ERR(stringFormat(vm, "Expected excatly $ argument(s).", buff));
@@ -691,13 +721,13 @@ static void moduleAddFunctionInternal(PKVM* vm, Script* script,
                                       int arity) {
 
   // Check if function with the same name already exists.
-  if (scriptSearchFunc(script, name, (uint32_t)strlen(name)) != -1) {
+  if (scriptGetFunc(script, name, (uint32_t)strlen(name)) != -1) {
     __ASSERT(false, stringFormat(vm, "A function named '$' already esists "
       "on module '@'", name, script->moudle)->data);
   }
 
   // Check if a global variable with the same name already exists.
-  if (scriptSearchGlobals(script, name, (uint32_t)strlen(name)) != -1) {
+  if (scriptGetGlobals(script, name, (uint32_t)strlen(name)) != -1) {
     __ASSERT(false, stringFormat(vm, "A global variable named '$' already "
       "esists on module '@'", name, script->moudle)->data);
   }
@@ -706,6 +736,8 @@ static void moduleAddFunctionInternal(PKVM* vm, Script* script,
   fn->native = fptr;
   fn->arity = arity;
 }
+
+// TODO: make the below module functions as PK_DOC(name, doc);
 
 // 'lang' library methods.
 // -----------------------
@@ -835,6 +867,11 @@ void initializeCore(PKVM* vm) {
   INITALIZE_BUILTIN_FN("type_name",   coreTypeName,   1);
 
   // TOOD: (maybe remove is_*() functions) suspend by type_name.
+  //       and add is keyword with modules for builtin types
+  // ex: val is Num; val is null; val is List; val is Range
+  //     List.append(l, e) # List is implicitly imported core module.
+  //     String.lower(s)
+
   INITALIZE_BUILTIN_FN("is_null",     coreIsNull,     1);
   INITALIZE_BUILTIN_FN("is_bool",     coreIsBool,     1);
   INITALIZE_BUILTIN_FN("is_num",      coreIsNum,      1);
@@ -851,6 +888,7 @@ void initializeCore(PKVM* vm) {
   INITALIZE_BUILTIN_FN("yield",       coreYield,     -1);
   INITALIZE_BUILTIN_FN("to_string",   coreToString,   1);
   INITALIZE_BUILTIN_FN("print",       corePrint,     -1);
+  INITALIZE_BUILTIN_FN("input",       coreInput,     -1);
 
   // String functions.
   INITALIZE_BUILTIN_FN("str_lower",   coreStrLower,   1);
@@ -1101,14 +1139,14 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
       Script* scr = (Script*)obj;
 
       // Search in functions.
-      uint32_t index = scriptSearchFunc(scr, attrib->data, attrib->length);
+      uint32_t index = scriptGetFunc(scr, attrib->data, attrib->length);
       if (index != -1) {
         ASSERT_INDEX(index, scr->functions.count);
         return VAR_OBJ(scr->functions.data[index]);
       }
 
       // Search in globals.
-      index = scriptSearchGlobals(scr, attrib->data, attrib->length);
+      index = scriptGetGlobals(scr, attrib->data, attrib->length);
       if (index != -1) {
         ASSERT_INDEX(index, scr->globals.count);
         return scr->globals.data[index];
@@ -1173,7 +1211,7 @@ do {                                                                          \
       Script* scr = (Script*)obj;
 
       // Check globals.
-      uint32_t index = scriptSearchGlobals(scr, attrib->data, attrib->length);
+      uint32_t index = scriptGetGlobals(scr, attrib->data, attrib->length);
       if (index != -1) {
         ASSERT_INDEX(index, scr->globals.count);
         scr->globals.data[index] = value;
@@ -1181,7 +1219,7 @@ do {                                                                          \
       }
 
       // Check function (Functions are immutable).
-      index = scriptSearchFunc(scr, attrib->data, attrib->length);
+      index = scriptGetFunc(scr, attrib->data, attrib->length);
       if (index != -1) {
         ASSERT_INDEX(index, scr->functions.count);
         ATTRIB_IMMUTABLE(scr->functions.data[index]->name);

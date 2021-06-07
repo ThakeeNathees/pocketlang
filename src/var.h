@@ -138,7 +138,7 @@
 #define IS_INT(value)   ((value & _MASK_INTEGER) == _MASK_INTEGER)
 #define IS_NUM(value)   ((value & _MASK_QNAN) != _MASK_QNAN)
 #define IS_OBJ(value)   ((value & _MASK_OBJECT) == _MASK_OBJECT)
-#define IS_OBJ_TYPE(obj, obj_type) IS_OBJ(obj) && AS_OBJ(obj)->type == obj_type
+#define IS_OBJ_TYPE(var, obj_type) IS_OBJ(var) && AS_OBJ(var)->type == obj_type
 
 // Decode types.
 #define AS_BOOL(value) ((value) == VAR_TRUE)
@@ -408,7 +408,7 @@ Script* newScript(PKVM* vm, String* path);
 // would be builtin function. For builtin function arity and the native
 // function pointer would be initialized after calling this function.
 Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
-  bool is_native);
+                      bool is_native);
 
 // Allocate new Fiber object around the function [fn] and return Fiber*.
 Fiber* newFiber(PKVM* vm, Function* fn);
@@ -500,8 +500,12 @@ uint32_t varHashValue(Var v);
 // Return true if the object type is hashable.
 bool isObjectHashable(ObjectType type);
 
-// Returns the string version of the value.
-String* toString(PKVM* vm, Var v);
+// Returns the string version of the [value].
+String* toString(PKVM* vm, const Var value);
+
+// Returns the representation version of the [value], similer of python's
+// __repr__() method.
+String * toRepr(PKVM * vm, const Var value);
 
 // Returns the truthy value of the var.
 bool toBool(Var v);
@@ -523,10 +527,10 @@ uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
 
 // Search for the function name in the script and return it's index in it's
 // [functions] buffer. If not found returns -1.
-int scriptSearchFunc(Script* script, const char* name, uint32_t length);
+int scriptGetFunc(Script* script, const char* name, uint32_t length);
 
 // Search for the global variable name in the script and return it's index in
 // it's [globals] buffer. If not found returns -1.
-int scriptSearchGlobals(Script* script, const char* name, uint32_t length);
+int scriptGetGlobals(Script* script, const char* name, uint32_t length);
 
 #endif // VAR_H

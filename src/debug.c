@@ -7,6 +7,7 @@
 
 #include <stdio.h>
 #include "core.h"
+#include "var.h"
 #include "vm.h"
 
 // To limit maximum elements to be dumpin in a map or a list.
@@ -313,6 +314,8 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_GTEQ:
       case OP_RANGE:
       case OP_IN:
+      case OP_REPL_PRINT:
+      case OP_YIELD:
       case OP_END:
         NO_ARGS();
         break;

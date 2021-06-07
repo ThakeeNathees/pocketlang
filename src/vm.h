@@ -176,8 +176,12 @@ void vmPushTempRef(PKVM* vm, Object* obj);
 // Pop the top most object from temporary reference stack.
 void vmPopTempRef(PKVM* vm);
 
-// Runs the [fiber] if it's at yielded state, this will resume the execution
-// till the next yield or return statement, and return result.
-PkInterpretResult vmRunFiber(PKVM* vm, Fiber* fiber);
+// Returns the scrpt with the resolved [path] (also the key) in the vm's script
+// cache. If not found itll return NULL.
+Script* vmGetScript(PKVM* vm, String* path);
+
+// Yield from the current fiber. If the [value] isn't NULL it'll set it as the
+// yield value.
+void vmYieldFiber(PKVM* vm, Var* value);
 
 #endif // VM_H

@@ -9,7 +9,7 @@
 
 #include <pocketlang.h>
 
- // FIXME: everything below here is temproary and for testing.
+// FIXME: everything below here is temproary and for testing.
 
 void registerModules(PKVM* vm);
 
@@ -23,7 +23,14 @@ size_t pathJoin(const char* from, const char* path, char* buffer,
 
 // ---------------------------------------
 
-void errorPrint(PKVM* vm, PkErrorType type, const char* file, int line,
+void onResultDone(PKVM* vm, PkStringPtr result) {
+
+  if ((bool)result.user_data) {
+    free((void*)result.string);
+  }
+}
+
+void errorFunction(PKVM* vm, PkErrorType type, const char* file, int line,
   const char* message) {
   if (type == PK_ERROR_COMPILE) {
     fprintf(stderr, "Error: %s\n       at \"%s\":%i\n", message, file, line);
@@ -40,11 +47,24 @@ void writeFunction(PKVM* vm, const char* text) {
   fprintf(stdout, "%s", text);
 }
 
-void onResultDone(PKVM* vm, PkStringPtr result) {
+static const char* read_line() {
+  // FIXME: use fgetc char by char till reach a new line.
+  const int size = 1024;
+  char* mem = (char*) malloc(size);
+  fgets(mem, size, stdin);
+  size_t len = strlen(mem);
 
-  if ((bool)result.user_data) {
-    free((void*)result.string);
-  }
+  // FIXME: handle \r\n, this is temp.
+  mem[len - 1] = '\0';
+  return mem;
+}
+
+PkStringPtr readFunction(PKVM* vm) {
+  PkStringPtr result;
+  result.string = read_line();
+  result.on_done = onResultDone;
+  result.user_data = (void*)true;
+  return result;
 }
 
 PkStringPtr resolvePath(PKVM* vm, const char* from, const char* path) {
@@ -135,22 +155,31 @@ int main(int argc, char** argv) {
   pathInit();
 
   PkConfiguration config = pkNewConfiguration();
-  config.error_fn = errorPrint;
+  config.error_fn = errorFunction;
   config.write_fn = writeFunction;
+  config.read_fn = readFunction;
   config.load_script_fn = loadScript;
   config.resolve_path_fn = resolvePath;
 
+  PkCompileOptions options = pkNewCompilerOptions();
+  options.debug = true; // TODO: update this with cli args.
+
   PKVM* vm = pkNewVM(&config);
   registerModules(vm);
-  PkInterpretResult result;
+  PkResult result;
 
   // FIXME: this is temp till arg parse implemented.
-  if (argc >= 3 && strcmp(argv[1], "-c") == 0) {
+
+  if (argc == 1) {
+    // TODO:
+    //PkHandle* module = pkNewModule(vm, "$(REPL)");
+
+  } if (argc >= 3 && strcmp(argv[1], "-c") == 0) {
 
     PkStringPtr source = { argv[2], NULL, NULL };
     PkStringPtr path = { "$(Source)", NULL, NULL };
 
-    result = pkInterpretSource(vm, source, path);
+    result = pkInterpretSource(vm, source, path, NULL);
     pkFreeVM(vm);
     return result;
   }
@@ -159,7 +188,7 @@ int main(int argc, char** argv) {
   PkStringPtr source = loadScript(vm, resolved.string);
 
   if (source.string != NULL) {
-    result = pkInterpretSource(vm, source, resolved);
+    result = pkInterpretSource(vm, source, resolved, &options);
 
   } else {
     result = PK_RESULT_COMPILE_ERROR;

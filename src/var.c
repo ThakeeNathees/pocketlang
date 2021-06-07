@@ -10,7 +10,7 @@
 #include "vm.h"
 
 /*****************************************************************************/
-/* PUBLIC API                                                                */
+/* VAR PUBLIC API                                                            */
 /*****************************************************************************/
 
 PkVarType pkGetValueType(const PkVar value) {
@@ -53,6 +53,13 @@ PkHandle* pkNewList(PKVM* vm) {
 
 PkHandle* pkNewMap(PKVM* vm) {
   return vmNewHandle(vm, VAR_OBJ(newMap(vm)));
+}
+
+PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn) {
+  __ASSERT(IS_OBJ_TYPE(fn->value, OBJ_FUNC), "Fn should be of type function.");
+  
+  Fiber* fiber = newFiber(vm, (Function*)AS_OBJ(fn->value));
+  return vmNewHandle(vm, VAR_OBJ(fiber));
 }
 
 const char* pkStringGetData(const PkVar value) {
@@ -137,7 +144,7 @@ void grayVarBuffer(PKVM* vm, VarBuffer* self) {
 GRAY_OBJ_BUFFER(String)
 GRAY_OBJ_BUFFER(Function)
 
-static void blackenObject(Object* obj, PKVM* vm) {
+static void _blackenObject(Object* obj, PKVM* vm) {
   // TODO: trace here.
 
   switch (obj->type) {
@@ -242,12 +249,11 @@ static void blackenObject(Object* obj, PKVM* vm) {
   }
 }
 
-
 void blackenObjects(PKVM* vm) {
   while (vm->gray_list_count > 0) {
     // Pop the gray object from the list.
     Object* gray = vm->gray_list[--vm->gray_list_count];
-    blackenObject(gray, vm);
+    _blackenObject(gray, vm);
   }
 }
 
@@ -334,8 +340,9 @@ Script* newScript(PKVM* vm, String* path) {
   stringBufferInit(&script->names);
 
   vmPushTempRef(vm, &script->_super);
-  const char* fn_name = "$(SourceBody)";
+  const char* fn_name = PK_BODY_FN_NAME;
   script->body = newFunction(vm, fn_name, (int)strlen(fn_name), script, false);
+  script->body->arity = 0; // TODO: should it be 1 (ARGV)?.
   vmPopTempRef(vm);
 
   return script;
@@ -847,8 +854,10 @@ struct OuterSequence {
 };
 typedef struct OuterSequence OuterSequence;
 
-static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
-                             OuterSequence* outer) {
+static void _toStringInternal(PKVM* vm, const Var v, ByteBuffer* buff,
+                              OuterSequence* outer, bool repr) {
+  ASSERT(outer == NULL || repr, OOPS);
+
   if (IS_NULL(v)) {
     byteBufferAddString(buff, vm, "null", 4);
     return;
@@ -887,8 +896,26 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
       case OBJ_STRING:
       {
         const String* str = (const String*)obj;
-        if (outer == NULL) {
+        if (outer == NULL && !repr) {
           byteBufferAddString(buff, vm, str->data, str->length);
+          return;
+        } else {
+          // If recursive return with quotes (ex: [42, "hello", 0..10]).
+          byteBufferWrite(buff, vm, '"');
+          for (const char* c = str->data; *c != '\0'; c++) {
+            switch (*c) {
+              case '"': byteBufferAddString(buff, vm, "\\\"", 2); break;
+              case '\\': byteBufferAddString(buff, vm, "\\\\", 2); break;
+              case '\n': byteBufferAddString(buff, vm, "\\n", 2); break;
+              case '\r': byteBufferAddString(buff, vm, "\\r", 2); break;
+              case '\t': byteBufferAddString(buff, vm, "\\t", 2); break;
+
+              default:
+                byteBufferWrite(buff, vm, *c);
+                break;
+            }
+          }
+          byteBufferWrite(buff, vm, '"');
           return;
         }
 
@@ -924,7 +951,7 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
         byteBufferWrite(buff, vm, '[');
         for (uint32_t i = 0; i < list->elements.count; i++) {
           if (i != 0) byteBufferAddString(buff, vm, ", ", 2);
-          toStringInternal(vm, list->elements.data[i], buff, &seq_list);
+          _toStringInternal(vm, list->elements.data[i], buff, &seq_list, true);
         }
         byteBufferWrite(buff, vm, ']');
         return;
@@ -971,9 +998,9 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
             byteBufferAddString(buff, vm, ", ", 2);
             _first = false;
           }
-          toStringInternal(vm, map->entries[i].key, buff, &seq_map);
+          _toStringInternal(vm, map->entries[i].key, buff, &seq_map, true);
           byteBufferWrite(buff, vm, ':');
-          toStringInternal(vm, map->entries[i].value, buff, &seq_map);
+          _toStringInternal(vm, map->entries[i].value, buff, &seq_map, true);
           i++;
         } while (i < map->capacity);
 
@@ -1044,10 +1071,23 @@ static void toStringInternal(PKVM* vm, Var v, ByteBuffer* buff,
   return;
 }
 
-String* toString(PKVM* vm, Var v) {
+String* toString(PKVM* vm, const Var value) {
+
+  // If it's already a string don't allocate a new string.
+  if (IS_OBJ_TYPE(value, OBJ_STRING)) {
+    return (String*)AS_OBJ(value);
+  }
+
   ByteBuffer buff;
   byteBufferInit(&buff);
-  toStringInternal(vm, v, &buff, NULL);
+  _toStringInternal(vm, value, &buff, NULL, false);
+  return newStringLength(vm, (const char*)buff.data, buff.count);
+}
+
+String* toRepr(PKVM* vm, const Var value) {
+  ByteBuffer buff;
+  byteBufferInit(&buff);
+  _toStringInternal(vm, value, &buff, NULL, true);
   return newStringLength(vm, (const char*)buff.data, buff.count);
 }
 
@@ -1168,7 +1208,7 @@ uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
   return self->names.count - 1;
 }
 
-int scriptSearchFunc(Script* script, const char* name, uint32_t length) {
+int scriptGetFunc(Script* script, const char* name, uint32_t length) {
   for (uint32_t i = 0; i < script->function_names.count; i++) {
     uint32_t name_index = script->function_names.data[i];
     String* fn_name = script->names.data[name_index];
@@ -1180,7 +1220,7 @@ int scriptSearchFunc(Script* script, const char* name, uint32_t length) {
   return -1;
 }
 
-int scriptSearchGlobals(Script* script, const char* name, uint32_t length) {
+int scriptGetGlobals(Script* script, const char* name, uint32_t length) {
   for (uint32_t i = 0; i < script->global_names.count; i++) {
     uint32_t name_index = script->global_names.data[i];
     String* g_name = script->names.data[name_index];
