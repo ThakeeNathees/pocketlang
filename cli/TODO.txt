@@ -1,5 +1,15 @@
 
 // To implement.
+
+- refactor build.bat batch script to powershell
+  refactor makefile and setup a github action.
+
+- change or add => to_string() to value.as_string
+  and add as_repr, as_bool.
+  str_lower("UPPER") to "UPPER".lower
+
+- support new line just after '=' (and other places)
+
 - Implement argparse.
     - -v --version
     - emit opcodes

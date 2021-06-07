@@ -44,7 +44,7 @@ if not defined INCLUDE goto :MSVC_INIT
 goto :START
 
 :MSVC_INIT
-call :ColorText 0f "Not running on MSVM prompt, searching for one..."
+call :ColorText 0f "Not running on MSVC prompt, searching for one..."
 echo.
 
 :: Find vswhere
@@ -170,6 +170,7 @@ goto :END
 :FAIL
 call :ColorText 0c "Build failed. See the error messages."
 echo.
+exit /b 1
 goto :END
 
 :END

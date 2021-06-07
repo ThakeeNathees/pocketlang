@@ -25,8 +25,9 @@ typedef enum {
 typedef struct Compiler Compiler;
 
 // This will take source code as a cstring, compiles it to pocketlang bytecodes
-// and append them to the script's implicit main (the $SourceBody function).
-bool compile(PKVM* vm, Script* script, const char* source);
+// and append them to the script's implicit main function ("$(SourceBody)").
+bool compile(PKVM* vm, Script* script, const char* source,
+             const PkCompileOptions* options);
 
 // Mark the heap allocated ojbects of the compiler at the garbage collection
 // called at the marking phase of vmCollectGarbage().

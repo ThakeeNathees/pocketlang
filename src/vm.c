@@ -21,18 +21,33 @@
 // if the host doesn't provided any allocators for us.
 static void* defaultRealloc(void* memory, size_t new_size, void* user_data);
 
+// Runs the [fiber] if it's at yielded state, this will resume the execution
+// till the next yield or return statement, and return result.
+static PkResult runFiber(PKVM* vm, Fiber* fiber);
+
 PkConfiguration pkNewConfiguration() {
   PkConfiguration config;
   config.realloc_fn = defaultRealloc;
 
   config.error_fn = NULL;
   config.write_fn = NULL;
+  config.read_fn = NULL;
 
   config.load_script_fn = NULL;
   config.resolve_path_fn = NULL;
   config.user_data = NULL;
 
   return config;
+}
+
+PkCompileOptions pkNewCompilerOptions() {
+  PkCompileOptions options;
+  options.debug = false;
+  // TODO:
+  //options.dump_opcodes = false;
+  //options.dump_stream = stdout;
+  options.repl_mode = false;
+  return options;
 }
 
 PKVM* pkNewVM(PkConfiguration* config) {
@@ -112,6 +127,49 @@ void pkReleaseHandle(PKVM* vm, PkHandle* handle) {
   DEALLOCATE(vm, handle);
 }
 
+// This function is responsible to call on_done function if it's done with the 
+// provided string pointers.
+PkResult pkInterpretSource(PKVM* vm, PkStringPtr source, PkStringPtr path,
+                           const PkCompileOptions* options) {
+
+  String* path_name = newString(vm, path.string);
+  if (path.on_done) path.on_done(vm, path);
+  vmPushTempRef(vm, &path_name->_super); // path_name.
+
+  // TODO: Should I clean the script if it already exists before compiling it?
+
+  // Load a new script to the vm's scripts cache.
+  Script* scr = vmGetScript(vm, path_name);
+  if (scr == NULL) {
+    scr = newScript(vm, path_name);
+    vmPushTempRef(vm, &scr->_super); // scr.
+    mapSet(vm, vm->scripts, VAR_OBJ(path_name), VAR_OBJ(scr));
+    vmPopTempRef(vm); // scr.
+  }
+  vmPopTempRef(vm); // path_name.
+
+  // Compile the source.
+  bool success = compile(vm, scr, source.string, options);
+  if (source.on_done) source.on_done(vm, source);
+
+  if (!success) return PK_RESULT_COMPILE_ERROR;
+
+  // Set script initialized to true before the execution ends to prevent cyclic
+  // inclusion cause a crash.
+  scr->initialized = true;
+
+  return runFiber(vm, newFiber(vm, scr->body));
+}
+
+void pkSetRuntimeError(PKVM* vm, const char* message) {
+  __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
+  vm->fiber->error = newString(vm, message);
+}
+
+/*****************************************************************************/
+/* SHARED FUNCTIONS                                                          */
+/*****************************************************************************/
+
 PkHandle* vmNewHandle(PKVM* vm, Var value) {
   PkHandle* handle = (PkHandle*)ALLOCATE(vm, PkHandle);
   handle->value = value;
@@ -121,7 +179,6 @@ PkHandle* vmNewHandle(PKVM* vm, Var value) {
   vm->handles = handle;
   return handle;
 }
-
 
 void* vmRealloc(PKVM* vm, void* memory, size_t old_size, size_t new_size) {
 
@@ -150,6 +207,13 @@ void vmPopTempRef(PKVM* vm) {
   ASSERT(vm->temp_reference_count > 0,
          "Temporary reference is empty to pop.");
   vm->temp_reference_count--;
+}
+
+Script* vmGetScript(PKVM* vm, String* path) {
+  Var scr = mapGet(vm->scripts, VAR_OBJ(path));
+  if (IS_UNDEF(scr)) return NULL;
+  ASSERT(AS_OBJ(scr)->type == OBJ_SCRIPT, OOPS);
+  return (Script*)AS_OBJ(scr);
 }
 
 void vmCollectGarbage(PKVM* vm) {
@@ -217,6 +281,22 @@ void vmCollectGarbage(PKVM* vm) {
   if (vm->next_gc < vm->min_heap_size) vm->next_gc = vm->min_heap_size;
 }
 
+void vmYieldFiber(PKVM* vm, Var* value) {
+
+  Fiber* caller = vm->fiber->caller;
+
+  // Return the yield value to the caller fiber.
+  if (caller != NULL) {
+    if (value == NULL) *caller->ret = VAR_NULL;
+    else *caller->ret = *value;
+  }
+
+  // Can be resumed by another caller fiber.
+  vm->fiber->caller = NULL;
+  vm->fiber->state = FIBER_YIELDED;
+  vm->fiber = caller;
+}
+
 /*****************************************************************************/
 /* VM INTERNALS                                                              */
 /*****************************************************************************/
@@ -229,13 +309,6 @@ static void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
     return NULL;
   }
   return realloc(memory, new_size);
-}
-
-static inline Script* getScript(PKVM* vm, String* path) {
-  Var scr = mapGet(vm->scripts, VAR_OBJ(path));
-  if (IS_UNDEF(scr)) return NULL;
-  ASSERT(AS_OBJ(scr)->type == OBJ_SCRIPT, OOPS);
-  return (Script*)AS_OBJ(scr);
 }
 
 // If failed to resolve it'll return false. Parameter [result] should be points
@@ -353,12 +426,7 @@ static inline void pushCallFrame(PKVM* vm, const Function* fn) {
     frame->ip = fn->fn->opcodes.data;
 }
 
-void pkSetRuntimeError(PKVM* vm, const char* message) {
-  __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
-  vm->fiber->error = newString(vm, message);
-}
-
-void vmReportError(PKVM* vm) {
+static void reportError(PKVM* vm) {
   ASSERT(HAS_ERROR(), "runtimeError() should be called after an error.");
   // TODO: pass the error to the caller of the fiber.
 
@@ -376,44 +444,11 @@ void vmReportError(PKVM* vm) {
   }
 }
 
-// This function is responsible to call on_done function if it's done with the 
-// provided string pointers.
-PkInterpretResult pkInterpretSource(PKVM* vm, PkStringPtr source,
-                                    PkStringPtr path) {
-  String* path_name = newString(vm, path.string);
-  if (path.on_done) path.on_done(vm, path);
-  vmPushTempRef(vm, &path_name->_super); // path_name.
-
-  // TODO: Should I clean the script if it already exists before compiling it?
-
-  // Load a new script to the vm's scripts cache.
-  Script* scr = getScript(vm, path_name);
-  if (scr == NULL) {
-    scr = newScript(vm, path_name);
-    vmPushTempRef(vm, &scr->_super); // scr.
-    mapSet(vm, vm->scripts, VAR_OBJ(path_name), VAR_OBJ(scr));
-    vmPopTempRef(vm); // scr.
-  }
-  vmPopTempRef(vm); // path_name.
-
-  // Compile the source.
-  bool success = compile(vm, scr, source.string);
-  if (source.on_done) source.on_done(vm, source);
-
-  if (!success) return PK_RESULT_COMPILE_ERROR;
-
-  // Set script initialized to true before the execution ends to prevent cyclic
-  // inclusion cause a crash.
-  scr->initialized = true;
-
-  return vmRunFiber(vm, newFiber(vm, scr->body));
-}
-
 /******************************************************************************
  * RUNTIME                                                                    *
  *****************************************************************************/
 
-PkInterpretResult vmRunFiber(PKVM* vm, Fiber* fiber) {
+static PkResult runFiber(PKVM* vm, Fiber* fiber) {
 
   // Set the fiber as the vm's current fiber (another root object) to prevent
   // it from garbage collection and get the reference from native functions.
@@ -423,9 +458,6 @@ PkInterpretResult vmRunFiber(PKVM* vm, Fiber* fiber) {
   fiber->state = FIBER_RUNNING;
 
   // The instruction pointer.
-  // Note: sing 'uint8_t** ip' as reference to the instruction pointer in the
-  // call frame seems a bit slower because of the dereferencing (~0.1 sec for
-  // 100 million calls).
   register const uint8_t* ip;
 
   register Var* rbp;         //< Stack base pointer register.
@@ -444,7 +476,7 @@ PkInterpretResult vmRunFiber(PKVM* vm, Fiber* fiber) {
   do {                                \
     if (HAS_ERROR()) {                \
       UPDATE_FRAME();                 \
-      vmReportError(vm);              \
+      reportError(vm);                \
       return PK_RESULT_RUNTIME_ERROR; \
     }                                 \
   } while (false)
@@ -454,7 +486,7 @@ PkInterpretResult vmRunFiber(PKVM* vm, Fiber* fiber) {
   do {                               \
     vm->fiber->error = err_msg;      \
     UPDATE_FRAME();                  \
-    vmReportError(vm);               \
+    reportError(vm);                 \
     return PK_RESULT_RUNTIME_ERROR;  \
   } while (false)
 
@@ -1149,6 +1181,31 @@ PkInterpretResult vmRunFiber(PKVM* vm, Fiber* fiber) {
     OPCODE(IN):
       // TODO: Implement bool varContaines(vm, on, value);
       TODO;
+
+    OPCODE(REPL_PRINT):
+    {
+      if (vm->config.write_fn != NULL) {
+        Var tmp = PEEK(-1);
+        vm->config.write_fn(vm, toRepr(vm, tmp)->data);
+        vm->config.write_fn(vm, "\n");
+      }
+      DISPATCH();
+    }
+
+    OPCODE(YIELD):
+    {
+      Fiber* call_fiber = vm->fiber;
+
+      UPDATE_FRAME();
+      vmYieldFiber(vm, NULL);
+      if (vm->fiber == NULL) return PK_RESULT_SUCCESS;
+      LOAD_FRAME();
+
+      // Pop function arguments except for the return value of the call fiber.
+      call_fiber->sp = call_fiber->ret + 1;
+
+      DISPATCH();
+    }
 
     OPCODE(END):
       TODO;

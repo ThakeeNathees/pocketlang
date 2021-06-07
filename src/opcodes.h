@@ -188,6 +188,13 @@ OPCODE(GTEQ, 0, -1)
 OPCODE(RANGE, 0, -1) //< Pop 2 integer make range push.
 OPCODE(IN, 0, -1)
 
+// Print the repr string of the value at the stack top, used in REPL mode.
+// This will not pop the value.
+OPCODE(REPL_PRINT, 0, 0)
+
+// Yield the current fiber. Used in REPL mode.
+OPCODE(YIELD, 0, 0)
+
 // A sudo instruction which will never be called. A function's last opcode
 // used for debugging.
 OPCODE(END, 0, 0)

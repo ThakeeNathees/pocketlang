@@ -40,6 +40,9 @@
 // available in C++98.
 #define ERROR_MESSAGE_SIZE 256
 
+// The name of a literal function.
+#define LITERAL_FN_NAME "$(LiteralFn)"
+
 /*****************************************************************************
  * TOKENS                                                                    *
  *****************************************************************************/
@@ -328,6 +331,8 @@ struct Compiler {
   Token previous, current, next; //< Currently parsed tokens.
   bool has_errors;          //< True if any syntex error occured at.
 
+  const PkCompileOptions* options; //< To configure the compilation.
+
   // Current depth the compiler in (-1 means top level) 0 means function
   // level and > 0 is inner scope.
   int scope_depth;
@@ -479,7 +484,7 @@ static void eatString(Compiler* compiler, bool single_quote) {
 
   // '\0' will be added by varNewSring();
   Var string = VAR_OBJ(newStringLength(compiler->vm, (const char*)buff.data,
-    (uint32_t)buff.count));
+                       (uint32_t)buff.count));
 
   byteBufferClear(&buff, compiler->vm);
 
@@ -879,7 +884,7 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
   int index; // For storing the search result below.
 
   // Search through globals.
-  index = scriptSearchGlobals(compiler->script, name, length);
+  index = scriptGetGlobals(compiler->script, name, length);
   if (index != -1) {
     result.type = NAME_GLOBAL_VAR;
     result.index = index;
@@ -887,7 +892,7 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
   }
   
   // Search through functions.
-  index = scriptSearchFunc(compiler->script, name, length);
+  index = scriptGetFunc(compiler->script, name, length);
   if (index != -1) {
     result.type = NAME_FUNCTION;
     result.index = index;
@@ -1453,7 +1458,7 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
  *****************************************************************************/
 
 static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
-                         Script* script) {
+                         Script* script, const PkCompileOptions* options) {
   
   compiler->vm = vm;
   compiler->next_compiler = NULL;
@@ -1462,6 +1467,7 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
   compiler->script = script;
   compiler->token_start = source;
   compiler->has_errors = false;
+  compiler->options = options;
 
   compiler->current_char = source;
   compiler->current_line = 1;
@@ -1689,7 +1695,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
     }
 
   } else {
-    name = "$(LiteralFn)";
+    name = LITERAL_FN_NAME;
     name_length = (int)strlen(name);
   }
   
@@ -1860,8 +1866,14 @@ static Script* importFile(Compiler* compiler, const char* path) {
   emitOpcode(compiler, OP_IMPORT);
   emitShort(compiler, index);
 
+  // Option for the compilation, even if we're running on repl mode the
+  // imported script cannot run on repl mode.
+  PkCompileOptions options = pkNewCompilerOptions();
+  if (compiler->options) options = *compiler->options;
+  options.repl_mode = false;
+
   // Compile the source to the script and clean the source.
-  bool success = compile(vm, scr, source.string);
+  bool success = compile(vm, scr, source.string, &options);
   if (source.on_done != NULL) source.on_done(vm, source);
 
   if (!success) parseError(compiler, "Compilation of imported script "
@@ -2247,6 +2259,11 @@ static void compileForStatement(Compiler* compiler) {
 // variable declaration, which will be handled.
 static void compileStatement(Compiler* compiler) {
 
+  // is_temproary will be set to true if the statement is an temporary
+  // expression, it'll used to be pop from the stack. If running REPL mode used
+  // to print it's value.
+  bool is_temproary = false;
+
   if (match(compiler, TK_BREAK)) {
     if (compiler->loop == NULL) {
       parseError(compiler, "Cannot use 'break' outside a loop.");
@@ -2304,28 +2321,67 @@ static void compileStatement(Compiler* compiler) {
     compiler->new_local = false;
     compileExpression(compiler);
     consumeEndStatement(compiler);
-    if (!compiler->new_local) {
-      // Pop the temp.
-      emitOpcode(compiler, OP_POP);
-    }
+    if (!compiler->new_local) is_temproary = true;
     compiler->new_local = false;
+  }
+
+  // If running REPL mode, print the expression's evaluvated value. Python
+  // does print local depth expression too. (it's just a design decision).
+  if (compiler->options && compiler->options->repl_mode &&
+      is_temproary /*&& compiler->scope_depth == DEPTH_GLOBAL*/) {
+    emitOpcode(compiler, OP_REPL_PRINT);
+  }
+
+  if (is_temproary) emitOpcode(compiler, OP_POP);
+
+}
+
+// Compile statements that are only valid at the top level of the script. Such
+// as import statement, function define, and if we're running REPL mode top
+// level expression's evaluvated value will be printed.
+static void compileTopLevelStatement(Compiler* compiler) {
+  if (match(compiler, TK_NATIVE)) {
+    compileFunction(compiler, FN_NATIVE);
+
+  } else if (match(compiler, TK_DEF)) {
+    compileFunction(compiler, FN_SCRIPT);
+
+  } else if (match(compiler, TK_FROM)) {
+    compileFromImport(compiler);
+
+  } else if (match(compiler, TK_IMPORT)) {
+    compileRegularImport(compiler);
+
+  } else if (match(compiler, TK_MODULE)) {
+    parseError(compiler, "Module name must be the first statement "
+      "of the script.");
+
+  } else {
+    compileStatement(compiler);
   }
 }
 
-bool compile(PKVM* vm, Script* script, const char* source) {
+bool compile(PKVM* vm, Script* script, const char* source,
+             const PkCompileOptions* options) {
 
   // Skip utf8 BOM if there is any.
   if (strncmp(source, "\xEF\xBB\xBF", 3) == 0) source += 3;
 
   Compiler _compiler;
   Compiler* compiler = &_compiler; //< Compiler pointer for quick access.
-  compilerInit(compiler, vm, source, script);
+  compilerInit(compiler, vm, source, script, options);
 
   // If compiling for an imported script the vm->compiler would be the compiler
   // of the script that imported this script. Add the all the compilers into a
   // link list.
   compiler->next_compiler = vm->compiler;
   vm->compiler = compiler;
+
+  // Remember the count of the (valid) code of the provided script body. For
+  // new scripts it'll be null, but if we're compiling it multiple times we
+  // already have some code before. And if the compilation failed we discard
+  // all the compiled opcodes and jump back to the valid_code.
+  uint32_t valid_code = script->body->fn->opcodes.count;
 
   Func curr_fn;
   curr_fn.depth = DEPTH_SCRIPT;
@@ -2356,40 +2412,25 @@ bool compile(PKVM* vm, Script* script, const char* source) {
   }
 
   while (!match(compiler, TK_EOF)) {
-
-    if (match(compiler, TK_NATIVE)) {
-      compileFunction(compiler, FN_NATIVE);
-
-    } else if (match(compiler, TK_DEF)) {
-      compileFunction(compiler, FN_SCRIPT);
-
-    } else if (match(compiler, TK_FROM)) {
-      compileFromImport(compiler);
-
-    } else if (match(compiler, TK_IMPORT)) {
-      compileRegularImport(compiler);
-
-    } else if (match(compiler, TK_MODULE)) {
-      parseError(compiler, "Module name must be the first statement "
-                 "of the script.");
-
-    } else {
-      compileStatement(compiler);
-    }
-
+    compileTopLevelStatement(compiler);
     skipNewLines(compiler);
   }
 
-  emitOpcode(compiler, OP_PUSH_NULL);
-  emitOpcode(compiler, OP_RETURN);
-  emitOpcode(compiler, OP_END);
+  if (compiler->options == NULL || !compiler->options->repl_mode) {
+    emitOpcode(compiler, OP_PUSH_NULL);
+    emitOpcode(compiler, OP_RETURN);
+    emitOpcode(compiler, OP_END);
+
+  } else {
+    emitOpcode(compiler, OP_YIELD);
+  }
 
   // Resolve forward names (function names that are used before defined).
   for (int i = 0; i < compiler->forwards_count; i++) {
     ForwardName* forward = &compiler->forwards[i];
     const char* name = forward->name;
     int length = forward->length;
-    int index = scriptSearchFunc(script, name, (uint32_t)length);
+    int index = scriptGetFunc(script, name, (uint32_t)length);
     if (index != -1) {
       patchForward(compiler, forward->func, forward->instruction, index);
     } else {
@@ -2404,8 +2445,29 @@ bool compile(PKVM* vm, Script* script, const char* source) {
   dumpFunctionCode(vm, script->body);
 #endif
 
-  // Return true if success.
-  return !(compiler->has_errors);
+  // If the compilation failed discard all the compiled invalid code.
+  // TODO: May be shrink the buffer.
+  if (compiler->has_errors) {
+    script->body->fn->opcodes.count = valid_code;
+    return false;
+  }
+
+  // If we reach here, it means the compilation is success and return true.
+  return true;
+}
+
+PkResult pkCompileModule(PKVM* vm, PkHandle* module, PkStringPtr source,
+                     const PkCompileOptions* options) {
+  __ASSERT(module != NULL, "Argument module was NULL.");
+  Var scr = module->value;
+  __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
+  Script* script = (Script*)AS_OBJ(scr);
+
+  bool success = compile(vm, script, source.string, options);
+  if (source.on_done) source.on_done(vm, source);
+
+  if (!success) return PK_RESULT_COMPILE_ERROR;
+  return PK_RESULT_SUCCESS;
 }
 
 void compilerMarkObjects(PKVM* vm, Compiler* compiler) {

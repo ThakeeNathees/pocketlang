@@ -63,7 +63,11 @@ extern "C" {
 // }
 // 
 #define PK_DOC(func, doc) \
-  /* TODO: static char __pkdoc__##func[] = doc;*/ void func(PKVM* vm)
+  /* TODO: static char __pkdoc__##func[] = doc;*/ static void func(PKVM* vm)
+
+// Name of the implicit function for a module. When a module is parsed all of
+// it's statements are wrapped around an implicit function with this name.
+#define PK_BODY_FN_NAME "$(SourceBody)"
 
 /*****************************************************************************/
 /* POCKETLANG TYPES                                                          */
@@ -100,6 +104,7 @@ typedef enum {
 
 typedef struct PkStringPtr PkStringPtr;
 typedef struct PkConfiguration PkConfiguration;
+typedef struct PkCompileOptions PkCompileOptions;
 
 // Type of the error message that pocketlang will provide with the pkErrorFn
 // callback.
@@ -109,13 +114,13 @@ typedef enum {
   PK_ERROR_STACKTRACE,  // One entry of a runtime error stack.
 } PkErrorType;
 
-// Result that pocketlang will return after running a script or a function
-// or evaluvating an expression.
+// Result that pocketlang will return after a compilation or running a script
+// or a function or evaluvating an expression.
 typedef enum {
   PK_RESULT_SUCCESS = 0,    // Successfully finished the execution.
   PK_RESULT_COMPILE_ERROR,  // Compilation failed.
   PK_RESULT_RUNTIME_ERROR,  // An error occured at runtime.
-} PkInterpretResult;
+} PkResult;
 
 /*****************************************************************************/
 /* POCKETLANG FUNCTION POINTERS & CALLBACKS                                  */
@@ -136,14 +141,19 @@ typedef void (*pkNativeFn)(PKVM* vm);
 //   function will return NULL.
 typedef void* (*pkReallocFn)(void* memory, size_t new_size, void* user_data);
 
-// Error callback function pointer. for runtime error it'll call first with
+// Error callback function pointer. For runtime error it'll call first with
 // PK_ERROR_RUNTIME followed by multiple callbacks with PK_ERROR_STACKTRACE.
+// The error messages should be written to stderr.
 typedef void (*pkErrorFn) (PKVM* vm, PkErrorType type,
                            const char* file, int line,
                            const char* message);
 
-// A function callback used by `print()` statement.
+// A function callback to write [text] to stdout.
 typedef void (*pkWriteFn) (PKVM* vm, const char* text);
+
+// A function callback to read a line from stdin. The returned string shouldn't
+// contain a line ending (\n or \r\n).
+typedef PkStringPtr (*pkReadFn) (PKVM* vm);
 
 // A function callback symbol for clean/free the pkStringResult.
 typedef void (*pkResultDoneFn) (PKVM* vm, PkStringPtr result);
@@ -168,6 +178,11 @@ typedef PkStringPtr (*pkLoadScriptFn) (PKVM* vm, const char* path);
 // Override those default configuration to adopt to another hosting
 // application.
 PK_PUBLIC PkConfiguration pkNewConfiguration();
+
+// Create a new pkCompilerOptions with the default values and return it.
+// Override those default configuration to adopt to another hosting
+// application.
+PK_PUBLIC PkCompileOptions pkNewCompilerOptions();
 
 // Allocate initialize and returns a new VM
 PK_PUBLIC PKVM* pkNewVM(PkConfiguration* config);
@@ -195,21 +210,36 @@ PK_PUBLIC PkVar pkGetHandleValue(const PkHandle* handle);
 // this for every handles before freeing the VM.
 PK_PUBLIC void pkReleaseHandle(PKVM* vm, PkHandle* handle);
 
-// Add a new module named [name] to the [vm]. Note that the module shouldn't
-// already existed, otherwise an assertion will fail to indicate that.
-PK_PUBLIC PkHandle* pkNewModule(PKVM* vm, const char* name);
-
 // Add a native function to the given script. If [arity] is -1 that means
 // The function has variadic parameters and use pkGetArgc() to get the argc.
 PK_PUBLIC void pkModuleAddFunction(PKVM* vm, PkHandle* module,
                                    const char* name,
                                    pkNativeFn fptr, int arity);
 
+// Returns the function from the [module] as a handle, if not found it'll
+// return NULL.
+PK_PUBLIC PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
+                                  const char* name);
+
+// Compile the [module] with the provided [source] and return true if the
+// compilation is success. Set the compiler options with the the [options]
+// argument or it can be set to NULL for default options.
+PK_PUBLIC PkResult pkCompileModule(PKVM* vm, PkHandle* module,
+                               PkStringPtr source,
+                               const PkCompileOptions* options);
+
 // Interpret the source and return the result. Once It's done with the source
 // and path 'on_done' will be called to clean the string if it's not NULL.
-PK_PUBLIC PkInterpretResult pkInterpretSource(PKVM* vm,
-                                              PkStringPtr source,
-                                              PkStringPtr path);
+// Set the compiler options with the the [options] argument or it can be set to
+// NULL for default options.
+PK_PUBLIC PkResult pkInterpretSource(PKVM* vm,
+                                     PkStringPtr source,
+                                     PkStringPtr path,
+                                     const PkCompileOptions* options);
+
+
+//PK_PUBLIC PkResult pkRunFiber(PKVM* vm, PkHandle* fiber,
+//                              int argc, PkHandle** argv);
 
 /*****************************************************************************/
 /* POCKETLANG PUBLIC TYPE DEFINES                                            */
@@ -232,12 +262,36 @@ struct PkConfiguration {
 
   pkErrorFn error_fn;
   pkWriteFn write_fn;
+  pkReadFn read_fn;
 
   pkResolvePathFn resolve_path_fn;
   pkLoadScriptFn load_script_fn;
 
   // User defined data associated with VM.
   void* user_data;
+};
+
+// The options to configure the compilation provided by the command line
+// arguments (or other ways the host application provides).
+struct PkCompileOptions {
+
+  // Compile debug version of the source.
+  bool debug;
+
+  // TODO: don't use FILE* pointer or any of <stdio.h> functions here.
+  //       instead add a stream option to vm.config.write_fn callback.
+  // 
+  // Dump the compiled opcodes to the given [dump_stream] FILE* could be stdio,
+  // stderr, or a file pointer.
+  //bool dump_opcodes;
+  //FILE* dump_stream;
+
+  // Set to true if compiling in REPL mode, This will print repr version of
+  // each evaluvated non-null values. Note that if [repl_mode] is true the
+  // [expression] should also be true otherwise it's incompatible, (will fail
+  // an assertion).
+  bool repl_mode;
+
 };
 
 /*****************************************************************************/
@@ -257,7 +311,7 @@ PK_PUBLIC int pkGetArgc(const PKVM* vm);
 
 // Return the [arg] th argument as a PkVar. This pointer will only be
 // valid till the current function ends, because it points to the var at the
-// stack and it'll popped when the current call frame ended. Use handlers to
+// stack and it'll popped when the current call frame ended. Use handles to
 // keep the var alive even after that.
 PK_PUBLIC PkVar pkGetArg(const PKVM* vm, int arg);
 
@@ -294,8 +348,14 @@ PK_PUBLIC PkHandle* pkNewStringLength(PKVM* vm, const char* value, size_t len);
 PK_PUBLIC PkHandle* pkNewList(PKVM* vm);
 PK_PUBLIC PkHandle* pkNewMap(PKVM* vm);
 
-PK_PUBLIC const char* pkStringGetData(const PkVar value);
+// Add a new module named [name] to the [vm]. Note that the module shouldn't
+// already existed, otherwise an assertion will fail to indicate that.
+PK_PUBLIC PkHandle* pkNewModule(PKVM* vm, const char* name);
 
+// Create and return a new fiber around the function [fn].
+PK_PUBLIC PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn);
+
+PK_PUBLIC const char* pkStringGetData(const PkVar value);
 
 //      TODO:
 // The below functions will push the primitive values on the stack and return
