@@ -14,7 +14,7 @@
 void registerModules(PKVM* vm);
 
 // Path public functions (TODO: should I add a header for that?)
-void pathInit();
+void pathInit(void);
 bool pathIsAbsolute(const char* path);
 void pathGetDirName(const char* path, size_t* length);
 size_t pathNormalize(const char* path, char* buff, size_t buff_size);
@@ -22,6 +22,11 @@ size_t pathJoin(const char* from, const char* path, char* buffer,
                 size_t buff_size);
 
 // ---------------------------------------
+
+// FIXME:
+typedef struct {
+  bool repl_mode;
+} VmUserData;
 
 void onResultDone(PKVM* vm, PkStringPtr result) {
 
@@ -31,15 +36,22 @@ void onResultDone(PKVM* vm, PkStringPtr result) {
 }
 
 void errorFunction(PKVM* vm, PkErrorType type, const char* file, int line,
-  const char* message) {
+                   const char* message) {
+
+  VmUserData* ud = (VmUserData*)pkGetUserData(vm);
+  bool repl = (ud) ? ud->repl_mode : false;
+
   if (type == PK_ERROR_COMPILE) {
-    fprintf(stderr, "Error: %s\n       at \"%s\":%i\n", message, file, line);
+    
+    if (repl) fprintf(stderr, "Error: %s\n", message);
+    else fprintf(stderr, "Error: %s\n       at \"%s\":%i\n", message, file, line);
 
   } else if (type == PK_ERROR_RUNTIME) {
     fprintf(stderr, "Error: %s\n", message);
 
   } else if (type == PK_ERROR_STACKTRACE) {
-    fprintf(stderr, "  %s() [\"%s\":%i]\n", message, file, line);
+    if (repl) fprintf(stderr, "  %s() [line:%i]\n", message, line);
+    else fprintf(stderr, "  %s() [\"%s\":%i]\n", message, file, line);
   }
 }
 
@@ -47,7 +59,7 @@ void writeFunction(PKVM* vm, const char* text) {
   fprintf(stdout, "%s", text);
 }
 
-static const char* read_line() {
+static const char* read_line(void) {
   // FIXME: use fgetc char by char till reach a new line.
   const int size = 1024;
   char* mem = (char*) malloc(size);
@@ -141,15 +153,15 @@ int main(int argc, char** argv) {
     "PocketLang " PK_VERSION_STRING " (https://github.com/ThakeeNathees/pocketlang/)\n"
     "Copyright(c) 2020 - 2021 ThakeeNathees.\n"
     "Free and open source software under the terms of the MIT license.\n";
-  const char* help = "usage: pocket [-c cmd | file]\n";
 
+  const char* usage = "usage: pocket [-c cmd | file]\n";
 
   // TODO: implement arg parse, REPL.
 
-  if (argc < 2) {
-    printf("%s\n%s", notice, help);
-    return 0;
-  }
+  //if (argc < 2) {
+  //  printf("%s\n%s", notice, help);
+  //  return 0;
+  //}
 
   // Initialize cli.
   pathInit();
@@ -166,13 +178,39 @@ int main(int argc, char** argv) {
 
   PKVM* vm = pkNewVM(&config);
   registerModules(vm);
-  PkResult result;
 
   // FIXME: this is temp till arg parse implemented.
+  PkResult result;
 
   if (argc == 1) {
-    // TODO:
-    //PkHandle* module = pkNewModule(vm, "$(REPL)");
+    PkHandle* module = pkNewModule(vm, "$(REPL)");
+    options.repl_mode = true;
+
+    VmUserData user_data;
+    user_data.repl_mode = true;
+    pkSetUserData(vm, &user_data);
+
+    printf("%s\n", notice);
+    bool done = false;
+    do {
+      printf(">>> ");
+      PkStringPtr line = { read_line(), onResultDone, (void*)true };
+      // TODO: if line is empty continue.
+
+      result = pkCompileModule(vm, module, line, &options);
+      if (result != PK_RESULT_SUCCESS) continue;
+
+      PkHandle* main_fn = pkGetFunction(vm, module, PK_IMPLICIT_MAIN_NAME);
+      PkHandle* fiber = pkNewFiber(vm, main_fn);
+      result = pkRunFiber(vm, fiber, 0, NULL);
+
+      pkReleaseHandle(vm, main_fn);
+      pkReleaseHandle(vm, fiber);
+
+    } while (!done);
+
+    pkReleaseHandle(vm, module);
+
 
   } if (argc >= 3 && strcmp(argv[1], "-c") == 0) {
 

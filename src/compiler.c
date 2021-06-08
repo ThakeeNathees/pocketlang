@@ -251,7 +251,7 @@ typedef enum {
 
 typedef struct {
   const char* name; //< Directly points into the source string.
-  int length;       //< Length of the name.
+  uint32_t length;  //< Length of the name.
   int depth;        //< The depth the local is defined in.
   int line;         //< The line variable declared for debugging.
 } Local;
@@ -643,7 +643,7 @@ static void lexToken(Compiler* compiler) {
       case ' ':
       case '\t':
       case '\r': {
-        char c = peekChar(compiler);
+        c = peekChar(compiler);
         while (c == ' ' || c == '\t' || c == '\r') {
           eatChar(compiler);
           c = peekChar(compiler);
@@ -735,11 +735,6 @@ static TokenType peek(Compiler* self) {
   return self->current.type;
 }
 
-// Returns next token type without lexing a new token.
-static TokenType peekNext(Compiler* self) {
-  return self->next.type;
-}
-
 // Consume the current token if it's expected and lex for the next token
 // and return true otherwise reutrn false.
 static bool match(Compiler* self, TokenType expected) {
@@ -794,7 +789,7 @@ static bool matchEndStatement(Compiler* compiler) {
 // Consume semi collon, multiple new lines or peek 'end' keyword.
 static void consumeEndStatement(Compiler* compiler) {
   if (!matchEndStatement(compiler)) {
-    parseError(compiler, "Expected statement end with newline or ';'.");
+    parseError(compiler, "Expected statement end with '\\n' or ';'.");
   }
 }
 
@@ -924,9 +919,9 @@ static void patchForward(Compiler* compiler, Fn* fn, int index, int name);
 
 static int compilerAddConstant(Compiler* compiler, Var value);
 static int compilerGetVariable(Compiler* compiler, const char* name,
-                               int length);
+                               uint32_t length);
 static int compilerAddVariable(Compiler* compiler, const char* name,
-                               int length, int line);
+                               uint32_t length, int line);
 static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
                                const char* name, int length, int line);
 
@@ -1491,7 +1486,7 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
 // Return the index of the variable if it's already defined in the current
 // scope otherwise returns -1.
 static int compilerGetVariable(Compiler* compiler, const char* name,
-                               int length) {
+                               uint32_t length) {
   for (int i = compiler->local_count - 1; i >= 0; i--) {
     Local* local = &compiler->locals[i];
     if (length == local->length && strncmp(name, local->name, length) == 0) {
@@ -1504,13 +1499,13 @@ static int compilerGetVariable(Compiler* compiler, const char* name,
 // Add a variable and return it's index to the context. Assumes that the
 // variable name is unique and not defined before in the current scope.
 static int compilerAddVariable(Compiler* compiler, const char* name,
-                                int length, int line) {
+                                uint32_t length, int line) {
 
   // TODO: should I validate the name for pre-defined, etc?
 
   // Check if maximum variable count is reached.
   bool max_vars_reached = false;
-  const char* var_type; // For max variables reached error message.
+  const char* var_type = ""; // For max variables reached error message.
   if (compiler->scope_depth == DEPTH_GLOBAL) {
     if (compiler->local_count == MAX_VARIABLES) {
       max_vars_reached = true;
@@ -1726,7 +1721,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
       argc++;
 
       const char* param_name = compiler->previous.start;
-      int param_len = compiler->previous.length;
+      uint32_t param_len = compiler->previous.length;
 
       // TODO: move this to a functions.
       bool predefined = false;
@@ -1757,7 +1752,12 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
     compileBlockBody(compiler, BLOCK_FUNC);
     consume(compiler, TK_END, "Expected 'end' after function definition end.");
   
-    emitOpcode(compiler,  OP_PUSH_NULL);
+    // TODO: This is the function end return, if we pop all the parameters the
+    // below push_null is redundent (because we always have a null at the rbp
+    // of the call frame. (for i in argc : emit(pop)) emit(return); but this
+    // might be faster (right?).
+
+    emitOpcode(compiler, OP_PUSH_NULL);
     emitOpcode(compiler, OP_RETURN);
     emitOpcode(compiler, OP_END);
   }
@@ -1931,6 +1931,8 @@ static inline Script* compilerImport(Compiler* compiler) {
 // before executing the below instructions.
 static void compilerImportAll(Compiler* compiler, Script* script) {
 
+  ASSERT(script != NULL, OOPS);
+
   // Line number of the variables which will be bind to the imported sybmols.
   int line = compiler->previous.line;
 
@@ -2048,7 +2050,7 @@ static void compileFromImport(Compiler* compiler) {
       emitStoreVariable(compiler, var_index, true);
       emitOpcode(compiler, OP_POP);
     
-    } while (match(compiler, TK_COMMA));
+    } while (match(compiler, TK_COMMA) && (skipNewLines(compiler), true));
   }
 
   // Done getting all the attributes, now pop the lib from the stack.
@@ -2115,11 +2117,10 @@ static void compileRegularImport(Compiler* compiler) {
       emitOpcode(compiler, OP_POP);
     }
 
-  } while (match(compiler, TK_COMMA));
+  } while (match(compiler, TK_COMMA) && (skipNewLines(compiler), true));
 
   consumeEndStatement(compiler);
 }
-
 
 // Compiles an expression. An expression will result a value on top of the
 // stack.
@@ -2260,9 +2261,12 @@ static void compileForStatement(Compiler* compiler) {
 static void compileStatement(Compiler* compiler) {
 
   // is_temproary will be set to true if the statement is an temporary
-  // expression, it'll used to be pop from the stack. If running REPL mode used
-  // to print it's value.
+  // expression, it'll used to be pop from the stack.
   bool is_temproary = false;
+
+  // This will be set to true if the statement is an expression. It'll used to
+  // print it's value when running in REPL mode.
+  bool is_expression = false;
 
   if (match(compiler, TK_BREAK)) {
     if (compiler->loop == NULL) {
@@ -2321,19 +2325,23 @@ static void compileStatement(Compiler* compiler) {
     compiler->new_local = false;
     compileExpression(compiler);
     consumeEndStatement(compiler);
+
+    is_expression = true;
     if (!compiler->new_local) is_temproary = true;
+
     compiler->new_local = false;
   }
 
-  // If running REPL mode, print the expression's evaluvated value. Python
-  // does print local depth expression too. (it's just a design decision).
+  // If running REPL mode, print the expression's evaluvated value. Only if
+  // we're at the top level. Python does print local depth expression too.
+  // (it's just a design decision).
   if (compiler->options && compiler->options->repl_mode &&
-      is_temproary /*&& compiler->scope_depth == DEPTH_GLOBAL*/) {
+      compiler->func->ptr == compiler->script->body &&
+      is_expression /*&& compiler->scope_depth == DEPTH_GLOBAL*/) {
     emitOpcode(compiler, OP_REPL_PRINT);
   }
 
   if (is_temproary) emitOpcode(compiler, OP_POP);
-
 }
 
 // Compile statements that are only valid at the top level of the script. Such
@@ -2377,11 +2385,16 @@ bool compile(PKVM* vm, Script* script, const char* source,
   compiler->next_compiler = vm->compiler;
   vm->compiler = compiler;
 
-  // Remember the count of the (valid) code of the provided script body. For
-  // new scripts it'll be null, but if we're compiling it multiple times we
-  // already have some code before. And if the compilation failed we discard
-  // all the compiled opcodes and jump back to the valid_code.
-  uint32_t valid_code = script->body->fn->opcodes.count;
+  // If we're compiling for a script that was already compiled (when running
+  // REPL or evaluvating an expression) we don't need the old main anymore.
+  // just use the globals and functions of the script and use a new body func.
+  ASSERT(script->body != NULL, OOPS);
+  byteBufferClear(&script->body->fn->opcodes, vm);
+
+  // Remember the count of the globals and functions, If the compilation failed
+  // discard all the globals and functions added by the compilation.
+  uint32_t globals_count = script->globals.count;
+  uint32_t functions_count = script->functions.count;
 
   Func curr_fn;
   curr_fn.depth = DEPTH_SCRIPT;
@@ -2416,14 +2429,9 @@ bool compile(PKVM* vm, Script* script, const char* source,
     skipNewLines(compiler);
   }
 
-  if (compiler->options == NULL || !compiler->options->repl_mode) {
-    emitOpcode(compiler, OP_PUSH_NULL);
-    emitOpcode(compiler, OP_RETURN);
-    emitOpcode(compiler, OP_END);
-
-  } else {
-    emitOpcode(compiler, OP_YIELD);
-  }
+  // Already a null at the stack top, added when the fiber for the function created.
+  emitOpcode(compiler, OP_RETURN);
+  emitOpcode(compiler, OP_END);
 
   // Resolve forward names (function names that are used before defined).
   for (int i = 0; i < compiler->forwards_count; i++) {
@@ -2441,23 +2449,21 @@ bool compile(PKVM* vm, Script* script, const char* source,
 
   vm->compiler = compiler->next_compiler;
 
+  // If compilation failed, discard all the invalid functions and globals.
+  if (compiler->has_errors) {
+    script->globals.count = script->global_names.count = globals_count;
+    script->functions.count = script->function_names.count = functions_count;
+  }
+
 #if DEBUG_DUMP_COMPILED_CODE
   dumpFunctionCode(vm, script->body);
 #endif
-
-  // If the compilation failed discard all the compiled invalid code.
-  // TODO: May be shrink the buffer.
-  if (compiler->has_errors) {
-    script->body->fn->opcodes.count = valid_code;
-    return false;
-  }
-
-  // If we reach here, it means the compilation is success and return true.
-  return true;
+  
+  return !compiler->has_errors;
 }
 
 PkResult pkCompileModule(PKVM* vm, PkHandle* module, PkStringPtr source,
-                     const PkCompileOptions* options) {
+                         const PkCompileOptions* options) {
   __ASSERT(module != NULL, "Argument module was NULL.");
   Var scr = module->value;
   __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");

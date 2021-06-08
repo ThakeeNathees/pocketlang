@@ -36,7 +36,6 @@ PkVarType pkGetValueType(const PkVar value) {
   }
 
   UNREACHABLE();
-  return (PkVarType)0;
 }
 
 PkHandle* pkNewString(PKVM* vm, const char* value) {
@@ -60,12 +59,6 @@ PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn) {
   
   Fiber* fiber = newFiber(vm, (Function*)AS_OBJ(fn->value));
   return vmNewHandle(vm, VAR_OBJ(fiber));
-}
-
-const char* pkStringGetData(const PkVar value) {
-  const Var str = (*(const Var*)value);
-  __ASSERT(IS_OBJ_TYPE(str, OBJ_STRING), "Value should be of type string.");
-  return ((String*)AS_OBJ(str))->data;
 }
 
 /*****************************************************************************/
@@ -340,7 +333,7 @@ Script* newScript(PKVM* vm, String* path) {
   stringBufferInit(&script->names);
 
   vmPushTempRef(vm, &script->_super);
-  const char* fn_name = PK_BODY_FN_NAME;
+  const char* fn_name = PK_IMPLICIT_MAIN_NAME;
   script->body = newFunction(vm, fn_name, (int)strlen(fn_name), script, false);
   script->body->arity = 0; // TODO: should it be 1 (ARGV)?.
   vmPopTempRef(vm);
@@ -401,8 +394,8 @@ Fiber* newFiber(PKVM* vm, Function* fn) {
     int stack_size = utilPowerOf2Ceil(fn->arity + 1);
     fiber->stack = ALLOCATE_ARRAY(vm, Var, stack_size);
     fiber->stack_size = stack_size;
-    fiber->sp = fiber->stack;
     fiber->ret = fiber->stack;
+    fiber->sp = fiber->stack + 1;
 
   } else {
     // Allocate stack.
@@ -410,8 +403,8 @@ Fiber* newFiber(PKVM* vm, Function* fn) {
     if (stack_size < MIN_STACK_SIZE) stack_size = MIN_STACK_SIZE;
     fiber->stack = ALLOCATE_ARRAY(vm, Var, stack_size);
     fiber->stack_size = stack_size;
-    fiber->sp = fiber->stack;
     fiber->ret = fiber->stack;
+    fiber->sp = fiber->stack + 1;
 
     // Allocate call frames.
     fiber->frame_capacity = INITIAL_CALL_FRAMES;
@@ -423,6 +416,10 @@ Fiber* newFiber(PKVM* vm, Function* fn) {
     fiber->frames[0].ip = fn->fn->opcodes.data;
     fiber->frames[0].rbp = fiber->ret;
   }
+
+  // Initialize the return value to null (doesn't really have to do that here
+  // but if we're trying to debut it may crash when dumping the return vaue).
+  *fiber->ret = VAR_NULL;
 
   return fiber;
 }
@@ -500,7 +497,6 @@ static uint32_t _hashObject(Object* obj) {
   }
 
   UNREACHABLE();
-  return -1;
 }
 
 uint32_t varHashValue(Var v) {
@@ -754,7 +750,6 @@ const char* getPkVarTypeName(PkVarType type) {
   }
 
   UNREACHABLE();
-  return NULL;
 }
 
 const char* getObjectTypeName(ObjectType type) {
@@ -767,9 +762,8 @@ const char* getObjectTypeName(ObjectType type) {
     case OBJ_FUNC:    return "Func";
     case OBJ_FIBER:   return "Fiber";
     case OBJ_USER:    return "UserObj";
-    default:
-      UNREACHABLE();
   }
+  UNREACHABLE();
 }
 
 const char* varTypeName(Var v) {
@@ -821,11 +815,11 @@ bool isValuesEqual(Var v1, Var v2) {
       */
       List *l1 = (List*)o1, *l2 = (List*)o2;
       if (l1->elements.count != l2->elements.count) return false;
-      Var* v1 = l1->elements.data;
-      Var* v2 = l2->elements.data;
+      Var* _v1 = l1->elements.data;
+      Var* _v2 = l2->elements.data;
       for (uint32_t i = 0; i < l1->elements.count; i++) {
-        if (!isValuesEqual(*v1, *v2)) return false;
-        v1++, v2++;
+        if (!isValuesEqual(*_v1, *_v2)) return false;
+        _v1++, _v2++;
       }
       return true;
     }
@@ -918,12 +912,7 @@ static void _toStringInternal(PKVM* vm, const Var v, ByteBuffer* buff,
           byteBufferWrite(buff, vm, '"');
           return;
         }
-
-        // If recursive return with quotes (ex: [42, "hello", 0..10]).
-        byteBufferWrite(buff, vm, '"');
-        byteBufferAddString(buff, vm, str->data, str->length);
-        byteBufferWrite(buff, vm, '"');
-        return;
+        UNREACHABLE();
       }
 
       case OBJ_LIST:
@@ -994,14 +983,13 @@ static void _toStringInternal(PKVM* vm, const Var v, ByteBuffer* buff,
           }
           if (_done) break;
 
-          if (!_first) {
-            byteBufferAddString(buff, vm, ", ", 2);
-            _first = false;
-          }
+          if (!_first) byteBufferAddString(buff, vm, ", ", 2);
+
           _toStringInternal(vm, map->entries[i].key, buff, &seq_map, true);
           byteBufferWrite(buff, vm, ':');
           _toStringInternal(vm, map->entries[i].value, buff, &seq_map, true);
-          i++;
+
+          i++; _first = false;
         } while (i < map->capacity);
 
         byteBufferWrite(buff, vm, '}');
@@ -1106,13 +1094,12 @@ bool toBool(Var v) {
     case OBJ_RANGE: // [[FALLTHROUGH]]
     case OBJ_SCRIPT:
     case OBJ_FUNC:
+    case OBJ_FIBER:
     case OBJ_USER:
       return true;
-    default:
-      UNREACHABLE();
   }
 
-  return true;
+  UNREACHABLE();
 }
 
 String* stringFormat(PKVM* vm, const char* fmt, ...) {

@@ -24,10 +24,9 @@
  */
 
 // To use dynamic variably-sized struct with a tail array add an array at the
-// end of the struct with size \ref DYNAMIC_TAIL_ARRAY. This method was a
-// legacy standard called "struct hack".
-#if __STDC_VERSION__ >= 199901L
-  /** for std >= c99  it's just `arr[]` */
+// end of the struct with size DYNAMIC_TAIL_ARRAY. This method was a legacy
+// standard called "struct hack".
+#if defined(_MSC_VER) || __STDC_VERSION__ >= 199901L // std >= c99
   #define DYNAMIC_TAIL_ARRAY
 #else
   #define DYNAMIC_TAIL_ARRAY 0
@@ -218,7 +217,7 @@ typedef enum {
 // This will terminate compiler (because of 1/0 evaluvated) if ObjectType max
 // is not [count]. Use this to ensure every time switching ObjectType will
 // cover all object types.
-#if DEBUG
+#ifdef DEBUG
   #define CHECK_MISSING_OBJ_TYPE(count) (1/ ((int)(!(count ^ OBJ_USER))) )
 #else
   #define CHECK_MISSING_OBJ_TYPE(count) do {} while (false)

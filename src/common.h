@@ -41,6 +41,11 @@
 // header for more information on Nan-tagging.
 #define VAR_NAN_TAGGING 1
 
+// The maximum number of argument a pocketlang function supported to call. This
+// value is arbitary and feel free to change it. (Just used this limit for an
+// internal buffer to store values before calling a new fiber).
+#define MAX_ARGC 32
+
 // The factor by which a buffer will grow when it's capacity reached.
 #define GROW_FACTOR 2
 
