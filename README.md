@@ -39,7 +39,9 @@ It's a [WebAssembly](https://webassembly.org/) build of the VM compiled using [e
 Note that in the webassembly version of the language, some features (input, relative import, etc.) have disabled, has
 limited memory allocations, and the IO calls might be slower.
 
-### On localhost
+### On Your System
+
+NOTE: Make sure you've compiled the `pocketlang` source code and you have the `pocket` binary in `build/debug/`.
 
 Copy/paste or type in the following factorial code in any editor of your choice:
 
@@ -57,7 +59,7 @@ for i in 0..10
 end
 ```
 
-Save the file as `factorial.wren` and execute it from your pocketlang directory with: `./build/debug/pocket <path-to-factorial.wren>/factorial.wren`.
+Save the file as `factorial.pk` and execute it from your pocketlang directory with: `./build/debug/pocket <path-to-factorial.wren>/factorial.pk`.
 
 This should print out the output of the factorial program in your STDOUT (terminal).
 
