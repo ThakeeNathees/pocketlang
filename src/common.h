@@ -8,7 +8,7 @@
 
 #include "include/pocketlang.h"
 
-// Commenly used c standard headers across the sources. Don't include any
+// Commonly used c standard headers across the sources. Don't include any
 // headers that are specific to a single source here, instead include them in
 // their source files explicitly (canno't be implicitly included by another
 // header). And don't include any C standard headers in any of the pocketlang
