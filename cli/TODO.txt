@@ -43,7 +43,7 @@
 
 // Add more.
 - Single header for embedding (script in pk, require file IO).
-[ ] Compilte core methods.
+[ ] Complete core methods.
 [ ] Complete var methods.
 [ ] Complete core functions.
 [ ] Complete builtin operators.
