@@ -9,7 +9,7 @@
 
 #include <pocketlang.h>
 
-// FIXME: everything below here is temproary and for testing.
+// FIXME: everything below here is temporary and for testing.
 
 void registerModules(PKVM* vm);
 
@@ -195,7 +195,7 @@ int main(int argc, char** argv) {
     do {
       printf(">>> ");
       PkStringPtr line = { read_line(), onResultDone, (void*)true };
-      // TODO: if line is empty continue.
+      // TODO: if line is empty, continue.
 
       result = pkCompileModule(vm, module, line, &options);
       if (result != PK_RESULT_SUCCESS) continue;
