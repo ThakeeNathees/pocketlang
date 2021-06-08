@@ -15,12 +15,12 @@ typedef enum {
   #undef OPCODE
 } Opcode;
 
-// Pocketlang compiler is a single pass compiler, which means it doesn't go
-// throught the basic compilation pipline such as lexing, parsing (AST),
-// analyzing, intermediate codegeneration, and target codegeneration one by one
-// instead it'll generate the target code as it reads the source (directly from
-// lexing to codegen). Despite it's faster than multipass compilers, we're
-// restricted syntax-wise and from compiletime optimizations, yet we support
+// Pocketlang compiler is a one pass/single pass compiler, which means it
+// doesn't go through the basic compilation pipeline such as lexing, parsing
+// (AST), analyzing, intermediate code generation, and target codegeneration
+// one by one. Instead it'll generate the target code as it reads the source
+// (directly from lexing to codegen). Despite it faster than multipass compilers,
+// we're restricted syntax-wise and from compile-time optimizations, yet we support
 // "forward names" to call functions before they defined (unlike C/Python).
 typedef struct Compiler Compiler;
 

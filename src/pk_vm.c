@@ -10,7 +10,7 @@
 #include "pk_utils.h"
 #include "pk_debug.h"
 
-// Evaluvated to true if a runtime error set on the current fiber.
+// Evaluated to "true" if a runtime error set on the current fiber.
 #define HAS_ERROR() (vm->fiber->error != NULL)
 
 /*****************************************************************************/

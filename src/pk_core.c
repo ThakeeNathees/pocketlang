@@ -57,7 +57,7 @@ PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
   // for 'global_names' refactor them from VarBuffer to GlobalVarBuffer where
   // GlobalVar is struct { const char* name, Var value };
   // 
-  // "nicreasing-name" order index buffer:
+  // "increasing-name" order index buffer:
   //   A buffer of int where each is an index in the function buffer and each
   //   points to different functions in an "increasing-name" (could be hash
   //   value) order. If we have more than some threshold number of function
@@ -72,15 +72,15 @@ PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
   return NULL;
 }
 
-// A convinent macro to get the nth (1 based) argument of the current function.
+// A convenient macro to get the nth (1 based) argument of the current function.
 #define ARG(n) (vm->fiber->ret[n])
 
-// Convinent macros to get the 1st, 2nd, 3rd arguments.
+// Convenient macros to get the 1st, 2nd, 3rd arguments.
 #define ARG1 ARG(1)
 #define ARG2 ARG(2)
 #define ARG3 ARG(3)
 
-// Evaluvates to the current function's argument count.
+// Evaluates to the current function's argument count.
 #define ARGC ((int)(vm->fiber->sp - vm->fiber->ret) - 1)
 
 // Set return value for the current native function and return.

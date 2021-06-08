@@ -37,7 +37,7 @@
 // Set this to dump stack frame before executing the next instruction.
 #define DEBUG_DUMP_CALL_STACK 0
 
-// Nan-Tagging could be disable for debugging/portability purposes. see "var.h"
+// Nan-Tagging could be disable for debugging/portability purposes. See "var.h"
 // header for more information on Nan-tagging.
 #define VAR_NAN_TAGGING 1
 

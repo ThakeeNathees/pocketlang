@@ -4,7 +4,7 @@
  */
 
 
-// The REPL (Read Evaluvate Print Loop) implementation.
+// The REPL (Read Evaluate Print Loop) implementation.
 // https://en.wikipedia.org/wiki/Read–eval–print_loop.
 
 #include "common.h"
