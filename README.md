@@ -39,6 +39,30 @@ It's a [WebAssembly](https://webassembly.org/) build of the VM compiled using [e
 Note that in the webassembly version of the language, some features (input, relative import, etc.) have disabled, has
 limited memory allocations, and the IO calls might be slower.
 
+### On Your System
+
+NOTE: Make sure you've compiled the `pocketlang` source code and you have the `pocket` binary in `build/debug/`.
+
+Copy/paste or type in the following factorial code in any editor of your choice:
+
+```ruby
+# A recursive factorial function
+def fac(n)
+  if n == 0 then return 1 end
+  return n*fac(n-1)
+end
+
+# Prints all factorials from 0 to 10 exclusive.
+print('Factorial of 0 - 9\n')
+for i in 0..10
+  print(fac(i))
+end
+```
+
+Save the file as `factorial.pk` and execute it from your pocketlang directory with: `./build/debug/pocket <path-to-factorial.wren>/factorial.pk`.
+
+This should print out the output of the factorial program in your STDOUT (terminal).
+
 ## Documentation
 
 The pocketlang documentation is hosted at https://thakeenathees.github.io/pocketlang/ which
