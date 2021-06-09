@@ -1,13 +1,13 @@
 /*
- *  Copyright (c) 2021 Thakee Nathees
- *  Licensed under: MIT License
+ *  Copyright (c) 2020-2021 Thakee Nathees
+ *  Distributed Under The MIT License
  */
 
 #ifndef DEBUG_H
 #define DEBUG_H
 
-#include "common.h"
-#include "var.h"
+#include "pk_common.h"
+#include "pk_var.h"
 
 // Dump the value of the [value] without a new line at the end.
 void dumpValue(PKVM* vm, Var value);

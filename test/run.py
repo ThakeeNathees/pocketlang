@@ -22,11 +22,10 @@ test_files = [
 benchmarks = {
 	"factors"      : ['.pk', '.py', '.rb', '.wren'],
 	"fib"          : ['.pk', '.py', '.rb', '.wren'],
-	"list_reverse" : ['.pk', '.py', '.rb'],
+	"list"         : ['.pk', '.py', '.rb'],
 	"loop"         : ['.pk', '.py', '.rb', ".wren"],
 	"primes"       : ['.pk', '.py', '.rb', ".wren"],
 }
-
 
 def main():
 	run_all_tests()

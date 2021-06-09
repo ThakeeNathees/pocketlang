@@ -1,4 +1,7 @@
 
+::  Copyright (c) 2020-2021 Thakee Nathees
+::  Distributed Under The MIT License
+
 @echo off
 
 :: To set color. (Ref : https://stackoverflow.com/questions/2048509/how-to-echo-with-different-colors-in-the-windows-command-line)

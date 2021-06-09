@@ -1,17 +1,17 @@
 /*
- *  Copyright (c) 2021 Thakee Nathees
- *  Licensed under: MIT License
+ *  Copyright (c) 2020-2021 Thakee Nathees
+ *  Distributed Under The MIT License
  */
 
 #ifndef COMPILER_H
 #define COMPILER_H
 
-#include "common.h"
-#include "var.h"
+#include "pk_common.h"
+#include "pk_var.h"
 
 typedef enum {
   #define OPCODE(name, _, __) OP_##name,
-  #include "opcodes.h"
+  #include "pk_opcodes.h"
   #undef OPCODE
 } Opcode;
 
@@ -26,8 +26,11 @@ typedef struct Compiler Compiler;
 
 // This will take source code as a cstring, compiles it to pocketlang bytecodes
 // and append them to the script's implicit main function ("$(SourceBody)").
-bool compile(PKVM* vm, Script* script, const char* source,
-             const PkCompileOptions* options);
+// On a successfull compilation it'll return PK_RESULT_SUCCESS, otherwise it'll
+// return PK_RESULT_COMPILE_ERROR but if repl_mode set in the [options],  and
+// we've reached and unexpected EOF it'll return PK_RESULT_UNEXPECTED_EOF.
+PkResult compile(PKVM* vm, Script* script, const char* source,
+                 const PkCompileOptions* options);
 
 // Mark the heap allocated ojbects of the compiler at the garbage collection
 // called at the marking phase of vmCollectGarbage().

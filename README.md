@@ -49,17 +49,17 @@ Copy/paste or type in the following factorial code in any editor of your choice:
 # A recursive factorial function
 def fac(n)
   if n == 0 then return 1 end
-  return n*fac(n-1)
+  return n * fac(n - 1)
 end
 
 # Prints all factorials from 0 to 10 exclusive.
-print('Factorial of 0 - 9\n')
+print('Factorial of 0 - 9')
 for i in 0..10
   print(fac(i))
 end
 ```
 
-Save the file as `factorial.pk` and execute it from your pocketlang directory with: `./build/debug/pocket <path-to-factorial.wren>/factorial.pk`.
+Save the file as `factorial.pk` and execute it from the pocketlang binary directory with: `./pocket <path-to-factorial.pk>`.
 
 This should print out the output of the factorial program in your STDOUT (terminal).
 

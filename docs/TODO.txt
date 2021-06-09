@@ -3,6 +3,9 @@
 
 - refactor build.bat batch script to powershell
   refactor makefile and setup a github action.
+  
+- check for tabs and trailing white space in source.
+  they're not allowed.
 
 - change or add => to_string() to value.as_string
   and add as_repr, as_bool.
@@ -21,12 +24,8 @@
 - Implement file IO (require structs).
 - Implement utf8 support.
 - Implement gdb like debugger (add color print for readability).
-- Implement fiber from script body and vm run fibers (not scripts).
-    Then remove vm's root script.
 - Initialize imported scripts (require fiber based vm).
-- REPL. compile expression for a script.
 - Hex, binary literals and floats like ".5".
-- Docs build to a single directory, and replace url space (%20) with a hyphen.
 - Complete all the TODO; macros.
 - implement MAX_ARGC checks (would cause a buffer overflow if not)
   when compiling and calling a function (also in fibers).
@@ -43,14 +42,14 @@
 
 // Add more.
 - Single header for embedding (script in pk, require file IO).
-[ ] Complete core methods.
-[ ] Complete var methods.
-[ ] Complete core functions.
-[ ] Complete builtin operators.
-[ ] Complete opcodes.
-[ ] Complete core libs.
-[ ] Complete the docs.
-[ ] More Tests.
+- Complete core methods.
+- Complete var methods.
+- Complete core functions.
+- Complete builtin operators.
+- Complete opcodes.
+- Complete core libs.
+- Complete the docs.
+- More Tests.
 
 // Bugs.
 It's at pre-alpha and every thing is left to

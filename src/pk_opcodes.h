@@ -1,6 +1,6 @@
 /*
- *  Copyright (c) 2021 Thakee Nathees
- *  Licensed under: MIT License
+ *  Copyright (c) 2020-2021 Thakee Nathees
+ *  Distributed Under The MIT License
  */
 
 // Opcodes X macro (http://en.wikipedia.org/wiki/X_Macro) should be included

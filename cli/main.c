@@ -1,15 +1,14 @@
 /*
- *  Copyright (c) 2021 Thakee Nathees
- *  Licensed under: MIT License
+ *  Copyright (c) 2020-2021 Thakee Nathees
+ *  Distributed Under The MIT License
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
+#include "common.h"
 
-#include <pocketlang.h>
+// FIXME: Everything below here is temporary and for testing.
 
-// FIXME: everything below here is temporary and for testing.
+void repl(PKVM* vm, const PkCompileOptions* options);
+const char* read_line(uint32_t* length);
 
 void registerModules(PKVM* vm);
 
@@ -22,11 +21,6 @@ size_t pathJoin(const char* from, const char* path, char* buffer,
                 size_t buff_size);
 
 // ---------------------------------------
-
-// FIXME:
-typedef struct {
-  bool repl_mode;
-} VmUserData;
 
 void onResultDone(PKVM* vm, PkStringPtr result) {
 
@@ -59,21 +53,9 @@ void writeFunction(PKVM* vm, const char* text) {
   fprintf(stdout, "%s", text);
 }
 
-static const char* read_line(void) {
-  // FIXME: use fgetc char by char till reach a new line.
-  const int size = 1024;
-  char* mem = (char*) malloc(size);
-  fgets(mem, size, stdin);
-  size_t len = strlen(mem);
-
-  // FIXME: handle \r\n, this is temp.
-  mem[len - 1] = '\0';
-  return mem;
-}
-
 PkStringPtr readFunction(PKVM* vm) {
   PkStringPtr result;
-  result.string = read_line();
+  result.string = read_line(NULL);
   result.on_done = onResultDone;
   result.user_data = (void*)true;
   return result;
@@ -149,11 +131,6 @@ PkStringPtr loadScript(PKVM* vm, const char* path) {
 
 int main(int argc, char** argv) {
 
-  const char* notice =
-    "PocketLang " PK_VERSION_STRING " (https://github.com/ThakeeNathees/pocketlang/)\n"
-    "Copyright(c) 2020 - 2021 ThakeeNathees.\n"
-    "Free and open source software under the terms of the MIT license.\n";
-
   const char* usage = "usage: pocket [-c cmd | file]\n";
 
   // TODO: implement arg parse, REPL.
@@ -177,40 +154,19 @@ int main(int argc, char** argv) {
   options.debug = true; // TODO: update this with cli args.
 
   PKVM* vm = pkNewVM(&config);
+
+  VmUserData user_data;
+  user_data.repl_mode = false;
+  pkSetUserData(vm, &user_data);
+
   registerModules(vm);
 
   // FIXME: this is temp till arg parse implemented.
   PkResult result;
 
   if (argc == 1) {
-    PkHandle* module = pkNewModule(vm, "$(REPL)");
     options.repl_mode = true;
-
-    VmUserData user_data;
-    user_data.repl_mode = true;
-    pkSetUserData(vm, &user_data);
-
-    printf("%s\n", notice);
-    bool done = false;
-    do {
-      printf(">>> ");
-      PkStringPtr line = { read_line(), onResultDone, (void*)true };
-      // TODO: if line is empty, continue.
-
-      result = pkCompileModule(vm, module, line, &options);
-      if (result != PK_RESULT_SUCCESS) continue;
-
-      PkHandle* main_fn = pkGetFunction(vm, module, PK_IMPLICIT_MAIN_NAME);
-      PkHandle* fiber = pkNewFiber(vm, main_fn);
-      result = pkRunFiber(vm, fiber, 0, NULL);
-
-      pkReleaseHandle(vm, main_fn);
-      pkReleaseHandle(vm, fiber);
-
-    } while (!done);
-
-    pkReleaseHandle(vm, module);
-
+    repl(vm, &options);
 
   } if (argc >= 3 && strcmp(argv[1], "-c") == 0) {
 

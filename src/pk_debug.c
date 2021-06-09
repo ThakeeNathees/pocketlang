@@ -1,14 +1,14 @@
 /*
- *  Copyright (c) 2021 Thakee Nathees
- *  Licensed under: MIT License
+ *  Copyright (c) 2020-2021 Thakee Nathees
+ *  Distributed Under The MIT License
  */
 
-#include "debug.h"
+#include "pk_debug.h"
 
 #include <stdio.h>
-#include "core.h"
-#include "var.h"
-#include "vm.h"
+#include "pk_core.h"
+#include "pk_var.h"
+#include "pk_vm.h"
 
 // To limit maximum elements to be dumpin in a map or a list.
 #define MAX_DUMP_ELEMENTS 30
@@ -16,7 +16,7 @@
 // Opcode names array.
 static const char* op_name[] = {
   #define OPCODE(name, params, stack) #name,
-  #include "opcodes.h"
+  #include "pk_opcodes.h"
   #undef OPCODE
 };
 

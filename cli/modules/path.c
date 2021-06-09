@@ -1,12 +1,15 @@
 /*
  *  Copyright (c) 2021 Thakee Nathees
- *  Licensed under: MIT License
+ *  Distributed Under The MIT License
  */
 
 
 #include <errno.h>
 #include <pocketlang.h>
 #include <stdio.h> /* defines FILENAME_MAX */
+
+// TODO: more cli/thirdparty to cli/modules/thirdparty to remove ".." in the
+//       relative import and split thirdparty sources into dependent directory.
 
 #include "../thirdparty/cwalk/cwalk.h"
 #if defined(_WIN32) && (defined(_MSC_VER) || defined(__TINYC__))

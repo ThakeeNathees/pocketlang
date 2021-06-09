@@ -1,6 +1,6 @@
 /*
- *  Copyright (c) 2021 Thakee Nathees
- *  Licensed under: MIT License
+ *  Copyright (c) 2020-2021 Thakee Nathees
+ *  Distributed Under The MIT License
  */
 
 #ifndef POCKETLANG_H
@@ -118,6 +118,17 @@ typedef enum {
 // or a function or evaluvating an expression.
 typedef enum {
   PK_RESULT_SUCCESS = 0,    // Successfully finished the execution.
+
+  // This will be *set to true if we're running REPL mode and reached an EOF
+  // unexpectedly, 
+
+  // Unexpected EOF while compiling the source. This is another compile time
+  // error that will ONLY be returned if the we're compiling with the REPL
+  // mode set in the compile options. We need this specific error to indicate
+  // the host application to add another line to the last input. If REPL not
+  // enabled this will be PK_RESULT_COMPILE_ERROR.
+  PK_RESULT_UNEXPECTED_EOF,
+
   PK_RESULT_COMPILE_ERROR,  // Compilation failed.
   PK_RESULT_RUNTIME_ERROR,  // An error occured at runtime.
 } PkResult;
