@@ -1,0 +1,32 @@
+
+## Core builtin functions and attribute tests.
+
+assert(hex(12648430) == '0xc0ffee')
+assert(hex(255) == '0xff' and hex(10597059) == '0xa1b2c3')
+assert(hex(-4294967295) == '-0xffffffff') ## the largest.
+
+## string attributes.
+assert(''.length == 0)
+assert('test'.length == 4)
+assert(''.lower == '' and ''.upper == '')
+assert('already+lower '.lower == 'already+lower ')
+assert('ALREADY+UPPER '.upper == 'ALREADY+UPPER ')
+assert('tEST+InG'.lower == 'test+ing')
+assert('tEST+InG'.upper == 'TEST+ING')
+
+assert(' trim '.strip == 'trim')
+assert(''.strip == '')
+
+## List attribute
+assert([].length == 0)
+assert([1, 2, 3].length == 3)
+
+## Function
+assert(print.arity == -1)
+assert(hex.arity == 1)
+assert(func(a, b)end .arity == 2)
+assert(print.name == "print")
+def fn(p1, p2, p3) end
+assert(fn.name == "fn")
+assert(fn.arity == 3)
+

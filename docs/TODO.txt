@@ -7,9 +7,13 @@
 - check for tabs and trailing white space in source.
   they're not allowed.
 
+- Hex, binary literals and floats like ".5".
+
 - change or add => to_string() to value.as_string
   and add as_repr, as_bool.
-  str_lower("UPPER") to "UPPER".lower
+
+- Make bool and num are incompatible
+  1 + true - make it not allowed.
 
 - support new line just after '=' (and other places)
 
@@ -25,7 +29,6 @@
 - Implement utf8 support.
 - Implement gdb like debugger (add color print for readability).
 - Initialize imported scripts (require fiber based vm).
-- Hex, binary literals and floats like ".5".
 - Complete all the TODO; macros.
 - implement MAX_ARGC checks (would cause a buffer overflow if not)
   when compiling and calling a function (also in fibers).

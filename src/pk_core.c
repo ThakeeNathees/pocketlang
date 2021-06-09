@@ -50,13 +50,13 @@ PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
 
   // TODO: Currently it's O(n) and could be optimized to O(log(n)) but does it
   //       worth it?
-  // 
+  //
   // 'function_names' buffer is un-necessary since the function itself has the
-  // reference to the function name and it can be refactored into a index buffer
-  // in an "increasing-name" order which can be used to binary search. Similer
-  // for 'global_names' refactor them from VarBuffer to GlobalVarBuffer where
-  // GlobalVar is struct { const char* name, Var value };
-  // 
+  // reference to the function name and it can be refactored into a index
+  // buffer in an "increasing-name" order which can be used to binary search.
+  // Similer for 'global_names' refactor them from VarBuffer to GlobalVarBuffer
+  // where GlobalVar is struct { const char* name, Var value };
+  //
   // "increasing-name" order index buffer:
   //   A buffer of int where each is an index in the function buffer and each
   //   points to different functions in an "increasing-name" (could be hash
@@ -72,13 +72,9 @@ PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
   return NULL;
 }
 
-// A convenient macro to get the nth (1 based) argument of the current function.
+// A convenient macro to get the nth (1 based) argument of the current
+// function.
 #define ARG(n) (vm->fiber->ret[n])
-
-// Convenient macros to get the 1st, 2nd, 3rd arguments.
-#define ARG1 ARG(1)
-#define ARG2 ARG(2)
-#define ARG3 ARG(3)
 
 // Evaluates to the current function's argument count.
 #define ARGC ((int)(vm->fiber->sp - vm->fiber->ret) - 1)
@@ -102,7 +98,7 @@ PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
     __ASSERT(vm->fiber != NULL,                                  \
              "This function can only be called at runtime.");    \
     __ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index."); \
-    __ASSERT(value != NULL, "Parameter [value] was NULL.");      \
+    __ASSERT(value != NULL, "Argument [value] was NULL.");       \
   } while (false)
 
 // Set error for incompatible type provided as an argument.
@@ -265,26 +261,29 @@ static inline bool validateNumeric(PKVM* vm, Var var, double* value,
   return false;
 }
 
-// Check if [var] is integer. If not set error and return false.
-static inline bool validateInteger(PKVM* vm, Var var, int32_t* value,
+// Check if [var] is 32 bit integer. If not set error and return false.
+static inline bool validateInteger(PKVM* vm, Var var, int64_t* value,
                                    const char* name) {
   double number;
   if (isNumeric(var, &number)) {
-    double truncated = floor(number);
-    if (truncated == number) {
-      *value = (int32_t)(truncated);
+    // TODO: check if the number is larger for a 64 bit integer.
+    double floor_val = floor(number);
+    if (floor_val == number) {
+      *value = (int64_t)(floor_val);
       return true;
     }
   }
 
-  vm->fiber->error = stringFormat(vm, "$ must be an integer.", name);
+  vm->fiber->error = stringFormat(vm, "$ must be a whole number.", name);
   return false;
 }
 
-static inline bool validateIndex(PKVM* vm, int32_t index, int32_t size,
-  const char* container) {
+// Index is could be larger than 32 bit integer, but the size in pocketlang
+// limited to 32 unsigned bit integer
+static inline bool validateIndex(PKVM* vm, int64_t index, uint32_t size,
+                                 const char* container) {
   if (index < 0 || size <= index) {
-    vm->fiber->error = stringFormat(vm, "$ index out of range.", container);
+    vm->fiber->error = stringFormat(vm, "$ index out of bound.", container);
     return false;
   }
   return true;
@@ -351,12 +350,12 @@ Script* getCoreLib(const PKVM* vm, String* name) {
 
 #define FN_IS_PRIMITE_TYPE(name, check) \
   static void coreIs##name(PKVM* vm) {  \
-    RET(VAR_BOOL(check(ARG1)));         \
+    RET(VAR_BOOL(check(ARG(1))));       \
   }
 
 #define FN_IS_OBJ_TYPE(name, _enum)     \
   static void coreIs##name(PKVM* vm) {  \
-    Var arg1 = ARG1;                    \
+    Var arg1 = ARG(1);                  \
     if (IS_OBJ_TYPE(arg1, _enum)) {     \
       RET(VAR_TRUE);                    \
     } else {                            \
@@ -376,29 +375,73 @@ FN_IS_OBJ_TYPE(Function,  OBJ_FUNC)
 FN_IS_OBJ_TYPE(Script,  OBJ_SCRIPT)
 FN_IS_OBJ_TYPE(UserObj,  OBJ_USER)
 
-PK_DOC(coreTypeName,
+PK_DOC(
   "type_name(value:var) -> string\n"
-  "Returns the type name of the of the value.") {
-  RET(VAR_OBJ(newString(vm, varTypeName(ARG1))));
+  "Returns the type name of the of the value.",
+static void coreTypeName(PKVM* vm)) {
+  RET(VAR_OBJ(newString(vm, varTypeName(ARG(1)))));
 }
 
-PK_DOC(coreAssert,
+// TODO: Complete this and register it.
+PK_DOC(
+  "bin(value:num) -> string\n"
+  "Returns as a binary value string with '0x' prefix.",
+static void coreBin(PKVM* vm)) {
+  int64_t value;
+  if (!validateInteger(vm, ARG(1), &value, "Argument 1")) return;
+
+  char buff[STR_BIN_BUFF_SIZE];
+
+  char* ptr = buff;
+  if (value < 0) *ptr++ = '-';
+  *ptr++ = '0'; *ptr++ = 'b';
+
+  TODO; // sprintf(ptr, "%b");
+}
+
+PK_DOC(
+  "hex(value:num) -> string\n"
+  "Returns as a hexadecimal value string with '0x' prefix.",
+static void coreHex(PKVM* vm)) {
+  int64_t value;
+  if (!validateInteger(vm, ARG(1), &value, "Argument 1")) return;
+
+  char buff[STR_HEX_BUFF_SIZE];
+
+  char* ptr = buff;
+  if (value < 0) *ptr++ = '-';
+  *ptr++ = '0'; *ptr++ = 'x';
+
+  if (value > UINT32_MAX || value < -(int64_t)(UINT32_MAX)) {
+    vm->fiber->error = newString(vm, "Integer is too large.");
+    RET(VAR_NULL);
+  }
+
+  uint32_t _x = (uint32_t)((value < 0) ? -value : value);
+  int length = sprintf(ptr, "%x", _x);
+
+  RET(VAR_OBJ(newStringLength(vm, buff,
+              (uint32_t) ((ptr + length) - (char*)(buff)) )));
+}
+
+PK_DOC(
   "assert(condition:bool [, msg:string]) -> void\n"
   "If the condition is false it'll terminate the current fiber with the "
-  "optional error message") {
+  "optional error message",
+static void coreAssert(PKVM* vm)) {
   int argc = ARGC;
   if (argc != 1 && argc != 2) {
     RET_ERR(newString(vm, "Invalid argument count."));
   }
 
-  if (!toBool(ARG1)) {
+  if (!toBool(ARG(1))) {
     String* msg = NULL;
 
     if (argc == 2) {
-      if (AS_OBJ(ARG2)->type != OBJ_STRING) {
-        msg = toString(vm, ARG2);
+      if (AS_OBJ(ARG(2))->type != OBJ_STRING) {
+        msg = toString(vm, ARG(2));
       } else {
-        msg = (String*)AS_OBJ(ARG2);
+        msg = (String*)AS_OBJ(ARG(2));
       }
       vmPushTempRef(vm, &msg->_super);
       vm->fiber->error = stringFormat(vm, "Assertion failed: '@'.", msg);
@@ -409,31 +452,34 @@ PK_DOC(coreAssert,
   }
 }
 
-PK_DOC(coreYield,
+PK_DOC(
   "yield([value]) -> var\n"
   "Return the current function with the yield [value] to current running "
   "fiber. If the fiber is resumed, it'll run from the next statement of the "
   "yield() call. If the fiber resumed with with a value, the return value of "
-  "the yield() would be that value otherwise null.") {
+  "the yield() would be that value otherwise null.",
+static void coreYield(PKVM* vm)) {
 
   int argc = ARGC;
   if (argc > 1) { // yield() or yield(val).
     RET_ERR(newString(vm, "Invalid argument count."));
   }
 
-  vmYieldFiber(vm, (argc == 1) ? &ARG1 : NULL);
+  vmYieldFiber(vm, (argc == 1) ? &ARG(1) : NULL);
 }
 
-PK_DOC(coreToString,
+PK_DOC(
   "to_string(value:var) -> string\n"
-  "Returns the string representation of the value.") {
-  RET(VAR_OBJ(toString(vm, ARG1)));
+  "Returns the string representation of the value.",
+static void coreToString(PKVM* vm)) {
+  RET(VAR_OBJ(toString(vm, ARG(1))));
 }
 
-PK_DOC(corePrint,
+PK_DOC(
   "print(...) -> void\n"
   "Write each argument as comma seperated to the stdout and ends with a "
-  "newline.") {
+  "newline.",
+static void corePrint(PKVM* vm)) {
   // If the host appliaction donesn't provide any write function, discard the
   // output.
   if (vm->config.write_fn == NULL) return;
@@ -446,10 +492,11 @@ PK_DOC(corePrint,
   vm->config.write_fn(vm, "\n");
 }
 
-PK_DOC(coreInput,
+PK_DOC(
   "input([msg:var]) -> string\n"
   "Read a line from stdin and returns it without the line ending. Accepting "
-  "an optional argument [msg] and prints it before reading.") {
+  "an optional argument [msg] and prints it before reading.",
+static void coreInput(PKVM* vm)) {
   int argc = ARGC;
   if (argc != 1 && argc != 2) {
     RET_ERR(newString(vm, "Invalid argument count."));
@@ -459,7 +506,7 @@ PK_DOC(coreInput,
   if (vm->config.read_fn == NULL) return;
 
   if (argc == 1) {
-    vm->config.write_fn(vm, toString(vm, ARG1)->data);
+    vm->config.write_fn(vm, toString(vm, ARG(1))->data);
   }
 
   PkStringPtr result = vm->config.read_fn(vm);
@@ -470,66 +517,26 @@ PK_DOC(coreInput,
 
 // String functions.
 // -----------------
-PK_DOC(coreStrLower,
-  "str_lower(value:string) -> string\n"
-  "Returns a lower-case version of the given string.") {
-  String* str;
-  if (!validateArgString(vm, 1, &str)) return;
 
-  String* result = newStringLength(vm, str->data, str->length);
-  char* data = result->data;
-  for (; *data; ++data) *data = (char)tolower(*data);
-  // Since the string is modified re-hash it.
-  result->hash = utilHashString(result->data);
+// TODO: substring.
 
-  RET(VAR_OBJ(result));
-}
-
-PK_DOC(coreStrUpper,
-  "str_upper(value:string) -> string\n"
-  "Returns a upper-case version of the given string.") {
-  String* str;
-  if (!validateArgString(vm, 1, &str)) return;
-
-  String* result = newStringLength(vm, str->data, str->length);
-  char* data = result->data;
-  for (; *data; ++data) *data = (char)toupper(*data);
-  // Since the string is modified re-hash it.
-  result->hash = utilHashString(result->data);
-  
-  RET(VAR_OBJ(result));
-}
-
-PK_DOC(coreStrStrip,
-  "str_strip(value:string) -> string\n"
-  "Returns a copy of the string as the leading and trailing white spaces are"
-  "trimed.") {
-  String* str;
-  if (!validateArgString(vm, 1, &str)) return;
-
-  const char* start = str->data;
-  while (*start && isspace(*start)) start++;
-  if (*start == '\0') RET(VAR_OBJ(newStringLength(vm, NULL, 0)));
-
-  const char* end = str->data + str->length - 1;
-  while (isspace(*end)) end--;
-
-  RET(VAR_OBJ(newStringLength(vm, start, (uint32_t)(end - start + 1))));
-}
-
-PK_DOC(coreStrChr,
+PK_DOC(
   "str_chr(value:number) -> string\n"
-  "Returns the ASCII string value of the integer argument.") {
-  int32_t num;
-  if (!validateInteger(vm, ARG1, &num, "Argument 1")) return;
+  "Returns the ASCII string value of the integer argument.",
+static void coreStrChr(PKVM* vm)) {
+  int64_t num;
+  if (!validateInteger(vm, ARG(1), &num, "Argument 1")) return;
+
+  // TODO: validate num is a byte.
 
   char c = (char)num;
   RET(VAR_OBJ(newStringLength(vm, &c, 1)));
 }
 
-PK_DOC(coreStrOrd, 
+PK_DOC(
   "str_ord(value:string) -> number\n"
-  "Returns integer value of the given ASCII character.") {
+  "Returns integer value of the given ASCII character.",
+static void coreStrOrd(PKVM* vm)) {
   String* c;
   if (!validateArgString(vm, 1, &c)) return;
   if (c->length != 1) {
@@ -543,9 +550,10 @@ PK_DOC(coreStrOrd,
 // List functions.
 // ---------------
 
-PK_DOC(coreListAppend,
+PK_DOC(
   "list_append(self:List, value:var) -> List\n"
-  "Append the [value] to the list [self] and return the list.") {
+  "Append the [value] to the list [self] and return the list.",
+static void coreListAppend(PKVM* vm)) {
   List* list;
   if (!validateArgList(vm, 1, &list)) return;
   Var elem = ARG(2);
@@ -557,10 +565,11 @@ PK_DOC(coreListAppend,
 // Map functions.
 // --------------
 
-PK_DOC(coreMapRemove,
+PK_DOC(
   "map_remove(self:map, key:var) -> var\n"
   "Remove the [key] from the map [self] and return it's value if the key "
-  "exists, otherwise it'll return null.") {
+  "exists, otherwise it'll return null.",
+static void coreMapRemove(PKVM* vm)) {
   Map* map;
   if (!validateArgMap(vm, 1, &map)) return;
   Var key = ARG(2);
@@ -571,35 +580,39 @@ PK_DOC(coreMapRemove,
 // Fiber functions.
 // ----------------
 
-PK_DOC(coreFiberNew,
+PK_DOC(
   "fiber_new(fn:function) -> fiber\n"
-  "Create and return a new fiber from the given function [fn].") {
+  "Create and return a new fiber from the given function [fn].",
+static void coreFiberNew(PKVM* vm)) {
   Function* fn;
   if (!validateArgFunction(vm, 1, &fn)) return;
   RET(VAR_OBJ(newFiber(vm, fn)));
 }
 
-PK_DOC(coreFiberGetFunc,
+PK_DOC(
   "fiber_get_func(fb:fiber) -> function\n"
   "Retruns the fiber's functions. Which is usefull if you wan't to re-run the "
-  "fiber, you can get the function and crate a new fiber.") {
+  "fiber, you can get the function and crate a new fiber.",
+static void coreFiberGetFunc(PKVM* vm)) {
   Fiber* fb;
   if (!validateArgFiber(vm, 1, &fb)) return;
   RET(VAR_OBJ(fb->func));
 }
 
-PK_DOC(coreFiberIsDone,
+PK_DOC(
   "fiber_is_done(fb:fiber) -> bool\n"
-  "Returns true if the fiber [fb] is done running and can no more resumed.") {
+  "Returns true if the fiber [fb] is done running and can no more resumed.",
+static void coreFiberIsDone(PKVM* vm)) {
   Fiber* fb;
   if (!validateArgFiber(vm, 1, &fb)) return;
   RET(VAR_BOOL(fb->state == FIBER_DONE));
 }
 
-PK_DOC(coreFiberRun,
+PK_DOC(
   "fiber_run(fb:fiber, ...) -> var\n"
   "Runs the fiber's function with the provided arguments and returns it's "
-  "return value or the yielded value if it's yielded.") {
+  "return value or the yielded value if it's yielded.",
+static void coreFiberRun(PKVM* vm)) {
 
   int argc = ARGC;
   if (argc == 0) // Missing the fiber argument.
@@ -623,10 +636,11 @@ PK_DOC(coreFiberRun,
   }
 }
 
-PK_DOC(coreFiberResume,
+PK_DOC(
   "fiber_resume(fb:fiber) -> var\n"
   "Resumes a yielded function from a previous call of fiber_run() function. "
-  "Return it's return value or the yielded value if it's yielded." ) {
+  "Return it's return value or the yielded value if it's yielded.",
+static void coreFiberResume(PKVM* vm)) {
 
   int argc = ARGC;
   if (argc == 0) // Missing the fiber argument.
@@ -661,7 +675,7 @@ static Script* newModuleInternal(PKVM* vm, const char* name) {
   // hosting application.
   if (!IS_UNDEF(mapGet(vm->core_libs, VAR_OBJ(_name)))) {
     vmPopTempRef(vm); // _name
-    __ASSERT(false, stringFormat(vm, 
+    __ASSERT(false, stringFormat(vm,
              "A module named '$' already exists", name)->data);
   }
 
@@ -749,60 +763,61 @@ void stdLangWrite(PKVM* vm) {
 
 void stdMathFloor(PKVM* vm) {
   double num;
-  if (!validateNumeric(vm, ARG1, &num, "Parameter 1")) return;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
 
   RET(VAR_NUM(floor(num)));
 }
 
 void stdMathCeil(PKVM* vm) {
   double num;
-  if (!validateNumeric(vm, ARG1, &num, "Parameter 1")) return;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
 
   RET(VAR_NUM(ceil(num)));
 }
 
 void stdMathPow(PKVM* vm) {
   double num, ex;
-  if (!validateNumeric(vm, ARG1, &num, "Parameter 1")) return;
-  if (!validateNumeric(vm, ARG2, &ex, "Parameter 2")) return;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
+  if (!validateNumeric(vm, ARG(2), &ex, "Argument 2")) return;
 
   RET(VAR_NUM(pow(num, ex)));
 }
 
 void stdMathSqrt(PKVM* vm) {
   double num;
-  if (!validateNumeric(vm, ARG1, &num, "Parameter 1")) return;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
 
   RET(VAR_NUM(sqrt(num)));
 }
 
 void stdMathAbs(PKVM* vm) {
   double num;
-  if (!validateNumeric(vm, ARG1, &num, "Parameter 1")) return;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   if (num < 0) num = -num;
   RET(VAR_NUM(num));
 }
 
 void stdMathSign(PKVM* vm) {
   double num;
-  if (!validateNumeric(vm, ARG1, &num, "Parameter 1")) return;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   if (num < 0) num = -1;
   else if (num > 0) num = +1;
   else num = 0;
   RET(VAR_NUM(num));
 }
 
-PK_DOC(stdMathHash,
+PK_DOC(
   "hash(value:var) -> num\n"
   "Return the hash value of the variable, if it's not hashable it'll "
-  "return null.");
+  "return null.",
+static void stdMathHash(PKVM* vm));
 void stdMathHash(PKVM* vm) {
-  if (IS_OBJ(ARG1)) {
-    if (!isObjectHashable(AS_OBJ(ARG1)->type)) {
+  if (IS_OBJ(ARG(1))) {
+    if (!isObjectHashable(AS_OBJ(ARG(1))->type)) {
       RET(VAR_NULL);
     }
   }
-  RET(VAR_NUM((double)varHashValue(ARG1)));
+  RET(VAR_NUM((double)varHashValue(ARG(1))));
 }
 
 /*****************************************************************************/
@@ -837,7 +852,7 @@ void initializeCore(PKVM* vm) {
   INITALIZE_BUILTIN_FN("is_null",     coreIsNull,     1);
   INITALIZE_BUILTIN_FN("is_bool",     coreIsBool,     1);
   INITALIZE_BUILTIN_FN("is_num",      coreIsNum,      1);
-  
+
   INITALIZE_BUILTIN_FN("is_string",   coreIsString,   1);
   INITALIZE_BUILTIN_FN("is_list",     coreIsList,     1);
   INITALIZE_BUILTIN_FN("is_map",      coreIsMap,      1);
@@ -845,7 +860,8 @@ void initializeCore(PKVM* vm) {
   INITALIZE_BUILTIN_FN("is_function", coreIsFunction, 1);
   INITALIZE_BUILTIN_FN("is_script",   coreIsScript,   1);
   INITALIZE_BUILTIN_FN("is_userobj",  coreIsUserObj,  1);
-  
+
+  INITALIZE_BUILTIN_FN("hex",         coreHex,        1);
   INITALIZE_BUILTIN_FN("assert",      coreAssert,    -1);
   INITALIZE_BUILTIN_FN("yield",       coreYield,     -1);
   INITALIZE_BUILTIN_FN("to_string",   coreToString,   1);
@@ -853,9 +869,6 @@ void initializeCore(PKVM* vm) {
   INITALIZE_BUILTIN_FN("input",       coreInput,     -1);
 
   // String functions.
-  INITALIZE_BUILTIN_FN("str_lower",   coreStrLower,   1);
-  INITALIZE_BUILTIN_FN("str_upper",   coreStrUpper,   1);
-  INITALIZE_BUILTIN_FN("str_strip",   coreStrStrip,   1);
   INITALIZE_BUILTIN_FN("str_chr",     coreStrChr,     1);
   INITALIZE_BUILTIN_FN("str_ord",     coreStrOrd,     1);
 
@@ -1022,13 +1035,31 @@ bool varLesser(Var v1, Var v2) {
   return false;
 }
 
-// A convinent convenient macro used in varGetAttrib and varSetAttrib.
-#define IS_ATTRIB(name) \
-  (attrib->length == strlen(name) && strcmp(name, attrib->data) == 0)
+// Here we're switching the FNV-1a hash value of the name (cstring). Which is
+// an efficient way than having multiple if (attrib == "name"). From O(n) * k
+// to O(1) where n is the length of the string and k is the number of string
+// comparison.
+//
+// ex:
+//     SWITCH_ATTRIB(str) { // str = "length"
+//       CASE_ATTRIB("length", 0x83d03615) : { return string->length; }
+//     }
+//
+// In C++11 this can be achieved (in a better way) with user defined literals
+// and constexpr. (Reference from my previous compiler written in C++).
+// https://github.com/ThakeeNathees/carbon/blob/89b11800132cbfeedcac0c992593afb5f0357236/include/core/internal.h#L174-L180
+// https://github.com/ThakeeNathees/carbon/blob/454d087f85f7fb9408eb0bc10ae702b8de844648/src/var/_string.cpp#L60-L77
+//
+// However there is a python script that's matching the CASE_ATTRIB() macro
+// calls and validate if the string and the hash values are matching.
+// TODO: port it to the CI/CD process at github actions.
+//
+#define SWITCH_ATTRIB(name) switch (utilHashString(name))
+#define CASE_ATTRIB(name, hash) case hash
 
 // Set error for accessing non-existed attribute.
-#define ERR_NO_ATTRIB()                                               \
-  vm->fiber->error = stringFormat(vm, "'$' objects has no attribute " \
+#define ERR_NO_ATTRIB(on)                                             \
+  vm->fiber->error = stringFormat(vm, "'$' object has no attribute "  \
                                        "named '$'",                   \
                                   varTypeName(on), attrib->data);
 
@@ -1044,57 +1075,68 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
   switch (obj->type) {
     case OBJ_STRING:
     {
-      if (IS_ATTRIB("length")) {
-        size_t length = ((String*)obj)->length;
-        return VAR_NUM((double)length);
+      String* str = (String*)obj;
+      SWITCH_ATTRIB(attrib->data) {
+
+        CASE_ATTRIB("length", 0x83d03615) :
+          return VAR_NUM((double)(str->length));
+
+        CASE_ATTRIB("lower", 0xb51d04ba) :
+          return VAR_OBJ(stringLower(vm, str));
+
+        CASE_ATTRIB("upper", 0xa8c6a47) :
+          return VAR_OBJ(stringUpper(vm, str));
+
+        CASE_ATTRIB("strip", 0xfd1b18d1) :
+          return VAR_OBJ(stringStrip(vm, str));
+
+        default:
+          ERR_NO_ATTRIB(on);
+          return VAR_NULL;
       }
 
-      ERR_NO_ATTRIB();
-      return VAR_NULL;
+      UNREACHABLE();
     }
 
     case OBJ_LIST:
     {
-      if (IS_ATTRIB("length")) {
-        size_t length = ((List*)obj)->elements.count;
-        return VAR_NUM((double)length);
+      List* list = (List*)obj;
+      SWITCH_ATTRIB(attrib->data) {
+
+        CASE_ATTRIB("length", 0x83d03615) :
+          return VAR_NUM((double)(list->elements.count));
+
+        default:
+          ERR_NO_ATTRIB(on);
+          return VAR_NULL;
       }
 
-      ERR_NO_ATTRIB();
-      return VAR_NULL;
+      UNREACHABLE();
     }
 
     case OBJ_MAP:
     {
-      TODO; // Not sure should I allow this(below).
-      //Var value = mapGet((Map*)obj, VAR_OBJ(attrib));
-      //if (IS_UNDEF(value)) {
-      //  vm->fiber->error = stringFormat(vm, "Key (\"@\") not exists.",
-      //                                  attrib);
-      //  return VAR_NULL;
-      //}
-      //return value;
+      // Not sure should I allow string values could be accessed with
+      // this way. ex:
+      // map = { "foo" : 42, "can't access" : 32 }
+      // val = map.foo ## 42
+      TODO;
     }
 
     case OBJ_RANGE:
     {
       Range* range = (Range*)obj;
+      SWITCH_ATTRIB(attrib->data) {
 
-      if (IS_ATTRIB("as_list")) {
-        List* list;
-        if (range->from < range->to) {
-          list = newList(vm, (uint32_t)(range->to - range->from));
-          for (double i = range->from; i < range->to; i++) {
-            pkVarBufferWrite(&list->elements, vm, VAR_NUM(i));
-          }
-        } else {
-          list = newList(vm, 0);
-        }
-        return VAR_OBJ(list);
+        CASE_ATTRIB("as_list", 0x1562c22) :
+          return VAR_OBJ(rangeAsList(vm, range));
+
+        default:
+          ERR_NO_ATTRIB(on);
+          return VAR_NULL;
       }
 
-      ERR_NO_ATTRIB();
-      return VAR_NULL;
+      UNREACHABLE();
     }
 
     case OBJ_SCRIPT: {
@@ -1114,11 +1156,28 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
         return scr->globals.data[index];
       }
 
-      ERR_NO_ATTRIB();
+      ERR_NO_ATTRIB(on);
       return VAR_NULL;
     }
 
     case OBJ_FUNC:
+    {
+      Function* fn = (Function*)obj;
+      SWITCH_ATTRIB(attrib->data) {
+
+        CASE_ATTRIB("arity", 0x3e96bd7a) :
+          return VAR_NUM((double)(fn->arity));
+
+        CASE_ATTRIB("name", 0x8d39bde6) :
+          return VAR_OBJ(newString(vm, fn->name));
+
+        default:
+          ERR_NO_ATTRIB(on);
+          return VAR_NULL;
+      }
+      UNREACHABLE();
+    }
+
     case OBJ_FIBER:
     case OBJ_USER:
       TODO;
@@ -1133,10 +1192,10 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
 void varSetAttrib(PKVM* vm, Var on, String* attrib, Var value) {
 
-#define ATTRIB_IMMUTABLE(prop)                                                \
+#define ATTRIB_IMMUTABLE(name)                                                \
 do {                                                                          \
-  if (IS_ATTRIB(prop)) {                                                      \
-    vm->fiber->error = stringFormat(vm, "'$' attribute is immutable.", prop); \
+  if ((attrib->length == strlen(name) && strcmp(name, attrib->data) == 0)) {  \
+    vm->fiber->error = stringFormat(vm, "'$' attribute is immutable.", name); \
     return;                                                                   \
   }                                                                           \
 } while (false)
@@ -1151,21 +1210,30 @@ do {                                                                          \
   switch (obj->type) {
     case OBJ_STRING:
       ATTRIB_IMMUTABLE("length");
-      ERR_NO_ATTRIB();
+      ATTRIB_IMMUTABLE("lower");
+      ATTRIB_IMMUTABLE("upper");
+      ATTRIB_IMMUTABLE("strip");
+      ERR_NO_ATTRIB(on);
       return;
 
     case OBJ_LIST:
       ATTRIB_IMMUTABLE("length");
-      ERR_NO_ATTRIB();
+      ERR_NO_ATTRIB(on);
       return;
 
     case OBJ_MAP:
+      // Not sure should I allow string values could be accessed with
+      // this way. ex:
+      // map = { "foo" : 42, "can't access" : 32 }
+      // map.foo = 'bar'
       TODO;
-      ERR_NO_ATTRIB();
+
+      ERR_NO_ATTRIB(on);
       return;
 
     case OBJ_RANGE:
-      ERR_NO_ATTRIB();
+      ATTRIB_IMMUTABLE("as_list");
+      ERR_NO_ATTRIB(on);
       return;
 
     case OBJ_SCRIPT: {
@@ -1187,20 +1255,22 @@ do {                                                                          \
         return;
       }
 
-      ERR_NO_ATTRIB();
+      ERR_NO_ATTRIB(on);
       return;
     }
 
     case OBJ_FUNC:
-      ERR_NO_ATTRIB();
+      ATTRIB_IMMUTABLE("arity");
+      ATTRIB_IMMUTABLE("name");
+      ERR_NO_ATTRIB(on);
       return;
 
     case OBJ_FIBER:
-      ERR_NO_ATTRIB();
+      ERR_NO_ATTRIB(on);
       return;
 
     case OBJ_USER:
-      TODO; //ERR_NO_ATTRIB();
+      TODO; //ERR_NO_ATTRIB(on);
       return;
 
     default:
@@ -1208,6 +1278,8 @@ do {                                                                          \
   }
   CHECK_MISSING_OBJ_TYPE(7);
   UNREACHABLE();
+
+#undef ATTRIB_IMMUTABLE
 }
 
 Var varGetSubscript(PKVM* vm, Var on, Var key) {
@@ -1221,7 +1293,7 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
   switch (obj->type) {
     case OBJ_STRING:
     {
-      int32_t index;
+      int64_t index;
       String* str = ((String*)obj);
       if (!validateInteger(vm, key, &index, "List index")) {
         return VAR_NULL;
@@ -1235,12 +1307,12 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
 
     case OBJ_LIST:
     {
-      int32_t index;
+      int64_t index;
       pkVarBuffer* elems = &((List*)obj)->elements;
       if (!validateInteger(vm, key, &index, "List index")) {
         return VAR_NULL;
       }
-      if (!validateIndex(vm, index, (int)elems->count, "List")) {
+      if (!validateIndex(vm, index, elems->count, "List")) {
         return VAR_NULL;
       }
       return elems->data[index];
@@ -1293,10 +1365,10 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
 
     case OBJ_LIST:
     {
-      int32_t index;
+      int64_t index;
       pkVarBuffer* elems = &((List*)obj)->elements;
       if (!validateInteger(vm, key, &index, "List index")) return;
-      if (!validateIndex(vm, index, (int)elems->count, "List")) return;
+      if (!validateIndex(vm, index, elems->count, "List")) return;
       elems->data[index] = value;
       return;
     }

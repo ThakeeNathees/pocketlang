@@ -185,7 +185,6 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_LIST_APPEND: NO_ARGS();   break;
       case OP_MAP_INSERT:  NO_ARGS();   break;
 
-
       case OP_PUSH_LOCAL_0:
       case OP_PUSH_LOCAL_1:
       case OP_PUSH_LOCAL_2:

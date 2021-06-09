@@ -3,7 +3,6 @@
  *  Distributed Under The MIT License
  */
 
-
 #include <errno.h>
 #include <pocketlang.h>
 #include <stdio.h> /* defines FILENAME_MAX */
@@ -29,7 +28,6 @@
 
 // TODO: No error is handled below. I should check for path with size more than
 // FILENAME_MAX.
- 
 
 // TODO: this macros should be moved to a general place of in cli.
 #define TOSTRING(x) #x
@@ -63,7 +61,6 @@ size_t pathJoin(const char* path_a, const char* path_b, char* buffer,
                         size_t buff_size) {
   return cwk_path_join(path_a, path_b, buffer, buff_size);
 }
-
 
 /*****************************************************************************/
 /* INTERNAL FUNCTIONS                                                        */

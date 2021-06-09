@@ -153,7 +153,7 @@ OPCODE(SET_ATTRIB, 2, -1)
 // Pop var, key, get value and push the result.
 OPCODE(GET_SUBSCRIPT, 0, -1)
 
-// Get subscript to perform assignment operation before store it, so it won't 
+// Get subscript to perform assignment operation before store it, so it won't
 // pop the var and the key. (ex: map[key] += value).
 OPCODE(GET_SUBSCRIPT_KEEP, 0, 1)
 

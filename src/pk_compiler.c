@@ -194,7 +194,6 @@ static _Keyword _keywords[] = {
   { NULL,       0, (TokenType)(0) }, // Sentinal to mark the end of the array
 };
 
-
 /*****************************************************************************
  * COMPILIER INTERNAL TYPES                                                  *
  *****************************************************************************/
@@ -302,7 +301,7 @@ typedef struct sForwardName {
 
 typedef struct sFunc {
 
-  // Scope of the function. -2 for script body, -1 for top level function and 
+  // Scope of the function. -2 for script body, -1 for top level function and
   // literal functions will have the scope where it declared.
   int depth;
 
@@ -354,7 +353,7 @@ struct Compiler {
   int forwards_count;
 
   // True if the last statement is a new local variable assignment. Because
-  // the assignment is different than reqular assignment and use this boolean 
+  // the assignment is different than reqular assignment and use this boolean
   // to tell the compiler that dont pop it's assigned value because the value
   // itself is the local.
   bool new_local;
@@ -409,8 +408,8 @@ static void reportError(Compiler* compiler, const char* file, int line,
 
   char message[ERROR_MESSAGE_SIZE];
   int length = vsprintf(message, fmt, args);
-  __ASSERT(length < ERROR_MESSAGE_SIZE, "Error message buffer should not exceed "
-           "the buffer");
+  __ASSERT(length < ERROR_MESSAGE_SIZE, "Error message buffer should not "
+           "exceed the buffer");
   vm->config.error_fn(vm, PK_ERROR_COMPILE, file, line, message);
 }
 
@@ -917,7 +916,7 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
     result.index = index;
     return result;
   }
-  
+
   // Search through functions.
   index = scriptGetFunc(compiler->script, name, length);
   if (index != -1) {
@@ -1194,16 +1193,16 @@ static void exprName(Compiler* compiler) {
 }
 
 /*           a or b:             |        a and b:
-                                 |    
+                                 |
             (...)                |           (...)
         .-- jump_if [offset]     |       .-- jump_if_not [offset]
-        |   (...)                |       |   (...)         
+        |   (...)                |       |   (...)
         |-- jump_if [offset]     |       |-- jump_if_not [offset]
-        |   push false           |       |   push true   
+        |   push false           |       |   push true
      .--+-- jump [offset]        |    .--+-- jump [offset]
      |  '-> push true            |    |  '-> push false
      '----> (...)                |    '----> (...)
-*/                                  
+*/
 
 void exprOr(Compiler* compiler) {
   emitOpcode(compiler, OP_JUMP_IF);
@@ -1214,7 +1213,7 @@ void exprOr(Compiler* compiler) {
   int true_offset_b = emitShort(compiler, 0xffff); //< Will be patched.
 
   emitOpcode(compiler, OP_PUSH_FALSE);
-  emitOpcode(compiler, OP_JUMP);     
+  emitOpcode(compiler, OP_JUMP);
   int end_offset = emitShort(compiler, 0xffff); //< Will be patched.
 
   patchJump(compiler, true_offset_a);
@@ -1486,7 +1485,7 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
 
 static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
                          Script* script, const PkCompileOptions* options) {
-  
+
   compiler->vm = vm;
   compiler->next_compiler = NULL;
 
@@ -1559,10 +1558,10 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
   // Add the variable and return it's index.
 
   if (compiler->scope_depth == DEPTH_GLOBAL) {
-    uint32_t name_index = scriptAddName(compiler->script, compiler->vm,
-                                        name, length);
-    pkUintBufferWrite(&compiler->script->global_names, compiler->vm, name_index);
-    pkVarBufferWrite(&compiler->script->globals, compiler->vm, VAR_NULL);
+    Script* script = compiler->script;
+    uint32_t name_index = scriptAddName(script, compiler->vm, name, length);
+    pkUintBufferWrite(&script->global_names, compiler->vm, name_index);
+    pkVarBufferWrite(&script->globals, compiler->vm, VAR_NULL);
     return compiler->script->globals.count - 1;
 
   } else {
@@ -1726,7 +1725,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
     name = LITERAL_FN_NAME;
     name_length = (int)strlen(name);
   }
-  
+
   Function* func = newFunction(compiler->vm, name, name_length,
                                compiler->script, fn_type == FN_NATIVE);
   int fn_index = (int)compiler->script->functions.count - 1;
@@ -1784,7 +1783,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   if (fn_type != FN_NATIVE) {
     compileBlockBody(compiler, BLOCK_FUNC);
     consume(compiler, TK_END, "Expected 'end' after function definition end.");
-  
+
     // TODO: This is the function end return, if we pop all the parameters the
     // below push_null is redundent (because we always have a null at the rbp
     // of the call frame. (for i in argc : emit(pop)) emit(return); but this
@@ -2058,22 +2057,22 @@ static void compileFromImport(Compiler* compiler) {
       const char* name = compiler->previous.start;
       int length = compiler->previous.length;
       int line = compiler->previous.line;
-    
+
       // Add the name of the symbol to the names buffer.
       int name_index = (int)scriptAddName(compiler->script, compiler->vm,
                                           name, length);
-    
+
       // Don't pop the lib since it'll be used for the next entry.
       emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
       emitShort(compiler, name_index); //< Name of the attrib.
-    
+
       // Check if it has an alias.
       if (match(compiler, TK_AS)) {
         // Consuming it'll update the previous token which would be the name of
         // the binding variable.
         consume(compiler, TK_NAME, "Expected a name after 'as'.");
       }
-    
+
       // Get the variable to bind the imported symbol, if we already have a
       // variable with that name override it, otherwise use a new variable.
       const char* name_start = compiler->previous.start;
@@ -2085,7 +2084,7 @@ static void compileFromImport(Compiler* compiler) {
 
       emitStoreVariable(compiler, var_index, true);
       emitOpcode(compiler, OP_POP);
-    
+
     } while (match(compiler, TK_COMMA) && (skipNewLines(compiler), true));
   }
 
@@ -2465,7 +2464,7 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
     skipNewLines(compiler);
   }
 
-  // Already a null at the stack top, added when the fiber for the function created.
+  emitOpcode(compiler, OP_PUSH_NULL);
   emitOpcode(compiler, OP_RETURN);
   emitOpcode(compiler, OP_END);
 
@@ -2498,7 +2497,7 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
 #if DEBUG_DUMP_COMPILED_CODE
   dumpFunctionCode(vm, script->body);
 #endif
-  
+
   // Return the compilation result.
   if (compiler->has_errors) {
     if (compiler->options && compiler->options->repl_mode &&
@@ -2523,7 +2522,7 @@ PkResult pkCompileModule(PKVM* vm, PkHandle* module, PkStringPtr source,
 }
 
 void compilerMarkObjects(PKVM* vm, Compiler* compiler) {
-  
+
   // Mark the script which is currently being compiled.
   grayObject(vm, &compiler->script->_super);
 

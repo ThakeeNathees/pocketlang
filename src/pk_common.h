@@ -113,6 +113,7 @@
   do {                                                               \
     fprintf(stderr, "Execution reached an unreachable path\n"        \
       "\tat %s() (%s:%i)\n", __func__, __FILE__, __LINE__);          \
+    DEBUG_BREAK();                                                   \
     abort();                                                         \
   } while (false)
 
@@ -141,7 +142,7 @@
 
 // Using __ASSERT() for make it crash in release binary too.
 #define TODO __ASSERT(false, "TODO: It hasn't implemented yet.")
-#define OOPS "Oops a bug!! report plese."
+#define OOPS "Oops a bug!! report please."
 
 #define TOSTRING(x) #x
 #define STRINGIFY(x) TOSTRING(x)
@@ -149,6 +150,7 @@
 // The formated string to convert double to string. It'll be with the minimum
 // length string representation of either a regular float or a scientific
 // notation (at most 15 decimal points).
+// Reference: https://www.cplusplus.com/reference/cstdio/printf/
 #define DOUBLE_FMT "%.16g"
 
 // Double number to string buffer size, used in sprintf with DOUBLE_FMT.
@@ -168,5 +170,24 @@
 // + 10 for digits
 // +  1 for null byte '\0'
 #define STR_INT_BUFF_SIZE 12
+
+// Integer number (double) to hex string buffer size.
+// The maximum value an unsigned 64 bit integer can get is
+// 0xffffffffffffffff which is 16 characters.
+// + 16 for hex digits
+// +  1 for sign '-'
+// +  2 for '0x' prefix
+// +  1 for null byte '\0'
+#define STR_HEX_BUFF_SIZE 20
+
+// Integer number (double) to bin string buffer size.
+// The maximum value an unsigned 64 bit integer can get is
+// 0b1111111111111111111111111111111111111111111111111111111111111111
+// which is 64 characters.
+// + 64 for bin digits
+// +  1 for sign '-'
+// +  2 for '0b' prefix
+// +  1 for null byte '\0'
+#define STR_BIN_BUFF_SIZE 68
 
 #endif //PK_COMMON_H

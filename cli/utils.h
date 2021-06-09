@@ -11,12 +11,11 @@ typedef struct {
   uint32_t capacity;
 } ByteBuffer;
 
-
 /*****************************************************************************/
 /* BYTE BUFFER                                                               */
 /*****************************************************************************/
 
-// Initialize a new buffer int instance. 
+// Initialize a new buffer int instance.
 void byteBufferInit(ByteBuffer* buffer);
 
 // Clears the allocated elements from the VM's realloc function.

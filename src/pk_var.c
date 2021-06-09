@@ -6,6 +6,8 @@
 #include "pk_var.h"
 
 #include <math.h>
+#include <ctype.h>
+
 #include "pk_utils.h"
 #include "pk_vm.h"
 
@@ -422,6 +424,97 @@ Fiber* newFiber(PKVM* vm, Function* fn) {
   *fiber->ret = VAR_NULL;
 
   return fiber;
+}
+
+List* rangeAsList(PKVM* vm, Range* self) {
+  List* list;
+  if (self->from < self->to) {
+    list = newList(vm, (uint32_t)(self->to - self->from));
+    for (double i = self->from; i < self->to; i++) {
+      pkVarBufferWrite(&list->elements, vm, VAR_NUM(i));
+    }
+    return list;
+
+  } else {
+    list = newList(vm, 0);
+  }
+
+  return list;
+}
+
+String* stringLower(PKVM* vm, String* self) {
+  // If the string itself is already lower don't allocate new string.
+  uint32_t index = 0;
+  for (const char* c = self->data; *c != '\0'; c++, index++) {
+    if (isupper(*c)) {
+
+      // It contain upper case letters, allocate new lower case string .
+      String* lower = newStringLength(vm, self->data, self->length);
+
+      // Start where the first upper case letter found.
+      char* _c = lower->data + (c - self->data);
+      for (; *_c != '\0'; _c++) *_c = (char)tolower(*_c);
+
+      // Since the string is modified re-hash it.
+      lower->hash = utilHashString(lower->data);
+      return lower;
+    }
+  }
+  // If we reached here the string itself is lower, return it.
+  return self;
+}
+
+String* stringUpper(PKVM* vm, String* self) {
+  // If the string itself is already upper don't allocate new string.
+  uint32_t index = 0;
+  for (const char* c = self->data; *c != '\0'; c++, index++) {
+    if (islower(*c)) {
+      // It contain lower case letters, allocate new upper case string .
+      String* upper = newStringLength(vm, self->data, self->length);
+
+      // Start where the first lower case letter found.
+      char* _c = upper->data + (c - self->data);
+      for (; *_c != '\0'; _c++) *_c = (char)toupper(*_c);
+
+      // Since the string is modified re-hash it.
+      upper->hash = utilHashString(upper->data);
+      return upper;
+    }
+  }
+  // If we reached here the string itself is lower, return it.
+  return self;
+}
+
+String* stringStrip(PKVM* vm, String* self) {
+
+  // Implementation:
+  // 
+  // "     a string with leading and trailing white space    "
+  //  ^start >>                                       << end^
+  //  
+  // These 'start' and 'end' pointers will move respectively right and left
+  // while it's a white space and return an allocated string from 'start' with
+  // length of (end - start + 1). For already trimed string it'll not allocate
+  // a new string, instead returns the same string provided.
+
+  const char* start = self->data;
+  while (*start && isspace(*start)) start++;
+
+  // If we reached the end of the string, it's all white space, return
+  // an empty string.
+  if (*start == '\0') {
+    return newStringLength(vm, NULL, 0);
+  }
+
+  const char* end = self->data + self->length - 1;
+  while (isspace(*end)) end--;
+
+  // If the string is already trimed, return the same string.
+  if (start == self->data && end == self->data + self->length - 1) {
+    return self;
+  }
+
+  return newStringLength(vm, start, (uint32_t)(end - start + 1));
 }
 
 void listInsert(PKVM* vm, List* self, uint32_t index, Var value) {

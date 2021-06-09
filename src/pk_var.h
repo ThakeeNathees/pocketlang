@@ -156,7 +156,6 @@
 // TODO: Union tagging implementation of all the above macros ignore macros 
 //       starts with an underscore.
 
-
 typedef enum {
   VAR_UNDEFINED, //< Internal type for exceptions.
   VAR_NULL,      //< Null pointer type.
@@ -449,6 +448,23 @@ void grayFunctionBuffer(PKVM* vm, pkFunctionBuffer* self);
 // Pop objects from the gray list and add it's referenced objects to the
 // working list to traverse and update the vm's [bytes_allocated] value.
 void blackenObjects(PKVM* vm);
+
+// Returns a number list from the range. starts with range.from and ends with
+// (range.to - 1) increase by 1. Note that if the range is reversed
+// (ie. range.from > range.to) It'll return an empty list ([]).
+List* rangeAsList(PKVM* vm, Range* self);
+
+// Returns a lower case version of the given string. If the string is
+// already lower it'll return the same string.
+String* stringLower(PKVM* vm, String* self);
+
+// Returns a upper case version of the given string. If the string is
+// already upper it'll return the same string.
+String* stringUpper(PKVM* vm, String* self);
+
+// Returns string with the leading and trailing white spaces are trimed.
+// If the string is already trimed it'll return the same string.
+String* stringStrip(PKVM* vm, String* self);
 
 // Insert [value] to the list at [index] and shift down the rest of the
 // elements.
