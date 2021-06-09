@@ -1,13 +1,13 @@
 /*
- *  Copyright (c) 2021 Thakee Nathees
- *  Licensed under: MIT License
+ *  Copyright (c) 2020-2021 Thakee Nathees
+ *  Distributed Under The MIT License
  */
 
 #ifndef CORE_H
 #define CORE_H
 
-#include "common.h"
-#include "var.h"
+#include "pk_common.h"
+#include "pk_var.h"
 
 // Initialize core language, builtin function and core libs.
 void initializeCore(PKVM* vm);

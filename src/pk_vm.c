@@ -1,14 +1,14 @@
 /*
- *  Copyright (c) 2021 Thakee Nathees
- *  Licensed under: MIT License
+ *  Copyright (c) 2020-2021 Thakee Nathees
+ *  Distributed Under The MIT License
  */
 
-#include "vm.h"
+#include "pk_vm.h"
 
 #include <math.h>
-#include "core.h"
-#include "utils.h"
-#include "debug.h"
+#include "pk_core.h"
+#include "pk_utils.h"
+#include "pk_debug.h"
 
 // Evaluvated to true if a runtime error set on the current fiber.
 #define HAS_ERROR() (vm->fiber->error != NULL)
@@ -149,10 +149,9 @@ PkResult pkInterpretSource(PKVM* vm, PkStringPtr source, PkStringPtr path,
   vmPopTempRef(vm); // path_name.
 
   // Compile the source.
-  bool success = compile(vm, scr, source.string, options);
+  PkResult result = compile(vm, scr, source.string, options);
   if (source.on_done) source.on_done(vm, source);
-
-  if (!success) return PK_RESULT_COMPILE_ERROR;
+  if (result != PK_RESULT_SUCCESS) return result;
 
   // Set script initialized to true before the execution ends to prevent cyclic
   // inclusion cause a crash.
@@ -658,6 +657,11 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
 #define OPCODE(code) case OP_##code
 #define DISPATCH()   goto L_vm_main_loop
 
+  // Trigger a break point here, if we're trying to debug the call stack.
+#if  DEBUG_DUMP_CALL_STACK
+  DEBUG_BREAK();
+#endif
+
   // Load the fiber's top call frame to the vm's execution variables.
   LOAD_FRAME();
 
@@ -716,7 +720,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
       Var elem = PEEK(-1); // Don't pop yet, we need the reference for gc.
       Var list = PEEK(-2);
       ASSERT(IS_OBJ_TYPE(list, OBJ_LIST), OOPS);
-      varBufferWrite(&((List*)AS_OBJ(list))->elements, vm, elem);
+      pkVarBufferWrite(&((List*)AS_OBJ(list))->elements, vm, elem);
       DROP(); // elem
       DISPATCH();
     }
@@ -954,7 +958,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
 
         case OBJ_LIST: {
           uint32_t iter = (int32_t)trunc(it);
-          VarBuffer* elems = &((List*)obj)->elements;
+          pkVarBuffer* elems = &((List*)obj)->elements;
           if (iter >= elems->count) JUMP_ITER_EXIT();
           *value = elems->data[iter];
           *iterator = VAR_NUM((double)iter + 1);
@@ -1052,9 +1056,6 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
         // TODO: if we're evaluvating an expressoin we need to set it's
         // value on the stack.
         //vm->fiber->sp = vm->fiber->stack; ??
-
-        // Assert all the stack locals were popped.
-        ASSERT(vm->fiber->sp == vm->fiber->stack, OOPS);
 
         FIBER_SWITCH_BACK();
 

@@ -1,6 +1,6 @@
 #!python
 ##  Copyright (c) 2020-2021 Thakee Nathees
-##  Licensed under: MIT License
+##  Distributed Under The MIT License
  
 from os.path import join
 import os, sys

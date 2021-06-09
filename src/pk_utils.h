@@ -1,12 +1,12 @@
 /*
  *  Copyright (c) 2020-2021 Thakee Nathees
- *  Licensed under: MIT License
+ *  Distributed Under The MIT License
  */
 
 #ifndef UTILS_H
 #define UTILS_H
 
-#include "common.h"
+#include "pk_common.h"
 
 // Returns the smallest power of two that is equal to or greater than [n].
 // Source : https://github.com/wren-lang/wren/blob/main/src/vm/wren_utils.h#L119

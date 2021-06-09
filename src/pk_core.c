@@ -1,17 +1,17 @@
 /*
- *  Copyright (c) 2021 Thakee Nathees
- *  Licensed under: MIT License
+ *  Copyright (c) 2020-2021 Thakee Nathees
+ *  Distributed Under The MIT License
  */
 
-#include "core.h"
+#include "pk_core.h"
 
 #include <ctype.h>
 #include <math.h>
 #include <time.h>
 
-#include "utils.h"
-#include "var.h"
-#include "vm.h"
+#include "pk_utils.h"
+#include "pk_var.h"
+#include "pk_vm.h"
 
 /*****************************************************************************/
 /* CORE PUBLIC API                                                           */
@@ -327,13 +327,13 @@ int findBuiltinFunction(const PKVM* vm, const char* name, uint32_t length) {
 
 // getBuiltinFunction implementation (see core.h for description).
 Function* getBuiltinFunction(const PKVM* vm, int index) {
-  ASSERT_INDEX(index, vm->builtins_count);
+  ASSERT_INDEX((uint32_t)index, vm->builtins_count);
   return vm->builtins[index].fn;
 }
 
 // getBuiltinFunctionName implementation (see core.h for description).
 const char* getBuiltinFunctionName(const PKVM* vm, int index) {
-  ASSERT_INDEX(index, vm->builtins_count);
+  ASSERT_INDEX((uint32_t)index, vm->builtins_count);
   return vm->builtins[index].name;
 }
 
@@ -550,7 +550,7 @@ PK_DOC(coreListAppend,
   if (!validateArgList(vm, 1, &list)) return;
   Var elem = ARG(2);
 
-  varBufferWrite(&list->elements, vm, elem);
+  pkVarBufferWrite(&list->elements, vm, elem);
   RET(VAR_OBJ(list));
 }
 
@@ -1085,7 +1085,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
         if (range->from < range->to) {
           list = newList(vm, (uint32_t)(range->to - range->from));
           for (double i = range->from; i < range->to; i++) {
-            varBufferWrite(&list->elements, vm, VAR_NUM(i));
+            pkVarBufferWrite(&list->elements, vm, VAR_NUM(i));
           }
         } else {
           list = newList(vm, 0);
@@ -1103,14 +1103,14 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
       // Search in functions.
       int index = scriptGetFunc(scr, attrib->data, attrib->length);
       if (index != -1) {
-        ASSERT_INDEX(index, scr->functions.count);
+        ASSERT_INDEX((uint32_t)index, scr->functions.count);
         return VAR_OBJ(scr->functions.data[index]);
       }
 
       // Search in globals.
       index = scriptGetGlobals(scr, attrib->data, attrib->length);
       if (index != -1) {
-        ASSERT_INDEX(index, scr->globals.count);
+        ASSERT_INDEX((uint32_t)index, scr->globals.count);
         return scr->globals.data[index];
       }
 
@@ -1174,7 +1174,7 @@ do {                                                                          \
       // Check globals.
       int index = scriptGetGlobals(scr, attrib->data, attrib->length);
       if (index != -1) {
-        ASSERT_INDEX(index, scr->globals.count);
+        ASSERT_INDEX((uint32_t)index, scr->globals.count);
         scr->globals.data[index] = value;
         return;
       }
@@ -1182,7 +1182,7 @@ do {                                                                          \
       // Check function (Functions are immutable).
       index = scriptGetFunc(scr, attrib->data, attrib->length);
       if (index != -1) {
-        ASSERT_INDEX(index, scr->functions.count);
+        ASSERT_INDEX((uint32_t)index, scr->functions.count);
         ATTRIB_IMMUTABLE(scr->functions.data[index]->name);
         return;
       }
@@ -1236,7 +1236,7 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
     case OBJ_LIST:
     {
       int32_t index;
-      VarBuffer* elems = &((List*)obj)->elements;
+      pkVarBuffer* elems = &((List*)obj)->elements;
       if (!validateInteger(vm, key, &index, "List index")) {
         return VAR_NULL;
       }
@@ -1294,7 +1294,7 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
     case OBJ_LIST:
     {
       int32_t index;
-      VarBuffer* elems = &((List*)obj)->elements;
+      pkVarBuffer* elems = &((List*)obj)->elements;
       if (!validateInteger(vm, key, &index, "List index")) return;
       if (!validateIndex(vm, index, (int)elems->count, "List")) return;
       elems->data[index] = value;

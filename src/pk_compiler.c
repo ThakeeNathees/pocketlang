@@ -1,15 +1,15 @@
 /*
- *  Copyright (c) 2021 Thakee Nathees
- *  Licensed under: MIT License
+ *  Copyright (c) 2020-2021 Thakee Nathees
+ *  Distributed Under The MIT License
  */
 
-#include "compiler.h"
+#include "pk_compiler.h"
 
-#include "core.h"
-#include "buffers.h"
-#include "utils.h"
-#include "vm.h"
-#include "debug.h"
+#include "pk_core.h"
+#include "pk_buffers.h"
+#include "pk_utils.h"
+#include "pk_vm.h"
+#include "pk_debug.h"
 
 // The maximum number of variables (or global if compiling top level script)
 // to lookup from the compiling context. Also it's limited by it's opcode
@@ -329,7 +329,9 @@ struct Compiler {
   const char* current_char; //< Current char position in the source.
   int current_line;         //< Line number of the current char.
   Token previous, current, next; //< Currently parsed tokens.
+
   bool has_errors;          //< True if any syntex error occured at.
+  bool need_more_lines;     //< True if we need more lines in REPL mode.
 
   const PkCompileOptions* options; //< To configure the compilation.
 
@@ -375,7 +377,7 @@ typedef struct {
 
 static OpInfo opcode_info[] = {
   #define OPCODE(name, params, stack) { params, stack },
-  #include "opcodes.h"
+  #include "pk_opcodes.h"
   #undef OPCODE
 };
 
@@ -386,10 +388,25 @@ static OpInfo opcode_info[] = {
 // Internal error report function of the parseError() function.
 static void reportError(Compiler* compiler, const char* file, int line,
                         const char* fmt, va_list args) {
+
+  // On REPL mode only the first error is reported.
+  if (compiler->options && compiler->options->repl_mode &&
+      compiler->has_errors) {
+    return;
+  }
+
+  compiler->has_errors = true;
+
+  // If the source is incompilete we're not printing an error message,
+  // instead return PK_RESULT_UNEXPECTED_EOF to the host.
+  if (compiler->need_more_lines) {
+    ASSERT(compiler->options && compiler->options->repl_mode, OOPS);
+    return;
+  }
+
   PKVM* vm = compiler->vm;
   if (vm->config.error_fn == NULL) return;
 
-  compiler->has_errors = true;
   char message[ERROR_MESSAGE_SIZE];
   int length = vsprintf(message, fmt, args);
   __ASSERT(length < ERROR_MESSAGE_SIZE, "Error message buffer should not exceed "
@@ -446,8 +463,8 @@ static bool matchChar(Compiler* compiler, char c);
 static bool matchLine(Compiler* compiler);
 
 static void eatString(Compiler* compiler, bool single_quote) {
-  ByteBuffer buff;
-  byteBufferInit(&buff);
+  pkByteBuffer buff;
+  pkByteBufferInit(&buff);
 
   char quote = (single_quote) ? '\'' : '"';
 
@@ -466,19 +483,19 @@ static void eatString(Compiler* compiler, bool single_quote) {
 
     if (c == '\\') {
       switch (eatChar(compiler)) {
-        case '"': byteBufferWrite(&buff, compiler->vm, '"'); break;
-        case '\'': byteBufferWrite(&buff, compiler->vm, '\''); break;
-        case '\\': byteBufferWrite(&buff, compiler->vm, '\\'); break;
-        case 'n': byteBufferWrite(&buff, compiler->vm, '\n'); break;
-        case 'r': byteBufferWrite(&buff, compiler->vm, '\r'); break;
-        case 't': byteBufferWrite(&buff, compiler->vm, '\t'); break;
+        case '"':  pkByteBufferWrite(&buff, compiler->vm, '"'); break;
+        case '\'': pkByteBufferWrite(&buff, compiler->vm, '\''); break;
+        case '\\': pkByteBufferWrite(&buff, compiler->vm, '\\'); break;
+        case 'n':  pkByteBufferWrite(&buff, compiler->vm, '\n'); break;
+        case 'r':  pkByteBufferWrite(&buff, compiler->vm, '\r'); break;
+        case 't':  pkByteBufferWrite(&buff, compiler->vm, '\t'); break;
 
         default:
           lexError(compiler, "Error: invalid escape character");
           break;
       }
     } else {
-      byteBufferWrite(&buff, compiler->vm, c);
+      pkByteBufferWrite(&buff, compiler->vm, c);
     }
   }
 
@@ -486,7 +503,7 @@ static void eatString(Compiler* compiler, bool single_quote) {
   Var string = VAR_OBJ(newStringLength(compiler->vm, (const char*)buff.data,
                        (uint32_t)buff.count));
 
-  byteBufferClear(&buff, compiler->vm);
+  pkByteBufferClear(&buff, compiler->vm);
 
   setNextValueToken(compiler, TK_STRING, string);
 }
@@ -568,11 +585,6 @@ static void skipLineComment(Compiler* compiler) {
     if (c == '\n') return;
     eatChar(compiler);
   }
-}
-
-// Will skip multiple new lines.
-static void skipNewLines(Compiler* compiler) {
-  matchLine(compiler);
 }
 
 // If the current char is [c] consume it and advance char by 1 and returns
@@ -761,10 +773,30 @@ static void consume(Compiler* self, TokenType expected, const char* err_msg) {
 
 // Match one or more lines and return true if there any.
 static bool matchLine(Compiler* compiler) {
-  if (peek(compiler) != TK_LINE) return false;
-  while (peek(compiler) == TK_LINE)
-    lexToken(compiler);
-  return true;
+
+  bool consumed = false;
+
+  if (peek(compiler) == TK_LINE) {
+    while (peek(compiler) == TK_LINE)
+      lexToken(compiler);
+    consumed = true;
+  }
+
+  // If we're running on REPL mode, at the EOF and compile time error occured,
+  // signal the host to get more lines and try re-compiling it.
+  if (compiler->options && compiler->options->repl_mode &&
+    !compiler->has_errors) {
+    if (peek(compiler) == TK_EOF) {
+      compiler->need_more_lines = true;
+    }
+  }
+
+  return consumed;
+}
+
+// Will skip multiple new lines.
+static void skipNewLines(Compiler* compiler) {
+  matchLine(compiler);
 }
 
 // Match semi collon, multiple new lines or peek 'end', 'else', 'elif'
@@ -1462,6 +1494,7 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
   compiler->script = script;
   compiler->token_start = source;
   compiler->has_errors = false;
+  compiler->need_more_lines = false;
   compiler->options = options;
 
   compiler->current_char = source;
@@ -1528,8 +1561,8 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
   if (compiler->scope_depth == DEPTH_GLOBAL) {
     uint32_t name_index = scriptAddName(compiler->script, compiler->vm,
                                         name, length);
-    uintBufferWrite(&compiler->script->global_names, compiler->vm, name_index);
-    varBufferWrite(&compiler->script->globals, compiler->vm, VAR_NULL);
+    pkUintBufferWrite(&compiler->script->global_names, compiler->vm, name_index);
+    pkVarBufferWrite(&compiler->script->globals, compiler->vm, VAR_NULL);
     return compiler->script->globals.count - 1;
 
   } else {
@@ -1562,7 +1595,7 @@ static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
 
 // Add a literal constant to scripts literals and return it's index.
 static int compilerAddConstant(Compiler* compiler, Var value) {
-  VarBuffer* literals = &compiler->script->literals;
+  pkVarBuffer* literals = &compiler->script->literals;
 
   for (uint32_t i = 0; i < literals->count; i++) {
     if (isValuesSame(literals->data[i], value)) {
@@ -1572,7 +1605,7 @@ static int compilerAddConstant(Compiler* compiler, Var value) {
 
   // Add new constant to script.
   if (literals->count < MAX_CONSTANTS) {
-    varBufferWrite(literals, compiler->vm, value);
+    pkVarBufferWrite(literals, compiler->vm, value);
   } else {
     parseError(compiler, "A script should contain at most %d "
                "unique constants.", MAX_CONSTANTS);
@@ -1616,9 +1649,9 @@ static void compilerExitBlock(Compiler* compiler) {
 // Emit a single byte and return it's index.
 static int emitByte(Compiler* compiler, int byte) {
 
-  byteBufferWrite(&_FN->opcodes, compiler->vm,
+  pkByteBufferWrite(&_FN->opcodes, compiler->vm,
                     (uint8_t)byte);
-  uintBufferWrite(&_FN->oplines, compiler->vm,
+  pkUintBufferWrite(&_FN->oplines, compiler->vm,
                    compiler->previous.line);
   return (int)_FN->opcodes.count - 1;
 }
@@ -1873,11 +1906,14 @@ static Script* importFile(Compiler* compiler, const char* path) {
   options.repl_mode = false;
 
   // Compile the source to the script and clean the source.
-  bool success = compile(vm, scr, source.string, &options);
+  PkResult result = compile(vm, scr, source.string, &options);
   if (source.on_done != NULL) source.on_done(vm, source);
 
-  if (!success) parseError(compiler, "Compilation of imported script "
-                           "'%s' failed", path_name->data);
+  if (result != PK_RESULT_SUCCESS) {
+    parseError(compiler, "Compilation of imported script '%s' failed",
+               path_name->data);
+  }
+
   return scr;
 }
 
@@ -1944,9 +1980,9 @@ static void compilerImportAll(Compiler* compiler, Script* script) {
   // string buffer, instead of making the loop a function or writeing it twice.
   // So modify the below code with caution.
 
-  bool done = false;            //< A flag to jump out of the loop.
-  UintBuffer* name_buff = NULL; //< The string buffer to iterate through.
-  goto L_first_buffer;          //< Skip pass the below iteration.
+  bool done = false;              //< A flag to jump out of the loop.
+  pkUintBuffer* name_buff = NULL; //< The string buffer to iterate through.
+  goto L_first_buffer;            //< Skip pass the below iteration.
 
   // --------------------------------------------------------------------------
 L_import_all_from_buffer:
@@ -2369,7 +2405,7 @@ static void compileTopLevelStatement(Compiler* compiler) {
   }
 }
 
-bool compile(PKVM* vm, Script* script, const char* source,
+PkResult compile(PKVM* vm, Script* script, const char* source,
              const PkCompileOptions* options) {
 
   // Skip utf8 BOM if there is any.
@@ -2389,7 +2425,7 @@ bool compile(PKVM* vm, Script* script, const char* source,
   // REPL or evaluvating an expression) we don't need the old main anymore.
   // just use the globals and functions of the script and use a new body func.
   ASSERT(script->body != NULL, OOPS);
-  byteBufferClear(&script->body->fn->opcodes, vm);
+  pkByteBufferClear(&script->body->fn->opcodes, vm);
 
   // Remember the count of the globals and functions, If the compilation failed
   // discard all the globals and functions added by the compilation.
@@ -2442,6 +2478,10 @@ bool compile(PKVM* vm, Script* script, const char* source,
     if (index != -1) {
       patchForward(compiler, forward->func, forward->instruction, index);
     } else {
+      // need_more_lines is only true for unexpected EOF errors. For syntax
+      // errors it'll be false by now but. Here it's a semantic errors, so
+      // we're overriding it to false.
+      compiler->need_more_lines = false;
       resolveError(compiler, forward->line, "Name '%.*s' is not defined.",
                    length, name);
     }
@@ -2459,7 +2499,15 @@ bool compile(PKVM* vm, Script* script, const char* source,
   dumpFunctionCode(vm, script->body);
 #endif
   
-  return !compiler->has_errors;
+  // Return the compilation result.
+  if (compiler->has_errors) {
+    if (compiler->options && compiler->options->repl_mode &&
+        compiler->need_more_lines) {
+      return PK_RESULT_UNEXPECTED_EOF;
+    }
+    return PK_RESULT_COMPILE_ERROR;
+  }
+  return PK_RESULT_SUCCESS;
 }
 
 PkResult pkCompileModule(PKVM* vm, PkHandle* module, PkStringPtr source,
@@ -2469,11 +2517,9 @@ PkResult pkCompileModule(PKVM* vm, PkHandle* module, PkStringPtr source,
   __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
   Script* script = (Script*)AS_OBJ(scr);
 
-  bool success = compile(vm, script, source.string, options);
+  PkResult result = compile(vm, script, source.string, options);
   if (source.on_done) source.on_done(vm, source);
-
-  if (!success) return PK_RESULT_COMPILE_ERROR;
-  return PK_RESULT_SUCCESS;
+  return result;
 }
 
 void compilerMarkObjects(PKVM* vm, Compiler* compiler) {

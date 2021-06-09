@@ -1,12 +1,12 @@
 /*
- *  Copyright (c) 2021 Thakee Nathees
- *  Licensed under: MIT License
+ *  Copyright (c) 2020-2021 Thakee Nathees
+ *  Distributed Under The MIT License
  */
 
 // This file will include all source files from the cli sub-directories here
 // (thirdparty/modules) into a single file. That'll make it easy to compile
-// with the command `gcc cli/*.c ...` instead of adding each sub-directory to
-// the list of source directory.
+// with the command `gcc cli/*.c ...` instead of having to add every single
+// sub directory to the list of source directory.
 
 /*****************************************************************************/
 /* THIRD PARTY                                                               */
@@ -20,7 +20,7 @@
 #include "thirdparty/cwalk/cwalk.c"
 
 /*****************************************************************************/
-/* MODULES                                                                   */
+/* CLI MODULES                                                               */
 /*****************************************************************************/
 
 #include "modules/path.c"

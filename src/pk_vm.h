@@ -1,14 +1,14 @@
 /*
  *  Copyright (c) 2021 Thakee Nathees
- *  Licensed under: MIT License
+ *  Distributed Under The MIT License
  */
 
 #ifndef VM_H
 #define VM_H
 
-#include "common.h"
-#include "compiler.h"
-#include "var.h"
+#include "pk_common.h"
+#include "pk_compiler.h"
+#include "pk_var.h"
 
 // The maximum number of temporary object reference to protect them from being
 // garbage collected.

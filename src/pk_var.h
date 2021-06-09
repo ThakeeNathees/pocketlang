@@ -1,13 +1,13 @@
 /*
  *  Copyright (c) 2020-2021 Thakee Nathees
- *  Licensed under: MIT License
+ *  Distributed Under The MIT License
  */
 
 #ifndef VAR_H
 #define VAR_H
 
-#include "buffers.h"
-#include "common.h"
+#include "pk_buffers.h"
+#include "pk_common.h"
 
 /** @file
  * A simple dynamic type system library for small dynamic typed languages using
@@ -190,17 +190,17 @@ typedef struct Function Function;
 typedef struct Fiber Fiber;
 
 // Declaration of buffer objects of different types.
-DECLARE_BUFFER(Uint, uint, uint32_t)
-DECLARE_BUFFER(Byte, byte, uint8_t)
-DECLARE_BUFFER(Var, var, Var)
-DECLARE_BUFFER(String, string, String*)
-DECLARE_BUFFER(Function, function, Function*)
+DECLARE_BUFFER(Uint, uint32_t)
+DECLARE_BUFFER(Byte, uint8_t)
+DECLARE_BUFFER(Var, Var)
+DECLARE_BUFFER(String, String*)
+DECLARE_BUFFER(Function, Function*)
 
 // Add all the characters to the buffer, byte buffer can also be used as a
-// buffer to write string (like a string stream).
-void byteBufferAddString(ByteBuffer* self, PKVM* vm, const char* str,
-  uint32_t length);
-
+// buffer to write string (like a string stream). Note that this will not
+// add a null byte '\0' at the end.
+void pkByteBufferAddString(pkByteBuffer* self, PKVM* vm, const char* str,
+                           uint32_t length);
 
 typedef enum {
   OBJ_STRING,
@@ -244,7 +244,7 @@ struct String {
 struct List {
   Object _super;
 
-  VarBuffer elements; //< Elements of the array.
+  pkVarBuffer elements; //< Elements of the array.
 };
 
 typedef struct {
@@ -293,22 +293,22 @@ struct Script {
   // TODO: (maybe) join the function buffer and variable buffers.
   // and make if possible to override functions. (also have to allow builtin).
 
-  VarBuffer globals;         //< Script level global variables.
-  UintBuffer global_names;   //< Name map to index in globals.
-  FunctionBuffer functions;  //< Script level functions.
-  UintBuffer function_names; //< Name map to index in functions.
+  pkVarBuffer globals;         //< Script level global variables.
+  pkUintBuffer global_names;   //< Name map to index in globals.
+  pkFunctionBuffer functions;  //< Script level functions.
+  pkUintBuffer function_names; //< Name map to index in functions.
 
-  StringBuffer names;        //< Name literals, attribute names, etc.
-  VarBuffer literals;        //< Script literal constant values.
+  pkStringBuffer names;        //< Name literals, attribute names, etc.
+  pkVarBuffer literals;        //< Script literal constant values.
 
-  Function* body;            //< Script body is an anonymous function.
-  bool initialized;          //< Set to true just before the body executed.
+  Function* body;              //< Script body is an anonymous function.
+  bool initialized;            //< Set to true just before the body executed.
 };
 
 // Script function pointer.
 typedef struct {
-  ByteBuffer opcodes;  //< Buffer of opcodes.
-  UintBuffer oplines;  //< Line number of opcodes for debug (1 based).
+  pkByteBuffer opcodes;  //< Buffer of opcodes.
+  pkUintBuffer oplines;  //< Line number of opcodes for debug (1 based).
   int stack_size;      //< Maximum size of stack required.
 } Fn;
 
@@ -385,10 +385,20 @@ void varInitObject(Object* self, PKVM* vm, ObjectType type);
 // String*.
 String* newStringLength(PKVM* vm, const char* text, uint32_t length);
 
-// Allocate new string using the cstring [text].
-static inline String* newString(PKVM* vm, const char* text) {
-  return newStringLength(vm, text, (uint32_t)strlen(text));
-}
+// An inline function/macro implementation of newString(). Set below 0 to 1, to
+// make the implementation a static inline function, it's totally okey to
+// define a function inside a header as long as it's static (but not a fan).
+#if 0 // Function implementation.
+  // Allocate new string using the cstring [text].
+  static inline String* newString(PKVM* vm, const char* text) {
+    uint32_t length = (text == NULL) ? 0 : (uint32_t)strlen(text);
+    return newStringLength(vm, text, length);
+  }
+#else // Macro implementaion.
+  // Allocate new string using the cstring [text].
+  #define newString(vm, text) \
+    newStringLength(vm, text, (text == NULL) ? 0 : (uint32_t)strlen(text))
+#endif
 
 // Allocate new List and return List*.
 List* newList(PKVM* vm, uint32_t size);
@@ -426,15 +436,15 @@ void grayValue(PKVM* vm, Var self);
 
 // Mark the elements of the buffer as reachable at the mark-and-sweep pahse of
 // the garbage collection.
-void grayVarBuffer(PKVM* vm, VarBuffer* self);
+void grayVarBuffer(PKVM* vm, pkVarBuffer* self);
 
 // Mark the elements of the buffer as reachable at the mark-and-sweep pahse of
 // the garbage collection.
-void grayStringBuffer(PKVM* vm, StringBuffer* self);
+void grayStringBuffer(PKVM* vm, pkStringBuffer* self);
 
 // Mark the elements of the buffer as reachable at the mark-and-sweep pahse of
 // the garbage collection.
-void grayFunctionBuffer(PKVM* vm, FunctionBuffer* self);
+void grayFunctionBuffer(PKVM* vm, pkFunctionBuffer* self);
 
 // Pop objects from the gray list and add it's referenced objects to the
 // working list to traverse and update the vm's [bytes_allocated] value.

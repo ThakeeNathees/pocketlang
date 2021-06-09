@@ -1,6 +1,6 @@
 
-##  Copyright (c) 2021 Thakee Nathees
-##  Licensed under: MIT License
+##  Copyright (c) 2020-2021 Thakee Nathees
+##  Distributed Under The MIT License
 
 CC          = gcc
 CFLAGS      = -lm -fPIC -Wno-int-to-pointer-cast
