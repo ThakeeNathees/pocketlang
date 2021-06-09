@@ -20,10 +20,10 @@
   "Free and open source software under the terms of the MIT license.\n"
 
 // Note that the cli itself is not a part of the pocketlang compiler, instead
-// it's a host application to run pocketlang from the command line. We're
-// embedding the pocketlang VM and we can only use it's public apis, not any
-// internals internals of it, including assertion macros, so we're re-defining
-// those macros here (like if it's a new project).
+// its a host application to run pocketlang from the command line. We're
+// embedding the pocketlang VM and we can only use its public APIs, not any
+// internals of it, including assertion macros. So we're re-defining those
+// macros here (like if it's a new project).
 
 /*****************************************************************************/
 /* COMMON MACROS                                                             */
@@ -91,9 +91,9 @@
   #define forceinline __attribute__((always_inline))
 #endif
 
-// Using __ASSERT() for make it crash in release binary too.
-#define TODO __ASSERT(false, "TODO: It hasn't implemented yet.")
-#define OOPS "Oops a bug!! report plese."
+// Using __ASSERT() for make it to crash in release binary too.
+#define TODO __ASSERT(false, "TODO: It hasn't been implemented yet.")
+#define OOPS "Oops a bug!! report please."
 
 #define TOSTRING(x) #x
 #define STRINGIFY(x) TOSTRING(x)
