@@ -19,7 +19,7 @@ typedef struct {
 // Initialize a new buffer int instance. 
 void byteBufferInit(ByteBuffer* buffer);
 
-// Clears the allocated elementes from the VM's realloc function. 
+// Clears the allocated elements from the VM's realloc function.
 void byteBufferClear(ByteBuffer* buffer);
 
 // Ensure the capacity is greater than [size], if not resize. 

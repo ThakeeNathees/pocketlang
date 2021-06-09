@@ -34,7 +34,7 @@ void byteBufferInit(ByteBuffer* buffer) {
 }
 
 void byteBufferClear(ByteBuffer* buffer) {
-  realloc(buffer->data, 0);
+  buffer->data = realloc(buffer->data, 0);
   buffer->data = NULL;
   buffer->count = 0;
   buffer->capacity = 0;
