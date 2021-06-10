@@ -14,8 +14,8 @@
 
 
 // FIXME: use fgetc char by char till reach a new line.
-// 
-// Read a line from stdinand returns it without the line ending. Accepting
+//
+// Read a line from stdin and returns it without the line ending. Accepting
 // an optional argument [length] (could be NULL). Note that the returned string
 // is heap allocated and should be cleaned by 'free()' function.
 const char* read_line(uint32_t* length) {
@@ -42,7 +42,7 @@ static inline bool is_str_empty(const char* line) {
   return true;
 }
 
-// The main loop of the REPL. will return the exit code.
+// The main loop of the REPL. Will return the exit code.
 int repl(PKVM* vm, const PkCompileOptions* options) {
 
   // Set repl_mode of the user_data.
@@ -52,7 +52,7 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
   // Print the copyright and license notice.
   printf("%s\n", CLI_NOTICE);
 
-  // The main module that'll used to compile and execute the input source.
+  // The main module that'll be used to compile and execute the input source.
   PkHandle* module = pkNewModule(vm, "$(REPL)");
 
   // FIXME: Again it's temp for testing.
@@ -80,7 +80,7 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
     const char* line = read_line(&length);
     bool is_empty = is_str_empty(line);
 
-    // If the line is empty and we don't have to compile it.
+    // If the line is empty, we don't have to compile it.
     if (is_empty && !need_more_lines) {
       free((void*)line);
       ASSERT(lines.count == 0, OOPS);
@@ -103,7 +103,7 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
       continue;
     }
 
-    // We're buffering the lines for un expected EOF, if we reached here that
+    // We're buffering the lines for unexpected EOF, if we reached here that
     // means it's either successfully compiled or compilation error. Clean the
     // buffer for the next iteration.
     need_more_lines = false;
@@ -123,5 +123,5 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
   pkReleaseHandle(vm, module);
 
   return 0;
-
 }
+

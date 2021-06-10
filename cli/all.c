@@ -6,7 +6,7 @@
 // This file will include all source files from the cli sub-directories here
 // (thirdparty/modules) into a single file. That'll make it easy to compile
 // with the command `gcc cli/*.c ...` instead of having to add every single
-// sub directory to the list of source directory.
+// sub-directory to the list of source directory.
 
 /*****************************************************************************/
 /* THIRD PARTY                                                               */
