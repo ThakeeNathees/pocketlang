@@ -57,13 +57,14 @@ extern "C" {
 // A convinent macro to define documentation of funcions. Use it to document 
 // your native functions.
 // 
-// PK_DOC(foo,
-//   "The function will print 'foo' on the console.") {
+// PK_DOC(
+//   "The function will print 'foo' on the console.",
+// static void foo()) {
 //   printf("foo\n");
 // }
 // 
-#define PK_DOC(func, doc) \
-  /* TODO: static char __pkdoc__##func[] = doc;*/ static void func(PKVM* vm)
+#define PK_DOC(doc, func) \
+  /* TODO: static char __pkdoc__##func[] = doc;*/ func
 
 // Name of the implicit function for a module. When a module is parsed all of
 // it's statements are wrapped around an implicit function with this name.

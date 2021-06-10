@@ -43,7 +43,6 @@
   void pk##m_name##BufferWrite(pk##m_name##Buffer* self,                      \
                               PKVM* vm, m_type data);                         \
 
-
 // The buffer "template" implementation of diferent types.
 #define DEFINE_BUFFER(m_name, m_type)                                         \
   void pk##m_name##BufferInit(pk##m_name##Buffer* self) {                     \

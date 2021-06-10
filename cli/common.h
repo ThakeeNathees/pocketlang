@@ -20,7 +20,7 @@
   "Free and open source software under the terms of the MIT license.\n"
 
 // Note that the cli itself is not a part of the pocketlang compiler, instead
-// its a host application to run pocketlang from the command line. We're
+// it's a host application to run pocketlang from the command line. We're
 // embedding the pocketlang VM and we can only use its public APIs, not any
 // internals of it, including assertion macros. So we're re-defining those
 // macros here (like if it's a new project).
@@ -34,8 +34,7 @@
 
 // The internal assertion macro, this will print error and break regardless of
 // the build target (debug or release). Use ASSERT() for debug assertion and
-// use __ASSERT() for TODOs and assetions in public methods (to indicate that
-// the host application did something wrong).
+// use __ASSERT() for TODOs.
 #define __ASSERT(condition, message)                               \
   do {                                                             \
     if (!(condition)) {                                            \
@@ -65,6 +64,7 @@
   do {                                                        \
     fprintf(stderr, "Execution reached an unreachable path\n" \
       "\tat %s() (%s:%i)\n", __func__, __FILE__, __LINE__);   \
+    DEBUG_BREAK();                                            \
     abort();                                                  \
   } while (false)
 

@@ -26,7 +26,6 @@ static inline int powerOf2Ceil(int n) {
  /* BYTE BUFFER IMPLEMENTATION                                                */
  /*****************************************************************************/
 
-
 void byteBufferInit(ByteBuffer* buffer) {
   buffer->data = NULL;
   buffer->count = 0;
@@ -34,7 +33,7 @@ void byteBufferInit(ByteBuffer* buffer) {
 }
 
 void byteBufferClear(ByteBuffer* buffer) {
-  buffer->data = realloc(buffer->data, 0);
+  free(buffer->data);
   buffer->data = NULL;
   buffer->count = 0;
   buffer->capacity = 0;

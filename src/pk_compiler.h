@@ -19,9 +19,10 @@ typedef enum {
 // doesn't go through the basic compilation pipeline such as lexing, parsing
 // (AST), analyzing, intermediate code generation, and target codegeneration
 // one by one. Instead it'll generate the target code as it reads the source
-// (directly from lexing to codegen). Despite it faster than multipass compilers,
-// we're restricted syntax-wise and from compile-time optimizations, yet we support
-// "forward names" to call functions before they defined (unlike C/Python).
+// (directly from lexing to codegen). Despite it's faster than multipass
+// compilers, we're restricted syntax-wise and from compile-time optimizations.
+// Yet we support "forward names" to call functions before they defined
+// (unlike C/Python).
 typedef struct Compiler Compiler;
 
 // This will take source code as a cstring, compiles it to pocketlang bytecodes

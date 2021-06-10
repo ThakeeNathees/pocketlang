@@ -3,15 +3,13 @@
  *  Distributed Under The MIT License
  */
 
-
 // The REPL (Read Evaluate Print Loop) implementation.
-// https://en.wikipedia.org/wiki/Read–eval–print_loop.
+// https://en.wikipedia.org/wiki/Read-eval-print_loop.
 
 #include "common.h"
 
 #include <ctype.h> // isspace
 #include "utils.h"
-
 
 // FIXME: use fgetc char by char till reach a new line.
 //
@@ -54,8 +52,6 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
 
   // The main module that'll be used to compile and execute the input source.
   PkHandle* module = pkNewModule(vm, "$(REPL)");
-
-  // FIXME: Again it's temp for testing.
 
   // A buffer to store lines read from stdin.
   ByteBuffer lines;
@@ -120,6 +116,7 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
 
   } while (!done);
 
+  byteBufferClear(&lines);
   pkReleaseHandle(vm, module);
 
   return 0;
