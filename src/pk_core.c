@@ -880,6 +880,26 @@ static void stdMathSine(PKVM* vm)) {
   RET(VAR_NUM(sin(rad)));
 }
 
+PK_DOC(
+  "cosine(rad:num) -> num\n"
+  "Return the cosine value of the argument [rad] which is an angle expressed "
+  "in radians.",
+static void stdMathCosine(PKVM* vm)) {
+  double rad;
+  if (!validateNumeric(vm, ARG(1), &rad, "Argument 1")) return;
+  RET(VAR_NUM(cos(rad)));
+}
+
+PK_DOC(
+  "tan(rad:num) -> num\n"
+  "Return the tangent value of the argument [rad] which is an angle expressed "
+  "in radians.",
+static void stdMathTangent(PKVM* vm)) {
+  double rad;
+  if (!validateNumeric(vm, ARG(1), &rad, "Argument 1")) return;
+  RET(VAR_NUM(tan(rad)));
+}
+
 /*****************************************************************************/
 /* CORE INITIALIZATION                                                       */
 /*****************************************************************************/
@@ -956,16 +976,18 @@ void initializeCore(PKVM* vm) {
 #endif
 
   Script* math = newModuleInternal(vm, "math");
-  moduleAddFunctionInternal(vm, math, "floor", stdMathFloor,  1);
-  moduleAddFunctionInternal(vm, math, "ceil",  stdMathCeil,   1);
-  moduleAddFunctionInternal(vm, math, "pow",   stdMathPow,    2);
-  moduleAddFunctionInternal(vm, math, "sqrt",  stdMathSqrt,   1);
-  moduleAddFunctionInternal(vm, math, "abs",   stdMathAbs,    1);
-  moduleAddFunctionInternal(vm, math, "sign",  stdMathSign,   1);
-  moduleAddFunctionInternal(vm, math, "hash",  stdMathHash,   1);
-  moduleAddFunctionInternal(vm, math, "sin",   stdMathSine,   1);
-  // TODO: add - cos, tan.
-  // low priority: sinh, cosh, tanh, asin, acos, atan.
+  moduleAddFunctionInternal(vm, math, "floor", stdMathFloor,   1);
+  moduleAddFunctionInternal(vm, math, "ceil",  stdMathCeil,    1);
+  moduleAddFunctionInternal(vm, math, "pow",   stdMathPow,     2);
+  moduleAddFunctionInternal(vm, math, "sqrt",  stdMathSqrt,    1);
+  moduleAddFunctionInternal(vm, math, "abs",   stdMathAbs,     1);
+  moduleAddFunctionInternal(vm, math, "sign",  stdMathSign,    1);
+  moduleAddFunctionInternal(vm, math, "hash",  stdMathHash,    1);
+  moduleAddFunctionInternal(vm, math, "sin",   stdMathSine,    1);
+  moduleAddFunctionInternal(vm, math, "cos",   stdMathCosine,  1);
+  moduleAddFunctionInternal(vm, math, "tan",   stdMathTangent, 1);
+
+  // TODO: low priority - sinh, cosh, tanh, asin, acos, atan.
 
   // Note that currently it's mutable (since it's a global variable, not
   // constant and pocketlang doesn't support constant) so the user shouldn't
