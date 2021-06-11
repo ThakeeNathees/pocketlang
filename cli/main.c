@@ -36,9 +36,10 @@ void errorFunction(PKVM* vm, PkErrorType type, const char* file, int line,
   bool repl = (ud) ? ud->repl_mode : false;
 
   if (type == PK_ERROR_COMPILE) {
-    
+
     if (repl) fprintf(stderr, "Error: %s\n", message);
-    else fprintf(stderr, "Error: %s\n       at \"%s\":%i\n", message, file, line);
+    else fprintf(stderr, "Error: %s\n       at \"%s\":%i\n",
+                 message, file, line);
 
   } else if (type == PK_ERROR_RUNTIME) {
     fprintf(stderr, "Error: %s\n", message);

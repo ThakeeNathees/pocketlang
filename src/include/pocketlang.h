@@ -222,7 +222,11 @@ PK_PUBLIC PkVar pkGetHandleValue(const PkHandle* handle);
 // this for every handles before freeing the VM.
 PK_PUBLIC void pkReleaseHandle(PKVM* vm, PkHandle* handle);
 
-// Add a native function to the given script. If [arity] is -1 that means
+// Add a global [value] to the given module.
+PK_PUBLIC void pkModuleAddGlobal(PKVM* vm, PkHandle* module,
+                                 const char* name, PkHandle* value);
+
+// Add a native function to the given module. If [arity] is -1 that means
 // The function has variadic parameters and use pkGetArgc() to get the argc.
 PK_PUBLIC void pkModuleAddFunction(PKVM* vm, PkHandle* module,
                                    const char* name,

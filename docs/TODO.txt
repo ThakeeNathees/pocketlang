@@ -1,11 +1,12 @@
 
 // To implement.
 
+- Refactor fiber into a module and is_done as an attribute.
+
+- move moduleAddGlobalInternal() to var.h (also other var functions).
+
 - refactor build.bat batch script to powershell
   refactor makefile and setup a github action.
-  
-- check for tabs and trailing white space in source.
-  they're not allowed.
 
 - Hex, binary literals and floats like ".5".
 

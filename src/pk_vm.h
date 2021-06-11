@@ -27,13 +27,19 @@
 // The allocated size the'll trigger the first GC. (~10MB).
 #define INITIAL_GC_SIZE (1024 * 1024 * 10)
 
-// The heap size might shrink if the remaining allocated bytes after a GC 
+// The heap size might shrink if the remaining allocated bytes after a GC
 // is less than the one before the last GC. So we need a minimum size.
 #define MIN_HEAP_SIZE (1024 * 1024)
 
 // The heap size for the next GC will be calculated as the bytes we have
 // allocated so far plus the fill factor of it.
 #define HEAP_FILL_PERCENT 75
+
+// Evaluated to "true" if a runtime error set on the current fiber.
+#define VM_HAS_ERROR(vm) (vm->fiber->error != NULL)
+
+// Set the error message [err] to the [vm]'s current fiber.
+#define VM_SET_ERROR(vm, err) (vm->fiber->error = err)
 
 // Builtin functions are stored in an array in the VM (unlike script functions
 // they're member of function buffer of the script) and this struct is a single
@@ -130,16 +136,16 @@ PkHandle* vmNewHandle(PKVM* vm, Var value);
 
 // Trigger garbage collection. This is an implementation of mark and sweep
 // garbage collection (https://en.wikipedia.org/wiki/Tracing_garbage_collection).
-// 
+//
 // 1. MARKING PHASE
-// 
+//
 //       |          |
 //       |  [obj0] -+---> [obj2] -> [obj6]    .------- Garbage --------.
 //       |  [obj3]  |       |                 |                        |
 //       |  [obj8]  |       '-----> [obj1]    |   [obj7] ---> [obj5]   |
 //       '----------'                         |       [obj4]           |
 //        working set                         '------------------------'
-// 
+//
 //   First we preform a tree traversel from all the vm's root objects. such as
 //   stack values, temp references, handles, vm's running fiber, current
 //   compiler (if it has any) etc. Mark them (ie. is_marked = true) and add
@@ -147,23 +153,23 @@ PkHandle* vmNewHandle(PKVM* vm, Var value);
 //   working set add all of it's referenced objects to the working set and mark
 //   it black (try-color marking) We'll keep doing this till the working set
 //   become empty, at this point any object which isn't marked is a garbage.
-// 
+//
 //   Every single heap allocated objects will be in the VM's link list. Those
 //   objects which are reachable have marked (ie. is_marked = true) once the
 //   marking phase is completed.
-//    .----------------. 
+//    .----------------.
 //    |  VM            |
 //    | Object* first -+--------> [obj8] -> [obj7] -> [obj6] ... [obj0] -> NULL
 //    '----------------' marked =  true      false     true       true
 //
 // 2. SWEEPING PHASE
-// 
+//
 //    .----------------.                .-------------.
 //    |  VM            |                |             V
 //    | Object* first -+--------> [obj8]    [obj7]    [obj6] ... [obj0] -> NULL
 //    '----------------' marked =  true      false     true       true
 //                                       '--free()--'
-//   
+//
 //   Once the marking phase is done, we iterate through the objects and remove
 //   the objects which are not marked from the linked list and deallocate them.
 //

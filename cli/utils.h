@@ -21,10 +21,10 @@ void byteBufferInit(ByteBuffer* buffer);
 // Clears the allocated elements from the VM's realloc function.
 void byteBufferClear(ByteBuffer* buffer);
 
-// Ensure the capacity is greater than [size], if not resize. 
+// Ensure the capacity is greater than [size], if not resize.
 void byteBufferReserve(ByteBuffer* buffer, size_t size);
 
-// Fill the buffer at the end of it with provided data if the capacity 
+// Fill the buffer at the end of it with provided data if the capacity
 // isn't enough using VM's realloc function.
 void byteBufferFill(ByteBuffer* buffer, uint8_t data, int count);
 

@@ -146,10 +146,10 @@ int utf8_encodeValue(int value, uint8_t* bytes) {
   // to 4th byte, next 6 bits to 3rd byte, next 6 bits to 2nd byte, 3 bits
   // first byte.
   if (value <= 0x10ffff) {
-    *(bytes++) = (uint8_t)(0b11110000 | ((value & 0b111000000000000000000) >> 18));
-    *(bytes++) = (uint8_t)(0b10000000 | ((value & 0b111111000000000000) >> 12));
-    *(bytes++) = (uint8_t)(0b10000000 | ((value & 0b111111000000) >> 6));
-    *(bytes)   = (uint8_t)(0b10000000 | ((value & 0b111111)));
+    *(bytes++) = (uint8_t)(0b11110000 | ((value & (0b111    << 18)) >> 18));
+    *(bytes++) = (uint8_t)(0b10000000 | ((value & (0b111111 << 12)) >> 12));
+    *(bytes++) = (uint8_t)(0b10000000 | ((value & (0b111111 << 6))  >> 6));
+    *(bytes)   = (uint8_t)(0b10000000 | ((value &  0b111111)));
     return 4;
   }
 

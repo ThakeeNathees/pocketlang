@@ -13,6 +13,13 @@
 #include "pk_var.h"
 #include "pk_vm.h"
 
+// M_PI is non standard. The macro _USE_MATH_DEFINES defining before importing
+// <math.h> will define the constants for MSVC. But for a portable solution,
+// we're defining it ourselves if it isn't already.
+#ifndef M_PI
+  #define M_PI 3.14159265358979323846
+#endif
+
 /*****************************************************************************/
 /* CORE PUBLIC API                                                           */
 /*****************************************************************************/
@@ -20,6 +27,10 @@
 // Create a new module with the given [name] and returns as a Script* for
 // internal. Which will be wrapped by pkNewModule to return a pkHandle*.
 static Script* newModuleInternal(PKVM* vm, const char* name);
+
+// The internal function to add global value to a module.
+static void moduleAddGlobalInternal(PKVM* vm, Script* script,
+                                    const char* name, Var value);
 
 // The internal function to add functions to a module.
 static void moduleAddFunctionInternal(PKVM* vm, Script* script,
@@ -30,6 +41,18 @@ static void moduleAddFunctionInternal(PKVM* vm, Script* script,
 PkHandle* pkNewModule(PKVM* vm, const char* name) {
   Script* module = newModuleInternal(vm, name);
   return vmNewHandle(vm, VAR_OBJ(module));
+}
+
+// pkModuleAddGlobal implementation (see pocketlang.h for description).
+PK_PUBLIC void pkModuleAddGlobal(PKVM* vm, PkHandle* module,
+                                 const char* name, PkHandle* value) {
+  __ASSERT(module != NULL, "Argument module was NULL.");
+  __ASSERT(value != NULL, "Argument value was NULL.");
+  Var scr = module->value;
+  __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
+
+  moduleAddGlobalInternal(vm, (Script*)AS_OBJ(scr), name, value->value);
+
 }
 
 // pkModuleAddFunction implementation (see pocketlang.h for description).
@@ -88,7 +111,7 @@ PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
 
 #define RET_ERR(err)           \
   do {                         \
-    vm->fiber->error = err;    \
+    VM_SET_ERROR(vm, err);     \
     RET(VAR_NULL);             \
   } while(false)
 
@@ -102,12 +125,12 @@ PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
   } while (false)
 
 // Set error for incompatible type provided as an argument.
-#define ERR_INVALID_ARG_TYPE(m_type)                           \
-do {                                                           \
-  char buff[STR_INT_BUFF_SIZE];                                \
-  sprintf(buff, "%d", arg);                                    \
-  vm->fiber->error = stringFormat(vm, "Expected a " m_type     \
-                                  " at argument $.", buff);    \
+#define ERR_INVALID_ARG_TYPE(m_type)                             \
+do {                                                             \
+  char buff[STR_INT_BUFF_SIZE];                                  \
+  sprintf(buff, "%d", arg);                                      \
+  VM_SET_ERROR(vm, stringFormat(vm, "Expected a " m_type         \
+                                " at argument $.", buff));       \
 } while (false)
 
 // pkGetArgc implementation (see pocketlang.h for description).
@@ -175,8 +198,8 @@ bool pkGetArgValue(PKVM* vm, int arg, PkVarType type, PkVar* value) {
   Var val = ARG(arg);
   if (pkGetValueType((PkVar)&val) != type) {
     char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", arg);
-    vm->fiber->error = stringFormat(vm,
-      "Expected a $ at argument $.", getPkVarTypeName(type), buff);
+    VM_SET_ERROR(vm, stringFormat(vm, "Expected a $ at argument $.",
+                 getPkVarTypeName(type), buff));
     return false;
   }
 
@@ -240,7 +263,7 @@ bool pkFiberIsDone(const PkHandle* fiber) {
 /* VALIDATORS                                                                */
 /*****************************************************************************/
 
-// Check if a numeric value bool/number and set [value].
+// Check if [var] is a numeric value (bool/number) and set [value].
 static inline bool isNumeric(Var var, double* value) {
   if (IS_NUM(var)) {
     *value = AS_NUM(var);
@@ -253,17 +276,8 @@ static inline bool isNumeric(Var var, double* value) {
   return false;
 }
 
-// Check if [var] is bool/number. If not set error and return false.
-static inline bool validateNumeric(PKVM* vm, Var var, double* value,
-                                   const char* name) {
-  if (isNumeric(var, value)) return true;
-  vm->fiber->error = stringFormat(vm, "$ must be a numeric value.", name);
-  return false;
-}
-
-// Check if [var] is 32 bit integer. If not set error and return false.
-static inline bool validateInteger(PKVM* vm, Var var, int64_t* value,
-                                   const char* name) {
+// Check if [var] is a numeric value (bool/number) and set [value].
+static inline bool isInteger(Var var, int64_t* value) {
   double number;
   if (isNumeric(var, &number)) {
     // TODO: check if the number is larger for a 64 bit integer.
@@ -273,8 +287,22 @@ static inline bool validateInteger(PKVM* vm, Var var, int64_t* value,
       return true;
     }
   }
+  return false;
+}
 
-  vm->fiber->error = stringFormat(vm, "$ must be a whole number.", name);
+// Check if [var] is bool/number. If not set error and return false.
+static inline bool validateNumeric(PKVM* vm, Var var, double* value,
+                                   const char* name) {
+  if (isNumeric(var, value)) return true;
+  VM_SET_ERROR(vm, stringFormat(vm, "$ must be a numeric value.", name));
+  return false;
+}
+
+// Check if [var] is 32 bit integer. If not set error and return false.
+static inline bool validateInteger(PKVM* vm, Var var, int64_t* value,
+                                   const char* name) {
+  if (isInteger(var, value)) return true;
+  VM_SET_ERROR(vm, stringFormat(vm, "$ must be a whole number.", name));
   return false;
 }
 
@@ -283,7 +311,7 @@ static inline bool validateInteger(PKVM* vm, Var var, int64_t* value,
 static inline bool validateIndex(PKVM* vm, int64_t index, uint32_t size,
                                  const char* container) {
   if (index < 0 || size <= index) {
-    vm->fiber->error = stringFormat(vm, "$ index out of bound.", container);
+    VM_SET_ERROR(vm, stringFormat(vm, "$ index out of bound.", container));
     return false;
   }
   return true;
@@ -297,8 +325,8 @@ static inline bool validateIndex(PKVM* vm, int64_t index, uint32_t size,
     ASSERT(arg > 0 && arg <= ARGC, OOPS);                                    \
     if (!IS_OBJ(var) || AS_OBJ(var)->type != m_type) {                       \
       char buff[12]; sprintf(buff, "%d", arg);                               \
-      vm->fiber->error = stringFormat(vm, "Expected a " m_name               \
-        " at argument $.", buff, false);                                     \
+      VM_SET_ERROR(vm, stringFormat(vm, "Expected a " m_name                 \
+                   " at argument $.", buff, false));                         \
     }                                                                        \
     *value = (m_class*)AS_OBJ(var);                                          \
     return true;                                                             \
@@ -413,7 +441,7 @@ static void coreHex(PKVM* vm)) {
   *ptr++ = '0'; *ptr++ = 'x';
 
   if (value > UINT32_MAX || value < -(int64_t)(UINT32_MAX)) {
-    vm->fiber->error = newString(vm, "Integer is too large.");
+    VM_SET_ERROR(vm, newString(vm, "Integer is too large."));
     RET(VAR_NULL);
   }
 
@@ -444,10 +472,10 @@ static void coreAssert(PKVM* vm)) {
         msg = (String*)AS_OBJ(ARG(2));
       }
       vmPushTempRef(vm, &msg->_super);
-      vm->fiber->error = stringFormat(vm, "Assertion failed: '@'.", msg);
+      VM_SET_ERROR(vm, stringFormat(vm, "Assertion failed: '@'.", msg));
       vmPopTempRef(vm);
     } else {
-      vm->fiber->error = newString(vm, "Assertion failed.");
+      VM_SET_ERROR(vm, newString(vm, "Assertion failed."));
     }
   }
 }
@@ -558,7 +586,7 @@ static void coreListAppend(PKVM* vm)) {
   if (!validateArgList(vm, 1, &list)) return;
   Var elem = ARG(2);
 
-  pkVarBufferWrite(&list->elements, vm, elem);
+  listAppend(vm, list, elem);
   RET(VAR_OBJ(list));
 }
 
@@ -691,11 +719,10 @@ static Script* newModuleInternal(PKVM* vm, const char* name) {
   return scr;
 }
 
-// An internal function to add a function to the given [script].
-static void moduleAddFunctionInternal(PKVM* vm, Script* script,
-                                      const char* name, pkNativeFn fptr,
-                                      int arity) {
-
+// This will fail an assertion if a function or a global with the [name]
+// already exists in the module.
+static inline void assertModuleNameDef(PKVM* vm, Script* script,
+                                       const char* name) {
   // Check if function with the same name already exists.
   if (scriptGetFunc(script, name, (uint32_t)strlen(name)) != -1) {
     __ASSERT(false, stringFormat(vm, "A function named '$' already esists "
@@ -707,6 +734,30 @@ static void moduleAddFunctionInternal(PKVM* vm, Script* script,
     __ASSERT(false, stringFormat(vm, "A global variable named '$' already "
       "esists on module '@'", name, script->moudle)->data);
   }
+}
+
+// The internal function to add global value to a module.
+static void moduleAddGlobalInternal(PKVM* vm, Script* script,
+                                    const char* name, Var value) {
+
+  // Ensure the name isn't predefined.
+  assertModuleNameDef(vm, script, name);
+
+  // TODO: move this to pk_var.h and use it in the compilerAddVariable
+  // function.
+  uint32_t name_index = scriptAddName(script, vm, name,
+                                      (uint32_t)strlen(name));
+  pkUintBufferWrite(&script->global_names, vm, name_index);
+  pkVarBufferWrite(&script->globals, vm, value);
+}
+
+// An internal function to add a function to the given [script].
+static void moduleAddFunctionInternal(PKVM* vm, Script* script,
+                                      const char* name, pkNativeFn fptr,
+                                      int arity) {
+
+  // Ensure the name isn't predefined.
+  assertModuleNameDef(vm, script, name);
 
   Function* fn = newFunction(vm, name, (int)strlen(name), script, true);
   fn->native = fptr;
@@ -810,14 +861,23 @@ PK_DOC(
   "hash(value:var) -> num\n"
   "Return the hash value of the variable, if it's not hashable it'll "
   "return null.",
-static void stdMathHash(PKVM* vm));
-void stdMathHash(PKVM* vm) {
+static void stdMathHash(PKVM* vm)) {
   if (IS_OBJ(ARG(1))) {
     if (!isObjectHashable(AS_OBJ(ARG(1))->type)) {
       RET(VAR_NULL);
     }
   }
   RET(VAR_NUM((double)varHashValue(ARG(1))));
+}
+
+PK_DOC(
+  "sin(rad:num) -> num\n"
+  "Return the sine value of the argument [rad] which is an angle expressed "
+  "in radians.",
+static void stdMathSine(PKVM* vm)) {
+  double rad;
+  if (!validateNumeric(vm, ARG(1), &rad, "Argument 1")) return;
+  RET(VAR_NUM(sin(rad)));
 }
 
 /*****************************************************************************/
@@ -903,6 +963,17 @@ void initializeCore(PKVM* vm) {
   moduleAddFunctionInternal(vm, math, "abs",   stdMathAbs,    1);
   moduleAddFunctionInternal(vm, math, "sign",  stdMathSign,   1);
   moduleAddFunctionInternal(vm, math, "hash",  stdMathHash,   1);
+  moduleAddFunctionInternal(vm, math, "sin",   stdMathSine,   1);
+  // TODO: add - cos, tan.
+  // low priority: sinh, cosh, tanh, asin, acos, atan.
+
+  // Note that currently it's mutable (since it's a global variable, not
+  // constant and pocketlang doesn't support constant) so the user shouldn't
+  // modify the PI, like in python.
+  // TODO: at varSetAttrib() we can detect if the user try to change an
+  // attribute of a core module and we can throw an error.
+  moduleAddGlobalInternal(vm, math, "PI", VAR_NUM(M_PI));
+
 }
 
 /*****************************************************************************/
@@ -910,8 +981,8 @@ void initializeCore(PKVM* vm) {
 /*****************************************************************************/
 
 #define UNSUPPORT_OPERAND_TYPES(op)                                    \
-  vm->fiber->error = stringFormat(vm, "Unsupported operand types for " \
-    "operator '" op "' $ and $", varTypeName(v1), varTypeName(v2))
+  VM_SET_ERROR(vm, stringFormat(vm, "Unsupported operand types for "   \
+    "operator '" op "' $ and $", varTypeName(v1), varTypeName(v2)))
 
 Var varAdd(PKVM* vm, Var v1, Var v2) {
 
@@ -937,10 +1008,10 @@ Var varAdd(PKVM* vm, Var v1, Var v2) {
       case OBJ_LIST:
       {
         if (o2->type == OBJ_LIST) {
+          List* l1 = (List*)o1, * l2 = (List*)o2;
           TODO;
         }
-      }
-      TODO;
+      } break;
 
       case OBJ_MAP:
       case OBJ_RANGE:
@@ -1015,6 +1086,20 @@ Var varModulo(PKVM* vm, Var v1, Var v2) {
   return VAR_NULL;
 }
 
+Var varBitAnd(PKVM* vm, Var v1, Var v2) {
+
+  int64_t i1, i2;
+  if (isInteger(v1, &i1)) {
+    if (validateInteger(vm, v2, &i2, "Right operand")) {
+      return VAR_NUM(i1 & i2);
+    }
+    return VAR_NULL;
+  }
+
+  UNSUPPORT_OPERAND_TYPES("&");
+  return VAR_NULL;
+}
+
 bool varGreater(Var v1, Var v2) {
   double d1, d2;
   if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
@@ -1058,16 +1143,15 @@ bool varLesser(Var v1, Var v2) {
 #define CASE_ATTRIB(name, hash) case hash
 
 // Set error for accessing non-existed attribute.
-#define ERR_NO_ATTRIB(on)                                             \
-  vm->fiber->error = stringFormat(vm, "'$' object has no attribute "  \
-                                       "named '$'",                   \
-                                  varTypeName(on), attrib->data);
+#define ERR_NO_ATTRIB(vm, on, attrib)                                        \
+  VM_SET_ERROR(vm, stringFormat(vm, "'$' object has no attribute named '$'", \
+                                varTypeName(on), attrib->data))
 
 Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
   if (!IS_OBJ(on)) {
-    vm->fiber->error = stringFormat(vm, "$ type is not subscriptable.",
-                                    varTypeName(on));
+    VM_SET_ERROR(vm, stringFormat(vm, "$ type is not subscriptable.",
+                                  varTypeName(on)));
     return VAR_NULL;
   }
 
@@ -1091,7 +1175,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
           return VAR_OBJ(stringStrip(vm, str));
 
         default:
-          ERR_NO_ATTRIB(on);
+          ERR_NO_ATTRIB(vm, on, attrib);
           return VAR_NULL;
       }
 
@@ -1107,7 +1191,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
           return VAR_NUM((double)(list->elements.count));
 
         default:
-          ERR_NO_ATTRIB(on);
+          ERR_NO_ATTRIB(vm, on, attrib);
           return VAR_NULL;
       }
 
@@ -1132,7 +1216,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
           return VAR_OBJ(rangeAsList(vm, range));
 
         default:
-          ERR_NO_ATTRIB(on);
+          ERR_NO_ATTRIB(vm, on, attrib);
           return VAR_NULL;
       }
 
@@ -1156,7 +1240,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
         return scr->globals.data[index];
       }
 
-      ERR_NO_ATTRIB(on);
+      ERR_NO_ATTRIB(vm, on, attrib);
       return VAR_NULL;
     }
 
@@ -1172,7 +1256,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
           return VAR_OBJ(newString(vm, fn->name));
 
         default:
-          ERR_NO_ATTRIB(on);
+          ERR_NO_ATTRIB(vm, on, attrib);
           return VAR_NULL;
       }
       UNREACHABLE();
@@ -1195,14 +1279,14 @@ void varSetAttrib(PKVM* vm, Var on, String* attrib, Var value) {
 #define ATTRIB_IMMUTABLE(name)                                                \
 do {                                                                          \
   if ((attrib->length == strlen(name) && strcmp(name, attrib->data) == 0)) {  \
-    vm->fiber->error = stringFormat(vm, "'$' attribute is immutable.", name); \
+    VM_SET_ERROR(vm, stringFormat(vm, "'$' attribute is immutable.", name));  \
     return;                                                                   \
   }                                                                           \
 } while (false)
 
   if (!IS_OBJ(on)) {
-    vm->fiber->error = stringFormat(vm, "$ type is not subscriptable.",
-                                    varTypeName(on));
+    VM_SET_ERROR(vm, stringFormat(vm, "$ type is not subscriptable.",
+                                  varTypeName(on)));
     return;
   }
 
@@ -1213,12 +1297,12 @@ do {                                                                          \
       ATTRIB_IMMUTABLE("lower");
       ATTRIB_IMMUTABLE("upper");
       ATTRIB_IMMUTABLE("strip");
-      ERR_NO_ATTRIB(on);
+      ERR_NO_ATTRIB(vm, on, attrib);
       return;
 
     case OBJ_LIST:
       ATTRIB_IMMUTABLE("length");
-      ERR_NO_ATTRIB(on);
+      ERR_NO_ATTRIB(vm, on, attrib);
       return;
 
     case OBJ_MAP:
@@ -1228,12 +1312,12 @@ do {                                                                          \
       // map.foo = 'bar'
       TODO;
 
-      ERR_NO_ATTRIB(on);
+      ERR_NO_ATTRIB(vm, on, attrib);
       return;
 
     case OBJ_RANGE:
       ATTRIB_IMMUTABLE("as_list");
-      ERR_NO_ATTRIB(on);
+      ERR_NO_ATTRIB(vm, on, attrib);
       return;
 
     case OBJ_SCRIPT: {
@@ -1255,22 +1339,22 @@ do {                                                                          \
         return;
       }
 
-      ERR_NO_ATTRIB(on);
+      ERR_NO_ATTRIB(vm, on, attrib);
       return;
     }
 
     case OBJ_FUNC:
       ATTRIB_IMMUTABLE("arity");
       ATTRIB_IMMUTABLE("name");
-      ERR_NO_ATTRIB(on);
+      ERR_NO_ATTRIB(vm, on, attrib);
       return;
 
     case OBJ_FIBER:
-      ERR_NO_ATTRIB(on);
+      ERR_NO_ATTRIB(vm, on, attrib);
       return;
 
     case OBJ_USER:
-      TODO; //ERR_NO_ATTRIB(on);
+      TODO; //ERR_NO_ATTRIB(vm, on, attrib);
       return;
 
     default:
@@ -1284,8 +1368,8 @@ do {                                                                          \
 
 Var varGetSubscript(PKVM* vm, Var on, Var key) {
   if (!IS_OBJ(on)) {
-    vm->fiber->error = stringFormat(vm, "$ type is not subscriptable.",
-                                    varTypeName(on));
+    VM_SET_ERROR(vm, stringFormat(vm, "$ type is not subscriptable.",
+                                  varTypeName(on)));
     return VAR_NULL;
   }
 
@@ -1326,9 +1410,9 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
         String* key_str = toString(vm, key);
         vmPushTempRef(vm, &key_str->_super);
         if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
-          vm->fiber->error = stringFormat(vm, "Invalid key '@'.", key_str);
+          VM_SET_ERROR(vm, stringFormat(vm, "Invalid key '@'.", key_str));
         } else {
-          vm->fiber->error = stringFormat(vm, "Key '@' not exists", key_str);
+          VM_SET_ERROR(vm, stringFormat(vm, "Key '@' not exists", key_str));
         }
         vmPopTempRef(vm);
         return VAR_NULL;
@@ -1352,15 +1436,15 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
 
 void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
   if (!IS_OBJ(on)) {
-    vm->fiber->error = stringFormat(vm, "$ type is not subscriptable.",
-                                    varTypeName(on));
+    VM_SET_ERROR(vm, stringFormat(vm, "$ type is not subscriptable.",
+                                  varTypeName(on)));
     return;
   }
 
   Object* obj = AS_OBJ(on);
   switch (obj->type) {
     case OBJ_STRING:
-      vm->fiber->error = newString(vm, "String objects are immutable.");
+      VM_SET_ERROR(vm, newString(vm, "String objects are immutable."));
       return;
 
     case OBJ_LIST:
@@ -1376,8 +1460,8 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
     case OBJ_MAP:
     {
       if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
-        vm->fiber->error = stringFormat(vm, "$ type is not hashable.",
-                                        varTypeName(key));
+        VM_SET_ERROR(vm, stringFormat(vm, "$ type is not hashable.",
+                                      varTypeName(key)));
       } else {
         mapSet(vm, (Map*)obj, key, value);
       }

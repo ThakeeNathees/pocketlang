@@ -58,7 +58,7 @@ PkHandle* pkNewMap(PKVM* vm) {
 
 PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn) {
   __ASSERT(IS_OBJ_TYPE(fn->value, OBJ_FUNC), "Fn should be of type function.");
-  
+
   Fiber* fiber = newFiber(vm, (Function*)AS_OBJ(fn->value));
   return vmNewHandle(vm, VAR_OBJ(fiber));
 }
@@ -362,7 +362,7 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
     uint32_t name_index = scriptAddName(owner, vm, name, length);
     pkUintBufferWrite(&owner->function_names, vm, name_index);
     vmPopTempRef(vm);
-  
+
     func->name = owner->names.data[name_index]->data;
     func->owner = owner;
     func->arity = -2; // -1 means variadic args.
@@ -488,10 +488,10 @@ String* stringUpper(PKVM* vm, String* self) {
 String* stringStrip(PKVM* vm, String* self) {
 
   // Implementation:
-  // 
+  //
   // "     a string with leading and trailing white space    "
   //  ^start >>                                       << end^
-  //  
+  //
   // These 'start' and 'end' pointers will move respectively right and left
   // while it's a white space and return an allocated string from 'start' with
   // length of (end - start + 1). For already trimed string it'll not allocate
@@ -558,7 +558,7 @@ Var listRemoveAt(PKVM* vm, List* self, uint32_t index) {
 
 // Return a has value for the object.
 static uint32_t _hashObject(Object* obj) {
-  
+
   ASSERT(isObjectHashable(obj->type),
          "Check if it's hashable before calling this method.");
 
@@ -646,7 +646,7 @@ static bool _mapFindEntry(Map* self, Var key, MapEntry** result) {
       *result = entry;
       return true;
     }
-    
+
     index = (index + 1) % self->capacity;
 
   } while (index != start_index);
@@ -658,7 +658,7 @@ static bool _mapFindEntry(Map* self, Var key, MapEntry** result) {
   return false;
 }
 
-// Add the key, value pair to the entries array of the map. Returns true if 
+// Add the key, value pair to the entries array of the map. Returns true if
 // the entry added for the first time and false for replaced vlaue.
 static bool _mapInsertEntry(Map* self, Var key, Var value) {
 
@@ -1198,7 +1198,7 @@ bool toBool(Var v) {
 String* stringFormat(PKVM* vm, const char* fmt, ...) {
   va_list arg_list;
 
-  // Calculate the total length of the resulting string. This is required to 
+  // Calculate the total length of the resulting string. This is required to
   // determine the final string size to allocate.
   va_start(arg_list, fmt);
   size_t total_length = 0;
@@ -1269,7 +1269,7 @@ String* stringJoin(PKVM* vm, String* str1, String* str2) {
 }
 
 uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
-  uint32_t length) {
+                       uint32_t length) {
 
   for (uint32_t i = 0; i < self->names.count; i++) {
     String* _name = self->names.data[i];

@@ -17,7 +17,7 @@
  * Reference:
  *     https://github.com/wren-lang/wren/blob/main/src/vm/wren_value.h
  *     https://leonardschuetz.ch/blog/nan-boxing/
- * 
+ *
  * The previous implementation was to add a type field to every var and use
  * smart pointers(C++17) to object with custom destructors, which makes the
  * programme inefficient for small types such null, bool, int and float.
@@ -56,7 +56,7 @@
  *
  *  v~~~~~~~~~~ NaN value
  * -11111111111----------------------------------------------------
- * 
+ *
  * We define a our variant \ref var as an unsigned 64 bit integer (we treat it
  * like a bit array) if the exponent bits were not set, just reinterprit it as
  * a IEEE 754 double precision 64 bit number. Other wise we there are a lot of
@@ -69,14 +69,14 @@
  *
  *             v~Highest mestissa bit
  * -[NaN      ]1---------------------------------------------------
- * 
+ *
  * if sign bit set, it's a heap allocated pointer.
  * |             these 2 bits are type tags representing 8 different types
  * |             vv
  * S[NaN      ]1cXX------------------------------------------------
  *              |  ^~~~~~~~ 48 bits to represent the value (51 for pointer)
  *              '- if this (const) bit set, it's a constant.
- * 
+ *
  * On a 32-bit machine a pointer size is 32 and on a 64-bit machine actually 48
  * bits are used for pointers. Ta-da, now we have double precision number,
  * primitives, pointers all inside a 64 bit sequence and for numbers it doesn't
@@ -153,7 +153,7 @@
 
 #else
 
-// TODO: Union tagging implementation of all the above macros ignore macros 
+// TODO: Union tagging implementation of all the above macros ignore macros
 //       starts with an underscore.
 
 typedef enum {
@@ -465,6 +465,18 @@ String* stringUpper(PKVM* vm, String* self);
 // Returns string with the leading and trailing white spaces are trimed.
 // If the string is already trimed it'll return the same string.
 String* stringStrip(PKVM* vm, String* self);
+
+// An inline function/macro implementation of listAppend(). Set below 0 to 1,
+// to make the implementation a static inline function, it's totally okey to
+// define a function inside a header as long as it's static (but not a fan).
+#if 0 // Function implementation.
+  static inline void listAppend(PKVM* vm, List* self, Var value) {
+    pkVarBufferWrite(&self->elements, vm, value);
+  }
+#else // Macro implementation.
+  #define listAppend(vm, self, value) \
+    pkVarBufferWrite(&self->elements, vm, value)
+#endif
 
 // Insert [value] to the list at [index] and shift down the rest of the
 // elements.
