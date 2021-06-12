@@ -45,6 +45,6 @@ assert((1 & 1) == 1)
 assert((1 & 2) == 0)
 assert((4 & 7) == 4)
 
-# If got here with no errors, then all test passed
+# If we got here with no errors, then all test passed
 print('All tests PASSED ✅')
 

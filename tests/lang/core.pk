@@ -43,6 +43,6 @@ for i in 0..1000
   assert(abs(sin(i) / cos(i) - tan(i)) < threshold)
 end
 
-# If got here with no errors, then all test passed
+# If we got here with no errors, then all test passed
 print('All tests PASSED ✅')
 
