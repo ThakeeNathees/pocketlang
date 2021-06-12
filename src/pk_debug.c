@@ -138,12 +138,30 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
       case OP_PUSH_LOCAL_6:
       case OP_PUSH_LOCAL_7:
       case OP_PUSH_LOCAL_8:
-        NO_ARGS();
-        break;
-
       case OP_PUSH_LOCAL_N:
-        BYTE_ARG();
-        break;
+      {
+
+        int arg;
+        if (op == OP_PUSH_LOCAL_N) {
+          arg = READ_BYTE();
+          ADD_INTEGER(vm, buff, arg, INT_WIDTH);
+
+        } else {
+          arg = (int)(op - OP_PUSH_LOCAL_0);
+          for (int i = 0; i < INT_WIDTH; i++) ADD_CHAR(vm, buff, ' ');
+        }
+
+        if (arg < func->arity) {
+          // Prints: (arg:%d)\n
+          pkByteBufferAddString(buff, vm, STR_AND_LEN(" (param:"));
+          ADD_INTEGER(vm, buff, arg, 1);
+          pkByteBufferAddString(buff, vm, STR_AND_LEN(")\n"));
+
+        } else {
+          ADD_CHAR(vm, buff, '\n');
+        }
+
+      } break;
 
       case OP_STORE_LOCAL_0:
       case OP_STORE_LOCAL_1:
@@ -154,12 +172,29 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
       case OP_STORE_LOCAL_6:
       case OP_STORE_LOCAL_7:
       case OP_STORE_LOCAL_8:
-        NO_ARGS();
-        break;
-
       case OP_STORE_LOCAL_N:
-        BYTE_ARG();
-        break;
+      {
+        int arg;
+        if (op == OP_STORE_LOCAL_N) {
+          arg = READ_BYTE();
+          ADD_INTEGER(vm, buff, arg, INT_WIDTH);
+
+        } else {
+          arg = (int)(op - OP_STORE_LOCAL_0);
+          for (int i = 0; i < INT_WIDTH; i++) ADD_CHAR(vm, buff, ' ');
+        }
+
+        if (arg < func->arity) {
+          // Prints: (arg:%d)\n
+          pkByteBufferAddString(buff, vm, STR_AND_LEN(" (param:"));
+          ADD_INTEGER(vm, buff, arg, 1);
+          pkByteBufferAddString(buff, vm, STR_AND_LEN(")\n"));
+
+        } else {
+          ADD_CHAR(vm, buff, '\n');
+        }
+
+      } break;
 
       case OP_PUSH_GLOBAL:
       case OP_STORE_GLOBAL:
@@ -218,6 +253,12 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
       }
 
       case OP_CALL:
+        // Prints: %5d (argc)\n
+        ADD_INTEGER(vm, buff, READ_BYTE(), INT_WIDTH);
+        pkByteBufferAddString(buff, vm, STR_AND_LEN(" (argc)\n"));
+        break;
+
+      case OP_TAIL_CALL:
         // Prints: %5d (argc)\n
         ADD_INTEGER(vm, buff, READ_BYTE(), INT_WIDTH);
         pkByteBufferAddString(buff, vm, STR_AND_LEN(" (argc)\n"));
