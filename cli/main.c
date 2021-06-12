@@ -23,7 +23,6 @@ size_t pathJoin(const char* from, const char* path, char* buffer,
 // ---------------------------------------
 
 void onResultDone(PKVM* vm, PkStringPtr result) {
-
   if ((bool)result.user_data) {
     free((void*)result.string);
   }

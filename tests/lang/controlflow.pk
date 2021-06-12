@@ -37,7 +37,6 @@ while true
 end
 assert(variable == 1212)
 
-
 while true
 	variable = 22
 	if true then elif false then end	
@@ -49,3 +48,11 @@ while true
 	break
 end
 assert(variable == 2323)
+
+map = { 'a':10, 'b':12, 'c':32 }; sum = 0
+for k in map
+  sum += map[k]
+end
+assert(sum == 54)
+
+
