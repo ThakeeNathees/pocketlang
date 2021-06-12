@@ -37,6 +37,7 @@ Var varDivide(PKVM* vm, Var v1, Var v2);   // Returns v1 / v2.
 Var varModulo(PKVM* vm, Var v1, Var v2);   // Returns v1 % v2.
 
 Var varBitAnd(PKVM* vm, Var v1, Var v2);   // Returns v1 & v2.
+Var varBitOr(PKVM* vm, Var v1, Var v2);    // Returns v1 | v2.
 
 bool varGreater(Var v1, Var v2); // Returns v1 > v2.
 bool varLesser(Var v1, Var v2);  // Returns v1 < v2.

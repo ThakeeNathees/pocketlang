@@ -36,4 +36,15 @@ m = {}
 m['m'] = m
 assert(to_string(m) == '{"m":{...}}')
 
+# Bitwise operation tests
+assert((1 | 1) == 1)
+assert((1 | 4) == 5)
+assert((3 | 5) == 7)
+
+assert((1 & 1) == 1)
+assert((1 & 2) == 0)
+assert((4 & 7) == 4)
+
+# If got here with no errors, then all test passed
+print('All tests PASSED ✅')
 
