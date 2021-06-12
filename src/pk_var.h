@@ -213,15 +213,6 @@ typedef enum {
   OBJ_USER,
 } ObjectType;
 
-// This will terminate compiler (because of 1/0 evaluvated) if ObjectType max
-// is not [count]. Use this to ensure every time switching ObjectType will
-// cover all object types.
-#ifdef DEBUG
-  #define CHECK_MISSING_OBJ_TYPE(count) (1/ ((int)(!(count ^ OBJ_USER))) )
-#else
-  #define CHECK_MISSING_OBJ_TYPE(count) do {} while (false)
-#endif
-
 // Base struct for all heap allocated objects.
 struct Object {
   ObjectType type;  //< Type of the object in \ref var_Object_Type.

@@ -80,6 +80,11 @@
 #include <stdio.h> //< Only needed here for ASSERT() macro and for release mode
                    //< TODO; macro use this to print a crash report.
 
+// This will terminate the compilation if the [condition] is false, because of
+// 1/0 evaluvated. Use this to check missing enums in switch, or check if an
+// enum or macro has a specific value. (STATIC_ASSERT(ENUM_SUCCESS == 0)).
+#define STATIC_ASSERT(condition) ( 1 / ((int)(condition)) )
+
 // The internal assertion macro, this will print error and break regardless of
 // the build target (debug or release). Use ASSERT() for debug assertion and
 // use __ASSERT() for TODOs and assetions in public methods (to indicate that

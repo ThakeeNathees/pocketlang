@@ -1162,14 +1162,18 @@ String* toString(PKVM* vm, const Var value) {
   pkByteBuffer buff;
   pkByteBufferInit(&buff);
   _toStringInternal(vm, value, &buff, NULL, false);
-  return newStringLength(vm, (const char*)buff.data, buff.count);
+  String* ret = newStringLength(vm, (const char*)buff.data, buff.count);
+  pkByteBufferClear(&buff, vm);
+  return ret;
 }
 
 String* toRepr(PKVM* vm, const Var value) {
   pkByteBuffer buff;
   pkByteBufferInit(&buff);
   _toStringInternal(vm, value, &buff, NULL, true);
-  return newStringLength(vm, (const char*)buff.data, buff.count);
+  String* ret = newStringLength(vm, (const char*)buff.data, buff.count);
+  pkByteBufferClear(&buff, vm);
+  return ret;
 }
 
 bool toBool(Var v) {

@@ -969,7 +969,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
           if (map->entries == NULL) JUMP_ITER_EXIT();
           MapEntry* e = map->entries + iter;
           for (; iter < map->capacity; iter++, e++) {
-            if (!IS_UNDEF(e->key)) JUMP_ITER_EXIT();
+            if (!IS_UNDEF(e->key)) break;
           }
           if (iter >= map->capacity) JUMP_ITER_EXIT();
 

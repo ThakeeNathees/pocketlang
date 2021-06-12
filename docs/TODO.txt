@@ -18,6 +18,18 @@
 
 - support new line just after '=' (and other places)
 
+- REPL error message should be the first one (not the last).
+  >>> def f()
+  ...   _f = func()
+  ...     _f() // _f not defined (no closure).
+  ...   end
+  Error: Expected an expression // expected Name '_f' not defined.
+  
+- literal function recursive call.
+  func(a, b)
+    self(a, b) // Something like this.
+  end
+
 - Implement argparse.
     - -v --version
     - emit opcodes

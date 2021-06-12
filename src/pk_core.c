@@ -9,6 +9,7 @@
 #include <math.h>
 #include <time.h>
 
+#include "pk_debug.h"
 #include "pk_utils.h"
 #include "pk_var.h"
 #include "pk_vm.h"
@@ -609,7 +610,7 @@ static void coreMapRemove(PKVM* vm)) {
 // ----------------
 
 PK_DOC(
-  "fiber_new(fn:function) -> fiber\n"
+  "fiber_new(fn:Function) -> fiber\n"
   "Create and return a new fiber from the given function [fn].",
 static void coreFiberNew(PKVM* vm)) {
   Function* fn;
@@ -618,7 +619,7 @@ static void coreFiberNew(PKVM* vm)) {
 }
 
 PK_DOC(
-  "fiber_get_func(fb:fiber) -> function\n"
+  "fiber_get_func(fb:Fiber) -> function\n"
   "Retruns the fiber's functions. Which is usefull if you wan't to re-run the "
   "fiber, you can get the function and crate a new fiber.",
 static void coreFiberGetFunc(PKVM* vm)) {
@@ -628,7 +629,7 @@ static void coreFiberGetFunc(PKVM* vm)) {
 }
 
 PK_DOC(
-  "fiber_is_done(fb:fiber) -> bool\n"
+  "fiber_is_done(fb:Fiber) -> bool\n"
   "Returns true if the fiber [fb] is done running and can no more resumed.",
 static void coreFiberIsDone(PKVM* vm)) {
   Fiber* fb;
@@ -637,7 +638,7 @@ static void coreFiberIsDone(PKVM* vm)) {
 }
 
 PK_DOC(
-  "fiber_run(fb:fiber, ...) -> var\n"
+  "fiber_run(fb:Fiber, ...) -> var\n"
   "Runs the fiber's function with the provided arguments and returns it's "
   "return value or the yielded value if it's yielded.",
 static void coreFiberRun(PKVM* vm)) {
@@ -665,7 +666,7 @@ static void coreFiberRun(PKVM* vm)) {
 }
 
 PK_DOC(
-  "fiber_resume(fb:fiber) -> var\n"
+  "fiber_resume(fb:Fiber) -> var\n"
   "Resumes a yielded function from a previous call of fiber_run() function. "
   "Return it's return value or the yielded value if it's yielded.",
 static void coreFiberResume(PKVM* vm)) {
@@ -782,6 +783,22 @@ void stdLangGC(PKVM* vm) {
   RET(VAR_NUM((double)garbage));
 }
 
+PK_DOC(
+  "disas(fn:Function) -> String\n"
+  "Returns the disassembled opcode of the function [fn]. ",
+static void stdLangDisas(PKVM* vm)) {
+  Function* fn;
+  if (!validateArgFunction(vm, 1, &fn)) return;
+
+  pkByteBuffer buff;
+  pkByteBufferInit(&buff);
+  dumpFunctionCode(vm, fn, &buff);
+  String* dump = newString(vm, (const char*)buff.data);
+  pkByteBufferClear(&buff, vm);
+
+  RET(VAR_OBJ(dump));
+}
+
 // A debug function for development (will be removed).
 void stdLangDebugBreak(PKVM* vm) {
   DEBUG_BREAK();
@@ -881,7 +898,7 @@ static void stdMathSine(PKVM* vm)) {
 }
 
 PK_DOC(
-  "cosine(rad:num) -> num\n"
+  "cos(rad:num) -> num\n"
   "Return the cosine value of the argument [rad] which is an angle expressed "
   "in radians.",
 static void stdMathCosine(PKVM* vm)) {
@@ -970,6 +987,7 @@ void initializeCore(PKVM* vm) {
   Script* lang = newModuleInternal(vm, "lang");
   moduleAddFunctionInternal(vm, lang, "clock", stdLangClock,  0);
   moduleAddFunctionInternal(vm, lang, "gc",    stdLangGC,     0);
+  moduleAddFunctionInternal(vm, lang, "disas", stdLangDisas,  1);
   moduleAddFunctionInternal(vm, lang, "write", stdLangWrite, -1);
 #ifdef DEBUG
   moduleAddFunctionInternal(vm, lang, "debug_break", stdLangDebugBreak, 0);
@@ -1113,7 +1131,7 @@ Var varBitAnd(PKVM* vm, Var v1, Var v2) {
   int64_t i1, i2;
   if (isInteger(v1, &i1)) {
     if (validateInteger(vm, v2, &i2, "Right operand")) {
-      return VAR_NUM(i1 & i2);
+      return VAR_NUM((double)(i1 & i2));
     }
     return VAR_NULL;
   }
@@ -1163,6 +1181,7 @@ bool varLesser(Var v1, Var v2) {
 //
 #define SWITCH_ATTRIB(name) switch (utilHashString(name))
 #define CASE_ATTRIB(name, hash) case hash
+#define CASE_DEFAULT default
 
 // Set error for accessing non-existed attribute.
 #define ERR_NO_ATTRIB(vm, on, attrib)                                        \
@@ -1196,7 +1215,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
         CASE_ATTRIB("strip", 0xfd1b18d1) :
           return VAR_OBJ(stringStrip(vm, str));
 
-        default:
+        CASE_DEFAULT:
           ERR_NO_ATTRIB(vm, on, attrib);
           return VAR_NULL;
       }
@@ -1212,7 +1231,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
         CASE_ATTRIB("length", 0x83d03615) :
           return VAR_NUM((double)(list->elements.count));
 
-        default:
+        CASE_DEFAULT:
           ERR_NO_ATTRIB(vm, on, attrib);
           return VAR_NULL;
       }
@@ -1237,7 +1256,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
         CASE_ATTRIB("as_list", 0x1562c22) :
           return VAR_OBJ(rangeAsList(vm, range));
 
-        default:
+        CASE_DEFAULT:
           ERR_NO_ATTRIB(vm, on, attrib);
           return VAR_NULL;
       }
@@ -1277,7 +1296,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
         CASE_ATTRIB("name", 0x8d39bde6) :
           return VAR_OBJ(newString(vm, fn->name));
 
-        default:
+        CASE_DEFAULT:
           ERR_NO_ATTRIB(vm, on, attrib);
           return VAR_NULL;
       }
@@ -1291,7 +1310,6 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     default:
       UNREACHABLE();
   }
-  CHECK_MISSING_OBJ_TYPE(7);
 
   UNREACHABLE();
 }
@@ -1382,11 +1400,15 @@ do {                                                                          \
     default:
       UNREACHABLE();
   }
-  CHECK_MISSING_OBJ_TYPE(7);
   UNREACHABLE();
 
 #undef ATTRIB_IMMUTABLE
 }
+
+#undef SWITCH_ATTRIB
+#undef CASE_ATTRIB
+#undef CASE_DEFAULT
+#undef ERR_NO_ATTRIB
 
 Var varGetSubscript(PKVM* vm, Var on, Var key) {
   if (!IS_OBJ(on)) {
@@ -1452,7 +1474,6 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
       UNREACHABLE();
   }
 
-  CHECK_MISSING_OBJ_TYPE(7);
   UNREACHABLE();
 }
 
@@ -1499,6 +1520,6 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
     default:
       UNREACHABLE();
   }
-  CHECK_MISSING_OBJ_TYPE(7);
+
   UNREACHABLE();
 }

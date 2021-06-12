@@ -1797,7 +1797,11 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   compilerExitBlock(compiler); // Parameter depth.
 
 #if DEBUG_DUMP_COMPILED_CODE
-  dumpFunctionCode(compiler->vm, compiler->func->ptr);
+  pkByteBuffer buff;
+  pkByteBufferInit(&buff);
+  dumpFunctionCode(compiler->vm, compiler->func->ptr, &buff);
+  printf("%s", buff.data);
+  pkByteBufferClear(&buff, compiler->vm);
 #endif
   compiler->func = compiler->func->outer_func;
 
@@ -2495,7 +2499,11 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
   }
 
 #if DEBUG_DUMP_COMPILED_CODE
-  dumpFunctionCode(vm, script->body);
+  pkByteBuffer buff;
+  pkByteBufferInit(&buff);
+  dumpFunctionCode(compiler->vm, script->body, &buff);
+  printf("%s", buff.data);
+  pkByteBufferClear(&buff, vm);
 #endif
 
   // Return the compilation result.
