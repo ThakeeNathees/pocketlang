@@ -1145,7 +1145,7 @@ Var varBitOr(PKVM* vm, Var v1, Var v2) {
   int64_t i1, i2;
   if (isInteger(v1, &i1)) {
     if (validateInteger(vm, v2, &i2, "Right operand")) {
-      return VAR_NUM(i1 | i2);
+      return VAR_NUM((double)(i1 | i2));
     }
     return VAR_NULL;
   }

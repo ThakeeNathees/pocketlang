@@ -44,5 +44,5 @@ for i in 0..1000
 end
 
 # If we got here with no errors, then all test passed
-print('All tests PASSED ✅')
+print('All tests PASSED (100%)')
 

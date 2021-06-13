@@ -1247,7 +1247,6 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
 
-      // Result is in base 10 (decimal)
       Var result = varBitOr(vm, l, r);
       DROP(); DROP(); // r, l
       PUSH(result);

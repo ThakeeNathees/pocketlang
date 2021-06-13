@@ -46,5 +46,5 @@ assert((1 & 2) == 0)
 assert((4 & 7) == 4)
 
 # If we got here with no errors, then all test passed
-print('All tests PASSED ✅')
+print('All tests PASSED (100%)')
 
