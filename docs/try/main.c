@@ -47,7 +47,7 @@ int runSource(const char* source) {
   
   PkStringPtr src = { source, NULL, NULL };
   PkStringPtr module = { "@try", NULL, NULL };
-  PkInterpretResult result = pkInterpretSource(vm, src, module);
+  PkResult result = pkInterpretSource(vm, src, module, NULL);
 
   pkFreeVM(vm);
 
