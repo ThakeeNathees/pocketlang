@@ -151,7 +151,7 @@ int main(int argc, char** argv) {
   config.resolve_path_fn = resolvePath;
 
   PkCompileOptions options = pkNewCompilerOptions();
-  options.debug = true; // TODO: update this with cli args.
+  options.debug = true; // TODO: update this with cli args. (tco disabled).
 
   PKVM* vm = pkNewVM(&config);
 

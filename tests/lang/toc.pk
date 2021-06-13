@@ -1,0 +1,75 @@
+
+## Tail call optimization implementation.
+
+from lang import clock
+
+## Reference:
+## !!CON2019. TAIL CALL OPTIMIZATION (The musical)
+## https://www.youtube.com/watch?v=-PX0BV9hGZY
+
+## This will cause stack overflow without toc at N = 350
+N = 10000
+
+def woo(n)
+	if n == 0 then return '' end
+	return woo(n-1) + '!'
+end
+
+def woo_toc(n, acc)
+	if n == 0 then return acc end
+	return woo_toc(n-1, acc + '!')
+end
+
+s = clock()
+print(woo_toc(N, '')) 
+print('elapsed:', clock() - s)
+
+## ----------------------------------------------------------------------------
+
+def fac_toc(n, acc)
+  if n == 0 then return acc end
+  return fac_toc(n-1, acc*n)
+end
+
+def fac(n)
+  if n == 0 then return 1 end
+  return fac(n-1) * n
+end
+
+
+## Limiting to 50 because fac(i) will
+## cause a stack overflow
+for i in 0..50
+  fi = fac(i);
+  ft = fac_toc(i, 1)
+  if i < 24
+    assert(fi == ft)
+  else ## For huge values it'll differ by a tiny value.
+    assert((fi - ft)/ft < 0.00000000001)
+  end
+end
+
+## This will run without any problem but we can't
+## assert the return value since it's WAY too large for
+## a 64 bit value (100000! = 2.824229407 E+456573).
+start = clock()
+fac_toc(100000, 1)
+## expected 0.006s average (on my pc, spec on readme).
+print('fac_toc(100000, 1): elapsed:', clock() - start, 's')
+assert(true)
+
+def g(n)
+  if n == 0 then return 1 end
+  return f(n -1)
+end
+
+def f(n)
+  if n == 0 then return 0 end
+  return g(n-1)
+end
+
+for i in 0..100
+  assert(i%2 == f(i))
+end
+
+

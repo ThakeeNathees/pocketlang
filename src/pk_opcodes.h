@@ -107,6 +107,18 @@ OPCODE(IMPORT, 0, 0)
 // params: 1 byte argc.
 OPCODE(CALL, 1, -0) //< Stack size will calculated at compile time.
 
+// Moves the [n] arguments and the function at the stack top to the current
+// frame's base for the tail call (the caller's frame it taken by the callee)
+// to perform the call, instead of creating a new call frame. This will
+// optimize memory from O(n) to O(1) and prevent stackoverflow, and for larger
+// recursive function it'll be much faster since, we're not allocating new
+// stack slots and call frames.
+// The return value will be placed at the same slot where it's caller will
+// place once the function is called (rbp). So we're jumping from a deep nested
+// calls to the initial caller directly once the function is done.
+// params: 1 byte argc.
+OPCODE(TAIL_CALL, 1, -0) //< Stack size will calculated at compile time.
+
 // Starts the iteration and test the sequence if it's iterable, before the
 // iteration instead of checking it everytime.
 OPCODE(ITER_TEST, 0, 0)

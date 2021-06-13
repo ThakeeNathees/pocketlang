@@ -36,8 +36,8 @@ end
 
 You can [try pocketlang on your browser](https://thakeenathees.github.io/pocketlang/getting-started-try-it-now.html).
 It's a [WebAssembly](https://webassembly.org/) build of the VM compiled using [emscripten](https://emscripten.org/).
-Note that in the webassembly version of the language, some features (input, relative import, etc.) have disabled, has
-limited memory allocations, and the IO calls might be slower.
+Note that in the webassembly version of the language, some features (input, file handling, relative import, etc.)
+have disabled, has limited memory allocations, and the stdout calls might be slower.
 
 ## Documentation
 
@@ -47,7 +47,12 @@ Note that the documentations are WIP and might not be up to date.
 
 ## Performance
 
-All the tests are ran on, Windows10 (64bit), ASUS N552VX, Intel Core i7-6700HQ 2.6GHz
+Pocketlang supports [tail call](https://en.wikipedia.org/wiki/Tail_call) [optimization](https://wiki.c2.com/?TailCallOptimization).
+When a function returns a call, the callee can re-use the caller's stack frame, this will optimize memory from O(n) to O(1)
+and for [tail recursive](https://www.youtube.com/watch?v=-PX0BV9hGZY) it'll completely prevent stackoverflows and yet it's faster
+then tco disabled.
+
+All the below benchmarks are ran on, Windows10 (64bit), ASUS N552VX, Intel Core i7-6700HQ 2.6GHz
 with 12GB SODIMM Ram. And the language versions are: pocketlang (pre-alpha), wren v0.3.0,
 python v3.7.4, ruby v2.7.2.
 
@@ -86,11 +91,13 @@ If you weren't able to compile it, please report by [opening an issue](https://g
 
 
 ## References
-- Bob Nystrom.(2021) *craftinginterpreters* [online] Available at: www.craftinginterpreters.com/ (Accessed January 2021)
+- Bob Nystrom.(2021) *craftinginterpreters* [online] Available at www.craftinginterpreters.com/ (Accessed January 2021)
 
-- Leonard schütz.(2020) *Dynamic Typing and NaN Boxing* [online] Available at: https://leonardschuetz.ch/blog/nan-boxing/ (Accessed December 2020)
+- Mark W. Bailey, Nathan C. Weston (June 2001) Technical report. *Performance Benefits of Tail Recursion Removal in
+Procedural Languages* [online] Available at http://cs.hamilton.edu/~mbailey/pubs/techreps/TR-2001-2.pdf
 
-- Bob Nystrom.(2011) *Pratt Parsers: Expression Parsing Made Easy* [online] Avaliable at: http://journal.stuffwithstuff.com/2011/03/19/pratt-parsers-expression-parsing-made-easy/ (Accessed December 2020)
+- Leonard schütz.(2020) *Dynamic Typing and NaN Boxing* [online] Available at https://leonardschuetz.ch/blog/nan-boxing/ (Accessed December 2020)
 
-- Carol E. (Wolf of Pace University), P. Oser. *The Shunting Yard Algorithm* [online] Available at: http://mathcenter.oxford.emory.edu/site/cs171/shuntingYardAlgorithm/ (Accessed September 2020)
+- Bob Nystrom.(2011) *Pratt Parsers: Expression Parsing Made Easy* [online] Avaliable at http://journal.stuffwithstuff.com/2011/03/19/pratt-parsers-expression-parsing-made-easy/ (Accessed December 2020)
 
+- Carol E. (Wolf of Pace University), P. Oser. *The Shunting Yard Algorithm* [online] Available at http://mathcenter.oxford.emory.edu/site/cs171/shuntingYardAlgorithm/ (Accessed September 2020)

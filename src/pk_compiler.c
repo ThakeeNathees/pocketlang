@@ -308,6 +308,9 @@ typedef struct sFunc {
   // The actual function pointer which is being compiled.
   Function* ptr;
 
+  // The index of the function in its module.
+  int index;
+
   // If outer function of a literal or the script body function of a script
   // function. Null for script body function.
   struct sFunc* outer_func;
@@ -367,6 +370,13 @@ struct Compiler {
   // the 'b' is an "l-value" and can be assigned but the '(b = 2)' is a
   // "r-value".
   bool l_value;
+
+  // This will set to true after parsing a call expression, and will be reset
+  // to false before calling an infix rule. If this is true, that means the
+  // last expression that was parsed with by compileExpression() is a function
+  // call. Which is usefull to check if a return expression is function call
+  // to perform a tail call optimization.
+  bool is_last_call;
 };
 
 typedef struct {
@@ -405,6 +415,9 @@ static void reportError(Compiler* compiler, const char* file, int line,
 
   PKVM* vm = compiler->vm;
   if (vm->config.error_fn == NULL) return;
+
+  // TODO: fix the buffer size. A non terminated large string could cause this
+  // crash.
 
   char message[ERROR_MESSAGE_SIZE];
   int length = vsprintf(message, fmt, args);
@@ -1096,12 +1109,16 @@ static void exprLiteral(Compiler* compiler) {
   int index = compilerAddConstant(compiler, value->value);
   emitOpcode(compiler, OP_PUSH_CONSTANT);
   emitShort(compiler, index);
+
+  compiler->is_last_call = false;
 }
 
 static void exprFunc(Compiler* compiler) {
   int fn_index = compileFunction(compiler, FN_LITERAL);
   emitOpcode(compiler, OP_PUSH_FN);
   emitByte(compiler, fn_index);
+
+  compiler->is_last_call = false;
 }
 
 // Local/global variables, script/native/builtin functions name.
@@ -1141,55 +1158,58 @@ static void exprName(Compiler* compiler) {
       }
 
     }
-    return;
-  }
 
-  switch (result.type) {
-    case NAME_LOCAL_VAR:
-    case NAME_GLOBAL_VAR: {
-      const bool is_global = result.type == NAME_GLOBAL_VAR;
+  } else {
 
-      if (compiler->l_value && matchAssignment(compiler)) {
-        TokenType assignment = compiler->previous.type;
-        if (assignment != TK_EQ) {
-          emitPushVariable(compiler, result.index, is_global);
-          compileExpression(compiler);
+    switch (result.type) {
+      case NAME_LOCAL_VAR:
+      case NAME_GLOBAL_VAR: {
+        const bool is_global = result.type == NAME_GLOBAL_VAR;
 
-          switch (assignment) {
-            case TK_PLUSEQ: emitOpcode(compiler, OP_ADD); break;
-            case TK_MINUSEQ: emitOpcode(compiler, OP_SUBTRACT); break;
-            case TK_STAREQ: emitOpcode(compiler, OP_MULTIPLY); break;
-            case TK_DIVEQ: emitOpcode(compiler, OP_DIVIDE); break;
-            default:
-              UNREACHABLE();
-              break;
+        if (compiler->l_value && matchAssignment(compiler)) {
+          TokenType assignment = compiler->previous.type;
+          if (assignment != TK_EQ) {
+            emitPushVariable(compiler, result.index, is_global);
+            compileExpression(compiler);
+
+            switch (assignment) {
+              case TK_PLUSEQ: emitOpcode(compiler, OP_ADD); break;
+              case TK_MINUSEQ: emitOpcode(compiler, OP_SUBTRACT); break;
+              case TK_STAREQ: emitOpcode(compiler, OP_MULTIPLY); break;
+              case TK_DIVEQ: emitOpcode(compiler, OP_DIVIDE); break;
+              default:
+                UNREACHABLE();
+                break;
+            }
+
+          } else {
+            compileExpression(compiler);
           }
 
+          emitStoreVariable(compiler, result.index, is_global);
+
         } else {
-          compileExpression(compiler);
+          emitPushVariable(compiler, result.index, is_global);
         }
-
-        emitStoreVariable(compiler, result.index, is_global);
-
-      } else {
-        emitPushVariable(compiler, result.index, is_global);
+        break;
       }
-      return;
+
+      case NAME_FUNCTION:
+        emitOpcode(compiler, OP_PUSH_FN);
+        emitByte(compiler, result.index);
+        break;
+
+      case NAME_BUILTIN:
+        emitOpcode(compiler, OP_PUSH_BUILTIN_FN);
+        emitByte(compiler, result.index);
+        break;
+
+      case NAME_NOT_DEFINED:
+        UNREACHABLE(); // Case already handled.
     }
-
-    case NAME_FUNCTION:
-      emitOpcode(compiler, OP_PUSH_FN);
-      emitByte(compiler, result.index);
-      return;
-
-    case NAME_BUILTIN:
-      emitOpcode(compiler, OP_PUSH_BUILTIN_FN);
-      emitByte(compiler, result.index);
-      return;
-
-    case NAME_NOT_DEFINED:
-      UNREACHABLE(); // Case already handled.
   }
+
+  compiler->is_last_call = false;
 }
 
 /*           a or b:             |        a and b:
@@ -1221,6 +1241,8 @@ void exprOr(Compiler* compiler) {
   emitOpcode(compiler, OP_PUSH_TRUE);
 
   patchJump(compiler, end_offset);
+
+  compiler->is_last_call = false;
 }
 
 void exprAnd(Compiler* compiler) {
@@ -1240,6 +1262,8 @@ void exprAnd(Compiler* compiler) {
   emitOpcode(compiler, OP_PUSH_FALSE);
 
   patchJump(compiler, end_offset);
+
+  compiler->is_last_call = false;
 }
 
 static void exprChainCall(Compiler* compiler) {
@@ -1266,6 +1290,8 @@ static void exprChainCall(Compiler* compiler) {
 
   emitOpcode(compiler, OP_CALL);
   emitByte(compiler, argc);
+
+  compiler->is_last_call = false;
 }
 
 static void exprBinaryOp(Compiler* compiler) {
@@ -1295,6 +1321,8 @@ static void exprBinaryOp(Compiler* compiler) {
     default:
       UNREACHABLE();
   }
+
+  compiler->is_last_call = false;
 }
 
 static void exprUnaryOp(Compiler* compiler) {
@@ -1309,6 +1337,8 @@ static void exprUnaryOp(Compiler* compiler) {
     default:
       UNREACHABLE();
   }
+
+  compiler->is_last_call = false;
 }
 
 static void exprGrouping(Compiler* compiler) {
@@ -1316,6 +1346,8 @@ static void exprGrouping(Compiler* compiler) {
   compileExpression(compiler);
   skipNewLines(compiler);
   consume(compiler, TK_RPARAN, "Expected ')' after expression.");
+
+  compiler->is_last_call = false;
 }
 
 static void exprList(Compiler* compiler) {
@@ -1340,6 +1372,8 @@ static void exprList(Compiler* compiler) {
 
   _FN->opcodes.data[size_index] = (size >> 8) & 0xff;
   _FN->opcodes.data[size_index + 1] = size & 0xff;
+
+  compiler->is_last_call = false;
 }
 
 static void exprMap(Compiler* compiler) {
@@ -1360,6 +1394,8 @@ static void exprMap(Compiler* compiler) {
 
   skipNewLines(compiler);
   consume(compiler, TK_RBRACE, "Expected '}' after map elements.");
+
+  compiler->is_last_call = false;
 }
 
 static void exprCall(Compiler* compiler) {
@@ -1378,6 +1414,8 @@ static void exprCall(Compiler* compiler) {
 
   emitOpcode(compiler, OP_CALL);
   emitByte(compiler, argc);
+
+  compiler->is_last_call = true;
 }
 
 static void exprAttrib(Compiler* compiler) {
@@ -1416,6 +1454,8 @@ static void exprAttrib(Compiler* compiler) {
     emitOpcode(compiler, OP_GET_ATTRIB);
     emitShort(compiler, index);
   }
+
+  compiler->is_last_call = false;
 }
 
 static void exprSubscript(Compiler* compiler) {
@@ -1447,17 +1487,20 @@ static void exprSubscript(Compiler* compiler) {
   } else {
     emitOpcode(compiler, OP_GET_SUBSCRIPT);
   }
+  compiler->is_last_call = false;
 }
 
 static void exprValue(Compiler* compiler) {
   TokenType op = compiler->previous.type;
   switch (op) {
-    case TK_NULL:  emitOpcode(compiler, OP_PUSH_NULL); return;
-    case TK_TRUE:  emitOpcode(compiler, OP_PUSH_TRUE); return;
-    case TK_FALSE: emitOpcode(compiler, OP_PUSH_FALSE); return;
+    case TK_NULL:  emitOpcode(compiler, OP_PUSH_NULL);  break;
+    case TK_TRUE:  emitOpcode(compiler, OP_PUSH_TRUE);  break;
+    case TK_FALSE: emitOpcode(compiler, OP_PUSH_FALSE); break;
     default:
       UNREACHABLE();
   }
+
+  compiler->is_last_call = false;
 }
 
 static void parsePrecedence(Compiler* compiler, Precedence precedence) {
@@ -1469,7 +1512,11 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
     return;
   }
 
+  // Reset to false and this will set to true by the exprCall() function,
+  // If the next infix is call '('.
+  compiler->is_last_call = false;
   compiler->l_value = precedence <= PREC_LOWEST;
+
   prefix(compiler);
 
   while (getRule(compiler->current.type)->precedence >= precedence) {
@@ -1513,6 +1560,7 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
 
   compiler->forwards_count = 0;
   compiler->new_local = false;
+  compiler->is_last_call = false;
 }
 
 // Return the index of the variable if it's already defined in the current
@@ -1738,6 +1786,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   curr_func.outer_func = compiler->func;
   curr_func.ptr = func;
   curr_func.depth = compiler->scope_depth;
+  curr_func.index = fn_index;
 
   compiler->func = &curr_func;
 
@@ -1783,18 +1832,14 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   if (fn_type != FN_NATIVE) {
     compileBlockBody(compiler, BLOCK_FUNC);
     consume(compiler, TK_END, "Expected 'end' after function definition end.");
+    compilerExitBlock(compiler); // Parameter depth.
 
-    // TODO: This is the function end return, if we pop all the parameters the
-    // below push_null is redundent (because we always have a null at the rbp
-    // of the call frame. (for i in argc : emit(pop)) emit(return); but this
-    // might be faster (right?).
-
-    emitOpcode(compiler, OP_PUSH_NULL);
     emitOpcode(compiler, OP_RETURN);
     emitOpcode(compiler, OP_END);
-  }
 
-  compilerExitBlock(compiler); // Parameter depth.
+  } else {
+    compilerExitBlock(compiler); // Parameter depth.
+  }
 
 #if DEBUG_DUMP_COMPILED_CODE
   pkByteBuffer buff;
@@ -2348,6 +2393,16 @@ static void compileStatement(Compiler* compiler) {
       emitOpcode(compiler, OP_RETURN);
     } else {
       compileExpression(compiler); //< Return value is at stack top.
+
+      // Tail call optimization disabled at debug mode.
+      if (compiler->options && !compiler->options->debug) {
+        if (compiler->is_last_call) {
+          ASSERT(_FN->opcodes.count >= 2, OOPS); // OP_CALL, argc
+          ASSERT(_FN->opcodes.data[_FN->opcodes.count - 2] == OP_CALL, OOPS);
+          _FN->opcodes.data[_FN->opcodes.count - 2] = OP_TAIL_CALL;
+        }
+      }
+
       consumeEndStatement(compiler);
       emitOpcode(compiler, OP_RETURN);
     }

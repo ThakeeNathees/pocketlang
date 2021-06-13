@@ -3,6 +3,13 @@
 
 - Refactor fiber into a module and is_done as an attribute.
 
+- def f(x)
+    f(x) ## not tco, unless return f(x)
+  end
+  if a function's last statement is a call, we can perform tco.
+
+- Recursive call to anonymous functions.
+
 - move moduleAddGlobalInternal() to var.h (also other var functions).
 
 - refactor build.bat batch script to powershell

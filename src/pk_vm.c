@@ -526,7 +526,7 @@ static inline void growStack(PKVM* vm, int size) {
 static inline void pushCallFrame(PKVM* vm, const Function* fn) {
     ASSERT(!fn->is_native, "Native function shouldn't use call frames.");
 
-    /* Grow the stack frame if needed. */
+    // Grow the stack frame if needed.
     if (vm->fiber->frame_count + 1 > vm->fiber->frame_capacity) {
       int new_capacity = vm->fiber->frame_capacity << 1;
       vm->fiber->frames = (CallFrame*)vmRealloc(vm, vm->fiber->frames,
@@ -535,7 +535,7 @@ static inline void pushCallFrame(PKVM* vm, const Function* fn) {
       vm->fiber->frame_capacity = new_capacity;
     }
 
-    /* Grow the stack if needed. */
+    // Grow the stack if needed.
     int needed = fn->fn->stack_size + (int)(vm->fiber->sp - vm->fiber->stack);
     if (vm->fiber->stack_size <= needed) growStack(vm, needed);
 
@@ -543,6 +543,34 @@ static inline void pushCallFrame(PKVM* vm, const Function* fn) {
     frame->rbp = vm->fiber->ret;
     frame->fn = fn;
     frame->ip = fn->fn->opcodes.data;
+}
+
+static inline void reuseCallFrame(PKVM* vm, const Function* fn) {
+
+  ASSERT(!fn->is_native, "Native function shouldn't use call frames.");
+  ASSERT(fn->arity >= 0, OOPS);
+  ASSERT(vm->fiber->frame_count > 0, OOPS);
+
+  Fiber* fb = vm->fiber;
+
+  // Move all the argument(s) to the base of the current frame.
+  Var* arg = fb->sp - fn->arity;
+  Var* target = fb->ret + 1;
+  for (; arg < fb->sp; arg++, target++) {
+    *target = *arg;
+  }
+
+  // At this point target points to the stack pointer of the next call.
+  fb->sp = target;
+
+  // Grow the stack if needed (least probably).
+  int needed = fn->fn->stack_size + (int)(vm->fiber->sp - vm->fiber->stack);
+  if (vm->fiber->stack_size <= needed) growStack(vm, needed);
+
+  CallFrame* frame = vm->fiber->frames + vm->fiber->frame_count - 1;
+  ASSERT(frame->rbp == fb->ret, OOPS);
+  frame->fn = fn;
+  frame->ip = fn->fn->opcodes.data;
 }
 
 static void reportError(PKVM* vm) {
@@ -838,6 +866,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     }
 
     OPCODE(CALL):
+    OPCODE(TAIL_CALL):
     {
       const uint8_t argc = READ_BYTE();
 
@@ -857,11 +886,11 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
           RUNTIME_ERROR(msg);
         }
 
-        // Next call frame starts here. (including return value).
-        call_fiber->ret = callable;
-        *(call_fiber->ret) = VAR_NULL; //< Set the return value to null.
-
         if (fn->is_native) {
+
+          // Next call frame starts here. (including return value).
+          call_fiber->ret = callable;
+          *(call_fiber->ret) = VAR_NULL; //< Set the return value to null.
 
           if (fn->native == NULL) {
             RUNTIME_ERROR(stringFormat(vm,
@@ -887,9 +916,22 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
           CHECK_ERROR();
 
         } else {
-          UPDATE_FRAME(); //< Update the current frame's ip.
-          pushCallFrame(vm, fn);
-          LOAD_FRAME();  //< Load the top frame to vm's execution variables.
+
+          if (instruction == OP_CALL) {
+            // Next call frame starts here. (including return value).
+            call_fiber->ret = callable;
+            *(call_fiber->ret) = VAR_NULL; //< Set the return value to null.
+
+            UPDATE_FRAME(); //< Update the current frame's ip.
+            pushCallFrame(vm, fn);
+            LOAD_FRAME();  //< Load the top frame to vm's execution variables.
+
+          } else {
+            ASSERT(instruction == OP_TAIL_CALL, OOPS);
+
+            reuseCallFrame(vm, fn);
+            LOAD_FRAME();  //< Re-load the frame to vm's execution variables.
+          }
         }
 
       } else {
