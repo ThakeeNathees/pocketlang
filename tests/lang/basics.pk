@@ -54,7 +54,7 @@ assert((1 << 0) == 1)
 assert((1 << 2) == 4)
 assert((3 << 2) == 12)
 
-assert((1 >> 0) == 0)
+assert((1 >> 1) == 0)
 assert((8 >> 1) == 4)
 assert((8 >> 2) == 2)
 assert((4 >> 2) == 1)

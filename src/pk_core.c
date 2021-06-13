@@ -1318,8 +1318,18 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
       Range* range = (Range*)obj;
       SWITCH_ATTRIB(attrib->data) {
 
-        CASE_ATTRIB("as_list", 0x1562c22) :
+        CASE_ATTRIB("as_list", 0x1562c22):
           return VAR_OBJ(rangeAsList(vm, range));
+
+        // We can't use '.start', '.end' since 'end' in pocketlang is a
+        // keyword. Also we can't use '.from', '.to' since 'from' is a keyword
+        // too. So, we're using '.first' and '.last' to access the range limits.
+
+        CASE_ATTRIB("first", 0x4881d841):
+          return VAR_NUM(range->from);
+
+        CASE_ATTRIB("last", 0x63e1d819):
+          return VAR_NUM(range->to);
 
         CASE_DEFAULT:
           ERR_NO_ATTRIB(vm, on, attrib);
@@ -1329,7 +1339,8 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
       UNREACHABLE();
     }
 
-    case OBJ_SCRIPT: {
+    case OBJ_SCRIPT:
+    {
       Script* scr = (Script*)obj;
 
       // Search in functions.
@@ -1422,6 +1433,8 @@ do {                                                                          \
 
     case OBJ_RANGE:
       ATTRIB_IMMUTABLE("as_list");
+      ATTRIB_IMMUTABLE("first");
+      ATTRIB_IMMUTABLE("last");
       ERR_NO_ATTRIB(vm, on, attrib);
       return;
 

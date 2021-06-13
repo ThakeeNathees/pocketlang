@@ -29,6 +29,12 @@ def fn(p1, p2, p3) end
 assert(fn.name == "fn")
 assert(fn.arity == 3)
 
+## range
+r = 1..5
+assert(r.as_list == [1, 2, 3, 4])
+assert(r.first == 1)
+assert(r.last == 5)
+
 ## Math functions
 from math import PI, sin, cos, tan, abs
 
