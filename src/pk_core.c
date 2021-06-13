@@ -1318,8 +1318,14 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
       Range* range = (Range*)obj;
       SWITCH_ATTRIB(attrib->data) {
 
-        CASE_ATTRIB("as_list", 0x1562c22) :
+        CASE_ATTRIB("as_list", 0x1562c22):
           return VAR_OBJ(rangeAsList(vm, range));
+
+        CASE_ATTRIB("start", 0x652b04df):
+          return VAR_NUM((double)(range->from));
+
+        CASE_ATTRIB("end", 0x6a8e75aa):
+          return VAR_NUM((double)(range->to));
 
         CASE_DEFAULT:
           ERR_NO_ATTRIB(vm, on, attrib);
@@ -1329,7 +1335,8 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
       UNREACHABLE();
     }
 
-    case OBJ_SCRIPT: {
+    case OBJ_SCRIPT:
+    {
       Script* scr = (Script*)obj;
 
       // Search in functions.
