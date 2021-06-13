@@ -80,10 +80,10 @@ typedef struct PKVM PKVM;
 
 // A handle to the pocketlang variables. It'll hold the reference to the
 // variable and ensure that the variable it holds won't be garbage collected
-// till it released with pkReleaseHandle().
+// till it's released with pkReleaseHandle().
 typedef struct PkHandle PkHandle;
 
-// A temproary pointer to the pocketlang variable. This pointer is aquired
+// A temproary pointer to the pocketlang variable. This pointer is acquired
 // from the pocketlang's current stack frame and the pointer will become
 // dangling once after the stack frame is popped.
 typedef void* PkVar;
@@ -116,18 +116,18 @@ typedef enum {
 } PkErrorType;
 
 // Result that pocketlang will return after a compilation or running a script
-// or a function or evaluvating an expression.
+// or a function or evaluating an expression.
 typedef enum {
   PK_RESULT_SUCCESS = 0,    // Successfully finished the execution.
 
-  // This will be *set to true if we're running REPL mode and reached an EOF
+  // This will be set to `true` if we're running REPL mode and reached an EOF
   // unexpectedly, 
 
   // Unexpected EOF while compiling the source. This is another compile time
-  // error that will ONLY be returned if the we're compiling with the REPL
-  // mode set in the compile options. We need this specific error to indicate
-  // the host application to add another line to the last input. If REPL not
-  // enabled this will be PK_RESULT_COMPILE_ERROR.
+  // error that will ONLY be returned if we're compiling with the REPL mode set
+  // in the compile options. We need this specific error to indicate the host
+  // application to add another line to the last input. If REPL is not enabled,
+  // this will be PK_RESULT_COMPILE_ERROR.
   PK_RESULT_UNEXPECTED_EOF,
 
   PK_RESULT_COMPILE_ERROR,  // Compilation failed.
@@ -196,7 +196,7 @@ PK_PUBLIC PkConfiguration pkNewConfiguration(void);
 // application.
 PK_PUBLIC PkCompileOptions pkNewCompilerOptions(void);
 
-// Allocate initialize and returns a new VM
+// Allocate, initialize and returns a new VM
 PK_PUBLIC PKVM* pkNewVM(PkConfiguration* config);
 
 // Clean the VM and dispose all the resources allocated by the VM.
@@ -208,17 +208,17 @@ PK_PUBLIC void pkSetUserData(PKVM* vm, void* user_data);
 // Returns the associated user data.
 PK_PUBLIC void* pkGetUserData(const PKVM* vm);
 
-// Create a new handle for the [value]. This is usefull to keep the [value]
-// alive once it aquired from the stack. Do not use the [value] once creating
-// a new handle for it instead get the value from the handle by using
-// pkGetHandleValue() function.
+// Create a new handle for the [value]. This is useful to keep the [value]
+// alive once it acquired from the stack. Do not use the [value] once
+// creating a new handle for it instead get the value from the handle by
+// using pkGetHandleValue() function.
 PK_PUBLIC PkHandle* pkNewHandle(PKVM* vm, PkVar value);
 
 // Return the PkVar pointer in the handle, the returned pointer will be valid
 // till the handle is released.
 PK_PUBLIC PkVar pkGetHandleValue(const PkHandle* handle);
 
-// Release the handle and allow it's value to be garbage collected. Always call
+// Release the handle and allow its value to be garbage collected. Always call
 // this for every handles before freeing the VM.
 PK_PUBLIC void pkReleaseHandle(PKVM* vm, PkHandle* handle);
 
@@ -243,7 +243,7 @@ PK_PUBLIC PkResult pkCompileModule(PKVM* vm, PkHandle* module,
                                PkStringPtr source,
                                const PkCompileOptions* options);
 
-// Interpret the source and return the result. Once It's done with the source
+// Interpret the source and return the result. Once it's done with the source
 // and path 'on_done' will be called to clean the string if it's not NULL.
 // Set the compiler options with the the [options] argument or it can be set to
 // NULL for default options.
@@ -270,7 +270,7 @@ PK_PUBLIC PkResult pkResumeFiber(PKVM* vm, PkHandle* fiber, PkVar value);
 /*****************************************************************************/
 
 // A string pointer wrapper to pass cstring from host application to pocketlang
-// vm, with a on_done() callback to clean it when the pocketlang vm done with
+// vm, with a on_done() callback to clean it when the pocketlang vm is done with
 // the string.
 struct PkStringPtr {
   const char* string;     //< The string result.
@@ -339,7 +339,7 @@ PK_PUBLIC int pkGetArgc(const PKVM* vm);
 // keep the var alive even after that.
 PK_PUBLIC PkVar pkGetArg(const PKVM* vm, int arg);
 
-// The below functions are used to extract the function arguments from the
+// The functions below are used to extract the function arguments from the
 // stack as a type. They will first validate the argument's type and set a
 // runtime error if it's not and return false. Otherwise it'll set the [value]
 // with the extracted value. Note that the arguments are 1 based (to get the 
@@ -350,7 +350,7 @@ PK_PUBLIC bool pkGetArgNumber(PKVM* vm, int arg, double* value);
 PK_PUBLIC bool pkGetArgString(PKVM* vm, int arg, const char** value);
 PK_PUBLIC bool pkGetArgValue(PKVM* vm, int arg, PkVarType type, PkVar* value);
 
-// The below functions are used to set the return value of the current native
+// The functions follow are used to set the return value of the current native
 // function's. Don't use it outside a registered native function.
 
 PK_PUBLIC void pkReturnNull(PKVM* vm);
@@ -377,7 +377,7 @@ PK_PUBLIC bool pkFiberIsDone(const PkHandle* fiber);
 /* POCKETLANG TYPE FUNCTIONS                                                 */
 /*****************************************************************************/
 
-// The below functions will allocate a new object and return's it's value
+// The functions below will allocate a new object and return's it's value
 // wrapped around a handler.
 
 PK_PUBLIC PkHandle* pkNewString(PKVM* vm, const char* value);
@@ -392,10 +392,9 @@ PK_PUBLIC PkHandle* pkNewModule(PKVM* vm, const char* name);
 // Create and return a new fiber around the function [fn].
 PK_PUBLIC PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn);
 
-//      TODO:
-// The below functions will push the primitive values on the stack and return
-// it's pointer as a PkVar it's usefull to convert your primitive values as
-// pocketlang variables.
+// TODO: The functions below will push the primitive values on the stack
+// and return it's pointer as a PkVar. It's useful to convert your primitive
+// values as pocketlang variables.
 //PK_PUBLIC PkVar pkPushNull(PKVM* vm);
 //PK_PUBLIC PkVar pkPushBool(PKVM* vm, bool value);
 //PK_PUBLIC PkVar pkPushNumber(PKVM* vm, double value);
