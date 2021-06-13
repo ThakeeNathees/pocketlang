@@ -1024,11 +1024,13 @@ void initializeCore(PKVM* vm) {
   VM_SET_ERROR(vm, stringFormat(vm, "Unsupported operand types for "   \
     "operator '" op "' $ and $", varTypeName(v1), varTypeName(v2)))
 
-Var varAdd(PKVM* vm, Var v1, Var v2) {
+#define PK_RIGHT_OP "Right operand"
 
+Var varAdd(PKVM* vm, Var v1, Var v2) {
   double d1, d2;
+
   if (isNumeric(v1, &d1)) {
-    if (validateNumeric(vm, v2, &d2, "Right operand")) {
+    if (validateNumeric(vm, v2, &d2, PK_RIGHT_OP)) {
       return VAR_NUM(d1 + d2);
     }
     return VAR_NULL;
@@ -1069,8 +1071,9 @@ Var varAdd(PKVM* vm, Var v1, Var v2) {
 
 Var varSubtract(PKVM* vm, Var v1, Var v2) {
   double d1, d2;
+
   if (isNumeric(v1, &d1)) {
-    if (validateNumeric(vm, v2, &d2, "Right operand")) {
+    if (validateNumeric(vm, v2, &d2, PK_RIGHT_OP)) {
       return VAR_NUM(d1 - d2);
     }
     return VAR_NULL;
@@ -1081,10 +1084,10 @@ Var varSubtract(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varMultiply(PKVM* vm, Var v1, Var v2) {
-
   double d1, d2;
+
   if (isNumeric(v1, &d1)) {
-    if (validateNumeric(vm, v2, &d2, "Right operand")) {
+    if (validateNumeric(vm, v2, &d2, PK_RIGHT_OP)) {
       return VAR_NUM(d1 * d2);
     }
     return VAR_NULL;
@@ -1096,8 +1099,9 @@ Var varMultiply(PKVM* vm, Var v1, Var v2) {
 
 Var varDivide(PKVM* vm, Var v1, Var v2) {
   double d1, d2;
+
   if (isNumeric(v1, &d1)) {
-    if (validateNumeric(vm, v2, &d2, "Right operand")) {
+    if (validateNumeric(vm, v2, &d2, PK_RIGHT_OP)) {
       return VAR_NUM(d1 / d2);
     }
     return VAR_NULL;
@@ -1108,10 +1112,10 @@ Var varDivide(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varModulo(PKVM* vm, Var v1, Var v2) {
-
   double d1, d2;
+
   if (isNumeric(v1, &d1)) {
-    if (validateNumeric(vm, v2, &d2, "Right operand")) {
+    if (validateNumeric(vm, v2, &d2, PK_RIGHT_OP)) {
       return VAR_NUM(fmod(d1, d2));
     }
     return VAR_NULL;
@@ -1127,10 +1131,10 @@ Var varModulo(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varBitAnd(PKVM* vm, Var v1, Var v2) {
-
   int64_t i1, i2;
+
   if (isInteger(v1, &i1)) {
-    if (validateInteger(vm, v2, &i2, "Right operand")) {
+    if (validateInteger(vm, v2, &i2, PK_RIGHT_OP)) {
       return VAR_NUM((double)(i1 & i2));
     }
     return VAR_NULL;
@@ -1141,10 +1145,10 @@ Var varBitAnd(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varBitOr(PKVM* vm, Var v1, Var v2) {
-
   int64_t i1, i2;
+
   if (isInteger(v1, &i1)) {
-    if (validateInteger(vm, v2, &i2, "Right operand")) {
+    if (validateInteger(vm, v2, &i2, PK_RIGHT_OP)) {
       return VAR_NUM((double)(i1 | i2));
     }
     return VAR_NULL;
@@ -1154,8 +1158,51 @@ Var varBitOr(PKVM* vm, Var v1, Var v2) {
   return VAR_NULL;
 }
 
+Var varBitXor(PKVM* vm, Var v1, Var v2) {
+  int64_t i1, i2;
+
+  if (isInteger(v1, &i1)) {
+    if (validateInteger(vm, v2, &i2, PK_RIGHT_OP)) {
+      return VAR_NUM((double)(i1 ^ i2));
+    }
+    return VAR_NULL;
+  } 
+
+  UNSUPPORT_OPERAND_TYPES("^");
+  return VAR_NULL;
+}
+
+Var varBitLshift(PKVM* vm, Var v1, Var v2) {
+  int64_t i1, i2;
+
+  if (isInteger(v1, &i1)) {
+    if (validateInteger(vm, v2, &i2, PK_RIGHT_OP)) {
+      return VAR_NUM((double)(i1 << i2));
+    }
+    return VAR_NULL;
+  }
+
+  UNSUPPORT_OPERAND_TYPES("<<");
+  return VAR_NULL;
+}
+
+Var varBitRshift(PKVM* vm, Var v1, Var v2) {
+  int64_t i1, i2;
+
+  if (isInteger(v1, &i1)) {
+    if (validateInteger(vm, v2, &i2, PK_RIGHT_OP)) {
+      return VAR_NUM((double)(i1 >> i2));
+    }
+    return VAR_NULL;
+  }
+
+  UNSUPPORT_OPERAND_TYPES(">>");
+  return VAR_NULL;
+}
+
 bool varGreater(Var v1, Var v2) {
   double d1, d2;
+
   if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
     return d1 > d2;
   }
@@ -1166,6 +1213,7 @@ bool varGreater(Var v1, Var v2) {
 
 bool varLesser(Var v1, Var v2) {
   double d1, d2;
+
   if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
     return d1 < d2;
   }

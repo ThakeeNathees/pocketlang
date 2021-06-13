@@ -1256,9 +1256,43 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     }
 
     OPCODE(BIT_XOR):
+    {
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+
+      Var result = varBitXor(vm, l, r);
+      DROP(); DROP(); // r, l
+      PUSH(result);
+
+      CHECK_ERROR();
+      DISPATCH();
+    }
+
     OPCODE(BIT_LSHIFT):
+    {
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+
+      Var result = varBitLshift(vm, l, r);
+      DROP(); DROP(); // r, l
+      PUSH(result);
+
+      CHECK_ERROR();
+      DISPATCH();
+    }
+
     OPCODE(BIT_RSHIFT):
-      TODO;
+    {
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+
+      Var result = varBitRshift(vm, l, r);
+      DROP(); DROP(); // r, l
+      PUSH(result);
+
+      CHECK_ERROR();
+      DISPATCH();
+    }
 
     OPCODE(EQEQ):
     {
