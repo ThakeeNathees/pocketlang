@@ -1,0 +1,16 @@
+
+## Run the script in pocketlang with
+## toc enabled VS toc disabled
+
+from lang import clock
+
+N = 50000
+
+def woo(n, acc)
+	if n == 0 then return acc end
+	return woo(n-1, acc + '!')
+end
+
+s = clock()
+print(woo(N, ''))
+print('elapsed:', clock() - s)
