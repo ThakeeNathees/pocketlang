@@ -1151,7 +1151,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     {
       Var num = POP();
       if (!IS_NUM(num)) {
-        RUNTIME_ERROR(newString(vm, "Cannot negate a non numeric value."));
+        RUNTIME_ERROR(newString(vm, "Can not negate a non numeric value."));
       }
       PUSH(VAR_NUM(-AS_NUM(num)));
       DISPATCH();
@@ -1174,9 +1174,9 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-      Var value = varAdd(vm, l, r);
+      Var result = varAdd(vm, l, r);
       DROP(); DROP(); // r, l
-      PUSH(value);
+      PUSH(result);
 
       CHECK_ERROR();
       DISPATCH();
@@ -1186,9 +1186,9 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-      Var value = varSubtract(vm, l, r);
+      Var result = varSubtract(vm, l, r);
       DROP(); DROP(); // r, l
-      PUSH(value);
+      PUSH(result);
 
       CHECK_ERROR();
       DISPATCH();
@@ -1198,9 +1198,9 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-      Var value = varMultiply(vm, l, r);
+      Var result = varMultiply(vm, l, r);
       DROP(); DROP(); // r, l
-      PUSH(value);
+      PUSH(result);
 
       CHECK_ERROR();
       DISPATCH();
@@ -1210,9 +1210,9 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-      Var value = varDivide(vm, l, r);
+      Var result = varDivide(vm, l, r);
       DROP(); DROP(); // r, l
-      PUSH(value);
+      PUSH(result);
 
       CHECK_ERROR();
       DISPATCH();
@@ -1222,9 +1222,9 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-      Var value = varModulo(vm, l, r);
+      Var result = varModulo(vm, l, r);
       DROP(); DROP(); // r, l
-      PUSH(value);
+      PUSH(result);
 
       CHECK_ERROR();
       DISPATCH();
@@ -1234,15 +1234,27 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-      Var value = varBitAnd(vm, l, r);
+      Var result = varBitAnd(vm, l, r);
       DROP(); DROP(); // r, l
-      PUSH(value);
+      PUSH(result);
 
       CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(BIT_OR):
+    {
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+
+      Var result = varBitOr(vm, l, r);
+      DROP(); DROP(); // r, l
+      PUSH(result);
+
+      CHECK_ERROR();
+      DISPATCH();
+    }
+
     OPCODE(BIT_XOR):
     OPCODE(BIT_LSHIFT):
     OPCODE(BIT_RSHIFT):

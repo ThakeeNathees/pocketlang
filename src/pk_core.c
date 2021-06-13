@@ -1140,6 +1140,20 @@ Var varBitAnd(PKVM* vm, Var v1, Var v2) {
   return VAR_NULL;
 }
 
+Var varBitOr(PKVM* vm, Var v1, Var v2) {
+
+  int64_t i1, i2;
+  if (isInteger(v1, &i1)) {
+    if (validateInteger(vm, v2, &i2, "Right operand")) {
+      return VAR_NUM((double)(i1 | i2));
+    }
+    return VAR_NULL;
+  }
+
+  UNSUPPORT_OPERAND_TYPES("|");
+  return VAR_NULL;
+}
+
 bool varGreater(Var v1, Var v2) {
   double d1, d2;
   if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
