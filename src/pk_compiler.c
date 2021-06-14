@@ -92,6 +92,7 @@ typedef enum {
   TK_MINUSEQ,    // -=
   TK_STAREQ,     // *=
   TK_DIVEQ,      // /=
+
   TK_SRIGHT,     // >>
   TK_SLEFT,      // <<
 
@@ -958,12 +959,13 @@ static void emitOpcode(Compiler* compiler, Opcode opcode);
 static int emitByte(Compiler* compiler, int byte);
 static int emitShort(Compiler* compiler, int arg);
 
+static void emitLoopJump(Compiler* compiler);
+static void emitAssignment(Compiler* compiler, TokenType assignment);
+
 static void patchJump(Compiler* compiler, int addr_index);
 static void patchForward(Compiler* compiler, Fn* fn, int index, int name);
 
 static int compilerAddConstant(Compiler* compiler, Var value);
-static int compilerGetVariable(Compiler* compiler, const char* name,
-                               uint32_t length);
 static int compilerAddVariable(Compiler* compiler, const char* name,
                                uint32_t length, int line);
 static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
@@ -1171,16 +1173,7 @@ static void exprName(Compiler* compiler) {
           if (assignment != TK_EQ) {
             emitPushVariable(compiler, result.index, is_global);
             compileExpression(compiler);
-
-            switch (assignment) {
-              case TK_PLUSEQ: emitOpcode(compiler, OP_ADD); break;
-              case TK_MINUSEQ: emitOpcode(compiler, OP_SUBTRACT); break;
-              case TK_STAREQ: emitOpcode(compiler, OP_MULTIPLY); break;
-              case TK_DIVEQ: emitOpcode(compiler, OP_DIVIDE); break;
-              default:
-                UNREACHABLE();
-                break;
-            }
+            emitAssignment(compiler, assignment);
 
           } else {
             compileExpression(compiler);
@@ -1433,16 +1426,7 @@ static void exprAttrib(Compiler* compiler) {
       emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
       emitShort(compiler, index);
       compileExpression(compiler);
-
-      switch (assignment) {
-        case TK_PLUSEQ: emitOpcode(compiler, OP_ADD); break;
-        case TK_MINUSEQ: emitOpcode(compiler, OP_SUBTRACT); break;
-        case TK_STAREQ: emitOpcode(compiler, OP_MULTIPLY); break;
-        case TK_DIVEQ: emitOpcode(compiler, OP_DIVIDE); break;
-        default:
-          UNREACHABLE();
-          break;
-      }
+      emitAssignment(compiler, assignment);
     } else {
       compileExpression(compiler);
     }
@@ -1468,16 +1452,8 @@ static void exprSubscript(Compiler* compiler) {
     if (assignment != TK_EQ) {
       emitOpcode(compiler, OP_GET_SUBSCRIPT_KEEP);
       compileExpression(compiler);
+      emitAssignment(compiler, assignment);
 
-      switch (assignment) {
-        case TK_PLUSEQ: emitOpcode(compiler, OP_ADD); break;
-        case TK_MINUSEQ: emitOpcode(compiler, OP_SUBTRACT); break;
-        case TK_STAREQ: emitOpcode(compiler, OP_MULTIPLY); break;
-        case TK_DIVEQ: emitOpcode(compiler, OP_DIVIDE); break;
-        default:
-          UNREACHABLE();
-          break;
-      }
     } else {
       compileExpression(compiler);
     }
@@ -1563,19 +1539,6 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
   compiler->is_last_call = false;
 }
 
-// Return the index of the variable if it's already defined in the current
-// scope otherwise returns -1.
-static int compilerGetVariable(Compiler* compiler, const char* name,
-                               uint32_t length) {
-  for (int i = compiler->local_count - 1; i >= 0; i--) {
-    Local* local = &compiler->locals[i];
-    if (length == local->length && strncmp(name, local->name, length) == 0) {
-      return i;
-    }
-  }
-  return -1;
-}
-
 // Add a variable and return it's index to the context. Assumes that the
 // variable name is unique and not defined before in the current scope.
 static int compilerAddVariable(Compiler* compiler, const char* name,
@@ -1587,14 +1550,14 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
   bool max_vars_reached = false;
   const char* var_type = ""; // For max variables reached error message.
   if (compiler->scope_depth == DEPTH_GLOBAL) {
-    if (compiler->local_count == MAX_VARIABLES) {
-      max_vars_reached = true;
-      var_type = "locals";
-    }
-  } else {
-    if (compiler->script->globals.count == MAX_VARIABLES) {
+    if (compiler->script->globals.count >= MAX_VARIABLES) {
       max_vars_reached = true;
       var_type = "globals";
+    }
+  } else {
+    if (compiler->local_count >= MAX_VARIABLES) {
+      max_vars_reached = true;
+      var_type = "locals";
     }
   }
   if (max_vars_reached) {
@@ -1665,14 +1628,39 @@ static void compilerEnterBlock(Compiler* compiler) {
   compiler->scope_depth++;
 }
 
-// Pop all the locals at the [depth] or highter. Returns the number of locals
-// that were poppedl
+// Change the stack size by the [num], if it's positive, the stack will
+// grow otherwise it'll shrink.
+static void compilerChangeStack(Compiler* compiler, int num) {
+  compiler->stack_size += num;
+
+  // If the compiler has error (such as undefined name, that will not popped
+  // because of the semantic error but it'll be popped once the expression
+  // parsing is done.
+  if (!compiler->has_errors) ASSERT(compiler->stack_size >= 0, OOPS);
+
+  if (compiler->stack_size > _FN->stack_size) {
+    _FN->stack_size = compiler->stack_size;
+  }
+}
+
+// Write instruction to pop all the locals at the current [depth] or higher,
+// but it won't change the stack size of locals count because this function
+// is called by break/continue statements at the middle of a scope, so we need
+// those locals till the scope ends. This will returns the number of locals
+// that were popped.
 static int compilerPopLocals(Compiler* compiler, int depth) {
   ASSERT(depth > (int)DEPTH_GLOBAL, "Cannot pop global variables.");
 
   int local = compiler->local_count - 1;
   while (local >= 0 && compiler->locals[local].depth >= depth) {
-    emitOpcode(compiler, OP_POP);
+
+    // Note: Do not use emitOpcode(compiler, OP_POP);
+    // Because this function is called at the middle of a scope (break,
+    // continue). So we need the pop instruction here but we still need the
+    // locals to continue parsing the next statements in the scope. They'll be
+    // popped once the scope is ended.
+    emitByte(compiler, OP_POP);
+
     local--;
   }
   return (compiler->local_count - 1) - local;
@@ -1713,10 +1701,25 @@ static int emitShort(Compiler* compiler, int arg) {
 // should be handled).
 static void emitOpcode(Compiler* compiler, Opcode opcode) {
   emitByte(compiler, (int)opcode);
+  compilerChangeStack(compiler, opcode_info[opcode].stack);
+}
 
-  compiler->stack_size += opcode_info[opcode].stack;
-  if (compiler->stack_size > _FN->stack_size) {
-    _FN->stack_size = compiler->stack_size;
+// Jump back to the start of the loop.
+static void emitLoopJump(Compiler* compiler) {
+  emitOpcode(compiler, OP_LOOP);
+  int offset = (int)_FN->opcodes.count - compiler->loop->start + 2;
+  emitShort(compiler, offset);
+}
+
+static void emitAssignment(Compiler* compiler, TokenType assignment) {
+  switch (assignment) {
+    case TK_PLUSEQ: emitOpcode(compiler, OP_ADD); break;
+    case TK_MINUSEQ: emitOpcode(compiler, OP_SUBTRACT); break;
+    case TK_STAREQ: emitOpcode(compiler, OP_MULTIPLY); break;
+    case TK_DIVEQ: emitOpcode(compiler, OP_DIVIDE); break;
+    default:
+      UNREACHABLE();
+      break;
   }
 }
 
@@ -1731,13 +1734,6 @@ static void patchJump(Compiler* compiler, int addr_index) {
 
 static void patchForward(Compiler* compiler, Fn* fn, int index, int name) {
   fn->opcodes.data[index] = name & 0xff;
-}
-
-// Jump back to the start of the loop.
-static void emitLoopJump(Compiler* compiler) {
-  emitOpcode(compiler, OP_LOOP);
-  int offset = (int)_FN->opcodes.count - compiler->loop->start + 2;
-  emitShort(compiler, offset);
 }
 
  /****************************************************************************
@@ -1828,6 +1824,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   }
 
   func->arity = argc;
+  compilerChangeStack(compiler, argc);
 
   if (fn_type != FN_NATIVE) {
     compileBlockBody(compiler, BLOCK_FUNC);
@@ -1892,6 +1889,8 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
 // path) and return it as a script pointer. And it'll emit opcodes to push
 // that script to the stack.
 static Script* importFile(Compiler* compiler, const char* path) {
+  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
+
   PKVM* vm = compiler->vm;
 
   // Resolve the path.
@@ -1969,9 +1968,10 @@ static Script* importFile(Compiler* compiler, const char* path) {
 // push that script to the stack.
 static Script* importCoreLib(Compiler* compiler, const char* name_start,
                              int name_length) {
+  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
   // Add the name to the script's name buffer, we need it as a key to the
-      // vm's script cache.
+  // vm's script cache.
   int index = (int)scriptAddName(compiler->script, compiler->vm,
                                  name_start, name_length);
   String* module = compiler->script->names.data[index];
@@ -1993,6 +1993,8 @@ static Script* importCoreLib(Compiler* compiler, const char* name_start,
 // Push the imported script on the stack and return the pointer. It could be
 // either core library or a local import.
 static inline Script* compilerImport(Compiler* compiler) {
+  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
+
   // Get the script (from core libs or vm's cache or compile new one).
   // And push it on the stack.
   if (match(compiler, TK_NAME)) { //< Core library.
@@ -2011,13 +2013,42 @@ static inline Script* compilerImport(Compiler* compiler) {
   return NULL;
 }
 
+// Search for the name, and return it's index in the globals. If it's not
+// exists in the globals it'll add a variable to the globals entry and return.
+// But If the name is predefined function (cannot be modified). It'll set error
+// and return -1.
+static int compilerImportName(Compiler* compiler, int line,
+                              const char* name, uint32_t length) {
+  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
+
+  NameSearchResult result = compilerSearchName(compiler, name, length);
+  switch (result.type) {
+    case NAME_NOT_DEFINED:
+      return compilerAddVariable(compiler, name, length, line);
+
+    case NAME_LOCAL_VAR:
+      UNREACHABLE();
+
+    case NAME_GLOBAL_VAR:
+      return result.index;
+
+    case NAME_FUNCTION:
+    case NAME_BUILTIN:
+      parseError(compiler, "Name '%.*s' already exists.", length, name);
+      return -1;
+  }
+
+  UNREACHABLE();
+}
+
 // Import all from the script, which is also would be at the top of the stack
 // before executing the below instructions.
 static void compilerImportAll(Compiler* compiler, Script* script) {
 
   ASSERT(script != NULL, OOPS);
+  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
-  // Line number of the variables which will be bind to the imported sybmols.
+  // Line number of the variables which will be bind to the imported sybmol.
   int line = compiler->previous.line;
 
   // TODO: Refactor this to a loop rather than jumping with goto.
@@ -2049,14 +2080,8 @@ L_import_all_from_buffer:
     emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
     emitShort(compiler, name_index);
 
-    // Store the bind the function with the variable. If the variable already
-    // exists, override it, otherwise a add a new varaible.
-    int var_index = compilerGetVariable(compiler, name->data, name->length);
-    if (var_index == -1) {
-      var_index = compilerAddVariable(compiler, name->data,
-                                          name->length, line);
-    }
-    emitStoreVariable(compiler, var_index, true);
+    int index = compilerImportName(compiler, line, name->data, name->length);
+    if (index != -1) emitStoreVariable(compiler, index, true);
     emitOpcode(compiler, OP_POP);
   }
 
@@ -2086,6 +2111,7 @@ L_import_done:
 
 // from module import symbol [as alias [, symbol2 [as alias]]]
 static void compileFromImport(Compiler* compiler) {
+  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
   // Import the library and push it on the stack. If the import failed
   // lib_from would be NULL.
@@ -2104,7 +2130,7 @@ static void compileFromImport(Compiler* compiler) {
       // Consume the symbol name to import from the script.
       consume(compiler, TK_NAME, "Expected symbol to import.");
       const char* name = compiler->previous.start;
-      int length = compiler->previous.length;
+      uint32_t length = (uint32_t)compiler->previous.length;
       int line = compiler->previous.line;
 
       // Add the name of the symbol to the names buffer.
@@ -2122,16 +2148,16 @@ static void compileFromImport(Compiler* compiler) {
         consume(compiler, TK_NAME, "Expected a name after 'as'.");
       }
 
+      // Set the imported symbol binding name, which wold be in the last token
+      // consumed by the first one or after the as keyword.
+      name = compiler->previous.start;
+      length = (uint32_t)compiler->previous.length;
+      line = compiler->previous.line;
+
       // Get the variable to bind the imported symbol, if we already have a
       // variable with that name override it, otherwise use a new variable.
-      const char* name_start = compiler->previous.start;
-      length = compiler->previous.length, line = compiler->previous.line;
-      int var_index = compilerGetVariable(compiler, name_start, length);
-      if (var_index == -1) {
-        var_index = compilerAddVariable(compiler, name_start, length, line);
-      }
-
-      emitStoreVariable(compiler, var_index, true);
+      int var_index = compilerImportName(compiler, line, name, length);
+      if (var_index != -1) emitStoreVariable(compiler, var_index, true);
       emitOpcode(compiler, OP_POP);
 
     } while (match(compiler, TK_COMMA) && (skipNewLines(compiler), true));
@@ -2145,6 +2171,8 @@ static void compileFromImport(Compiler* compiler) {
 }
 
 static void compileRegularImport(Compiler* compiler) {
+  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
+
   do {
 
     // Import the library and push it on the stack. If it cannot import,
@@ -2163,12 +2191,10 @@ static void compileRegularImport(Compiler* compiler) {
 
       // Get the variable to bind the imported symbol, if we already have a
       // variable with that name override it, otherwise use a new variable.
-      const char* name_start = compiler->previous.start;
+      const char* name = compiler->previous.start;
       int length = compiler->previous.length, line = compiler->previous.line;
-      var_index = compilerGetVariable(compiler, name_start, length);
-      if (var_index == -1) {
-        var_index = compilerAddVariable(compiler, name_start, length, line);
-      }
+      var_index = compilerImportName(compiler, line, name, length);
+
     } else {
       // If it has a module name use it as binding variable.
       // Core libs names are it's module name but for local libs it's optional
@@ -2177,12 +2203,10 @@ static void compileRegularImport(Compiler* compiler) {
 
         // Get the variable to bind the imported symbol, if we already have a
         // variable with that name override it, otherwise use a new variable.
-        const char* name_start = lib->moudle->data;
-        int length = lib->moudle->length, line = compiler->previous.line;
-        var_index = compilerGetVariable(compiler, name_start, length);
-        if (var_index == -1) {
-          var_index = compilerAddVariable(compiler, name_start, length, line);
-        }
+        const char* name = lib->moudle->data;
+        uint32_t length = lib->moudle->length;
+        int line = compiler->previous.line;
+        var_index = compilerImportName(compiler, line, name, length);
 
       } else {
         // -- Nothing to do here --

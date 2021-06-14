@@ -7,7 +7,6 @@ from lang import clock
 ## !!CON2019. TAIL CALL OPTIMIZATION (The musical)
 ## https://www.youtube.com/watch?v=-PX0BV9hGZY
 
-## This will cause stack overflow without toc at N = 350
 N = 10000
 
 def woo(n)

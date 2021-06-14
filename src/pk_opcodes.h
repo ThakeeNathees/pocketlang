@@ -99,7 +99,8 @@ OPCODE(POP, 0, -1)
 // Pop the path from the stack, import the module at the path and push the
 // script in the script. If the script is imported for the first time (not
 // cached) the script's body will be executed.
-OPCODE(IMPORT, 0, 0)
+// params: 2 byte name index.
+OPCODE(IMPORT, 2, 1)
 
 // Calls a function using stack's top N values as the arguments and once it
 // done the stack top should be stored otherwise it'll be disregarded. The

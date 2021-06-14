@@ -1321,9 +1321,9 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
         CASE_ATTRIB("as_list", 0x1562c22):
           return VAR_OBJ(rangeAsList(vm, range));
 
-        // We can't use '.start', '.end' since 'end' in pocketlang is a
-        // keyword. Also we can't use '.from', '.to' since 'from' is a keyword
-        // too. So, we're using '.first' and '.last' to access the range limits.
+        // We can't use 'start', 'end' since 'end' in pocketlang is a
+        // keyword. Also we can't use 'from', 'to' since 'from' is a keyword
+        // too. So, we're using 'first' and 'last' to access the range limits.
 
         CASE_ATTRIB("first", 0x4881d841):
           return VAR_NUM(range->from);

@@ -611,7 +611,17 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
   register CallFrame* frame; //< Current call frame.
   register Script* script;   //< Currently executing script.
 
-#define PUSH(value)  (*vm->fiber->sp++ = (value))
+#if DEBUG
+  #define PUSH(value)                                                        \
+  do {                                                                       \
+    ASSERT(vm->fiber->sp < (vm->fiber->stack + (vm->fiber->stack_size - 1)), \
+           OOPS);                                                            \
+    (*vm->fiber->sp++ = (value));                                            \
+  } while (false)
+#else
+  #define PUSH(value)  (*vm->fiber->sp++ = (value))
+#endif
+
 #define POP()        (*(--vm->fiber->sp))
 #define DROP()       (--vm->fiber->sp)
 #define PEEK(off)    (*(vm->fiber->sp + (off)))
