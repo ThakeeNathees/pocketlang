@@ -93,6 +93,9 @@ typedef enum {
   TK_STAREQ,     // *=
   TK_DIVEQ,      // /=
 
+  TK_ANDEQ,      // &=
+  // TODO: TK_OREQ, TK_XOREQ
+
   TK_SRIGHT,     // >>
   TK_SLEFT,      // <<
 
@@ -659,7 +662,12 @@ static void lexToken(Compiler* compiler) {
       case '%': setNextToken(compiler, TK_PERCENT); return;
 
       case '~': setNextToken(compiler, TK_TILD); return;
-      case '&': setNextToken(compiler, TK_AMP); return;
+
+      case '&':
+        setNextTwoCharToken(compiler, '=', TK_AMP, TK_ANDEQ);
+        return;
+
+      // TODO: TK_OREQ, TK_XOREQ
       case '|': setNextToken(compiler, TK_PIPE); return;
       case '^': setNextToken(compiler, TK_CARET); return;
 
@@ -866,6 +874,8 @@ static bool matchAssignment(Compiler* compiler) {
   if (match(compiler, TK_MINUSEQ)) return true;
   if (match(compiler, TK_STAREQ)) return true;
   if (match(compiler, TK_DIVEQ)) return true;
+  if (match(compiler, TK_ANDEQ)) return true;
+  // TODO: match TK_OREQ, TK_XOREQ
   return false;
 }
 
@@ -1039,6 +1049,8 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_MINUSEQ    */   NO_RULE,
   /* TK_STAREQ     */   NO_RULE,
   /* TK_DIVEQ      */   NO_RULE,
+  /* TK_ANDEQ      */   NO_RULE,
+  // TODO: add TK_OREQ, TK_XOREQ
   /* TK_SRIGHT     */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_SLEFT      */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_MODULE     */   NO_RULE,
@@ -1717,6 +1729,8 @@ static void emitAssignment(Compiler* compiler, TokenType assignment) {
     case TK_MINUSEQ: emitOpcode(compiler, OP_SUBTRACT); break;
     case TK_STAREQ: emitOpcode(compiler, OP_MULTIPLY); break;
     case TK_DIVEQ: emitOpcode(compiler, OP_DIVIDE); break;
+    case TK_ANDEQ: emitOpcode(compiler, OP_BIT_AND); break;
+    // TODO: TK_OREQ, TK_XOREQ
     default:
       UNREACHABLE();
       break;

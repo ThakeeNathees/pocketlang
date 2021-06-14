@@ -8,7 +8,10 @@
   end
   if a function's last statement is a call, we can perform tco.
 
-- Recursive call to anonymous functions.
+- implement 'lang.getMaxCallDepth()' (default=1000 like python) and
+  setMaxCallDepth(val) to change stack size at runtime.
+
+- Recursive call to anonymous functions. use 'this' keyword
 
 - move moduleAddGlobalInternal() to var.h (also other var functions).
 
