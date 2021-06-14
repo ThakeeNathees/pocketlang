@@ -59,6 +59,12 @@ assert((8 >> 1) == 4)
 assert((8 >> 2) == 2)
 assert((4 >> 2) == 1)
 
+x = 42  ; assert((x&=51) == 34)
+x = 123 ; assert((x&=324) == 64)
+for i in 0..1000
+  x = i; assert((x&=-1) == i)
+end
+
 # If we got here with no errors, then all test passed
 print('All tests PASSED (100%)')
 
