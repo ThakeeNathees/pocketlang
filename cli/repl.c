@@ -11,19 +11,23 @@
 #include <ctype.h> // isspace
 #include "utils.h"
 
-// FIXME: use fgetc char by char till reach a new line.
-//
 // Read a line from stdin and returns it without the line ending. Accepting
 // an optional argument [length] (could be NULL). Note that the returned string
 // is heap allocated and should be cleaned by 'free()' function.
 const char* read_line(uint32_t* length) {
   const int size = 1024;
   char* mem = (char*)malloc(size);
-  fgets(mem, size, stdin);
-  size_t len = strlen(mem);
+  char c;
+  int len;
 
-  // FIXME: handle \r\n, this is temp.
-  mem[len - 1] = '\0';
+  for (len = 0; len < size - 1 && (c=fgetc(stdin)) != EOF && c != '\n'; ++len)
+    mem[len] = c;
+  if (c == '\n') {
+    mem[len] = c;
+    ++len;
+  }
+  mem[len] = '\0';
+
   if (length != NULL) *length = (uint32_t)(len - 1);
 
   return mem;
