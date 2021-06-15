@@ -36,7 +36,7 @@
 - Implement argparse.
     - -v --version
     - emit opcodes
-    - maybe write a similer .pyc file for pocket
+    - maybe write a similar .pyc file for pocket
     - --docs to generate docs from cstring.
     - dump compiled code to a file.
 - In keyword.
@@ -76,7 +76,7 @@
   string (currently our max is uint32_t) and for binary
   (C doesn't have a sprintf("%b", num) for us.
 
-- Ensure that the bitwise optration result `a << b` can be fit
+- Ensure that the bitwise operation result `a << b` can be fit
   into a double value before casting it to one. and we're allowing
   the integer overflow when shifting.
 
@@ -84,9 +84,9 @@
 It's at pre-alpha and every thing is left to
 implement, and nothing would be work as expected.
 
-- f = func print() end; print(f) # semicollon should be there.
-  def f() print() end print(f)   # semicollon should be there.
-  make it okey to use semicollon freely like new lines.
+- f = func print() end; print(f) # semicolon should be there.
+  def f() print() end print(f)   # semicolon should be there.
+  make it okay to use semicolon freely like new lines.
 
 - REPL error message should be the first one (not the last).
   >>> def f()

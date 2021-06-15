@@ -56,7 +56,7 @@ PAGES = [
 def new_context():
 	return {
 		'{{ TITLE }}'      : '',
-		'{{ NAVIGAION }}'  : '',
+		'{{ NAVIGATION }}' : '',
 		'{{ CONTENT }}'    : '',
 		'{{ HOME_URL }}'   : '',
 		'{{ STATIC_DIR }}' : '',
@@ -142,11 +142,11 @@ def generate_page_context(src, dst, navigation):
 	static_dir = relative_static_dir(dst)
 	content = path_to_content(src)
 	ctx = new_context()
-	ctx[ '{{ TITLE }}'     ]   = title
-	ctx[ '{{ NAVIGAION }}' ]   = navigation
-	ctx[ '{{ CONTENT }}'   ]   = content
-	ctx[ '{{ HOME_URL }}'  ]   = ROOT_URL + 'index.html'
-	ctx[ '{{ STATIC_DIR }}']   = static_dir
+	ctx[ '{{ TITLE }}'      ]   = title
+	ctx[ '{{ NAVIGATION }}' ]   = navigation
+	ctx[ '{{ CONTENT }}'    ]   = content
+	ctx[ '{{ HOME_URL }}'   ]   = ROOT_URL + 'index.html'
+	ctx[ '{{ STATIC_DIR }}' ]   = static_dir
 	return ctx;
 
 def get_validated_ext(path)	:
