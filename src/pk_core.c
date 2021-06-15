@@ -377,7 +377,7 @@ Script* getCoreLib(const PKVM* vm, String* name) {
 /* CORE BUILTIN FUNCTIONS                                                    */
 /*****************************************************************************/
 
-#define FN_IS_PRIMITE_TYPE(name, check) \
+#define FN_IS_PRIMITIVE_TYPE(name, check) \
   static void coreIs##name(PKVM* vm) {  \
     RET(VAR_BOOL(check(ARG(1))));       \
   }
@@ -392,9 +392,9 @@ Script* getCoreLib(const PKVM* vm, String* name) {
     }                                   \
   }
 
-FN_IS_PRIMITE_TYPE(Null, IS_NULL)
-FN_IS_PRIMITE_TYPE(Bool, IS_BOOL)
-FN_IS_PRIMITE_TYPE(Num,  IS_NUM)
+FN_IS_PRIMITIVE_TYPE(Null, IS_NULL)
+FN_IS_PRIMITIVE_TYPE(Bool, IS_BOOL)
+FN_IS_PRIMITIVE_TYPE(Num,  IS_NUM)
 
 FN_IS_OBJ_TYPE(String, OBJ_STRING)
 FN_IS_OBJ_TYPE(List,  OBJ_LIST)
