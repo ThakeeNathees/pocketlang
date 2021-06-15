@@ -509,7 +509,7 @@ PK_DOC(
   "Write each argument as comma seperated to the stdout and ends with a "
   "newline.",
 static void corePrint(PKVM* vm)) {
-  // If the host appliaction donesn't provide any write function, discard the
+  // If the host application doesn't provide any write function, discard the
   // output.
   if (vm->config.write_fn == NULL) return;
 
@@ -531,7 +531,7 @@ static void coreInput(PKVM* vm)) {
     RET_ERR(newString(vm, "Invalid argument count."));
   }
 
-  // If the host appliaction donesn't provide any write function, return.
+  // If the host application doesn't provide any write function, return.
   if (vm->config.read_fn == NULL) return;
 
   if (argc == 1) {
@@ -620,7 +620,7 @@ static void coreFiberNew(PKVM* vm)) {
 
 PK_DOC(
   "fiber_get_func(fb:Fiber) -> function\n"
-  "Retruns the fiber's functions. Which is usefull if you wan't to re-run the "
+  "Retruns the fiber's functions. Which is usefull if you want to re-run the "
   "fiber, you can get the function and crate a new fiber.",
 static void coreFiberGetFunc(PKVM* vm)) {
   Fiber* fb;
@@ -775,7 +775,7 @@ void stdLangClock(PKVM* vm) {
   RET(VAR_NUM((double)clock() / CLOCKS_PER_SEC));
 }
 
-// Trigger garbage collection and return the ammount of bytes cleaned.
+// Trigger garbage collection and return the amount of bytes cleaned.
 void stdLangGC(PKVM* vm) {
   size_t bytes_before = vm->bytes_allocated;
   vmCollectGarbage(vm);
@@ -807,7 +807,7 @@ void stdLangDebugBreak(PKVM* vm) {
 // Write function, just like print function but it wont put space between args
 // and write a new line at the end.
 void stdLangWrite(PKVM* vm) {
-  // If the host appliaction donesn't provide any write function, discard the
+  // If the host application doesn't provide any write function, discard the
   // output.
   if (vm->config.write_fn == NULL) return;
 
@@ -940,7 +940,7 @@ void initializeCore(PKVM* vm) {
   // Initialize builtin functions.
   INITALIZE_BUILTIN_FN("type_name",   coreTypeName,   1);
 
-  // TOOD: (maybe remove is_*() functions) suspend by type_name.
+  // TODO: (maybe remove is_*() functions) suspend by type_name.
   //       and add is keyword with modules for builtin types
   // ex: val is Num; val is null; val is List; val is Range
   //     List.append(l, e) # List is implicitly imported core module.

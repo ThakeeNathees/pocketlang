@@ -48,7 +48,7 @@ OPCODE(LIST_APPEND, 0, -1)
 OPCODE(MAP_INSERT, 0, -2)
 
 // Push stack local on top of the stack. Locals at 0 to 8 marked explicitly
-// since it's performance criticle.
+// since it's performance critical.
 // params: PUSH_LOCAL_N -> 1 byte count value.
 OPCODE(PUSH_LOCAL_0, 0, 1)
 OPCODE(PUSH_LOCAL_1, 0, 1)

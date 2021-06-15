@@ -12,8 +12,8 @@
 /** @file
  * A simple dynamic type system library for small dynamic typed languages using
  * a technique called NaN-tagging (optional). The method is inspired from the
- * wren (https://wren.io/) an awsome language written by Bob Nystrom the author
- * of "Crafting Interpreters" and it's contrbuters.
+ * wren (https://wren.io/) an awesome language written by Bob Nystrom the
+ * author of "Crafting Interpreters" and it's contrbuters.
  * Reference:
  *     https://github.com/wren-lang/wren/blob/main/src/vm/wren_value.h
  *     https://leonardschuetz.ch/blog/nan-boxing/
@@ -58,16 +58,16 @@
  * -11111111111----------------------------------------------------
  *
  * We define a our variant \ref var as an unsigned 64 bit integer (we treat it
- * like a bit array) if the exponent bits were not set, just reinterprit it as
+ * like a bit array) if the exponent bits were not set, just reinterpret it as
  * a IEEE 754 double precision 64 bit number. Other wise we there are a lot of
  * different combination of bits we can use for our custom tagging, this method
  * is called NaN-Tagging.
  *
  * There are two kinds of NaN values "signalling" and "quiet". The first one is
  * intended to halt the execution but the second one is to continue the
- * execution quietly. We get the quiet NaN by setting the highest mentissa bit.
+ * execution quietly. We get the quiet NaN by setting the highest mantissa bit.
  *
- *             v~Highest mestissa bit
+ *             v~Highest mantissa bit
  * -[NaN      ]1---------------------------------------------------
  *
  * if sign bit set, it's a heap allocated pointer.
@@ -160,7 +160,7 @@ typedef enum {
   VAR_UNDEFINED, //< Internal type for exceptions.
   VAR_NULL,      //< Null pointer type.
   VAR_BOOL,      //< Yin and yang of software.
-  VAR_INT,       //< Only 32bit integers (to consistance with Nan-Tagging).
+  VAR_INT,       //< Only 32bit integers (for consistence with Nan-Tagging).
   VAR_FLOAT,     //< Floats are stored as (64bit) double.
 
   VAR_OBJECT,    //< Base type for all \ref var_Object types.
@@ -239,7 +239,7 @@ struct List {
 
 typedef struct {
   // If the key is VAR_UNDEFINED it's an empty slot and if the value is false
-  // the entry is new and available, if true it's a tumbstone - the entry
+  // the entry is new and available, if true it's a tombstone - the entry
   // previously used but then deleted.
 
   Var key;   //< The entry's key or VAR_UNDEFINED of the entry is not in use.
@@ -384,7 +384,7 @@ String* newStringLength(PKVM* vm, const char* text, uint32_t length);
     uint32_t length = (text == NULL) ? 0 : (uint32_t)strlen(text);
     return newStringLength(vm, text, length);
   }
-#else // Macro implementaion.
+#else // Macro implementation.
   // Allocate new string using the cstring [text].
   #define newString(vm, text) \
     newStringLength(vm, text, (text == NULL) ? 0 : (uint32_t)strlen(text))
@@ -424,15 +424,15 @@ void grayObject(PKVM* vm, Object* self);
 // collection.
 void grayValue(PKVM* vm, Var self);
 
-// Mark the elements of the buffer as reachable at the mark-and-sweep pahse of
+// Mark the elements of the buffer as reachable at the mark-and-sweep phase of
 // the garbage collection.
 void grayVarBuffer(PKVM* vm, pkVarBuffer* self);
 
-// Mark the elements of the buffer as reachable at the mark-and-sweep pahse of
+// Mark the elements of the buffer as reachable at the mark-and-sweep phase of
 // the garbage collection.
 void grayStringBuffer(PKVM* vm, pkStringBuffer* self);
 
-// Mark the elements of the buffer as reachable at the mark-and-sweep pahse of
+// Mark the elements of the buffer as reachable at the mark-and-sweep phase of
 // the garbage collection.
 void grayFunctionBuffer(PKVM* vm, pkFunctionBuffer* self);
 
@@ -453,8 +453,8 @@ String* stringLower(PKVM* vm, String* self);
 // already upper it'll return the same string.
 String* stringUpper(PKVM* vm, String* self);
 
-// Returns string with the leading and trailing white spaces are trimed.
-// If the string is already trimed it'll return the same string.
+// Returns string with the leading and trailing white spaces are trimmed.
+// If the string is already trimmed it'll return the same string.
 String* stringStrip(PKVM* vm, String* self);
 
 // An inline function/macro implementation of listAppend(). Set below 0 to 1,
@@ -476,7 +476,7 @@ void listInsert(PKVM* vm, List* self, uint32_t index, Var value);
 // Remove and return element at [index].
 Var listRemoveAt(PKVM* vm, List* self, uint32_t index);
 
-// Returns the value for the [key] in the mape. If key not exists return
+// Returns the value for the [key] in the map. If key not exists return
 // VAR_UNDEFINED.
 Var mapGet(Map* self, Var key);
 
@@ -522,7 +522,7 @@ bool isValuesSame(Var v1, Var v2);
 // Returns true if both variables are equal (ie v1 == v2).
 bool isValuesEqual(Var v1, Var v2);
 
-// Return the hash valur of the variable. (variable should be hashable).
+// Return the hash value of the variable. (variable should be hashable).
 uint32_t varHashValue(Var v);
 
 // Return true if the object type is hashable.
@@ -531,14 +531,14 @@ bool isObjectHashable(ObjectType type);
 // Returns the string version of the [value].
 String* toString(PKVM* vm, const Var value);
 
-// Returns the representation version of the [value], similer of python's
+// Returns the representation version of the [value], similar to python's
 // __repr__() method.
 String * toRepr(PKVM * vm, const Var value);
 
 // Returns the truthy value of the var.
 bool toBool(Var v);
 
-// Creates a new string from the arguments. This is intented to used internal
+// Creates a new string from the arguments. This is intended for internal
 // usage and it has 2 formated characters (just like wren does).
 // $ - a C string
 // @ - a String object

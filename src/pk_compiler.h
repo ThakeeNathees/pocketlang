@@ -33,7 +33,7 @@ typedef struct Compiler Compiler;
 PkResult compile(PKVM* vm, Script* script, const char* source,
                  const PkCompileOptions* options);
 
-// Mark the heap allocated ojbects of the compiler at the garbage collection
+// Mark the heap allocated objects of the compiler at the garbage collection
 // called at the marking phase of vmCollectGarbage().
 void compilerMarkObjects(PKVM* vm, Compiler* compiler);
 

@@ -52,7 +52,7 @@ uint32_t utilHashString(const char* string);
  * don't know about ASCII encoding it's just how a character is represented in
  * a single byte. For an example the character 'A' is 01000001, 'B' is 01000010
  * and so on. The first bit in is always 0 called parity bit, it's a way to
- * check if  some of the bits have flipped by noice back in the old age of
+ * check if some of the bits have flipped by noise back in the old age of
  * computers. Parity bit should be equal to the sum of the rest of the bits mod
  * 2. So we have 7 bits to represent ASCII which is 127 different characters.
  * But utf-8 can potentially encode 2,164,864 characters.
@@ -76,7 +76,7 @@ uint32_t utilHashString(const char* string);
  * </pre>
  *
  * USAGE:
- *     // define imlpementation only a single *.c source file like this
+ *     // define implementation only a single *.c source file like this
  *     #define UTF8_IMPLEMENT
  *     #include "utf8.h"
 */
