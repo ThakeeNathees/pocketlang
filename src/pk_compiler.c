@@ -94,7 +94,8 @@ typedef enum {
   TK_DIVEQ,      // /=
 
   TK_ANDEQ,      // &=
-  // TODO: TK_OREQ, TK_XOREQ
+  TK_OREQ,       // |=
+  TK_XOREQ,      // ^=
 
   TK_SRIGHT,     // >>
   TK_SLEFT,      // <<
@@ -666,10 +667,12 @@ static void lexToken(Compiler* compiler) {
       case '&':
         setNextTwoCharToken(compiler, '=', TK_AMP, TK_ANDEQ);
         return;
-
-      // TODO: TK_OREQ, TK_XOREQ
-      case '|': setNextToken(compiler, TK_PIPE); return;
-      case '^': setNextToken(compiler, TK_CARET); return;
+      case '|':
+        setNextTwoCharToken(compiler, '=', TK_PIPE, TK_OREQ);
+        return;
+      case '^':
+        setNextTwoCharToken(compiler, '=', TK_CARET, TK_XOREQ);
+        return;
 
       case '\n': setNextToken(compiler, TK_LINE); return;
 
@@ -875,7 +878,8 @@ static bool matchAssignment(Compiler* compiler) {
   if (match(compiler, TK_STAREQ)) return true;
   if (match(compiler, TK_DIVEQ)) return true;
   if (match(compiler, TK_ANDEQ)) return true;
-  // TODO: match TK_OREQ, TK_XOREQ
+  if (match(compiler, TK_OREQ)) return true;
+  if (match(compiler, TK_XOREQ)) return true;
   return false;
 }
 
@@ -1050,7 +1054,8 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_STAREQ     */   NO_RULE,
   /* TK_DIVEQ      */   NO_RULE,
   /* TK_ANDEQ      */   NO_RULE,
-  // TODO: add TK_OREQ, TK_XOREQ
+  /* TK_OREQ       */   NO_RULE,
+  /* TK_XOREQ      */   NO_RULE,
   /* TK_SRIGHT     */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_SLEFT      */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_MODULE     */   NO_RULE,
@@ -1730,7 +1735,8 @@ static void emitAssignment(Compiler* compiler, TokenType assignment) {
     case TK_STAREQ: emitOpcode(compiler, OP_MULTIPLY); break;
     case TK_DIVEQ: emitOpcode(compiler, OP_DIVIDE); break;
     case TK_ANDEQ: emitOpcode(compiler, OP_BIT_AND); break;
-    // TODO: TK_OREQ, TK_XOREQ
+    case TK_OREQ: emitOpcode(compiler, OP_BIT_OR); break;
+    case TK_XOREQ: emitOpcode(compiler, OP_BIT_XOR); break;
     default:
       UNREACHABLE();
       break;

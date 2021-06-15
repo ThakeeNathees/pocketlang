@@ -65,6 +65,22 @@ for i in 0..1000
   x = i; assert((x&=-1) == i)
 end
 
+x = 43690 ; assert((x|=21845) == 65535)
+x = 204   ; assert((x|=119) == 255)
+for i in 0..1000
+  x = i; assert((x|=0) == i)
+  x = i; assert((x|=-1) == -1)
+  x = i; assert((x|=i) == i)
+end
+
+x = 4321 ; assert((x^=1234) == 5171)
+x = 77   ; assert((x^=88) == 21)
+for i in 0..1000
+  x = i; assert((x^=i) == 0)
+  x = i; assert((x^=0) == i)
+  x = i; assert((x^=-1) == -i-1)
+end
+
 # If we got here with no errors, then all test passed
 print('All tests PASSED (100%)')
 
