@@ -377,7 +377,7 @@ Script* getCoreLib(const PKVM* vm, String* name) {
 /* CORE BUILTIN FUNCTIONS                                                    */
 /*****************************************************************************/
 
-#define FN_IS_PRIMITE_TYPE(name, check) \
+#define FN_IS_PRIMITIVE_TYPE(name, check) \
   static void coreIs##name(PKVM* vm) {  \
     RET(VAR_BOOL(check(ARG(1))));       \
   }
@@ -392,9 +392,9 @@ Script* getCoreLib(const PKVM* vm, String* name) {
     }                                   \
   }
 
-FN_IS_PRIMITE_TYPE(Null, IS_NULL)
-FN_IS_PRIMITE_TYPE(Bool, IS_BOOL)
-FN_IS_PRIMITE_TYPE(Num,  IS_NUM)
+FN_IS_PRIMITIVE_TYPE(Null, IS_NULL)
+FN_IS_PRIMITIVE_TYPE(Bool, IS_BOOL)
+FN_IS_PRIMITIVE_TYPE(Num,  IS_NUM)
 
 FN_IS_OBJ_TYPE(String, OBJ_STRING)
 FN_IS_OBJ_TYPE(List,  OBJ_LIST)
@@ -509,7 +509,7 @@ PK_DOC(
   "Write each argument as comma seperated to the stdout and ends with a "
   "newline.",
 static void corePrint(PKVM* vm)) {
-  // If the host appliaction donesn't provide any write function, discard the
+  // If the host application doesn't provide any write function, discard the
   // output.
   if (vm->config.write_fn == NULL) return;
 
@@ -531,7 +531,7 @@ static void coreInput(PKVM* vm)) {
     RET_ERR(newString(vm, "Invalid argument count."));
   }
 
-  // If the host appliaction donesn't provide any write function, return.
+  // If the host application doesn't provide any write function, return.
   if (vm->config.read_fn == NULL) return;
 
   if (argc == 1) {
@@ -620,7 +620,7 @@ static void coreFiberNew(PKVM* vm)) {
 
 PK_DOC(
   "fiber_get_func(fb:Fiber) -> function\n"
-  "Retruns the fiber's functions. Which is usefull if you wan't to re-run the "
+  "Retruns the fiber's functions. Which is usefull if you want to re-run the "
   "fiber, you can get the function and crate a new fiber.",
 static void coreFiberGetFunc(PKVM* vm)) {
   Fiber* fb;
@@ -709,7 +709,7 @@ static Script* newModuleInternal(PKVM* vm, const char* name) {
   }
 
   Script* scr = newScript(vm, _name);
-  scr->moudle = _name;
+  scr->module = _name;
   vmPopTempRef(vm); // _name
 
   // Add the script to core_libs.
@@ -727,13 +727,13 @@ static inline void assertModuleNameDef(PKVM* vm, Script* script,
   // Check if function with the same name already exists.
   if (scriptGetFunc(script, name, (uint32_t)strlen(name)) != -1) {
     __ASSERT(false, stringFormat(vm, "A function named '$' already esists "
-      "on module '@'", name, script->moudle)->data);
+      "on module '@'", name, script->module)->data);
   }
 
   // Check if a global variable with the same name already exists.
   if (scriptGetGlobals(script, name, (uint32_t)strlen(name)) != -1) {
     __ASSERT(false, stringFormat(vm, "A global variable named '$' already "
-      "esists on module '@'", name, script->moudle)->data);
+      "esists on module '@'", name, script->module)->data);
   }
 }
 
@@ -775,7 +775,7 @@ void stdLangClock(PKVM* vm) {
   RET(VAR_NUM((double)clock() / CLOCKS_PER_SEC));
 }
 
-// Trigger garbage collection and return the ammount of bytes cleaned.
+// Trigger garbage collection and return the amount of bytes cleaned.
 void stdLangGC(PKVM* vm) {
   size_t bytes_before = vm->bytes_allocated;
   vmCollectGarbage(vm);
@@ -807,7 +807,7 @@ void stdLangDebugBreak(PKVM* vm) {
 // Write function, just like print function but it wont put space between args
 // and write a new line at the end.
 void stdLangWrite(PKVM* vm) {
-  // If the host appliaction donesn't provide any write function, discard the
+  // If the host application doesn't provide any write function, discard the
   // output.
   if (vm->config.write_fn == NULL) return;
 
@@ -933,54 +933,54 @@ static void initializeBuiltinFN(PKVM* vm, BuiltinFn* bfn, const char* name,
 
 void initializeCore(PKVM* vm) {
 
-#define INITALIZE_BUILTIN_FN(name, fn, argc)                         \
+#define INITIALIZE_BUILTIN_FN(name, fn, argc)                         \
   initializeBuiltinFN(vm, &vm->builtins[vm->builtins_count++], name, \
                       (int)strlen(name), argc, fn);
 
   // Initialize builtin functions.
-  INITALIZE_BUILTIN_FN("type_name",   coreTypeName,   1);
+  INITIALIZE_BUILTIN_FN("type_name",   coreTypeName,   1);
 
-  // TOOD: (maybe remove is_*() functions) suspend by type_name.
+  // TODO: (maybe remove is_*() functions) suspend by type_name.
   //       and add is keyword with modules for builtin types
   // ex: val is Num; val is null; val is List; val is Range
   //     List.append(l, e) # List is implicitly imported core module.
   //     String.lower(s)
 
-  INITALIZE_BUILTIN_FN("is_null",     coreIsNull,     1);
-  INITALIZE_BUILTIN_FN("is_bool",     coreIsBool,     1);
-  INITALIZE_BUILTIN_FN("is_num",      coreIsNum,      1);
+  INITIALIZE_BUILTIN_FN("is_null",     coreIsNull,     1);
+  INITIALIZE_BUILTIN_FN("is_bool",     coreIsBool,     1);
+  INITIALIZE_BUILTIN_FN("is_num",      coreIsNum,      1);
 
-  INITALIZE_BUILTIN_FN("is_string",   coreIsString,   1);
-  INITALIZE_BUILTIN_FN("is_list",     coreIsList,     1);
-  INITALIZE_BUILTIN_FN("is_map",      coreIsMap,      1);
-  INITALIZE_BUILTIN_FN("is_range",    coreIsRange,    1);
-  INITALIZE_BUILTIN_FN("is_function", coreIsFunction, 1);
-  INITALIZE_BUILTIN_FN("is_script",   coreIsScript,   1);
-  INITALIZE_BUILTIN_FN("is_userobj",  coreIsUserObj,  1);
+  INITIALIZE_BUILTIN_FN("is_string",   coreIsString,   1);
+  INITIALIZE_BUILTIN_FN("is_list",     coreIsList,     1);
+  INITIALIZE_BUILTIN_FN("is_map",      coreIsMap,      1);
+  INITIALIZE_BUILTIN_FN("is_range",    coreIsRange,    1);
+  INITIALIZE_BUILTIN_FN("is_function", coreIsFunction, 1);
+  INITIALIZE_BUILTIN_FN("is_script",   coreIsScript,   1);
+  INITIALIZE_BUILTIN_FN("is_userobj",  coreIsUserObj,  1);
 
-  INITALIZE_BUILTIN_FN("hex",         coreHex,        1);
-  INITALIZE_BUILTIN_FN("assert",      coreAssert,    -1);
-  INITALIZE_BUILTIN_FN("yield",       coreYield,     -1);
-  INITALIZE_BUILTIN_FN("to_string",   coreToString,   1);
-  INITALIZE_BUILTIN_FN("print",       corePrint,     -1);
-  INITALIZE_BUILTIN_FN("input",       coreInput,     -1);
+  INITIALIZE_BUILTIN_FN("hex",         coreHex,        1);
+  INITIALIZE_BUILTIN_FN("assert",      coreAssert,    -1);
+  INITIALIZE_BUILTIN_FN("yield",       coreYield,     -1);
+  INITIALIZE_BUILTIN_FN("to_string",   coreToString,   1);
+  INITIALIZE_BUILTIN_FN("print",       corePrint,     -1);
+  INITIALIZE_BUILTIN_FN("input",       coreInput,     -1);
 
   // String functions.
-  INITALIZE_BUILTIN_FN("str_chr",     coreStrChr,     1);
-  INITALIZE_BUILTIN_FN("str_ord",     coreStrOrd,     1);
+  INITIALIZE_BUILTIN_FN("str_chr",     coreStrChr,     1);
+  INITIALIZE_BUILTIN_FN("str_ord",     coreStrOrd,     1);
 
   // List functions.
-  INITALIZE_BUILTIN_FN("list_append", coreListAppend, 2);
+  INITIALIZE_BUILTIN_FN("list_append", coreListAppend, 2);
 
   // Map functions.
-  INITALIZE_BUILTIN_FN("map_remove",  coreMapRemove,  2);
+  INITIALIZE_BUILTIN_FN("map_remove",  coreMapRemove,  2);
 
   // Fiber functions.
-  INITALIZE_BUILTIN_FN("fiber_new",      coreFiberNew,     1);
-  INITALIZE_BUILTIN_FN("fiber_get_func", coreFiberGetFunc, 1);
-  INITALIZE_BUILTIN_FN("fiber_run",      coreFiberRun,    -1);
-  INITALIZE_BUILTIN_FN("fiber_is_done",  coreFiberIsDone,  1);
-  INITALIZE_BUILTIN_FN("fiber_resume",   coreFiberResume, -1);
+  INITIALIZE_BUILTIN_FN("fiber_new",      coreFiberNew,     1);
+  INITIALIZE_BUILTIN_FN("fiber_get_func", coreFiberGetFunc, 1);
+  INITIALIZE_BUILTIN_FN("fiber_run",      coreFiberRun,    -1);
+  INITIALIZE_BUILTIN_FN("fiber_is_done",  coreFiberIsDone,  1);
+  INITIALIZE_BUILTIN_FN("fiber_resume",   coreFiberResume, -1);
 
   // Core Modules /////////////////////////////////////////////////////////////
 

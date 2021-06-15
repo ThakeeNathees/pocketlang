@@ -54,7 +54,7 @@ extern "C" {
   #define PK_PUBLIC
 #endif
 
-// A convinent macro to define documentation of funcions. Use it to document 
+// A convenient macro to define documentation of funcions. Use it to document
 // your native functions.
 // 
 // PK_DOC(
@@ -88,7 +88,7 @@ typedef struct PkHandle PkHandle;
 // dangling once after the stack frame is popped.
 typedef void* PkVar;
 
-// Type enum of the pocketlang varaibles, this can be used to get the type
+// Type enum of the pocketlang variables, this can be used to get the type
 // from a Var* in the method pkGetVarType().
 typedef enum {
   PK_NULL,
@@ -131,7 +131,7 @@ typedef enum {
   PK_RESULT_UNEXPECTED_EOF,
 
   PK_RESULT_COMPILE_ERROR,  // Compilation failed.
-  PK_RESULT_RUNTIME_ERROR,  // An error occured at runtime.
+  PK_RESULT_RUNTIME_ERROR,  // An error occurred at runtime.
 } PkResult;
 
 /*****************************************************************************/
@@ -186,7 +186,7 @@ typedef PkStringPtr (*pkLoadScriptFn) (PKVM* vm, const char* path);
 /* POCKETLANG PUBLIC API                                                     */
 /*****************************************************************************/
 
-// Create a new pkConfiguraition with the default values and return it.
+// Create a new PkConfiguration with the default values and return it.
 // Override those default configuration to adopt to another hosting
 // application.
 PK_PUBLIC PkConfiguration pkNewConfiguration(void);
@@ -254,14 +254,14 @@ PK_PUBLIC PkResult pkInterpretSource(PKVM* vm,
 
 // Runs the fiber's function with the provided arguments (param [arc] is the
 // argument count and [argv] are the values). It'll returns it's run status
-// reslt (success or failure) if you need the yielded or returned value use the
-// pkFiberGetReturnValue() function, and use pkFiberIsDone() function to check
-// if the fiber can be resumed with pkFiberResume() function.
+// result (success or failure) if you need the yielded or returned value use
+// the pkFiberGetReturnValue() function, and use pkFiberIsDone() function to
+// check if the fiber can be resumed with pkFiberResume() function.
 PK_PUBLIC PkResult pkRunFiber(PKVM* vm, PkHandle* fiber,
                               int argc, PkHandle** argv);
 
 // Resume a yielded fiber with an optional [value]. (could be set to NULL)
-// It'll returns it's run status reslt (success or failure) if you need the
+// It'll returns it's run status result (success or failure) if you need the
 // yielded or returned value use the pkFiberGetReturnValue() function.
 PK_PUBLIC PkResult pkResumeFiber(PKVM* vm, PkHandle* fiber, PkVar value);
 
@@ -311,7 +311,7 @@ struct PkCompileOptions {
   //FILE* dump_stream;
 
   // Set to true if compiling in REPL mode, This will print repr version of
-  // each evaluvated non-null values. Note that if [repl_mode] is true the
+  // each evaluated non-null values. Note that if [repl_mode] is true the
   // [expression] should also be true otherwise it's incompatible, (will fail
   // an assertion).
   bool repl_mode;
@@ -345,7 +345,7 @@ PK_PUBLIC PkVar pkGetArg(const PKVM* vm, int arg);
 // with the extracted value. Note that the arguments are 1 based (to get the 
 // first argument use 1 not 0).
 
-PK_PUBLIC bool pkGetArgBool(PKVM* vm, int arg, bool* vlaue);
+PK_PUBLIC bool pkGetArgBool(PKVM* vm, int arg, bool* value);
 PK_PUBLIC bool pkGetArgNumber(PKVM* vm, int arg, double* value);
 PK_PUBLIC bool pkGetArgString(PKVM* vm, int arg, const char** value);
 PK_PUBLIC bool pkGetArgValue(PKVM* vm, int arg, PkVarType type, PkVar* value);

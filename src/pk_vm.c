@@ -321,7 +321,7 @@ bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var** argv) {
 
   if (argc != fiber->func->arity) {
     char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", fiber->func->arity);
-    _ERR_FAIL(stringFormat(vm, "Expected excatly $ argument(s).", buff));
+    _ERR_FAIL(stringFormat(vm, "Expected exactly $ argument(s).", buff));
   }
 
   if (fiber->state != FIBER_NEW) {
@@ -344,7 +344,7 @@ bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var** argv) {
   // Pass the function arguments.
 
   // Assert we have the first frame (to push the arguments). And assert we have
-  // enought stack space for parameters.
+  // enough stack space for parameters.
   ASSERT(fiber->frame_count == 1, OOPS);
   ASSERT(fiber->frames[0].rbp == fiber->ret, OOPS);
   ASSERT((fiber->stack + fiber->stack_size) - fiber->sp >= argc, OOPS);
@@ -457,7 +457,7 @@ static inline bool resolveScriptPath(PKVM* vm, PkStringPtr* path_string) {
 }
 
 // Import and return Script object as Var. If the script is imported and
-// compiled here it'll set [is_new_script] to true oterwise (using the cached
+// compiled here it'll set [is_new_script] to true otherwise (using the cached
 // script) set to false.
 static inline Var importScript(PKVM* vm, String* path_name) {
 
@@ -865,7 +865,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
       String* name = script->names.data[READ_SHORT()];
       Var scr = importScript(vm, name);
 
-      // TODO: implement fiber bsed execution.
+      // TODO: implement fiber based execution.
       //ASSERT(IS_OBJ_TYPE(script, OBJ_SCRIPT), OOPS);
       //Script* scr = (Script*)AS_OBJ(script);
       //if (!scr->initialized) vmRunScript(vm, scr);
@@ -891,7 +891,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
         // -1 argument means multiple number of args.
         if (fn->arity != -1 && fn->arity != argc) {
           char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", fn->arity);
-          String* msg = stringFormat(vm, "Expected excatly $ argument(s).",
+          String* msg = stringFormat(vm, "Expected exactly $ argument(s).",
                                      buff);
           RUNTIME_ERROR(msg);
         }
@@ -1102,7 +1102,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
       // Pop the last frame, and if no more call frames, we're done with the
       // current fiber.
       if (--vm->fiber->frame_count == 0) {
-        // TODO: if we're evaluvating an expressoin we need to set it's
+        // TODO: if we're evaluating an expression we need to set it's
         // value on the stack.
         //vm->fiber->sp = vm->fiber->stack; ??
 

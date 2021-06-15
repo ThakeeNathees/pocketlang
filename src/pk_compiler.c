@@ -196,11 +196,11 @@ static _Keyword _keywords[] = {
   { "continue", 8, TK_CONTINUE },
   { "return",   6, TK_RETURN   },
 
-  { NULL,       0, (TokenType)(0) }, // Sentinal to mark the end of the array
+  { NULL,       0, (TokenType)(0) }, // Sentinel to mark the end of the array
 };
 
 /*****************************************************************************
- * COMPILIER INTERNAL TYPES                                                  *
+ * COMPILER INTERNAL TYPES                                                   *
  *****************************************************************************/
 
 // Precedence parsing references:
@@ -322,7 +322,7 @@ typedef struct sFunc {
 
 } Func;
 
-// A convinent macro to get the current function.
+// A convenient macro to get the current function.
 #define _FN (compiler->func->ptr->fn)
 
 struct Compiler {
@@ -337,7 +337,7 @@ struct Compiler {
   int current_line;         //< Line number of the current char.
   Token previous, current, next; //< Currently parsed tokens.
 
-  bool has_errors;          //< True if any syntex error occured at.
+  bool has_errors;          //< True if any syntex error occurred at.
   bool need_more_lines;     //< True if we need more lines in REPL mode.
 
   const PkCompileOptions* options; //< To configure the compilation.
@@ -361,7 +361,7 @@ struct Compiler {
   int forwards_count;
 
   // True if the last statement is a new local variable assignment. Because
-  // the assignment is different than reqular assignment and use this boolean
+  // the assignment is different than regular assignment and use this boolean
   // to tell the compiler that dont pop it's assigned value because the value
   // itself is the local.
   bool new_local;
@@ -370,7 +370,7 @@ struct Compiler {
   // using the assignment operator ('='). ie. 'a = 42' here a is an "l-value"
   // and the 42 is a "r-value" so the assignment is consumed and compiled.
   // Consider '42 = a' where 42 is a "r-value" which cannot be assigned.
-  // Similerly 'a = 1 + b = 2' the expression '(1 + b)' is a "r value" and
+  // Similarly 'a = 1 + b = 2' the expression '(1 + b)' is a "r value" and
   // the assignment here is invalid, however 'a = 1 + (b = 2)' is valid because
   // the 'b' is an "l-value" and can be assigned but the '(b = 2)' is a
   // "r-value".
@@ -411,7 +411,7 @@ static void reportError(Compiler* compiler, const char* file, int line,
 
   compiler->has_errors = true;
 
-  // If the source is incompilete we're not printing an error message,
+  // If the source is incomplete we're not printing an error message,
   // instead return PK_RESULT_UNEXPECTED_EOF to the host.
   if (compiler->need_more_lines) {
     ASSERT(compiler->options && compiler->options->repl_mode, OOPS);
@@ -457,8 +457,8 @@ static void parseError(Compiler* compiler, const char* fmt, ...) {
 }
 
 // Error caused when trying to resolve forward names (maybe more in the
-// furure), Which will be called once after compiling the script and thus we
-// need to pass the line number the error origined from.
+// future), Which will be called once after compiling the script and thus we
+// need to pass the line number the error originated from.
 static void resolveError(Compiler* compiler, int line, const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
@@ -772,7 +772,7 @@ static TokenType peek(Compiler* self) {
 }
 
 // Consume the current token if it's expected and lex for the next token
-// and return true otherwise reutrn false.
+// and return true otherwise return false.
 static bool match(Compiler* self, TokenType expected) {
   if (peek(self) != expected) return false;
   lexToken(self);
@@ -806,7 +806,7 @@ static bool matchLine(Compiler* compiler) {
     consumed = true;
   }
 
-  // If we're running on REPL mode, at the EOF and compile time error occured,
+  // If we're running on REPL mode, at the EOF and compile time error occurred,
   // signal the host to get more lines and try re-compiling it.
   if (compiler->options && compiler->options->repl_mode &&
     !compiler->has_errors) {
@@ -833,7 +833,7 @@ static bool matchEndStatement(Compiler* compiler) {
   if (matchLine(compiler) || peek(compiler) == TK_EOF)
     return true;
 
-  // In the below statement we don't require any new lines or semicollons.
+  // In the below statement we don't require any new lines or semicolons.
   // 'if cond then stmnt1 elif cond2 then stmnt2 else stmnt3 end'
   if (peek(compiler) == TK_END || peek(compiler) == TK_ELSE ||
       peek(compiler) == TK_ELIF)
@@ -1160,8 +1160,8 @@ static void exprName(Compiler* compiler) {
         emitStoreVariable(compiler, index, true);
 
       } else {
-        // This will prevent the assignment from poped out from the stack
-        // since the assigned value itself is the local and not a temp.
+        // This will prevent the assignment from being popped out from the
+        // stack since the assigned value itself is the local and not a temp.
         compiler->new_local = true;
         emitStoreVariable(compiler, index, false);
       }
@@ -1296,7 +1296,7 @@ static void exprChainCall(Compiler* compiler) {
     }
   }
 
-  // TOOD: ensure argc < 256 (MAX_ARGC) 1byte.
+  // TODO: ensure argc < 256 (MAX_ARGC) 1byte.
 
   emitOpcode(compiler, OP_CALL);
   emitByte(compiler, argc);
@@ -1607,7 +1607,7 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
 static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
                                const char* name, int length, int line) {
   if (compiler->forwards_count == MAX_FORWARD_NAMES) {
-    parseError(compiler, "A script should contain at most %d implict forward "
+    parseError(compiler, "A script should contain at most %d implicit forward "
                "function declarations.", MAX_FORWARD_NAMES);
     return;
   }
@@ -2068,7 +2068,7 @@ static void compilerImportAll(Compiler* compiler, Script* script) {
   ASSERT(script != NULL, OOPS);
   ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
-  // Line number of the variables which will be bind to the imported sybmol.
+  // Line number of the variables which will be bind to the imported symbol.
   int line = compiler->previous.line;
 
   // TODO: Refactor this to a loop rather than jumping with goto.
@@ -2219,12 +2219,12 @@ static void compileRegularImport(Compiler* compiler) {
       // If it has a module name use it as binding variable.
       // Core libs names are it's module name but for local libs it's optional
       // to define a module name for a script.
-      if (lib && lib->moudle != NULL) {
+      if (lib && lib->module != NULL) {
 
         // Get the variable to bind the imported symbol, if we already have a
         // variable with that name override it, otherwise use a new variable.
-        const char* name = lib->moudle->data;
-        uint32_t length = lib->moudle->length;
+        const char* name = lib->module->data;
+        uint32_t length = lib->module->length;
         int line = compiler->previous.line;
         var_index = compilerImportName(compiler, line, name, length);
 
@@ -2470,7 +2470,7 @@ static void compileStatement(Compiler* compiler) {
     compiler->new_local = false;
   }
 
-  // If running REPL mode, print the expression's evaluvated value. Only if
+  // If running REPL mode, print the expression's evaluated value. Only if
   // we're at the top level. Python does print local depth expression too.
   // (it's just a design decision).
   if (compiler->options && compiler->options->repl_mode &&
@@ -2484,7 +2484,7 @@ static void compileStatement(Compiler* compiler) {
 
 // Compile statements that are only valid at the top level of the script. Such
 // as import statement, function define, and if we're running REPL mode top
-// level expression's evaluvated value will be printed.
+// level expression's evaluated value will be printed.
 static void compileTopLevelStatement(Compiler* compiler) {
   if (match(compiler, TK_NATIVE)) {
     compileFunction(compiler, FN_NATIVE);
@@ -2524,7 +2524,7 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
   vm->compiler = compiler;
 
   // If we're compiling for a script that was already compiled (when running
-  // REPL or evaluvating an expression) we don't need the old main anymore.
+  // REPL or evaluating an expression) we don't need the old main anymore.
   // just use the globals and functions of the script and use a new body func.
   ASSERT(script->body != NULL, OOPS);
   pkByteBufferClear(&script->body->fn->opcodes, vm);
@@ -2550,14 +2550,14 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
     // If the script running a REPL or compiled multiple times by hosting
     // application module attribute might already set. In that case make it
     // Compile error.
-    if (script->moudle != NULL) {
+    if (script->module != NULL) {
       parseError(compiler, "Module name already defined.");
 
     } else {
       consume(compiler, TK_NAME, "Expected a name for the module.");
       const char* name = compiler->previous.start;
       uint32_t len = compiler->previous.length;
-      script->moudle = newStringLength(vm, name, len);
+      script->module = newStringLength(vm, name, len);
       consumeEndStatement(compiler);
     }
   }

@@ -8,7 +8,7 @@
 x = 0  # Creating a variable.
 
 # In pocketlang statements should end with a new line
-# or a semicollon. White space characters except for new
+# or a semicolon. White space characters except for new
 # lines are ignored in pocketlang.
 a = 1; b = 2;
 
@@ -68,12 +68,12 @@ def call(fn, x)
 	return func print('foo') end
 end
 
-# Concanative call operator '->'
+# Concatenative call operator '->'
 
 str_lower(str_strip('Foo ')) # This can be written as below
 'Foo ' -> str_strip -> str_lower
 
-'foo' -> print # similer as print('foo')
+'foo' -> print # similar to print('foo')
 
 # Fibers & Coroutine
 #-------------------

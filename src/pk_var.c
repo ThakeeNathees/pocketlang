@@ -176,7 +176,7 @@ static void _blackenObject(Object* obj, PKVM* vm) {
       vm->bytes_allocated += sizeof(Script);
 
       grayObject(vm, &scr->path->_super);
-      grayObject(vm, &scr->moudle->_super);
+      grayObject(vm, &scr->module->_super);
 
       grayVarBuffer(vm, &scr->globals);
       vm->bytes_allocated += sizeof(Var) * scr->globals.capacity;
@@ -324,7 +324,7 @@ Script* newScript(PKVM* vm, String* path) {
   varInitObject(&script->_super, vm, OBJ_SCRIPT);
 
   script->path = path;
-  script->moudle = NULL;
+  script->module = NULL;
   script->initialized = false;
 
   pkVarBufferInit(&script->globals);
@@ -420,7 +420,7 @@ Fiber* newFiber(PKVM* vm, Function* fn) {
   }
 
   // Initialize the return value to null (doesn't really have to do that here
-  // but if we're trying to debut it may crash when dumping the return vaue).
+  // but if we're trying to debut it may crash when dumping the return value).
   *fiber->ret = VAR_NULL;
 
   return fiber;
@@ -494,7 +494,7 @@ String* stringStrip(PKVM* vm, String* self) {
   //
   // These 'start' and 'end' pointers will move respectively right and left
   // while it's a white space and return an allocated string from 'start' with
-  // length of (end - start + 1). For already trimed string it'll not allocate
+  // length of (end - start + 1). For already trimmed string it'll not allocate
   // a new string, instead returns the same string provided.
 
   const char* start = self->data;
@@ -509,7 +509,7 @@ String* stringStrip(PKVM* vm, String* self) {
   const char* end = self->data + self->length - 1;
   while (isspace(*end)) end--;
 
-  // If the string is already trimed, return the same string.
+  // If the string is already trimmed, return the same string.
   if (start == self->data && end == self->data + self->length - 1) {
     return self;
   }
@@ -611,7 +611,7 @@ static bool _mapFindEntry(Map* self, Var key, MapEntry** result) {
   if (self->capacity == 0) return false;
 
   // The [start_index] is where the entry supposed to be if there wasn't any
-  // collision occured. It'll be the start index for the linear probing.
+  // collision occurred. It'll be the start index for the linear probing.
   uint32_t start_index = varHashValue(key) % self->capacity;
   uint32_t index = start_index;
 
@@ -659,7 +659,7 @@ static bool _mapFindEntry(Map* self, Var key, MapEntry** result) {
 }
 
 // Add the key, value pair to the entries array of the map. Returns true if
-// the entry added for the first time and false for replaced vlaue.
+// the entry added for the first time and false for replaced value.
 static bool _mapInsertEntry(Map* self, Var key, Var value) {
 
   ASSERT(self->capacity != 0, "Should ensure the capacity before inserting.");
@@ -773,11 +773,11 @@ bool fiberHasError(Fiber* fiber) {
 void freeObject(PKVM* vm, Object* self) {
   // TODO: Debug trace memory here.
 
-  // First clean the object's referencs, but we're not recursively doallocating
-  // them because they're not marked and will be cleaned later.
+  // First clean the object's references, but we're not recursively
+  // deallocating them because they're not marked and will be cleaned later.
   // Example: List's `elements` is VarBuffer that contain a heap allocated
   // array of `var*` which will be cleaned below but the actual `var` elements
-  // will won't be freed here instead they havent marked at all, and will be
+  // will won't be freed here instead they haven't marked at all, and will be
   // removed at the sweeping phase of the garbage collection.
   switch (self->type) {
     case OBJ_STRING:
@@ -1111,9 +1111,9 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
       case OBJ_SCRIPT: {
         const Script* scr = (const Script*)obj;
         pkByteBufferAddString(buff, vm, "[Module:", 8);
-        if (scr->moudle != NULL) {
-          pkByteBufferAddString(buff, vm, scr->moudle->data,
-                              scr->moudle->length);
+        if (scr->module != NULL) {
+          pkByteBufferAddString(buff, vm, scr->module->data,
+                              scr->module->length);
         } else {
           pkByteBufferWrite(buff, vm, '"');
           pkByteBufferAddString(buff, vm, scr->path->data, scr->path->length);

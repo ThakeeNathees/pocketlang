@@ -3,8 +3,8 @@
 
 ## %% Without a build script %%
 
-It can be build from source easily without any depencency, or additional
-requirenments except for a c99 compatible compiler. And build systems are
+It can be build from source easily without any dependency, or additional
+requirements except for a c99 compatible compiler. And build systems are
 optional. It can be compiled with the following command.
 
 Using gcc
@@ -30,7 +30,7 @@ If you weren't able to compile it, please report by [opening an issue](https://g
 ## %% Using a build script %%
 
 You could find some of the build script for different build system in the `build/`
-direcroty. If you don't find a scirpt for your prifered system, request on github
+directory. If you don't find a script for your preferred system, request on github
 by [opening an issue](https://github.com/ThakeeNathees/pocketlang/issues/new) or
 feel free to contribute one.
 
@@ -41,7 +41,7 @@ cd build && make
 ```
 
 I haven't tested the makefile on different platforms except for "windows subsystem for linux".
-And the makefile is still need to be imporved. If you find any problems with the script or
+And the makefile is still need to be improved. If you find any problems with the script or
 have any improvements, let us know in [github](https://github.com/ThakeeNathees/pocketlang).
 
 

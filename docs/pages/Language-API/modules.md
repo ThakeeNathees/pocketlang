@@ -1,13 +1,13 @@
 # %% Import statements and Modules %%
 
-Each source file in pocketlang itself is a module that can be imported in another module, which makes it easier to split and share the project. There are two major kinds of modules in pocketlang. First one is core modules which are builtin to the VM and the second one is the local modlues where it's a written script file you'll import it with the path of it.
+Each source file in pocketlang itself is a module that can be imported in another module, which makes it easier to split and share the project. There are two major kinds of modules in pocketlang. First one is core modules which are builtin to the VM and the second one is the local modules where it's a written script file you'll import it with the path of it.
 
 ## %% Importing a core module %%
 
 The import statement of the pocketlang is highly inspired from python's import syntax. Here how it looks like.
 
 ```ruby
-# To import a core modlue.
+# To import a core module.
 import lang
 
 # Import multiple modules.
@@ -16,7 +16,7 @@ import lang, math
 # Import functions from a module.
 from lang import write, gc
 
-# Using alias to bind with a differt name.
+# Using alias to bind with a different name.
 import math as foo
 from lang import clock as bar
 
@@ -40,7 +40,7 @@ from '../baz.pk' import *
 
 ```
 
-If the local scripts have defined a module name, they'll imported and binded with it's module name if not they've imported with an alias. If the local script don't have a module name and imported without an alias, every symbols (global variables, and functions) will be imported and that's similer to import all statement.
+If the local scripts have defined a module name, they'll imported and bound with it's module name if not they've imported with an alias. If the local script don't have a module name and imported without an alias, every symbols (global variables, and functions) will be imported and that's similar to import all statement.
 
 ```ruby
 # 'foo.pk' isn't defined a module name.
@@ -52,7 +52,7 @@ import 'foo.pk' as foo
 foo.fn()
 
 # 'bar.pk' is defined with a module name 'bar'.
-# It'll imported and binded as variable bar.
+# It'll be imported and bound as variable bar.
 import 'bar.pk'
 bar.fn()
 
@@ -60,7 +60,7 @@ bar.fn()
 
 ## %% The module keyword. %%
 
-We can define a name to a modlue with the `module` keyword. The name will become the namespace for that module's functions and global variables when importing it.
+We can define a name to a module with the `module` keyword. The name will become the namespace for that module's functions and global variables when importing it.
 
 
 ```ruby

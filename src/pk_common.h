@@ -42,7 +42,7 @@
 #define VAR_NAN_TAGGING 1
 
 // The maximum number of argument a pocketlang function supported to call. This
-// value is arbitary and feel free to change it. (Just used this limit for an
+// value is arbitrary and feel free to change it. (Just used this limit for an
 // internal buffer to store values before calling a new fiber).
 #define MAX_ARGC 32
 
@@ -65,7 +65,7 @@
 #define ALLOCATE_DYNAMIC(vm, type, count, tail_type) \
     ((type*)vmRealloc(vm, NULL, 0, sizeof(type) + sizeof(tail_type) * (count)))
 
-// Allocate [count] ammount of object of [type] array.
+// Allocate [count] amount of object of [type] array.
 #define ALLOCATE_ARRAY(vm, type, count) \
     ((type*)vmRealloc(vm, NULL, 0, sizeof(type) * (count)))
 
@@ -81,13 +81,13 @@
                    //< TODO; macro use this to print a crash report.
 
 // This will terminate the compilation if the [condition] is false, because of
-// 1/0 evaluvated. Use this to check missing enums in switch, or check if an
+// 1/0 evaluated. Use this to check missing enums in switch, or check if an
 // enum or macro has a specific value. (STATIC_ASSERT(ENUM_SUCCESS == 0)).
 #define STATIC_ASSERT(condition) ( 1 / ((int)(condition)) )
 
 // The internal assertion macro, this will print error and break regardless of
 // the build target (debug or release). Use ASSERT() for debug assertion and
-// use __ASSERT() for TODOs and assetions in public methods (to indicate that
+// use __ASSERT() for TODOs and assertions in public methods (to indicate that
 // the host application did something wrong).
 #define __ASSERT(condition, message)                                 \
   do {                                                               \

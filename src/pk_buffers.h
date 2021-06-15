@@ -27,7 +27,7 @@
   /* Initialize a new buffer int instance. */                                 \
   void pk##m_name##BufferInit(pk##m_name##Buffer* self);                      \
                                                                               \
-  /* Clears the allocated elementes from the VM's realloc function. */        \
+  /* Clears the allocated elements from the VM's realloc function. */         \
   void pk##m_name##BufferClear(pk##m_name##Buffer* self, PKVM* vm);           \
                                                                               \
   /* Ensure the capacity is greater than [size], if not resize. */            \

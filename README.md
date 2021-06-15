@@ -3,11 +3,11 @@
 <img src="https://user-images.githubusercontent.com/41085900/117528974-88fa8d00-aff2-11eb-8001-183c14786362.png" width="500" >
 </p>
 
-**Pocketlang** is a small (~3000 semicollons) and [fast](https://github.com/ThakeeNathees/pocketlang#performance)
+**Pocketlang** is a small (~3000 semicolons) and [fast](https://github.com/ThakeeNathees/pocketlang#performance)
 functional language written in C. It's syntactically similar to Ruby and it can
 be learned [within 15 minutes](https://thakeenathees.github.io/pocketlang/getting-started-learn-in-15-minutes.html).
 Including the compiler, bytecode VM and runtime, it's a standalone executable
-with zero external dependecies just as it's self descriptive name. The pocketlang
+with zero external dependencies just as it's self descriptive name. The pocketlang
 VM can be embedded in another hosting program very easily.
 
 The language is written using [Wren Language](https://wren.io/) and their
@@ -65,8 +65,8 @@ directory. They were ran using a small python script in the test directory.
 
 See [build documentation](https://thakeenathees.github.io/pocketlang/getting-started-build-from-source.html#using-a-build-script)
 for using an optional build script (Makefile, batch script for MSVC, SCons found in the `build/` directory).
-It can be build from source easily without any depencency, or additional
-requirenments except for a c99 compatible compiler. It can be compiled with the
+It can be build from source easily without any dependencies, or additional
+requirements except for a c99 compatible compiler. It can be compiled with the
 following command.
 
 #### GCC

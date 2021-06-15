@@ -24,7 +24,7 @@
 // running one.
 #define MIN_STACK_SIZE 128
 
-// The allocated size the'll trigger the first GC. (~10MB).
+// The allocated size that will trigger the first GC. (~10MB).
 #define INITIAL_GC_SIZE (1024 * 1024 * 10)
 
 // The heap size might shrink if the remaining allocated bytes after a GC
@@ -80,7 +80,7 @@ struct PKVM {
   int heap_fill_percent;
 
   // In the tri coloring scheme gray is the working list. We recursively pop
-  // from the list color it balck and add it's referenced objects to gray_list.
+  // from the list color it black and add it's referenced objects to gray_list.
   Object** gray_list;
   int gray_list_count;
   int gray_list_capacity;
@@ -146,7 +146,7 @@ PkHandle* vmNewHandle(PKVM* vm, Var value);
 //       '----------'                         |       [obj4]           |
 //        working set                         '------------------------'
 //
-//   First we preform a tree traversel from all the vm's root objects. such as
+//   First we preform a tree traversal from all the vm's root objects. such as
 //   stack values, temp references, handles, vm's running fiber, current
 //   compiler (if it has any) etc. Mark them (ie. is_marked = true) and add
 //   them to the working set (the gray_list). Pop the top object from the
