@@ -96,7 +96,7 @@ If you weren't able to compile it, please report by [opening an issue](https://g
 - Mark W. Bailey, Nathan C. Weston (June 2001) Technical report. *Performance Benefits of Tail Recursion Removal in
 Procedural Languages* [online] Available at http://cs.hamilton.edu/~mbailey/pubs/techreps/TR-2001-2.pdf
 
-- Leonard schütz.(2020) *Dynamic Typing and NaN Boxing* [online] Available at https://leonardschuetz.ch/blog/nan-boxing/ (Accessed December 2020)
+- Leonard schÃ¼tz.(2020) *Dynamic Typing and NaN Boxing* [online] Available at https://leonardschuetz.ch/blog/nan-boxing/ (Accessed December 2020)
 
 - Bob Nystrom.(2011) *Pratt Parsers: Expression Parsing Made Easy* [online] Avaliable at http://journal.stuffwithstuff.com/2011/03/19/pratt-parsers-expression-parsing-made-easy/ (Accessed December 2020)
 

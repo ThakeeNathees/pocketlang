@@ -5,7 +5,6 @@ assert(hex(255) == '0xff' and hex(10597059) == '0xa1b2c3')
 assert(hex(-4294967295) == '-0xffffffff') ## the largest.
 
 
-
 ## string attributes.
 assert(''.length == 0)
 assert('test'.length == 4)

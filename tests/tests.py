@@ -1,90 +1,128 @@
-import subprocess, os, sys
-import json, re
+#!python
+## Copyright (c) 2020-2021 Thakee Nathees
+## Distributed Under The MIT License
+
+import os, sys, platform
+import subprocess, json, re
 from os.path import join
 
 ## TODO: Re write this in doctest (https://github.com/onqtam/doctest)
 
 ## All the test files.
-test_files = [
-  "lang/basics.pk",
-  "lang/core.pk",
-  "lang/controlflow.pk",
-  "lang/fibers.pk",
-  "lang/functions.pk",
-  "lang/import.pk",
+TEST_SUITE = {
+  "Unit Tests": (
+    "lang/basics.pk",
+    "lang/core.pk",
+    "lang/controlflow.pk",
+    "lang/fibers.pk",
+    "lang/functions.pk",
+    "lang/import.pk",
+  ),
 
-  "examples/brainfuck.pk",
-  "examples/fib.pk",
-  "examples/fizzbuzz.pk",
-  "examples/helloworld.pk",
-  "examples/pi.pk",
-  "examples/prime.pk",
-
-]
-
-## All benchmark files. ## TODO: pass args for iterations.
-benchmarks = {
-  "factors"      : ['.pk', '.py', '.rb', '.wren'],
-  "fib"          : ['.pk', '.py', '.rb', '.wren'],
-  "list"         : ['.pk', '.py', '.rb'],
-  "loop"         : ['.pk', '.py', '.rb', ".wren"],
-  "primes"       : ['.pk', '.py', '.rb', ".wren"],
+  "Examples": (
+    "examples/brainfuck.pk",
+    "examples/fib.pk",
+    "examples/fizzbuzz.pk",
+    "examples/helloworld.pk",
+    "examples/pi.pk",
+    "examples/prime.pk",
+  ),
 }
 
+## This global variable will be set to true if any test failed.
+tests_failed = False
 def main():
+
+  ## this will enable ansi codes in windows terminal.
+  os.system('')
+  
   run_all_tests()
-  #run_all_benchmarks()
-
-def run_all_benchmarks():
-  print_title("BENCHMARKS")
-
-  def get_interpreter(file):
-    if file.endswith('.pk'  ) : return 'pocket'
-    if file.endswith('.py'  ) : return 'python'
-    if file.endswith('.rb'  ) : return 'ruby'
-    if file.endswith('.wren') : return 'wren'
-    assert False
-
-  for bm_name in benchmarks:
-    print(bm_name + ":")
-    for ext in benchmarks[bm_name]:
-      file = join('benchmark', bm_name, bm_name + ext)
-      interpreter = get_interpreter(file)
-      print('  %10s: '%interpreter, end=''); sys.stdout.flush()
-      result = run_command([interpreter, file])
-      time = re.findall(r'elapsed:\s*([0-9\.]+)\s*s',
-                result.stdout.decode('utf8'),
-                re.MULTILINE)
-      assert len(time) == 1, r'elapsed:\s*([0-9\.]+)\s*s --> no mach found.'
-      print('%10ss'%time[0])
+  if tests_failed:
+    sys.exit(1)
 
 def run_all_tests():
-  print_title("TESTS")
+  ## get the interpreter.
+  pocket = get_pocket_binary()
   
-  FMT_PATH = "%-25s"
-  INDENTATION = '      | '
-  for path in test_files:
-    print(FMT_PATH % path, end='')
-    result = run_command(['pocket', path])
-    if result.returncode != 0:
-      print('-- Failed')
-      err = INDENTATION + result.stderr \
-          .decode('utf8')               \
-          .replace('\n', '\n' + INDENTATION)
-      print(err)
-    else:
-      print('-- OK')
+  for suite in TEST_SUITE:
+    print_title(suite)
+    for path in TEST_SUITE[suite]:
+      run_test_file(pocket, path)
 
+def run_test_file(pocket, path):
+  FMT_PATH = "%-25s"
+  INDENTATION = '  | '
+  print(FMT_PATH % path, end='')
+
+  sys.stdout.flush()
+  result = run_command([pocket, path])
+  if result.returncode != 0:
+    print_error('-- Failed')
+    err = INDENTATION + result.stderr \
+        .decode('utf8')               \
+        .replace('\n', '\n' + INDENTATION)
+    print_error(err)
+  else:
+    print_success('-- PASSED')
+
+## This will return the path of the pocket binary (on different platforms).
+## The debug version of it for enabling the assertions.
+def get_pocket_binary():
+  system = platform.system()
+  pocket = ''
+  if system == 'Windows':
+    pocket = "..\\build\\debug\\bin\\pocket.exe"
+    
+  elif system == 'Linux':
+    pocket = "../build/debug/pocket"
+    
+  elif system == 'Darwin':
+    pocket = "../build/debug/pocket"
+  
+  else:
+    error_exit("Unsupported platform %s" % system)
+    
+  if not os.path.exists(pocket):
+    error_exit("Pocket interpreter not found at: '%s'" % pocket)
+  
+  return pocket
 
 def run_command(command):
   return subprocess.run(command,
                           stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE)
 
+## ----------------------------------------------------------------------------
+
+## ANSI color codes to print messages.
+COLORS = {
+    'GREEN'     : '\u001b[32m',
+    'YELLOW'    : '\033[93m',
+    'RED'       : '\u001b[31m',
+    'UNDERLINE' : '\033[4m' ,
+    'END'       : '\033[0m' ,
+}
+
+## prints an error to stderr and continue tests.
+def print_error(msg):
+  global tests_failed
+  tests_failed = True
+  print(COLORS['RED'] + msg + COLORS['END'], file=sys.stderr)
+
+## print success message to stdout.
+def print_success(msg):
+  print(COLORS['GREEN'] + msg + COLORS['END'], file=sys.stdout)
+
+## prints an error message to stderr and exit
+## immediately.
+def error_exit(msg):
+  print("Error:", msg, file=sys.stderr)
+  sys.exit(1)
+
 def print_title(title):
-  print("--------------------------------")
+  print("----------------------------------")
   print(" %s " % title)
-  print("--------------------------------")
+  print("----------------------------------")
   
 if __name__ == '__main__':
   main()

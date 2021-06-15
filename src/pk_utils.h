@@ -68,11 +68,11 @@ uint32_t utilHashString(const char* string);
  * <pre>
  * example:
  *                  v-- leading byte   v-- continuation byte => 2 bytes
- *             é =  11000011           10101001
+ *             Ã© =  11000011           10101001
  *                  ^^^                ^^
  *                  110 means 2 bytes  10 means continuation
  *
- * (note that the character é is 8 bit long with ANSI encoding)
+ * (note that the character Ã© is 8 bit long with ANSI encoding)
  * </pre>
  *
  * USAGE:
@@ -101,7 +101,7 @@ uint32_t utilHashString(const char* string);
 // For 4 bytes character, represented as 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
 // the payload is 21 bits                     | x xxxx xxxx xxxx xxxx xxxx |
 // so the maximum value *SHOULD* be 0x1fffff  | 1 f    f    f    f    f    |
-// but in RFC3629 §3 (https://tools.ietf.org/html/rfc3629#section-3) UTF-8 is
+// but in RFC3629 Â§3 (https://tools.ietf.org/html/rfc3629#section-3) UTF-8 is
 // limited to 0x10FFFF to match the limits of UTF-16.
 // </pre>
 int utf8_encodeBytesCount(int value);
