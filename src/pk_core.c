@@ -709,7 +709,7 @@ static Script* newModuleInternal(PKVM* vm, const char* name) {
   }
 
   Script* scr = newScript(vm, _name);
-  scr->moudle = _name;
+  scr->module = _name;
   vmPopTempRef(vm); // _name
 
   // Add the script to core_libs.
@@ -727,13 +727,13 @@ static inline void assertModuleNameDef(PKVM* vm, Script* script,
   // Check if function with the same name already exists.
   if (scriptGetFunc(script, name, (uint32_t)strlen(name)) != -1) {
     __ASSERT(false, stringFormat(vm, "A function named '$' already esists "
-      "on module '@'", name, script->moudle)->data);
+      "on module '@'", name, script->module)->data);
   }
 
   // Check if a global variable with the same name already exists.
   if (scriptGetGlobals(script, name, (uint32_t)strlen(name)) != -1) {
     __ASSERT(false, stringFormat(vm, "A global variable named '$' already "
-      "esists on module '@'", name, script->moudle)->data);
+      "esists on module '@'", name, script->module)->data);
   }
 }
 

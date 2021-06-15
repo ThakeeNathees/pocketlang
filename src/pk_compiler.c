@@ -2219,12 +2219,12 @@ static void compileRegularImport(Compiler* compiler) {
       // If it has a module name use it as binding variable.
       // Core libs names are it's module name but for local libs it's optional
       // to define a module name for a script.
-      if (lib && lib->moudle != NULL) {
+      if (lib && lib->module != NULL) {
 
         // Get the variable to bind the imported symbol, if we already have a
         // variable with that name override it, otherwise use a new variable.
-        const char* name = lib->moudle->data;
-        uint32_t length = lib->moudle->length;
+        const char* name = lib->module->data;
+        uint32_t length = lib->module->length;
         int line = compiler->previous.line;
         var_index = compilerImportName(compiler, line, name, length);
 
@@ -2550,14 +2550,14 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
     // If the script running a REPL or compiled multiple times by hosting
     // application module attribute might already set. In that case make it
     // Compile error.
-    if (script->moudle != NULL) {
+    if (script->module != NULL) {
       parseError(compiler, "Module name already defined.");
 
     } else {
       consume(compiler, TK_NAME, "Expected a name for the module.");
       const char* name = compiler->previous.start;
       uint32_t len = compiler->previous.length;
-      script->moudle = newStringLength(vm, name, len);
+      script->module = newStringLength(vm, name, len);
       consumeEndStatement(compiler);
     }
   }

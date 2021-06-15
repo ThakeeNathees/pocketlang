@@ -266,7 +266,7 @@ struct Script {
 
   // For core libraries the module and the path are same and points to the
   // same String objects.
-  String* moudle; //< Module name of the script.
+  String* module; //< Module name of the script.
   String* path;   //< Path of the script.
 
   /*

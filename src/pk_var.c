@@ -176,7 +176,7 @@ static void _blackenObject(Object* obj, PKVM* vm) {
       vm->bytes_allocated += sizeof(Script);
 
       grayObject(vm, &scr->path->_super);
-      grayObject(vm, &scr->moudle->_super);
+      grayObject(vm, &scr->module->_super);
 
       grayVarBuffer(vm, &scr->globals);
       vm->bytes_allocated += sizeof(Var) * scr->globals.capacity;
@@ -324,7 +324,7 @@ Script* newScript(PKVM* vm, String* path) {
   varInitObject(&script->_super, vm, OBJ_SCRIPT);
 
   script->path = path;
-  script->moudle = NULL;
+  script->module = NULL;
   script->initialized = false;
 
   pkVarBufferInit(&script->globals);
@@ -1111,9 +1111,9 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
       case OBJ_SCRIPT: {
         const Script* scr = (const Script*)obj;
         pkByteBufferAddString(buff, vm, "[Module:", 8);
-        if (scr->moudle != NULL) {
-          pkByteBufferAddString(buff, vm, scr->moudle->data,
-                              scr->moudle->length);
+        if (scr->module != NULL) {
+          pkByteBufferAddString(buff, vm, scr->module->data,
+                              scr->module->length);
         } else {
           pkByteBufferWrite(buff, vm, '"');
           pkByteBufferAddString(buff, vm, scr->path->data, scr->path->length);
