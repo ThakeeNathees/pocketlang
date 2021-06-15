@@ -933,12 +933,12 @@ static void initializeBuiltinFN(PKVM* vm, BuiltinFn* bfn, const char* name,
 
 void initializeCore(PKVM* vm) {
 
-#define INITALIZE_BUILTIN_FN(name, fn, argc)                         \
+#define INITIALIZE_BUILTIN_FN(name, fn, argc)                         \
   initializeBuiltinFN(vm, &vm->builtins[vm->builtins_count++], name, \
                       (int)strlen(name), argc, fn);
 
   // Initialize builtin functions.
-  INITALIZE_BUILTIN_FN("type_name",   coreTypeName,   1);
+  INITIALIZE_BUILTIN_FN("type_name",   coreTypeName,   1);
 
   // TODO: (maybe remove is_*() functions) suspend by type_name.
   //       and add is keyword with modules for builtin types
@@ -946,41 +946,41 @@ void initializeCore(PKVM* vm) {
   //     List.append(l, e) # List is implicitly imported core module.
   //     String.lower(s)
 
-  INITALIZE_BUILTIN_FN("is_null",     coreIsNull,     1);
-  INITALIZE_BUILTIN_FN("is_bool",     coreIsBool,     1);
-  INITALIZE_BUILTIN_FN("is_num",      coreIsNum,      1);
+  INITIALIZE_BUILTIN_FN("is_null",     coreIsNull,     1);
+  INITIALIZE_BUILTIN_FN("is_bool",     coreIsBool,     1);
+  INITIALIZE_BUILTIN_FN("is_num",      coreIsNum,      1);
 
-  INITALIZE_BUILTIN_FN("is_string",   coreIsString,   1);
-  INITALIZE_BUILTIN_FN("is_list",     coreIsList,     1);
-  INITALIZE_BUILTIN_FN("is_map",      coreIsMap,      1);
-  INITALIZE_BUILTIN_FN("is_range",    coreIsRange,    1);
-  INITALIZE_BUILTIN_FN("is_function", coreIsFunction, 1);
-  INITALIZE_BUILTIN_FN("is_script",   coreIsScript,   1);
-  INITALIZE_BUILTIN_FN("is_userobj",  coreIsUserObj,  1);
+  INITIALIZE_BUILTIN_FN("is_string",   coreIsString,   1);
+  INITIALIZE_BUILTIN_FN("is_list",     coreIsList,     1);
+  INITIALIZE_BUILTIN_FN("is_map",      coreIsMap,      1);
+  INITIALIZE_BUILTIN_FN("is_range",    coreIsRange,    1);
+  INITIALIZE_BUILTIN_FN("is_function", coreIsFunction, 1);
+  INITIALIZE_BUILTIN_FN("is_script",   coreIsScript,   1);
+  INITIALIZE_BUILTIN_FN("is_userobj",  coreIsUserObj,  1);
 
-  INITALIZE_BUILTIN_FN("hex",         coreHex,        1);
-  INITALIZE_BUILTIN_FN("assert",      coreAssert,    -1);
-  INITALIZE_BUILTIN_FN("yield",       coreYield,     -1);
-  INITALIZE_BUILTIN_FN("to_string",   coreToString,   1);
-  INITALIZE_BUILTIN_FN("print",       corePrint,     -1);
-  INITALIZE_BUILTIN_FN("input",       coreInput,     -1);
+  INITIALIZE_BUILTIN_FN("hex",         coreHex,        1);
+  INITIALIZE_BUILTIN_FN("assert",      coreAssert,    -1);
+  INITIALIZE_BUILTIN_FN("yield",       coreYield,     -1);
+  INITIALIZE_BUILTIN_FN("to_string",   coreToString,   1);
+  INITIALIZE_BUILTIN_FN("print",       corePrint,     -1);
+  INITIALIZE_BUILTIN_FN("input",       coreInput,     -1);
 
   // String functions.
-  INITALIZE_BUILTIN_FN("str_chr",     coreStrChr,     1);
-  INITALIZE_BUILTIN_FN("str_ord",     coreStrOrd,     1);
+  INITIALIZE_BUILTIN_FN("str_chr",     coreStrChr,     1);
+  INITIALIZE_BUILTIN_FN("str_ord",     coreStrOrd,     1);
 
   // List functions.
-  INITALIZE_BUILTIN_FN("list_append", coreListAppend, 2);
+  INITIALIZE_BUILTIN_FN("list_append", coreListAppend, 2);
 
   // Map functions.
-  INITALIZE_BUILTIN_FN("map_remove",  coreMapRemove,  2);
+  INITIALIZE_BUILTIN_FN("map_remove",  coreMapRemove,  2);
 
   // Fiber functions.
-  INITALIZE_BUILTIN_FN("fiber_new",      coreFiberNew,     1);
-  INITALIZE_BUILTIN_FN("fiber_get_func", coreFiberGetFunc, 1);
-  INITALIZE_BUILTIN_FN("fiber_run",      coreFiberRun,    -1);
-  INITALIZE_BUILTIN_FN("fiber_is_done",  coreFiberIsDone,  1);
-  INITALIZE_BUILTIN_FN("fiber_resume",   coreFiberResume, -1);
+  INITIALIZE_BUILTIN_FN("fiber_new",      coreFiberNew,     1);
+  INITIALIZE_BUILTIN_FN("fiber_get_func", coreFiberGetFunc, 1);
+  INITIALIZE_BUILTIN_FN("fiber_run",      coreFiberRun,    -1);
+  INITIALIZE_BUILTIN_FN("fiber_is_done",  coreFiberIsDone,  1);
+  INITIALIZE_BUILTIN_FN("fiber_resume",   coreFiberResume, -1);
 
   // Core Modules /////////////////////////////////////////////////////////////
 
