@@ -4,8 +4,6 @@
 
 ## This will run a static checks on the source files, for line length,
 ## uses of tabs and trailing white spaces, etc.
-##
-## Run the file at the top level of the repository "python3 tests/check.py".
 
 import os, sys, re
 from os.path import join
@@ -14,26 +12,21 @@ from os import listdir
 ## A list of source files, to check if the fnv1a hash values match it's
 ## corresponding cstring in the CASE_ATTRIB(name, hash) macro calls.
 HASH_CHECK_LIST = [
-  "src/pk_core.c",
+  "../src/pk_core.c",
 ]
 
 ## A list of directory, contains C source files to perform static checks.
 ## This will include both '.c' and '.h' files.
 C_SOURCE_DIRS = [
-  "src/",
-  "cli/",
-  "cli/modules/",
+  "../src/",
+  "../cli/",
+  "../cli/modules/",
 ]
 
 ## This global variable will be set to true if any check failed.
 checks_failed = False
 
-def main():
-  dir = os.path.dirname(os.path.realpath(__file__))
-  if dir == os.getcwd():
-    print("Run the file from the top level of the repository", file=sys.stderr)
-    sys.exit(1)
-    
+def main():    
   check_fnv1_hash(HASH_CHECK_LIST)
   check_static(C_SOURCE_DIRS)
   if checks_failed:

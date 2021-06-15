@@ -47,8 +47,7 @@ if not defined INCLUDE goto :MSVC_INIT
 goto :START
 
 :MSVC_INIT
-call :ColorText 0f "Not running on MSVC prompt, searching for one..."
-echo.
+echo Not running on MSVC prompt, searching for one...
 
 :: Find vswhere
 if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" (
@@ -56,8 +55,7 @@ if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" (
 ) else ( if exist "%ProgramFiles%\Microsoft Visual Studio\Installer\vswhere.exe" (
 	set VSWHERE_PATH="%ProgramFiles%\Microsoft Visual Studio\Installer\vswhere.exe"
 ) else (
-	call :ColorText 0c "Can't find vswhere.exe"
-	echo.
+	echo Can't find vswhere.exe
 	goto :NO_VS_PROMPT
 ))
 
@@ -70,14 +68,12 @@ if not exist "%VSWHERE_PATH%" (
 	goto :NO_VS_PROMPT
 )
 
-call :ColorText 0f "Found at - "
-echo %VSWHERE_PATH%
+echo Found at - %VSWHERE_PATH%
 
 :: Initialize VC for X86_64
 call "%VSWHERE_PATH%\VC\Auxiliary\Build\vcvars64.bat"
 if errorlevel 1 goto :NO_VS_PROMPT
-call :ColorText 0f "Initialized MSVC x86_64"
-echo. 
+echo Initialized MSVC x86_64
 goto :START
 
 :NO_VS_PROMPT
@@ -156,8 +152,7 @@ if exist "debug" rmdir /S /Q "debug"
 if exist "release" rmdir /S /Q "release"
 
 echo.
-call :ColorText 0a "Files were cleaned."
-echo.
+echo Files were cleaned.
 goto :END
 
 :: ----------------------------------------------------------------------------
@@ -166,13 +161,11 @@ goto :END
 
 :SUCCESS
 echo.
-call :ColorText 0a "Compilation Success"
-echo.
+echo Compilation Success
 goto :END
 
 :FAIL
-call :ColorText 0c "Build failed. See the error messages."
-echo.
+echo Build failed. See the error messages.
 exit /b 1
 goto :END
 
@@ -183,11 +176,15 @@ goto :eof
 ::                      PRINT COLORED MESSAGE
 :: ----------------------------------------------------------------------------
 
+:: Usage:
+::call :ColorText 0a "Compilation Success"
+::echo.
+
 :: Reference - https://stackoverflow.com/questions/2048509/how-to-echo-with-different-colors-in-the-windows-command-line)
-:ColorText
-echo off
-<nul set /p ".=%DEL%" > "%~2"
-findstr /v /a:%1 /R "^$" "%~2" nul
-del "%~2" > nul 2>&1
-goto :eof
+:::ColorText
+::echo off
+::<nul set /p ".=%DEL%" > "%~2"
+::findstr /v /a:%1 /R "^$" "%~2" nul
+::del "%~2" > nul 2>&1
+::goto :eof
 
