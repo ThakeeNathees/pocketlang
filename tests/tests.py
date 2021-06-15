@@ -103,15 +103,22 @@ COLORS = {
     'END'       : '\033[0m' ,
 }
 
+## All tests messages are written to stdour because they're mixed
+## and github actions io calls seems asynchronous. And ANSI colors
+## not seems to working with multiline in github actions, so
+## printing the message line by line.
+
 ## prints an error to stderr and continue tests.
 def print_error(msg):
   global tests_failed
   tests_failed = True
-  print(COLORS['RED'] + msg + COLORS['END'], file=sys.stderr)
+  for line in msg.splitlines():
+    print(COLORS['RED'] + line + COLORS['END'])
 
 ## print success message to stdout.
 def print_success(msg):
-  print(COLORS['GREEN'] + msg + COLORS['END'], file=sys.stdout)
+  for line in msg.splitlines():
+    print(COLORS['GREEN'] + line + COLORS['END'])
 
 ## prints an error message to stderr and exit
 ## immediately.

@@ -1,0 +1,58 @@
+
+name: CI
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  ## Check for trailing white space, line width, tabs, etc.
+  style-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run check.py script.
+        run: |
+          cd tests
+          python3 check.py
+  
+  ## Compile and run test on linux system.
+  linux-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run the Makefile.
+        run: |
+          cd build
+          make
+      - name: Run tests.
+        run: |
+          cd tests
+          python3 tests.py
+
+  ## Compile and run tests on windows system.
+  windows-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2      
+      - name: Run build batch script.
+        run: |
+          cd build
+          cmd /c build.bat
+      - name: Run tests.
+        run: |
+          cd tests
+          python tests.py
+
+  ## Compile and run tests on macos system.
+  macos-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run the Makefile.
+        run: |
+          cd build
+          make
+      - name: Run tests.
+        run: |
+          cd tests
+          python3 tests.py
+
+
