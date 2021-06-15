@@ -56,3 +56,5 @@ end
 assert(sum == 54)
 
 
+# If we got here, that means all test were passed.
+print('All TESTS PASSED')

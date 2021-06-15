@@ -25,3 +25,6 @@ assert(result == '[fn3:[fn2:[fn1:data]|suff]]')
 # str_lower(s) function refactored to s.lower attribute.
 #result = ' tEST+InG ' -> str_strip -> str_lower
 #assert(result == 'test+ing')
+
+# If we got here, that means all test were passed.
+print('All TESTS PASSED')

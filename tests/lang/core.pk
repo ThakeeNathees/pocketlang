@@ -4,6 +4,8 @@ assert(hex(12648430) == '0xc0ffee')
 assert(hex(255) == '0xff' and hex(10597059) == '0xa1b2c3')
 assert(hex(-4294967295) == '-0xffffffff') ## the largest.
 
+
+
 ## string attributes.
 assert(''.length == 0)
 assert('test'.length == 4)
@@ -49,6 +51,6 @@ for i in 0..1000
   assert(abs(sin(i) / cos(i) - tan(i)) < threshold)
 end
 
-# If we got here with no errors, then all test passed
-print('All tests PASSED (100%)')
 
+# If we got here, that means all test were passed.
+print('All TESTS PASSED')

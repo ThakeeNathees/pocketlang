@@ -31,3 +31,6 @@ p2 = fiber_resume(fiber, 'r1'); assert(p2 == 2)
 p1 = fiber_resume(fiber, 'r2'); assert(p1 == 1)
 pa = fiber_resume(fiber, 'r3'); assert(pa == 7)
 assert(fiber_is_done(fiber))
+
+# If we got here, that means all test were passed.
+print('All TESTS PASSED')
