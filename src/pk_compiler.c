@@ -129,7 +129,7 @@ typedef enum {
   TK_WHILE,      // while
   TK_FOR,        // for
   TK_IF,         // if
-  TK_ELIF,       // elif
+  TK_ELSEIF,     // else if
   TK_ELSE,       // else
   TK_BREAK,      // break
   TK_CONTINUE,   // continue
@@ -190,7 +190,7 @@ static _Keyword _keywords[] = {
   { "while",    5, TK_WHILE    },
   { "for",      3, TK_FOR      },
   { "if",       2, TK_IF       },
-  { "elif",     4, TK_ELIF     },
+  { "else if",  4, TK_ELSEIF   },
   { "else",     4, TK_ELSE     },
   { "break",    5, TK_BREAK    },
   { "continue", 8, TK_CONTINUE },
@@ -823,7 +823,7 @@ static void skipNewLines(Compiler* compiler) {
   matchLine(compiler);
 }
 
-// Match semi collon, multiple new lines or peek 'end', 'else', 'elif'
+// Match semi collon, multiple new lines or peek 'end', 'else', 'else if'
 // keywords.
 static bool matchEndStatement(Compiler* compiler) {
   if (match(compiler, TK_SEMICOLLON)) {
@@ -834,9 +834,9 @@ static bool matchEndStatement(Compiler* compiler) {
     return true;
 
   // In the below statement we don't require any new lines or semicolons.
-  // 'if cond then stmnt1 elif cond2 then stmnt2 else stmnt3 end'
+  // 'if cond then stmnt1 else if cond2 then stmnt2 else stmnt3 end'
   if (peek(compiler) == TK_END || peek(compiler) == TK_ELSE ||
-      peek(compiler) == TK_ELIF)
+      peek(compiler) == TK_ELSEIF)
     return true;
 
   return false;
@@ -1078,7 +1078,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_WHILE      */   NO_RULE,
   /* TK_FOR        */   NO_RULE,
   /* TK_IF         */   NO_RULE,
-  /* TK_ELIF       */   NO_RULE,
+  /* TK_ELSEIF     */   NO_RULE,
   /* TK_ELSE       */   NO_RULE,
   /* TK_BREAK      */   NO_RULE,
   /* TK_CONTINUE   */   NO_RULE,
@@ -1894,7 +1894,7 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
 
   TokenType next = peek(compiler);
   while (!(next == TK_END || next == TK_EOF || (
-    (type == BLOCK_IF) && (next == TK_ELSE || next == TK_ELIF)))) {
+    (type == BLOCK_IF) && (next == TK_ELSE || next == TK_ELSEIF)))) {
 
     compileStatement(compiler);
     skipNewLines(compiler);
@@ -2256,7 +2256,7 @@ static void compileExpression(Compiler* compiler) {
   parsePrecedence(compiler, PREC_LOWEST);
 }
 
-static void compileIfStatement(Compiler* compiler, bool elif) {
+static void compileIfStatement(Compiler* compiler, bool elseif) {
 
   skipNewLines(compiler);
   compileExpression(compiler); //< Condition.
@@ -2265,7 +2265,7 @@ static void compileIfStatement(Compiler* compiler, bool elif) {
 
   compileBlockBody(compiler, BLOCK_IF);
 
-  if (match(compiler, TK_ELIF)) {
+  if (match(compiler, TK_ELSEIF)) {
 
     // Jump pass else.
     emitOpcode(compiler, OP_JUMP);
@@ -2294,9 +2294,9 @@ static void compileIfStatement(Compiler* compiler, bool elif) {
     patchJump(compiler, ifpatch);
   }
 
-  // elif will not consume the 'end' keyword as it'll be leaved to be consumed
+  // else if will not consume the 'end' keyword as it'll be leaved to be consumed
   // by it's 'if'.
-  if (!elif) {
+  if (!elseif) {
     skipNewLines(compiler);
     consume(compiler, TK_END, "Expected 'end' after statement end.");
   }
