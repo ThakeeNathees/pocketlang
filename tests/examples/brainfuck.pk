@@ -7,8 +7,8 @@ from lang import write
 ## Reference: https://en.wikipedia.org/wiki/Brainfuck
 
 ## Note that this interpreter implementation is just to test pocketlang and is
-## not an efficient one. This could be optimized by evaluvating the expressions
-## at "compile time" (AOT) to avoid re-evaluvating those expressions at runtime
+## not an efficient one. This could be optimized by evaluating the expressions
+## at "compile time" (AOT) to avoid re-evaluating those expressions at runtime
 ## and also we can pre compile the loop jump offsets.
 
 ## Source: https://en.wikipedia.org/wiki/Brainfuck
