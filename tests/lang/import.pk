@@ -32,3 +32,5 @@ import 'import/all_import.pk' as all_import
 assert(all_import.all_f1 == all_f1)
 
 
+# If we got here, that means all test were passed.
+print('All TESTS PASSED')

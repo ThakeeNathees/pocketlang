@@ -43,9 +43,9 @@
 // The name of a literal function.
 #define LITERAL_FN_NAME "$(LiteralFn)"
 
-/*****************************************************************************
- * TOKENS                                                                    *
- *****************************************************************************/
+/*****************************************************************************/
+/* TOKENS                                                                    */
+/*****************************************************************************/
 
 typedef enum {
 
@@ -199,9 +199,9 @@ static _Keyword _keywords[] = {
   { NULL,       0, (TokenType)(0) }, // Sentinel to mark the end of the array
 };
 
-/*****************************************************************************
- * COMPILER INTERNAL TYPES                                                   *
- *****************************************************************************/
+/*****************************************************************************/
+/* COMPILER INTERNAL TYPES                                                   */
+/*****************************************************************************/
 
 // Precedence parsing references:
 // https://en.wikipedia.org/wiki/Shunting-yard_algorithm
@@ -395,9 +395,9 @@ static OpInfo opcode_info[] = {
   #undef OPCODE
 };
 
-/*****************************************************************************
- * ERROR HANDLERS                                                            *
- *****************************************************************************/
+/*****************************************************************************/
+/* ERROR HANDLERS                                                            */
+/*****************************************************************************/
 
 // Internal error report function of the parseError() function.
 static void reportError(Compiler* compiler, const char* file, int line,
@@ -467,9 +467,9 @@ static void resolveError(Compiler* compiler, int line, const char* fmt, ...) {
   va_end(args);
 }
 
-/*****************************************************************************
- * LEXING                                                                    *
- *****************************************************************************/
+/*****************************************************************************/
+/* LEXING                                                                    */
+/*****************************************************************************/
 
 // Forward declaration of lexer methods.
 
@@ -572,23 +572,100 @@ static void eatName(Compiler* compiler) {
 // Complete lexing a number literal.
 static void eatNumber(Compiler* compiler) {
 
-  // TODO: hex, binary and scientific literals.
+  // TODO: scientific literals.
 
-  while (utilIsDigit(peekChar(compiler)))
-    eatChar(compiler);
+  // TODO: 0b1012 parsed as to number tokens : 0b101 and 2
+  // Should be invalid binary literal error (also for hex).
 
-  if (peekChar(compiler) == '.' && utilIsDigit(peekNextChar(compiler))) {
-    matchChar(compiler, '.');
-    while (utilIsDigit(peekChar(compiler)))
+  Var value = VAR_NULL; // The number value.
+
+  char c = *compiler->token_start;
+
+  // Binary literal.
+  if (c == '0' && peekChar(compiler) == 'b') {
+    eatChar(compiler); // Consume '0b'
+
+    uint64_t bin = 0;
+    c = peekChar(compiler);
+    if (c != '0' && c != '1') { // The first digit should be either 0 or 1.
+      lexError(compiler, "Invalid binary literal.");
+
+    } else {
+      do {
+        c = peekChar(compiler);
+        if (c != '0' && c != '1') break;
+        eatChar(compiler); // Consume the digit.
+
+        // Check the length of the binary literal.
+        int length = (int)(compiler->current_char - compiler->token_start);
+        if (length > STR_BIN_BUFF_SIZE - 2) { // -2: '-\0' 0b is in both side.
+          lexError(compiler, "Binary literal is too long.");
+          break;
+        }
+
+        // "Append" the next digit at the end.
+        bin = (bin << 1) | (c - '0');
+
+      } while (true);
+
+      value = VAR_NUM((double)bin);
+    }
+
+  } else if (c == '0' && peekChar(compiler) == 'x') {
+    eatChar(compiler); // Consume '0x'
+
+  #define IS_HEX_CHAR(c) (('0' <= c && c <= '9') || ('a' <= c && c<= 'f'))
+
+    uint64_t hex = 0;
+    c = peekChar(compiler);
+    if (!IS_HEX_CHAR(c)) { // The first digit should be either hex digit.
+      lexError(compiler, "Invalid hex literal.");
+
+    } else {
+      do {
+        c = peekChar(compiler);
+        if (!IS_HEX_CHAR(c)) break;
+        eatChar(compiler); // Consume the digit.
+
+        // Check the length of the binary literal.
+        int length = (int)(compiler->current_char - compiler->token_start);
+        if (length > STR_HEX_BUFF_SIZE - 2) { // -2: '-\0' 0x is in both side.
+          lexError(compiler, "Hex literal is too long.");
+          break;
+        }
+
+        // "Append" the next digit at the end.
+        uint8_t append_val = ('0' <= c && c <= '9')
+          ? (uint8_t)(c - '0')
+          : (uint8_t)((c - 'a') + 10);
+        hex = (hex << 4) | append_val;
+
+      } while (true);
+
+      value = VAR_NUM((double)hex);
+    }
+
+  #undef IS_HEX_CHAR
+
+  } else {
+    while (utilIsDigit(peekChar(compiler))) {
       eatChar(compiler);
-  }
-  errno = 0;
-  Var value = VAR_NUM(strtod(compiler->token_start, NULL));
-  if (errno == ERANGE) {
-    const char* start = compiler->token_start;
-    int len = (int)(compiler->current_char - start);
-    lexError(compiler, "Literal is too large (%.*s)", len, start);
-    value = VAR_NUM(0);
+    }
+
+    if (peekChar(compiler) == '.' && utilIsDigit(peekNextChar(compiler))) {
+      matchChar(compiler, '.');
+      while (utilIsDigit(peekChar(compiler)))
+        eatChar(compiler);
+    }
+
+    errno = 0;
+    value = VAR_NUM(strtod(compiler->token_start, NULL));
+    if (errno == ERANGE) {
+      const char* start = compiler->token_start;
+      int len = (int)(compiler->current_char - start);
+      lexError(compiler, "Literal is too large (%.*s)", len, start);
+      value = VAR_NUM(0);
+    }
   }
 
   setNextValueToken(compiler, TK_NUMBER, value);
@@ -667,9 +744,11 @@ static void lexToken(Compiler* compiler) {
       case '&':
         setNextTwoCharToken(compiler, '=', TK_AMP, TK_ANDEQ);
         return;
+
       case '|':
         setNextTwoCharToken(compiler, '=', TK_PIPE, TK_OREQ);
         return;
+
       case '^':
         setNextTwoCharToken(compiler, '=', TK_CARET, TK_XOREQ);
         return;
@@ -743,8 +822,10 @@ static void lexToken(Compiler* compiler) {
 
         if (utilIsDigit(c)) {
           eatNumber(compiler);
+
         } else if (utilIsName(c)) {
           eatName(compiler);
+
         } else {
           if (c >= 32 && c <= 126) {
             lexError(compiler, "Invalid character '%c'", c);
@@ -762,9 +843,9 @@ static void lexToken(Compiler* compiler) {
   compiler->next.start = compiler->current_char;
 }
 
-/*****************************************************************************
- * PARSING                                                                   *
- *****************************************************************************/
+/*****************************************************************************/
+/* PARSING                                                                   */
+/*****************************************************************************/
 
 // Returns current token type without lexing a new token.
 static TokenType peek(Compiler* self) {
@@ -883,9 +964,9 @@ static bool matchAssignment(Compiler* compiler) {
   return false;
 }
 
-/*****************************************************************************
- * NAME SEARCH                                                               *
- *****************************************************************************/
+/*****************************************************************************/
+/* NAME SEARCH                                                               */
+/*****************************************************************************/
 
 // Result type for an identifier definition.
 typedef enum {
@@ -964,9 +1045,9 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
   return result;
 }
 
-/*****************************************************************************
- * PARSING GRAMMAR                                                           *
- *****************************************************************************/
+/*****************************************************************************/
+/* PARSING GRAMMAR                                                           */
+/*****************************************************************************/
 
 // Forward declaration of codegen functions.
 static void emitOpcode(Compiler* compiler, Opcode opcode);
@@ -975,6 +1056,7 @@ static int emitShort(Compiler* compiler, int arg);
 
 static void emitLoopJump(Compiler* compiler);
 static void emitAssignment(Compiler* compiler, TokenType assignment);
+static void emitFunctionEnd(Compiler* compiler);
 
 static void patchJump(Compiler* compiler, int addr_index);
 static void patchForward(Compiler* compiler, Fn* fn, int index, int name);
@@ -1175,7 +1257,6 @@ static void exprName(Compiler* compiler) {
       } else {
         parseError(compiler, "Name '%.*s' is not defined.", length, start);
       }
-
     }
 
   } else {
@@ -1519,9 +1600,9 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
   }
 }
 
-/*****************************************************************************
- * COMPILING                                                                 *
- *****************************************************************************/
+/*****************************************************************************/
+/* COMPILING                                                                 */
+/*****************************************************************************/
 
 static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
                          Script* script, const PkCompileOptions* options) {
@@ -1694,9 +1775,9 @@ static void compilerExitBlock(Compiler* compiler) {
   compiler->scope_depth--;
 }
 
-/*****************************************************************************
- * COMPILING (EMIT BYTECODE)                                                 *
- *****************************************************************************/
+/*****************************************************************************/
+/* COMPILING (EMIT BYTECODE)                                                 */
+/*****************************************************************************/
 
 // Emit a single byte and return it's index.
 static int emitByte(Compiler* compiler, int byte) {
@@ -1743,6 +1824,18 @@ static void emitAssignment(Compiler* compiler, TokenType assignment) {
   }
 }
 
+static void emitFunctionEnd(Compiler* compiler) {
+
+  // Don't use emitOpcode(compiler, OP_RETURN); Because it'll recude the stack
+  // size by -1, (return value will be popped). We really don't have to pop the
+  // return value of the function, when returning from the end of the function,
+  // because there'll always be a null value at the base of the current call
+  // frame as the return value of the function.
+  emitByte(compiler, OP_RETURN);
+
+  emitOpcode(compiler, OP_END);
+}
+
 // Update the jump offset.
 static void patchJump(Compiler* compiler, int addr_index) {
   int offset = (int)_FN->opcodes.count - (addr_index + 2 /*bytes index*/);
@@ -1756,9 +1849,9 @@ static void patchForward(Compiler* compiler, Fn* fn, int index, int name) {
   fn->opcodes.data[index] = name & 0xff;
 }
 
- /****************************************************************************
-  * COMPILING (PARSE TOPLEVEL)                                               *
-  ****************************************************************************/
+/*****************************************************************************/
+/* COMPILING (PARSE TOPLEVEL)                                                */
+/*****************************************************************************/
 
 typedef enum {
   BLOCK_FUNC,
@@ -1850,9 +1943,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
     compileBlockBody(compiler, BLOCK_FUNC);
     consume(compiler, TK_END, "Expected 'end' after function definition end.");
     compilerExitBlock(compiler); // Parameter depth.
-
-    emitOpcode(compiler, OP_RETURN);
-    emitOpcode(compiler, OP_END);
+    emitFunctionEnd(compiler);
 
   } else {
     compilerExitBlock(compiler); // Parameter depth.
@@ -2567,9 +2658,7 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
     skipNewLines(compiler);
   }
 
-  emitOpcode(compiler, OP_PUSH_NULL);
-  emitOpcode(compiler, OP_RETURN);
-  emitOpcode(compiler, OP_END);
+  emitFunctionEnd(compiler);
 
   // Resolve forward names (function names that are used before defined).
   for (int i = 0; i < compiler->forwards_count; i++) {

@@ -39,7 +39,11 @@
 #define VM_HAS_ERROR(vm) (vm->fiber->error != NULL)
 
 // Set the error message [err] to the [vm]'s current fiber.
-#define VM_SET_ERROR(vm, err) (vm->fiber->error = err)
+#define VM_SET_ERROR(vm, err)        \
+  do {                               \
+    ASSERT(!VM_HAS_ERROR(vm), OOPS); \
+    (vm->fiber->error = err);        \
+  } while (false)
 
 // Builtin functions are stored in an array in the VM (unlike script functions
 // they're member of function buffer of the script) and this struct is a single

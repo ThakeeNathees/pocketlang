@@ -282,9 +282,10 @@ static inline bool isInteger(Var var, int64_t* value) {
   double number;
   if (isNumeric(var, &number)) {
     // TODO: check if the number is larger for a 64 bit integer.
-    double floor_val = floor(number);
-    if (floor_val == number) {
-      *value = (int64_t)(floor_val);
+    if (floor(number) == number) {
+      ASSERT(INT64_MIN <= number && number <= INT64_MAX,
+        "TODO: Large numbers haven't handled yet. Please report!");
+      *value = (int64_t)(number);
       return true;
     }
   }
@@ -411,7 +412,6 @@ static void coreTypeName(PKVM* vm)) {
   RET(VAR_OBJ(newString(vm, varTypeName(ARG(1)))));
 }
 
-// TODO: Complete this and register it.
 PK_DOC(
   "bin(value:num) -> string\n"
   "Returns as a binary value string with '0x' prefix.",
@@ -421,11 +421,26 @@ static void coreBin(PKVM* vm)) {
 
   char buff[STR_BIN_BUFF_SIZE];
 
-  char* ptr = buff;
-  if (value < 0) *ptr++ = '-';
-  *ptr++ = '0'; *ptr++ = 'b';
+  bool negative = (value < 0) ? true : false;
+  if (negative) value = -value;
 
-  TODO; // sprintf(ptr, "%b");
+  char* ptr = buff + STR_BIN_BUFF_SIZE - 1;
+  *ptr-- = '\0'; // NULL byte at the end of the string.
+
+  if (value != 0) {
+    while (value > 0) {
+      *ptr-- = '0' + (value & 1);
+      value >>= 1;
+    }
+  } else {
+    *ptr-- = '0';
+  }
+
+  *ptr-- = 'b'; *ptr-- = '0';
+  if (negative) *ptr-- = '-';
+
+  uint32_t length = (uint32_t)((buff + STR_BIN_BUFF_SIZE - 1) - (ptr + 1));
+  RET(VAR_OBJ(newStringLength(vm, ptr + 1, length)));
 }
 
 PK_DOC(
@@ -446,6 +461,8 @@ static void coreHex(PKVM* vm)) {
     RET(VAR_NULL);
   }
 
+  // TODO: spritnf limits only to 8 character hex value, we need to do it
+  // outself for a maximum of 16 character long (see bin() for reference).
   uint32_t _x = (uint32_t)((value < 0) ? -value : value);
   int length = sprintf(ptr, "%x", _x);
 
@@ -933,7 +950,7 @@ static void initializeBuiltinFN(PKVM* vm, BuiltinFn* bfn, const char* name,
 
 void initializeCore(PKVM* vm) {
 
-#define INITIALIZE_BUILTIN_FN(name, fn, argc)                         \
+#define INITIALIZE_BUILTIN_FN(name, fn, argc)                        \
   initializeBuiltinFN(vm, &vm->builtins[vm->builtins_count++], name, \
                       (int)strlen(name), argc, fn);
 
@@ -958,6 +975,7 @@ void initializeCore(PKVM* vm) {
   INITIALIZE_BUILTIN_FN("is_script",   coreIsScript,   1);
   INITIALIZE_BUILTIN_FN("is_userobj",  coreIsUserObj,  1);
 
+  INITIALIZE_BUILTIN_FN("bin",         coreBin,        1);
   INITIALIZE_BUILTIN_FN("hex",         coreHex,        1);
   INITIALIZE_BUILTIN_FN("assert",      coreAssert,    -1);
   INITIALIZE_BUILTIN_FN("yield",       coreYield,     -1);

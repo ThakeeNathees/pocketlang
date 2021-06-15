@@ -83,7 +83,7 @@ cl /Fepocket cli/*.c src/*.c /Isrc/include && rm *.obj
 
 1. Create an empty project file / makefile.
 2. Add all C files in the src directory.
-3. Add all C files in the cli directory (**not** recursively).
+3. Add all C files in the cli directory (**NOT** recursively).
 4. Add `src/include` to include path.
 5. Compile.
 
