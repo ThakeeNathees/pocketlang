@@ -7,21 +7,21 @@ if true then variable = 42 else unreachable() end
 assert(variable == 42, 'If statement failed.')
 
 if false then unreachable()
-elif true then variable = null
+elsif true then variable = null
 else unreachable() end
-assert(is_null(variable), 'Elif statement failed.')
+assert(is_null(variable), 'elsif statement failed.')
 
 if false then unreachable()
-elif false then unreachable()
-elif false then unreachable()
+elsif false then unreachable()
+elsif false then unreachable()
 else variable = "changed" end
 assert(variable == "changed", 'Else statement failed.')
 
 if false then unreachable()
-elif true
+elsif true
   if false
     unreachable()
-  elif true
+  elsif true
     variable = 123
   else
     unreachable()
@@ -39,9 +39,9 @@ assert(variable == 1212)
 
 while true
 	variable = 22
-	if true then elif false then end	
+	if true then elsif false then end	
 	if false
-	elif true
+	elsif true
 		variable += 2300
 	end
 	variable += 1
