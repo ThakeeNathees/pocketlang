@@ -134,16 +134,9 @@ int main(int argc, char** argv) {
   const char* usage =
     "usage: pocket [-c cmd | file]\n\n"
     "The following options are available:\n\n"
-    "  -c cmd | file    executes a command or a file [TODO]\n"
+    "  -c cmd | file    executes a command or a file\n"
     "  --version        prints the version of pocketlang\n"
     "  --help           prints this help message\n";
-
-  // TODO: implement arg parse, REPL.
-
-  //if (argc < 2) {
-  //  printf("%s\n%s", notice, help);
-  //  return 0;
-  //}
 
   if (argc > 1) {
     if (strcmp(argv[1], "--help") == 0) {
