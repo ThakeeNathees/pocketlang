@@ -37,13 +37,17 @@
   /* Fill the buffer at the end of it with provided data if the capacity */   \
   /* isn't enough using VM's realloc function. */                             \
   void pk##m_name##BufferFill(pk##m_name##Buffer* self, PKVM* vm,             \
-                             m_type data, int count);                         \
+                              m_type data, int count);                        \
                                                                               \
   /* Write to the buffer with provided data at the end of the buffer.*/       \
   void pk##m_name##BufferWrite(pk##m_name##Buffer* self,                      \
-                              PKVM* vm, m_type data);                         \
+                               PKVM* vm, m_type data);                        \
+                                                                              \
+  /* Concatenate the contents of another buffer at the end of this buffer.*/  \
+  void pk##m_name##BufferConcat(pk##m_name##Buffer* self, PKVM* vm,           \
+                                pk##m_name##Buffer* other);                   \
 
-// The buffer "template" implementation of diferent types.
+// The buffer "template" implementation of different types.
 #define DEFINE_BUFFER(m_name, m_type)                                         \
   void pk##m_name##BufferInit(pk##m_name##Buffer* self) {                     \
     self->data = NULL;                                                        \
@@ -71,7 +75,7 @@
   }                                                                           \
                                                                               \
   void pk##m_name##BufferFill(pk##m_name##Buffer* self, PKVM* vm,             \
-              m_type data, int count) {                                       \
+                              m_type data, int count) {                       \
                                                                               \
     pk##m_name##BufferReserve(self, vm, self->count + count);                 \
                                                                               \
@@ -81,8 +85,18 @@
   }                                                                           \
                                                                               \
   void pk##m_name##BufferWrite(pk##m_name##Buffer* self,                      \
-              PKVM* vm, m_type data) {                                        \
+                               PKVM* vm, m_type data) {                       \
     pk##m_name##BufferFill(self, vm, data, 1);                                \
   }                                                                           \
+                                                                              \
+  void pk##m_name##BufferConcat(pk##m_name##Buffer* self, PKVM* vm,           \
+                                pk##m_name##Buffer* other) {                  \
+    pk##m_name##BufferReserve(self, vm, self->count + other->count);          \
+                                                                              \
+    memcpy(self->data + self->count,                                          \
+           other->data,                                                       \
+           other->count * sizeof(m_type));                                    \
+    self->count += other->count;                                              \
+  }
 
 #endif // BUFFERS_TEMPLATE_H

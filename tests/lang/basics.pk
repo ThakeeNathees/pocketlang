@@ -21,6 +21,11 @@ assert(0xffffffffffffffff == 18446744073709551615)
 l1 = [1, false, null, func print('hello') end]
 assert(is_null(l1[2]))
 l1[1] = true; assert(l1[1])
+l1 = [] + [] ; assert(l1.length == 0)
+l1 = [] + [1]; assert(l1.length == 1); assert(l1[0] == 1)
+l1 = [1] + []; assert(l1.length == 1); assert(l1[0] == 1)
+l2 = l1 + [1,2,3]; assert(l2.length == 4); assert(l2 == [1,1,2,3])
+l3 = l2 + l1 + l2; assert(l3 == [1,1,2,3,1,1,1,2,3])
 
 ## Builtin functions tests.
 assert(to_string(42) == '42')

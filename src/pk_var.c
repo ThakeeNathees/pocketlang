@@ -1272,6 +1272,23 @@ String* stringJoin(PKVM* vm, String* str1, String* str2) {
   return string;
 }
 
+List* listJoin(PKVM* vm, List* l1, List* l2) {
+
+  // Optimize end case.
+  if (l1->elements.count == 0) return l2;
+  if (l2->elements.count == 0) return l1;
+
+  size_t size = (size_t)l1->elements.count + (size_t)l2->elements.count;
+  List* list = newList(vm, size);
+
+  vmPushTempRef(vm, &list->_super);
+  pkVarBufferConcat(&list->elements, vm, &l1->elements);
+  pkVarBufferConcat(&list->elements, vm, &l2->elements);
+  vmPopTempRef(vm);
+
+  return list;
+}
+
 uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
                        uint32_t length) {
 
