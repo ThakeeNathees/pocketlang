@@ -9,6 +9,15 @@ import os, sys, re
 from os.path import join
 from os import listdir
 
+## The absolute path of this file, when run as a script.
+## This file is not intended to be included in other files at the moment.
+THIS_PATH = os.path.abspath(os.path.dirname(__file__))
+
+## Converts a list of relative paths from the working directory
+## to a list of relative paths from this file's absolute directory.
+def to_abs_paths(sources):
+  return map(lambda s: os.path.join(THIS_PATH, s), sources)
+
 ## A list of source files, to check if the fnv1a hash values match it's
 ## corresponding cstring in the CASE_ATTRIB(name, hash) macro calls.
 HASH_CHECK_LIST = [
@@ -26,9 +35,9 @@ C_SOURCE_DIRS = [
 ## This global variable will be set to true if any check failed.
 checks_failed = False
 
-def main():    
-  check_fnv1_hash(HASH_CHECK_LIST)
-  check_static(C_SOURCE_DIRS)
+def main():
+  check_fnv1_hash(to_abs_paths(HASH_CHECK_LIST))
+  check_static(to_abs_paths(C_SOURCE_DIRS))
   if checks_failed:
     sys.exit(1)
   print("Static checks were passed.")
@@ -117,4 +126,3 @@ def report_error(msg):
 
 if __name__ == '__main__':
   main()
-  

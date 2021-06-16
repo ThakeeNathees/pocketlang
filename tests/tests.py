@@ -8,6 +8,10 @@ from os.path import join
 
 ## TODO: Re write this in doctest (https://github.com/onqtam/doctest)
 
+## The absolute path of this file, when run as a script.
+## This file is not intended to be included in other files at the moment.
+THIS_PATH = os.path.abspath(os.path.dirname(__file__))
+
 ## All the test files.
 TEST_SUITE = {
   "Unit Tests": (
@@ -29,6 +33,13 @@ TEST_SUITE = {
   ),
 }
 
+## Map from systems to the relative binary path
+SYSTEM_TO_BINARY_PATH = {
+  "Windows": "..\\build\\debug\\bin\\pocket.exe",
+  "Linux": "../build/debug/pocket",
+  "Darwin": "../build/debug/pocket",
+}
+
 ## This global variable will be set to true if any test failed.
 tests_failed = False
 def main():
@@ -46,13 +57,14 @@ def run_all_tests():
   
   for suite in TEST_SUITE:
     print_title(suite)
-    for path in TEST_SUITE[suite]:
-      run_test_file(pocket, path)
+    for test in TEST_SUITE[suite]:
+      path = os.path.join(THIS_PATH, test)
+      run_test_file(pocket, test, path)
 
-def run_test_file(pocket, path):
+def run_test_file(pocket, test, path):
   FMT_PATH = "%-25s"
   INDENTATION = '  | '
-  print(FMT_PATH % path, end='')
+  print(FMT_PATH % test, end='')
 
   sys.stdout.flush()
   result = run_command([pocket, path])
@@ -69,22 +81,13 @@ def run_test_file(pocket, path):
 ## The debug version of it for enabling the assertions.
 def get_pocket_binary():
   system = platform.system()
-  pocket = ''
-  if system == 'Windows':
-    pocket = "..\\build\\debug\\bin\\pocket.exe"
-    
-  elif system == 'Linux':
-    pocket = "../build/debug/pocket"
-    
-  elif system == 'Darwin':
-    pocket = "../build/debug/pocket"
-  
-  else:
+  if system not in SYSTEM_TO_BINARY_PATH:
     error_exit("Unsupported platform %s" % system)
-    
+
+  pocket = os.path.join(THIS_PATH, SYSTEM_TO_BINARY_PATH[system])
   if not os.path.exists(pocket):
     error_exit("Pocket interpreter not found at: '%s'" % pocket)
-  
+
   return pocket
 
 def run_command(command):
