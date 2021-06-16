@@ -131,7 +131,12 @@ PkStringPtr loadScript(PKVM* vm, const char* path) {
 
 int main(int argc, char** argv) {
 
-  const char* usage = "usage: pocket [-c cmd | file]\n";
+  const char* usage =
+    "usage: pocket [-c cmd | file]\n\n"
+    "The following options are available:\n\n"
+    "  -c cmd | file    executes a command or a file [TODO]\n"
+    "  --version        prints the version of pocketlang\n"
+    "  --help           prints this help message\n";
 
   // TODO: implement arg parse, REPL.
 
@@ -139,6 +144,19 @@ int main(int argc, char** argv) {
   //  printf("%s\n%s", notice, help);
   //  return 0;
   //}
+
+  if (argc > 1) {
+    if (strcmp(argv[1], "--help") == 0) {
+      printf("%s", usage);
+      return 0;
+    } else if (strcmp(argv[1], "--version") == 0) {
+      printf("Version: %s\n", PK_VERSION_STRING);
+      return 0;
+    } else {
+      printf("Invalid option flag. Use --help for more.\n");
+      return 0;
+    }
+  }
 
   // Initialize cli.
   pathInit();
