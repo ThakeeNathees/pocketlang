@@ -134,9 +134,10 @@ int main(int argc, char** argv) {
   const char* usage =
     "usage: pocket [-c cmd | file]\n\n"
     "The following options are available:\n\n"
-    "  -c cmd | file    executes a command or a file\n"
-    "  --version        prints the version of pocketlang\n"
-    "  --help           prints this help message\n";
+    "  -c cmd    :    program passed in as string (terminates option list)\n"
+    "  file      :    program read from script file\n"
+    "  --version :    prints the version of pocketlang\n"
+    "  --help    :    prints this help message\n";
 
   if (argc > 1) {
     if (strcmp(argv[1], "--help") == 0) {
