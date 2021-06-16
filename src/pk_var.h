@@ -548,6 +548,9 @@ String* stringFormat(PKVM* vm, const char* fmt, ...);
 // Which would be faster than using "@@" format.
 String* stringJoin(PKVM* vm, String* str1, String* str2);
 
+// Create a new list by joining the 2 given list and return the result.
+List* listJoin(PKVM* vm, List* l1, List* l2);
+
 // Add the name (string literal) to the string buffer if not already exists and
 // return it's index in the buffer.
 uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,

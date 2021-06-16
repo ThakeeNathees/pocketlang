@@ -1068,8 +1068,7 @@ Var varAdd(PKVM* vm, Var v1, Var v2) {
       case OBJ_LIST:
       {
         if (o2->type == OBJ_LIST) {
-          List* l1 = (List*)o1, * l2 = (List*)o2;
-          TODO;
+          return VAR_OBJ(listJoin(vm, (List*)o1, (List*)o2));
         }
       } break;
 
