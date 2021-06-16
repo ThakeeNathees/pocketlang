@@ -12,6 +12,7 @@
 #include "utils.h"
 
 // FIXME: use fgetc char by char till reach a new line.
+// TODO: Will need refactoring to use a byte buffer.
 //
 // Read a line from stdin and returns it without the line ending. Accepting
 // an optional argument [length] (could be NULL). Note that the returned string
@@ -27,6 +28,19 @@ const char* read_line(uint32_t* length) {
   if (length != NULL) *length = (uint32_t)(len - 1);
 
   return mem;
+}
+
+// Reads a line one character at a time and stop reading when we hit the
+// EOF or a new line. The buffer resizes itself when count == capacity.
+static void readLine(ByteBuffer* buff) {
+  do {
+    char c = fgetc(stdin);
+    if (c == EOF || c == '\n') break;
+
+    byteBufferWrite(buff, (uint8_t)c);
+  } while (true);
+
+  byteBufferWrite(buff, '\0');
 }
 
 // Returns true if the string is empty, used to check if the input line is
@@ -57,6 +71,10 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
   ByteBuffer lines;
   byteBufferInit(&lines);
 
+  // A buffer to store a line read from stdin.
+  ByteBuffer line;
+  byteBufferInit(&line);
+
   // Will be set to true if the compilation failed with unexpected EOF to add
   // more lines to the [lines] buffer.
   bool need_more_lines = false;
@@ -72,20 +90,19 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
     }
 
     // Read a line from stdin and add the line to the lines buffer.
-    uint32_t length = 0;
-    const char* line = read_line(&length);
-    bool is_empty = is_str_empty(line);
+    readLine(&line);
+    bool is_empty = is_str_empty((const char*)line.data);
 
     // If the line is empty, we don't have to compile it.
     if (is_empty && !need_more_lines) {
-      free((void*)line);
+      byteBufferClear(&line);
       ASSERT(lines.count == 0, OOPS);
       continue;
     }
 
     if (lines.count != 0) byteBufferWrite(&lines, '\n');
-    byteBufferAddString(&lines, line, length);
-    free((void*)line);
+    byteBufferAddString(&lines, (const char*)line.data, line.count - 1);
+    byteBufferClear(&line);
     byteBufferWrite(&lines, '\0');
 
     // Compile the buffer to the module.
