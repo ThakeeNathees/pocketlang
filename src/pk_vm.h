@@ -85,9 +85,14 @@ struct PKVM {
 
   // In the tri coloring scheme gray is the working list. We recursively pop
   // from the list color it black and add it's referenced objects to gray_list.
-  Object** gray_list;
-  int gray_list_count;
-  int gray_list_capacity;
+
+  // Working set is the is the list of objects that were marked reachable from
+  // VM's root (ex: stack values, temp references, handles, vm's running fiber,
+  // current compiler etc). But yet tobe perform a reachability analysis of the
+  // objects it reference to.
+  Object** working_set;
+  int working_set_count;
+  int working_set_capacity;
 
   // A stack of temporary object references to ensure that the object
   // doesn't garbage collected.

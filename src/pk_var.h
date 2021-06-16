@@ -418,27 +418,28 @@ Fiber* newFiber(PKVM* vm, Function* fn);
 
 // Mark the reachable objects at the mark-and-sweep phase of the garbage
 // collection.
-void grayObject(PKVM* vm, Object* self);
+void markObject(PKVM* vm, Object* self);
 
 // Mark the reachable values at the mark-and-sweep phase of the garbage
 // collection.
-void grayValue(PKVM* vm, Var self);
+void markValue(PKVM* vm, Var self);
 
 // Mark the elements of the buffer as reachable at the mark-and-sweep phase of
 // the garbage collection.
-void grayVarBuffer(PKVM* vm, pkVarBuffer* self);
+void markVarBuffer(PKVM* vm, pkVarBuffer* self);
 
 // Mark the elements of the buffer as reachable at the mark-and-sweep phase of
 // the garbage collection.
-void grayStringBuffer(PKVM* vm, pkStringBuffer* self);
+void markStringBuffer(PKVM* vm, pkStringBuffer* self);
 
 // Mark the elements of the buffer as reachable at the mark-and-sweep phase of
 // the garbage collection.
-void grayFunctionBuffer(PKVM* vm, pkFunctionBuffer* self);
+void markFunctionBuffer(PKVM* vm, pkFunctionBuffer* self);
 
-// Pop objects from the gray list and add it's referenced objects to the
-// working list to traverse and update the vm's [bytes_allocated] value.
-void blackenObjects(PKVM* vm);
+// Pop the marked objects from the working set of the VM and add it's
+// referenced objects to the working set, continue traversing and mark
+// all the reachable objects.
+void popMarkedObjects(PKVM* vm);
 
 // Returns a number list from the range. starts with range.from and ends with
 // (range.to - 1) increase by 1. Note that if the range is reversed
@@ -456,6 +457,16 @@ String* stringUpper(PKVM* vm, String* self);
 // Returns string with the leading and trailing white spaces are trimmed.
 // If the string is already trimmed it'll return the same string.
 String* stringStrip(PKVM* vm, String* self);
+
+// Creates a new string from the arguments. This is intended for internal
+// usage and it has 2 formated characters (just like wren does).
+// $ - a C string
+// @ - a String object
+String* stringFormat(PKVM* vm, const char* fmt, ...);
+
+// Create a new string by joining the 2 given string and return the result.
+// Which would be faster than using "@@" format.
+String* stringJoin(PKVM* vm, String* str1, String* str2);
 
 // An inline function/macro implementation of listAppend(). Set below 0 to 1,
 // to make the implementation a static inline function, it's totally okey to
@@ -475,6 +486,9 @@ void listInsert(PKVM* vm, List* self, uint32_t index, Var value);
 
 // Remove and return element at [index].
 Var listRemoveAt(PKVM* vm, List* self, uint32_t index);
+
+// Create a new list by joining the 2 given list and return the result.
+List* listJoin(PKVM* vm, List* l1, List* l2);
 
 // Returns the value for the [key] in the map. If key not exists return
 // VAR_UNDEFINED.
@@ -537,19 +551,6 @@ String * toRepr(PKVM * vm, const Var value);
 
 // Returns the truthy value of the var.
 bool toBool(Var v);
-
-// Creates a new string from the arguments. This is intended for internal
-// usage and it has 2 formated characters (just like wren does).
-// $ - a C string
-// @ - a String object
-String* stringFormat(PKVM* vm, const char* fmt, ...);
-
-// Create a new string by joining the 2 given string and return the result.
-// Which would be faster than using "@@" format.
-String* stringJoin(PKVM* vm, String* str1, String* str2);
-
-// Create a new list by joining the 2 given list and return the result.
-List* listJoin(PKVM* vm, List* l1, List* l2);
 
 // Add the name (string literal) to the string buffer if not already exists and
 // return it's index in the buffer.

@@ -57,10 +57,10 @@ PKVM* pkNewVM(PkConfiguration* config) {
   memset(vm, 0, sizeof(PKVM));
 
   vm->config = *config;
-  vm->gray_list_count = 0;
-  vm->gray_list_capacity = MIN_CAPACITY;
-  vm->gray_list = (Object**)vm->config.realloc_fn(
-                   NULL, sizeof(Object*) * vm->gray_list_capacity, NULL);
+  vm->working_set_count = 0;
+  vm->working_set_capacity = MIN_CAPACITY;
+  vm->working_set = (Object**)vm->config.realloc_fn(
+                       NULL, sizeof(Object*) * vm->working_set_capacity, NULL);
   vm->next_gc = INITIAL_GC_SIZE;
   vm->min_heap_size = MIN_HEAP_SIZE;
   vm->heap_fill_percent = HEAP_FILL_PERCENT;
@@ -82,8 +82,8 @@ void pkFreeVM(PKVM* vm) {
     obj = next;
   }
 
-  vm->gray_list = (Object**)vm->config.realloc_fn(
-    vm->gray_list, 0, vm->config.user_data);
+  vm->working_set = (Object**)vm->config.realloc_fn(
+    vm->working_set, 0, vm->config.user_data);
 
   // Tell the host application that it forget to release all of it's handles
   // before freeing the VM.
@@ -252,22 +252,22 @@ void vmCollectGarbage(PKVM* vm) {
   vm->bytes_allocated = 0;
 
   // Mark the core libs and builtin functions.
-  grayObject(vm, &vm->core_libs->_super);
+  markObject(vm, &vm->core_libs->_super);
   for (uint32_t i = 0; i < vm->builtins_count; i++) {
-    grayObject(vm, &vm->builtins[i].fn->_super);
+    markObject(vm, &vm->builtins[i].fn->_super);
   }
 
   // Mark the scripts cache.
-  grayObject(vm, &vm->scripts->_super);
+  markObject(vm, &vm->scripts->_super);
 
   // Mark temp references.
   for (int i = 0; i < vm->temp_reference_count; i++) {
-    grayObject(vm, vm->temp_reference[i]);
+    markObject(vm, vm->temp_reference[i]);
   }
 
   // Mark the handles.
   for (PkHandle* h = vm->handles; h != NULL; h = h->next) {
-    grayValue(vm, h->value);
+    markValue(vm, h->value);
   }
 
   // Garbage collection triggered at the middle of a compilation.
@@ -276,10 +276,13 @@ void vmCollectGarbage(PKVM* vm) {
   }
 
   if (vm->fiber != NULL) {
-    grayObject(vm, &vm->fiber->_super);
+    markObject(vm, &vm->fiber->_super);
   }
 
-  blackenObjects(vm);
+  // Pop the marked objects from the working set and push all of it's
+  // referenced objects. This will repeat till no more objects left in the
+  // working set.
+  popMarkedObjects(vm);
 
   // Now sweep all the un-marked objects in then link list and remove them
   // from the chain.

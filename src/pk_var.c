@@ -99,47 +99,49 @@ void varInitObject(Object* self, PKVM* vm, ObjectType type) {
   vm->first = self;
 }
 
-void grayObject(PKVM* vm, Object* self) {
+void markObject(PKVM* vm, Object* self) {
   if (self == NULL || self->is_marked) return;
   self->is_marked = true;
 
-  // Add the object to the VM's gray_list so that we can recursively mark
+  // Add the object to the VM's working_set so that we can recursively mark
   // it's referenced objects later.
-  if (vm->gray_list_count >= vm->gray_list_capacity) {
-    vm->gray_list_capacity *= 2;
-    vm->gray_list = (Object**)vm->config.realloc_fn(
-      vm->gray_list,
-      vm->gray_list_capacity * sizeof(Object*),
-      vm->config.user_data);
+  if (vm->working_set_count >= vm->working_set_capacity) {
+    vm->working_set_capacity *= 2;
+    vm->working_set = (Object**)vm->config.realloc_fn(
+                                    vm->working_set,
+                                    vm->working_set_capacity * sizeof(Object*),
+                                    vm->config.user_data);
   }
 
-  vm->gray_list[vm->gray_list_count++] = self;
+  vm->working_set[vm->working_set_count++] = self;
 }
 
-void grayValue(PKVM* vm, Var self) {
+void markValue(PKVM* vm, Var self) {
   if (!IS_OBJ(self)) return;
-  grayObject(vm, AS_OBJ(self));
+  markObject(vm, AS_OBJ(self));
 }
 
-void grayVarBuffer(PKVM* vm, pkVarBuffer* self) {
+void markVarBuffer(PKVM* vm, pkVarBuffer* self) {
   if (self == NULL) return;
   for (uint32_t i = 0; i < self->count; i++) {
-    grayValue(vm, self->data[i]);
+    markValue(vm, self->data[i]);
   }
 }
 
-#define GRAY_OBJ_BUFFER(m_name)                                   \
-  void gray##m_name##Buffer(PKVM* vm, pk##m_name##Buffer* self) { \
+#define MARK_OBJ_BUFFER(m_name)                                   \
+  void mark##m_name##Buffer(PKVM* vm, pk##m_name##Buffer* self) { \
     if (self == NULL) return;                                     \
     for (uint32_t i = 0; i < self->count; i++) {                  \
-      grayObject(vm, &self->data[i]->_super);                     \
+      markObject(vm, &self->data[i]->_super);                     \
     }                                                             \
   }
 
-GRAY_OBJ_BUFFER(String)
-GRAY_OBJ_BUFFER(Function)
+MARK_OBJ_BUFFER(String)
+MARK_OBJ_BUFFER(Function)
 
-static void _blackenObject(Object* obj, PKVM* vm) {
+#undef MARK_OBJ_BUFFER
+
+static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
   // TODO: trace here.
 
   switch (obj->type) {
@@ -150,7 +152,7 @@ static void _blackenObject(Object* obj, PKVM* vm) {
 
     case OBJ_LIST: {
       List* list = (List*)obj;
-      grayVarBuffer(vm, &list->elements);
+      markVarBuffer(vm, &list->elements);
       vm->bytes_allocated += sizeof(List);
       vm->bytes_allocated += sizeof(Var) * list->elements.capacity;
     } break;
@@ -159,8 +161,8 @@ static void _blackenObject(Object* obj, PKVM* vm) {
       Map* map = (Map*)obj;
       for (uint32_t i = 0; i < map->capacity; i++) {
         if (IS_UNDEF(map->entries[i].key)) continue;
-        grayValue(vm, map->entries[i].key);
-        grayValue(vm, map->entries[i].value);
+        markValue(vm, map->entries[i].key);
+        markValue(vm, map->entries[i].value);
       }
       vm->bytes_allocated += sizeof(Map);
       vm->bytes_allocated += sizeof(MapEntry) * map->capacity;
@@ -175,28 +177,28 @@ static void _blackenObject(Object* obj, PKVM* vm) {
       Script* scr = (Script*)obj;
       vm->bytes_allocated += sizeof(Script);
 
-      grayObject(vm, &scr->path->_super);
-      grayObject(vm, &scr->module->_super);
+      markObject(vm, &scr->path->_super);
+      markObject(vm, &scr->module->_super);
 
-      grayVarBuffer(vm, &scr->globals);
+      markVarBuffer(vm, &scr->globals);
       vm->bytes_allocated += sizeof(Var) * scr->globals.capacity;
 
       // Integer buffer have no gray call.
       vm->bytes_allocated += sizeof(uint32_t) * scr->global_names.capacity;
 
-      grayVarBuffer(vm, &scr->literals);
+      markVarBuffer(vm, &scr->literals);
       vm->bytes_allocated += sizeof(Var) * scr->literals.capacity;
 
-      grayFunctionBuffer(vm, &scr->functions);
+      markFunctionBuffer(vm, &scr->functions);
       vm->bytes_allocated += sizeof(Function*) * scr->functions.capacity;
 
       // Integer buffer have no gray call.
       vm->bytes_allocated += sizeof(uint32_t) * scr->function_names.capacity;
 
-      grayStringBuffer(vm, &scr->names);
+      markStringBuffer(vm, &scr->names);
       vm->bytes_allocated += sizeof(String*) * scr->names.capacity;
 
-      grayObject(vm, &scr->body->_super);
+      markObject(vm, &scr->body->_super);
     } break;
 
     case OBJ_FUNC:
@@ -204,7 +206,7 @@ static void _blackenObject(Object* obj, PKVM* vm) {
       Function* func = (Function*)obj;
       vm->bytes_allocated += sizeof(Function);
 
-      grayObject(vm, &func->owner->_super);
+      markObject(vm, &func->owner->_super);
 
       if (!func->is_native) {
         Fn* fn = func->fn;
@@ -218,23 +220,23 @@ static void _blackenObject(Object* obj, PKVM* vm) {
       Fiber* fiber = (Fiber*)obj;
       vm->bytes_allocated += sizeof(Fiber);
 
-      grayObject(vm, &fiber->func->_super);
+      markObject(vm, &fiber->func->_super);
 
       // Blacken the stack.
       for (Var* local = fiber->stack; local < fiber->sp; local++) {
-        grayValue(vm, *local);
+        markValue(vm, *local);
       }
       vm->bytes_allocated += sizeof(Var) * fiber->stack_size;
 
       // Blacken call frames.
       for (int i = 0; i < fiber->frame_count; i++) {
-        grayObject(vm, (Object*)&fiber->frames[i].fn->_super);
-        grayObject(vm, &fiber->frames[i].fn->owner->_super);
+        markObject(vm, (Object*)&fiber->frames[i].fn->_super);
+        markObject(vm, &fiber->frames[i].fn->owner->_super);
       }
       vm->bytes_allocated += sizeof(CallFrame) * fiber->frame_capacity;
 
-      grayObject(vm, &fiber->caller->_super);
-      grayObject(vm, &fiber->error->_super);
+      markObject(vm, &fiber->caller->_super);
+      markObject(vm, &fiber->error->_super);
 
     } break;
 
@@ -244,11 +246,10 @@ static void _blackenObject(Object* obj, PKVM* vm) {
   }
 }
 
-void blackenObjects(PKVM* vm) {
-  while (vm->gray_list_count > 0) {
-    // Pop the gray object from the list.
-    Object* gray = vm->gray_list[--vm->gray_list_count];
-    _blackenObject(gray, vm);
+void popMarkedObjects(PKVM* vm) {
+  while (vm->working_set_count > 0) {
+    Object* marked_obj = vm->working_set[--vm->working_set_count];
+    popMarkedObjectsInternal(marked_obj, vm);
   }
 }
 
@@ -517,6 +518,79 @@ String* stringStrip(PKVM* vm, String* self) {
   return newStringLength(vm, start, (uint32_t)(end - start + 1));
 }
 
+String* stringFormat(PKVM* vm, const char* fmt, ...) {
+  va_list arg_list;
+
+  // Calculate the total length of the resulting string. This is required to
+  // determine the final string size to allocate.
+  va_start(arg_list, fmt);
+  size_t total_length = 0;
+  for (const char* c = fmt; *c != '\0'; c++) {
+    switch (*c) {
+      case '$':
+        total_length += strlen(va_arg(arg_list, const char*));
+        break;
+
+      case '@':
+        total_length += va_arg(arg_list, String*)->length;
+        break;
+
+      default:
+        total_length++;
+    }
+  }
+  va_end(arg_list);
+
+  // Now build the new string.
+  String* result = _allocateString(vm, total_length);
+  va_start(arg_list, fmt);
+  char* buff = result->data;
+  for (const char* c = fmt; *c != '\0'; c++) {
+    switch (*c) {
+      case '$':
+      {
+        const char* string = va_arg(arg_list, const char*);
+        size_t length = strlen(string);
+        memcpy(buff, string, length);
+        buff += length;
+      } break;
+
+      case '@':
+      {
+        String* string = va_arg(arg_list, String*);
+        memcpy(buff, string->data, string->length);
+        buff += string->length;
+      } break;
+
+      default:
+      {
+        *buff++ = *c;
+      } break;
+    }
+  }
+  va_end(arg_list);
+
+  result->hash = utilHashString(result->data);
+  return result;
+}
+
+String* stringJoin(PKVM* vm, String* str1, String* str2) {
+
+  // Optimize end case.
+  if (str1->length == 0) return str2;
+  if (str2->length == 0) return str1;
+
+  size_t length = (size_t)str1->length + (size_t)str2->length;
+  String* string = _allocateString(vm, length);
+
+  memcpy(string->data, str1->data, str1->length);
+  memcpy(string->data + str1->length, str2->data, str2->length);
+  // Null byte already existed. From _allocateString.
+
+  string->hash = utilHashString(string->data);
+  return string;
+}
+
 void listInsert(PKVM* vm, List* self, uint32_t index, Var value) {
 
   // Add an empty slot at the end of the buffer.
@@ -554,6 +628,23 @@ Var listRemoveAt(PKVM* vm, List* self, uint32_t index) {
 
   self->elements.count--;
   return removed;
+}
+
+List* listJoin(PKVM* vm, List* l1, List* l2) {
+
+  // Optimize end case.
+  if (l1->elements.count == 0) return l2;
+  if (l2->elements.count == 0) return l1;
+
+  uint32_t size = l1->elements.count + l2->elements.count;
+  List* list = newList(vm, size);
+
+  vmPushTempRef(vm, &list->_super);
+  pkVarBufferConcat(&list->elements, vm, &l1->elements);
+  pkVarBufferConcat(&list->elements, vm, &l2->elements);
+  vmPopTempRef(vm);
+
+  return list;
 }
 
 // Return a has value for the object.
@@ -1197,96 +1288,6 @@ bool toBool(Var v) {
   }
 
   UNREACHABLE();
-}
-
-String* stringFormat(PKVM* vm, const char* fmt, ...) {
-  va_list arg_list;
-
-  // Calculate the total length of the resulting string. This is required to
-  // determine the final string size to allocate.
-  va_start(arg_list, fmt);
-  size_t total_length = 0;
-  for (const char* c = fmt; *c != '\0'; c++) {
-    switch (*c) {
-      case '$':
-        total_length += strlen(va_arg(arg_list, const char*));
-        break;
-
-      case '@':
-        total_length += va_arg(arg_list, String*)->length;
-        break;
-
-      default:
-        total_length++;
-    }
-  }
-  va_end(arg_list);
-
-  // Now build the new string.
-  String* result = _allocateString(vm, total_length);
-  va_start(arg_list, fmt);
-  char* buff = result->data;
-  for (const char* c = fmt; *c != '\0'; c++) {
-    switch (*c) {
-      case '$':
-      {
-        const char* string = va_arg(arg_list, const char*);
-        size_t length = strlen(string);
-        memcpy(buff, string, length);
-        buff += length;
-      } break;
-
-      case '@':
-      {
-        String* string = va_arg(arg_list, String*);
-        memcpy(buff, string->data, string->length);
-        buff += string->length;
-      } break;
-
-      default:
-      {
-        *buff++ = *c;
-      } break;
-    }
-  }
-  va_end(arg_list);
-
-  result->hash = utilHashString(result->data);
-  return result;
-}
-
-String* stringJoin(PKVM* vm, String* str1, String* str2) {
-
-  // Optimize end case.
-  if (str1->length == 0) return str2;
-  if (str2->length == 0) return str1;
-
-  size_t length = (size_t)str1->length + (size_t)str2->length;
-  String* string = _allocateString(vm, length);
-
-  memcpy(string->data,                str1->data, str1->length);
-  memcpy(string->data + str1->length, str2->data, str2->length);
-  // Null byte already existed. From _allocateString.
-
-  string->hash = utilHashString(string->data);
-  return string;
-}
-
-List* listJoin(PKVM* vm, List* l1, List* l2) {
-
-  // Optimize end case.
-  if (l1->elements.count == 0) return l2;
-  if (l2->elements.count == 0) return l1;
-
-  size_t size = (size_t)l1->elements.count + (size_t)l2->elements.count;
-  List* list = newList(vm, size);
-
-  vmPushTempRef(vm, &list->_super);
-  pkVarBufferConcat(&list->elements, vm, &l1->elements);
-  pkVarBufferConcat(&list->elements, vm, &l2->elements);
-  vmPopTempRef(vm);
-
-  return list;
 }
 
 uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
