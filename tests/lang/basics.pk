@@ -73,6 +73,9 @@ assert(8 >> 1 == 0x4)
 assert(8 >> 2 == 0b10)
 assert(0xa >> 1 == 5)
 
+assert(~8 == -9)
+assert(~1 == -2)
+
 x = 42  ; assert((x&=51) == 34)
 x = 123 ; assert((x&=324) == 64)
 for i in 0..1000

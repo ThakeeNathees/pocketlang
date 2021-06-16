@@ -41,6 +41,7 @@ Var varBitOr(PKVM* vm, Var v1, Var v2);       // Returns v1 | v2.
 Var varBitXor(PKVM* vm, Var v1, Var v2);      // Returns v1 ^ v2.
 Var varBitLshift(PKVM* vm, Var v1, Var v2);   // Returns v1 << v2.
 Var varBitRshift(PKVM* vm, Var v1, Var v2);   // Returns v1 >> v2.
+Var varBitNot(PKVM* vm, Var v);               // Returns ~v.
 
 bool varGreater(Var v1, Var v2); // Returns v1 > v2.
 bool varLesser(Var v1, Var v2);  // Returns v1 < v2.
