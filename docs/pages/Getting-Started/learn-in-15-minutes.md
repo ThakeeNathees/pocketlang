@@ -30,7 +30,7 @@ func(x) return x*x end # Lambda/literal functions.
 # If condition.
 if x == 'foo'
 	print('bar')
-elif x == 'bar'
+elsif x == 'bar'
 	print('baz')
 end
 
