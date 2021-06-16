@@ -1222,7 +1222,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     OPCODE(BIT_NOT):
     {
       // Don't pop yet, we need the reference for gc.
-      Var val = POP();
+      Var val = PEEK(-1);
 
       Var result = varBitNot(vm, val);
       DROP(); // val

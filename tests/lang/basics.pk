@@ -75,6 +75,8 @@ assert(0xa >> 1 == 5)
 
 assert(~8 == -9)
 assert(~1 == -2)
+assert(~0b0 == -1)
+assert(~0x1 == -2)
 
 x = 42  ; assert((x&=51) == 34)
 x = 123 ; assert((x&=324) == 64)
