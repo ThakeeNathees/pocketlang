@@ -30,8 +30,7 @@ const char* read_line(uint32_t* length) {
   return mem;
 }
 
-// Reads a line one character at a time and stop reading when we hit the
-// EOF or a new line. The buffer resizes itself when count == capacity.
+// Read a line from stdin and returns it without the line ending.
 static void readLine(ByteBuffer* buff) {
   do {
     char c = fgetc(stdin);

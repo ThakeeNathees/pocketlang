@@ -1160,7 +1160,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_WHILE      */   NO_RULE,
   /* TK_FOR        */   NO_RULE,
   /* TK_IF         */   NO_RULE,
-  /* TK_ELSIF     */   NO_RULE,
+  /* TK_ELSIF      */   NO_RULE,
   /* TK_ELSE       */   NO_RULE,
   /* TK_BREAK      */   NO_RULE,
   /* TK_CONTINUE   */   NO_RULE,
@@ -2720,13 +2720,13 @@ PkResult pkCompileModule(PKVM* vm, PkHandle* module, PkStringPtr source,
 void compilerMarkObjects(PKVM* vm, Compiler* compiler) {
 
   // Mark the script which is currently being compiled.
-  grayObject(vm, &compiler->script->_super);
+  markObject(vm, &compiler->script->_super);
 
   // Mark the string literals (they haven't added to the script's literal
   // buffer yet).
-  grayValue(vm, compiler->current.value);
-  grayValue(vm, compiler->previous.value);
-  grayValue(vm, compiler->next.value);
+  markValue(vm, compiler->current.value);
+  markValue(vm, compiler->previous.value);
+  markValue(vm, compiler->next.value);
 
   if (compiler->next_compiler != NULL) {
     compilerMarkObjects(vm, compiler->next_compiler);
