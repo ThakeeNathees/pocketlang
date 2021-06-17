@@ -95,11 +95,11 @@ set root_dir=..\..\..\
 
 if "%debug_build%"=="false" (
 	set cflags=%cflags% -O2 -MD
-	set target_dir=release\
+	set target_dir=build\release\
 ) else (
 	set cflags=%cflags% -MDd -ZI
 	set addnl_cdefines=%addnl_cdefines% /DDEBUG
-	set target_dir=debug\
+	set target_dir=build\debug\
 )
 
 if "%shared_lib%"=="true" (

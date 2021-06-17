@@ -19,8 +19,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Run the Makefile.
         run: |
-          cd build
-          make
+          make all
       - name: Run tests.
         run: |
           python3 tests/tests.py
@@ -32,7 +31,6 @@ jobs:
       - uses: actions/checkout@v2      
       - name: Run build batch script.
         run: |
-          cd build
           cmd /c build.bat
       - name: Run tests.
         run: |
@@ -45,8 +43,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Run the Makefile.
         run: |
-          cd build
-          make
+          make all
       - name: Run tests.
         run: |
           python3 tests/tests.py
