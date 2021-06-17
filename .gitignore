@@ -4,11 +4,6 @@
 .vscode/
 build/
 
-# It's a convinent batch script to run pyton script
-# changing directory and run another script.
-# Which are compile wasm and generate pages.
-docs/build.bat
-
 # Prerequisites
 *.d
 

@@ -4,12 +4,6 @@
 
 @echo off
 
-:: To set color. (Ref : https://stackoverflow.com/questions/2048509/how-to-echo-with-different-colors-in-the-windows-command-line)
-SETLOCAL EnableDelayedExpansion
-for /F "tokens=1,2 delims=#" %%a in ('"prompt #$H#$E# & echo on & for %%b in (1) do rem"') do (
-  set "DEL=%%a"
-)
-
 :: ----------------------------------------------------------------------------
 ::                      PARSE COMMAND LINE ARGS
 :: ----------------------------------------------------------------------------
@@ -172,19 +166,5 @@ goto :END
 :END
 endlocal
 goto :eof
-:: ----------------------------------------------------------------------------
-::                      PRINT COLORED MESSAGE
-:: ----------------------------------------------------------------------------
 
-:: Usage:
-::call :ColorText 0a "Compilation Success"
-::echo.
-
-:: Reference - https://stackoverflow.com/questions/2048509/how-to-echo-with-different-colors-in-the-windows-command-line)
-:::ColorText
-::echo off
-::<nul set /p ".=%DEL%" > "%~2"
-::findstr /v /a:%1 /R "^$" "%~2" nul
-::del "%~2" > nul 2>&1
-::goto :eof
 
