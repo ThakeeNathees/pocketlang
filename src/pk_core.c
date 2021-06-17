@@ -1217,6 +1217,14 @@ Var varBitRshift(PKVM* vm, Var v1, Var v2) {
   return VAR_NULL;
 }
 
+Var varBitNot(PKVM* vm, Var v) {
+  int64_t i;
+
+  if (!validateInteger(vm, v, &i, "Unary operand")) return VAR_NULL;
+
+  return VAR_NUM((double)(~i));
+}
+
 bool varGreater(Var v1, Var v2) {
   double d1, d2;
 

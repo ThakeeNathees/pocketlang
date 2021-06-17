@@ -1220,7 +1220,17 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     }
 
     OPCODE(BIT_NOT):
-      TODO;
+    {
+      // Don't pop yet, we need the reference for gc.
+      Var val = PEEK(-1);
+
+      Var result = varBitNot(vm, val);
+      DROP(); // val
+      PUSH(result);
+
+      CHECK_ERROR();
+      DISPATCH();
+    }
 
     // Do not ever use PUSH(binaryOp(vm, POP(), POP()));
     // Function parameters are not evaluated in a defined order in C.
