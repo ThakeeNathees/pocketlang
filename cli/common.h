@@ -98,6 +98,12 @@
 #define TOSTRING(x) #x
 #define STRINGIFY(x) TOSTRING(x)
 
+// Function attribute: this macro is used to bypass Windows build
+// failing since it doesn't recognize the attribute.
+#if defined( WIN32 ) || defined( _WIN32 ) || defined( __WIN32__ )
+  #define __attribute__(X)
+#endif
+
 /*****************************************************************************/
 /* CLI DEFINES                                                               */
 /*****************************************************************************/

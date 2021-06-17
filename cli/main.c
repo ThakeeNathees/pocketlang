@@ -8,6 +8,9 @@
 // FIXME: Everything below here is temporary and for testing.
 
 void repl(PKVM* vm, const PkCompileOptions* options);
+
+const char* read_line(uint32_t* length)
+  __attribute__ ((deprecated("Use readLine() instead")));
 const char* read_line(uint32_t* length);
 
 void registerModules(PKVM* vm);
