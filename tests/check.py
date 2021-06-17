@@ -56,7 +56,10 @@ def check_fnv1_hash(sources):
       hash = hex(fnv1a_hash(name))
       
       if val == hash: continue
-      report_error(f"{location(file, line_no)} - hash mismatch. "
+      
+      ## Path of the file relative to top-level.
+      file_path = os.path.relpath(file, join(THIS_PATH, '..'))
+      report_error(f"{location(file_path, line_no)} - hash mismatch. "
         f"hash('{name}') = {hash} not {val}")
         
     fp.close()
@@ -73,27 +76,32 @@ def check_static(dirs):
       
       fp = open(join(dir, file), 'r')
       
+      ## Path of the file relative to top-level.
+      file_path = os.path.relpath(join(dir, file), join(THIS_PATH, '..'))
+
       ## This will be set to true if the last line is empty.
       is_last_empty = False; line_no = 0
       for line in fp.readlines():
         line_no += 1; line = line[:-1] # remove the line ending.
         
-        _location = location(join(dir, file), line_no)
-        
         ## Check if the line contains any tabs.
         if '\t' in line:
+          _location = location(file_path, line_no)
           report_error(f"{_location} - contains tab(s) ({repr(line)}).")
             
         if len(line) >= 80:
           if 'http://' in line or 'https://' in line: continue
+          _location = location(file_path, line_no)
           report_error(
             f"{_location} - contains {len(line)} (> 79) characters.")
             
         if line.endswith(' '):
+          _location = location(file_path, line_no)
           report_error(f"{_location} - contains trailing white space.")
             
         if line == '':
           if is_last_empty:
+            _location = location(file_path, line_no)
             report_error(f"{_location} - consequent empty lines.")
           is_last_empty = True
         else:
