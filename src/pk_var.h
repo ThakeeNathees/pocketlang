@@ -305,14 +305,19 @@ typedef struct {
 struct Function {
   Object _super;
 
-  const char* name;    //< Name in the script [owner] or C literal.
-  Script* owner;       //< Owner script of the function.
-  int arity;           //< Number of argument the function expects.
+  const char* name;      //< Name in the script [owner] or C literal.
+  Script* owner;         //< Owner script of the function.
+  int arity;             //< Number of argument the function expects.
 
-  bool is_native;      //< True if Native function.
+  // Docstring of the function, currently it's just the C string literal
+  // pointer, refactor this into String* so that we can support public
+  // native functions to provide a docstring.
+  const char* docstring;
+
+  bool is_native;        //< True if Native function.
   union {
-    pkNativeFn native;  //< Native function pointer.
-    Fn* fn;             //< Script function pointer.
+    pkNativeFn native;   //< Native function pointer.
+    Fn* fn;              //< Script function pointer.
   };
 };
 
@@ -406,8 +411,10 @@ Script* newScript(PKVM* vm, String* path);
 // be the name in the Script's nametable. If the [owner] is NULL the function
 // would be builtin function. For builtin function arity and the native
 // function pointer would be initialized after calling this function.
+// The argument [docstring] is an optional documentation text (could be NULL)
+// That'll printed when running help(fn).
 Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
-                      bool is_native);
+                      bool is_native, const char* docstring);
 
 // Allocate new Fiber object around the function [fn] and return Fiber*.
 Fiber* newFiber(PKVM* vm, Function* fn);

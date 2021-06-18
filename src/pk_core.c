@@ -21,6 +21,16 @@
   #define M_PI 3.14159265358979323846
 #endif
 
+// Returns the docstring of the function, which is a static const char* defined
+// just above the function by the DEF() macro below.
+#define DOCSTRING(fn) _pk_doc_##fn
+
+// A macro to declare a function, with docstring, which is defined as
+// _pk_doc_<fn> = docstring; That'll used to generate function help text.
+#define DEF(fn, docstring)               \
+  const char* DOCSTRING(fn) = docstring; \
+  static void fn(PKVM* vm)
+
 /*****************************************************************************/
 /* CORE PUBLIC API                                                           */
 /*****************************************************************************/
@@ -36,7 +46,7 @@ static void moduleAddGlobalInternal(PKVM* vm, Script* script,
 // The internal function to add functions to a module.
 static void moduleAddFunctionInternal(PKVM* vm, Script* script,
                                       const char* name, pkNativeFn fptr,
-                                      int arity);
+                                      int arity, const char* docstring);
 
 // pkNewModule implementation (see pocketlang.h for description).
 PkHandle* pkNewModule(PKVM* vm, const char* name) {
@@ -53,7 +63,6 @@ PK_PUBLIC void pkModuleAddGlobal(PKVM* vm, PkHandle* module,
   __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
 
   moduleAddGlobalInternal(vm, (Script*)AS_OBJ(scr), name, value->value);
-
 }
 
 // pkModuleAddFunction implementation (see pocketlang.h for description).
@@ -62,7 +71,8 @@ void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
   __ASSERT(module != NULL, "Argument module was NULL.");
   Var scr = module->value;
   __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
-  moduleAddFunctionInternal(vm, (Script*)AS_OBJ(scr), name, fptr, arity);
+  moduleAddFunctionInternal(vm, (Script*)AS_OBJ(scr), name, fptr, arity,
+                            NULL /*TODO: Public API for function docstring.*/);
 }
 
 PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
@@ -378,44 +388,78 @@ Script* getCoreLib(const PKVM* vm, String* name) {
 /* CORE BUILTIN FUNCTIONS                                                    */
 /*****************************************************************************/
 
-#define FN_IS_PRIMITIVE_TYPE(name, check) \
-  static void coreIs##name(PKVM* vm) {  \
-    RET(VAR_BOOL(check(ARG(1))));       \
-  }
-
-#define FN_IS_OBJ_TYPE(name, _enum)     \
-  static void coreIs##name(PKVM* vm) {  \
-    Var arg1 = ARG(1);                  \
-    if (IS_OBJ_TYPE(arg1, _enum)) {     \
-      RET(VAR_TRUE);                    \
-    } else {                            \
-      RET(VAR_FALSE);                   \
-    }                                   \
-  }
-
-FN_IS_PRIMITIVE_TYPE(Null, IS_NULL)
-FN_IS_PRIMITIVE_TYPE(Bool, IS_BOOL)
-FN_IS_PRIMITIVE_TYPE(Num,  IS_NUM)
-
-FN_IS_OBJ_TYPE(String, OBJ_STRING)
-FN_IS_OBJ_TYPE(List,  OBJ_LIST)
-FN_IS_OBJ_TYPE(Map,    OBJ_MAP)
-FN_IS_OBJ_TYPE(Range,  OBJ_RANGE)
-FN_IS_OBJ_TYPE(Function,  OBJ_FUNC)
-FN_IS_OBJ_TYPE(Script,  OBJ_SCRIPT)
-FN_IS_OBJ_TYPE(UserObj,  OBJ_USER)
-
-PK_DOC(
+DEF(coreTypeName,
   "type_name(value:var) -> string\n"
-  "Returns the type name of the of the value.",
-static void coreTypeName(PKVM* vm)) {
+  "Returns the type name of the of the value.") {
+
   RET(VAR_OBJ(newString(vm, varTypeName(ARG(1)))));
 }
 
-PK_DOC(
+DEF(coreHelp,
+  "help([fn]) -> null\n"
+  "This will write an error message to stdout and return null.") {
+
+  int argc = ARGC;
+  if (argc != 0 && argc != 1) {
+    RET_ERR(newString(vm, "Invalid argument count."));
+  }
+
+  if (argc == 0) {
+    // If there ins't an io function callback, we're done.
+    if (vm->config.write_fn == NULL) RET(VAR_NULL);
+    vm->config.write_fn(vm, "TODO: print help here\n");
+
+  } else if (argc == 1) {
+    Function* fn;
+    if (!validateArgFunction(vm, 1, &fn)) return;
+
+    // If there ins't an io function callback, we're done.
+    if (vm->config.write_fn == NULL) RET(VAR_NULL);
+
+    if (fn->docstring != NULL) {
+      vm->config.write_fn(vm, fn->docstring);
+      vm->config.write_fn(vm, "\n\n");
+    } else {
+      // TODO: A better message.
+      vm->config.write_fn(vm, "function '");
+      vm->config.write_fn(vm, fn->name);
+      vm->config.write_fn(vm, "()' doesn't have a docstring.\n");
+    }
+  }
+}
+
+DEF(coreAssert,
+  "assert(condition:bool [, msg:string]) -> void\n"
+  "If the condition is false it'll terminate the current fiber with the "
+  "optional error message") {
+
+  int argc = ARGC;
+  if (argc != 1 && argc != 2) {
+    RET_ERR(newString(vm, "Invalid argument count."));
+  }
+
+  if (!toBool(ARG(1))) {
+    String* msg = NULL;
+
+    if (argc == 2) {
+      if (AS_OBJ(ARG(2))->type != OBJ_STRING) {
+        msg = toString(vm, ARG(2));
+      } else {
+        msg = (String*)AS_OBJ(ARG(2));
+      }
+      vmPushTempRef(vm, &msg->_super);
+      VM_SET_ERROR(vm, stringFormat(vm, "Assertion failed: '@'.", msg));
+      vmPopTempRef(vm);
+    } else {
+      VM_SET_ERROR(vm, newString(vm, "Assertion failed."));
+    }
+  }
+}
+
+DEF(coreBin,
   "bin(value:num) -> string\n"
-  "Returns as a binary value string with '0x' prefix.",
-static void coreBin(PKVM* vm)) {
+  "Returns as a binary value string with '0x' prefix.") {
+
   int64_t value;
   if (!validateInteger(vm, ARG(1), &value, "Argument 1")) return;
 
@@ -443,10 +487,10 @@ static void coreBin(PKVM* vm)) {
   RET(VAR_OBJ(newStringLength(vm, ptr + 1, length)));
 }
 
-PK_DOC(
+DEF(coreHex,
   "hex(value:num) -> string\n"
-  "Returns as a hexadecimal value string with '0x' prefix.",
-static void coreHex(PKVM* vm)) {
+  "Returns as a hexadecimal value string with '0x' prefix.") {
+
   int64_t value;
   if (!validateInteger(vm, ARG(1), &value, "Argument 1")) return;
 
@@ -467,44 +511,15 @@ static void coreHex(PKVM* vm)) {
   int length = sprintf(ptr, "%x", _x);
 
   RET(VAR_OBJ(newStringLength(vm, buff,
-              (uint32_t) ((ptr + length) - (char*)(buff)) )));
+    (uint32_t)((ptr + length) - (char*)(buff)))));
 }
 
-PK_DOC(
-  "assert(condition:bool [, msg:string]) -> void\n"
-  "If the condition is false it'll terminate the current fiber with the "
-  "optional error message",
-static void coreAssert(PKVM* vm)) {
-  int argc = ARGC;
-  if (argc != 1 && argc != 2) {
-    RET_ERR(newString(vm, "Invalid argument count."));
-  }
-
-  if (!toBool(ARG(1))) {
-    String* msg = NULL;
-
-    if (argc == 2) {
-      if (AS_OBJ(ARG(2))->type != OBJ_STRING) {
-        msg = toString(vm, ARG(2));
-      } else {
-        msg = (String*)AS_OBJ(ARG(2));
-      }
-      vmPushTempRef(vm, &msg->_super);
-      VM_SET_ERROR(vm, stringFormat(vm, "Assertion failed: '@'.", msg));
-      vmPopTempRef(vm);
-    } else {
-      VM_SET_ERROR(vm, newString(vm, "Assertion failed."));
-    }
-  }
-}
-
-PK_DOC(
+DEF(coreYield,
   "yield([value]) -> var\n"
   "Return the current function with the yield [value] to current running "
   "fiber. If the fiber is resumed, it'll run from the next statement of the "
   "yield() call. If the fiber resumed with with a value, the return value of "
-  "the yield() would be that value otherwise null.",
-static void coreYield(PKVM* vm)) {
+  "the yield() would be that value otherwise null.") {
 
   int argc = ARGC;
   if (argc > 1) { // yield() or yield(val).
@@ -514,18 +529,18 @@ static void coreYield(PKVM* vm)) {
   vmYieldFiber(vm, (argc == 1) ? &ARG(1) : NULL);
 }
 
-PK_DOC(
+DEF(coreToString,
   "to_string(value:var) -> string\n"
-  "Returns the string representation of the value.",
-static void coreToString(PKVM* vm)) {
+  "Returns the string representation of the value.") {
+
   RET(VAR_OBJ(toString(vm, ARG(1))));
 }
 
-PK_DOC(
+DEF(corePrint,
   "print(...) -> void\n"
-  "Write each argument as comma seperated to the stdout and ends with a "
-  "newline.",
-static void corePrint(PKVM* vm)) {
+  "Write each argument as space seperated, to the stdout and ends with a "
+  "newline.") {
+
   // If the host application doesn't provide any write function, discard the
   // output.
   if (vm->config.write_fn == NULL) return;
@@ -538,11 +553,11 @@ static void corePrint(PKVM* vm)) {
   vm->config.write_fn(vm, "\n");
 }
 
-PK_DOC(
+DEF(coreInput,
   "input([msg:var]) -> string\n"
   "Read a line from stdin and returns it without the line ending. Accepting "
-  "an optional argument [msg] and prints it before reading.",
-static void coreInput(PKVM* vm)) {
+  "an optional argument [msg] and prints it before reading.") {
+
   int argc = ARGC;
   if (argc != 1 && argc != 2) {
     RET_ERR(newString(vm, "Invalid argument count."));
@@ -566,10 +581,9 @@ static void coreInput(PKVM* vm)) {
 
 // TODO: substring.
 
-PK_DOC(
+DEF(coreStrChr,
   "str_chr(value:number) -> string\n"
-  "Returns the ASCII string value of the integer argument.",
-static void coreStrChr(PKVM* vm)) {
+  "Returns the ASCII string value of the integer argument.") {
   int64_t num;
   if (!validateInteger(vm, ARG(1), &num, "Argument 1")) return;
 
@@ -579,10 +593,10 @@ static void coreStrChr(PKVM* vm)) {
   RET(VAR_OBJ(newStringLength(vm, &c, 1)));
 }
 
-PK_DOC(
+DEF(coreStrOrd,
   "str_ord(value:string) -> number\n"
-  "Returns integer value of the given ASCII character.",
-static void coreStrOrd(PKVM* vm)) {
+  "Returns integer value of the given ASCII character.") {
+
   String* c;
   if (!validateArgString(vm, 1, &c)) return;
   if (c->length != 1) {
@@ -596,10 +610,10 @@ static void coreStrOrd(PKVM* vm)) {
 // List functions.
 // ---------------
 
-PK_DOC(
+DEF(coreListAppend,
   "list_append(self:List, value:var) -> List\n"
-  "Append the [value] to the list [self] and return the list.",
-static void coreListAppend(PKVM* vm)) {
+  "Append the [value] to the list [self] and return the list.") {
+
   List* list;
   if (!validateArgList(vm, 1, &list)) return;
   Var elem = ARG(2);
@@ -611,11 +625,11 @@ static void coreListAppend(PKVM* vm)) {
 // Map functions.
 // --------------
 
-PK_DOC(
+DEF(coreMapRemove,
   "map_remove(self:map, key:var) -> var\n"
   "Remove the [key] from the map [self] and return it's value if the key "
-  "exists, otherwise it'll return null.",
-static void coreMapRemove(PKVM* vm)) {
+  "exists, otherwise it'll return null.") {
+
   Map* map;
   if (!validateArgMap(vm, 1, &map)) return;
   Var key = ARG(2);
@@ -626,39 +640,38 @@ static void coreMapRemove(PKVM* vm)) {
 // Fiber functions.
 // ----------------
 
-PK_DOC(
+DEF(coreFiberNew,
   "fiber_new(fn:Function) -> fiber\n"
-  "Create and return a new fiber from the given function [fn].",
-static void coreFiberNew(PKVM* vm)) {
+  "Create and return a new fiber from the given function [fn].") {
+
   Function* fn;
   if (!validateArgFunction(vm, 1, &fn)) return;
   RET(VAR_OBJ(newFiber(vm, fn)));
 }
 
-PK_DOC(
+DEF(coreFiberGetFunc,
   "fiber_get_func(fb:Fiber) -> function\n"
   "Retruns the fiber's functions. Which is usefull if you want to re-run the "
-  "fiber, you can get the function and crate a new fiber.",
-static void coreFiberGetFunc(PKVM* vm)) {
+  "fiber, you can get the function and crate a new fiber.") {
+
   Fiber* fb;
   if (!validateArgFiber(vm, 1, &fb)) return;
   RET(VAR_OBJ(fb->func));
 }
 
-PK_DOC(
+DEF(coreFiberIsDone,
   "fiber_is_done(fb:Fiber) -> bool\n"
-  "Returns true if the fiber [fb] is done running and can no more resumed.",
-static void coreFiberIsDone(PKVM* vm)) {
+  "Returns true if the fiber [fb] is done running and can no more resumed.") {
+
   Fiber* fb;
   if (!validateArgFiber(vm, 1, &fb)) return;
   RET(VAR_BOOL(fb->state == FIBER_DONE));
 }
 
-PK_DOC(
+DEF(coreFiberRun,
   "fiber_run(fb:Fiber, ...) -> var\n"
   "Runs the fiber's function with the provided arguments and returns it's "
-  "return value or the yielded value if it's yielded.",
-static void coreFiberRun(PKVM* vm)) {
+  "return value or the yielded value if it's yielded.") {
 
   int argc = ARGC;
   if (argc == 0) // Missing the fiber argument.
@@ -682,11 +695,10 @@ static void coreFiberRun(PKVM* vm)) {
   }
 }
 
-PK_DOC(
+DEF(coreFiberResume,
   "fiber_resume(fb:Fiber) -> var\n"
   "Resumes a yielded function from a previous call of fiber_run() function. "
-  "Return it's return value or the yielded value if it's yielded.",
-static void coreFiberResume(PKVM* vm)) {
+  "Return it's return value or the yielded value if it's yielded.") {
 
   int argc = ARGC;
   if (argc == 0) // Missing the fiber argument.
@@ -772,12 +784,13 @@ static void moduleAddGlobalInternal(PKVM* vm, Script* script,
 // An internal function to add a function to the given [script].
 static void moduleAddFunctionInternal(PKVM* vm, Script* script,
                                       const char* name, pkNativeFn fptr,
-                                      int arity) {
+                                      int arity, const char* docstring) {
 
   // Ensure the name isn't predefined.
   assertModuleNameDef(vm, script, name);
 
-  Function* fn = newFunction(vm, name, (int)strlen(name), script, true);
+  Function* fn = newFunction(vm, name, (int)strlen(name),
+                             script, true, docstring);
   fn->native = fptr;
   fn->arity = arity;
 }
@@ -787,23 +800,27 @@ static void moduleAddFunctionInternal(PKVM* vm, Script* script,
 // 'lang' library methods.
 // -----------------------
 
-// Returns the number of seconds since the application started.
-void stdLangClock(PKVM* vm) {
+DEF(stdLangClock,
+  "clock() -> num\n"
+  "Returns the number of seconds since the application started") {
+
   RET(VAR_NUM((double)clock() / CLOCKS_PER_SEC));
 }
 
-// Trigger garbage collection and return the amount of bytes cleaned.
-void stdLangGC(PKVM* vm) {
+DEF(stdLangGC,
+  "gc() -> num\n"
+  "Trigger garbage collection and return the amount of bytes cleaned.") {
+
   size_t bytes_before = vm->bytes_allocated;
   vmCollectGarbage(vm);
   size_t garbage = bytes_before - vm->bytes_allocated;
   RET(VAR_NUM((double)garbage));
 }
 
-PK_DOC(
+DEF(stdLangDisas,
   "disas(fn:Function) -> String\n"
-  "Returns the disassembled opcode of the function [fn]. ",
-static void stdLangDisas(PKVM* vm)) {
+  "Returns the disassembled opcode of the function [fn].") {
+
   Function* fn;
   if (!validateArgFunction(vm, 1, &fn)) return;
 
@@ -816,14 +833,18 @@ static void stdLangDisas(PKVM* vm)) {
   RET(VAR_OBJ(dump));
 }
 
-// A debug function for development (will be removed).
-void stdLangDebugBreak(PKVM* vm) {
+DEF(stdLangDebugBreak,
+  "debug_break() -> null\n"
+  "A debug function for development (will be removed).") {
+
   DEBUG_BREAK();
 }
 
-// Write function, just like print function but it wont put space between args
-// and write a new line at the end.
-void stdLangWrite(PKVM* vm) {
+DEF(stdLangWrite,
+  "write(...) -> null\n"
+  "Write function, just like print function but it wont put space between"
+  "args and write a new line at the end.") {
+
   // If the host application doesn't provide any write function, discard the
   // output.
   if (vm->config.write_fn == NULL) return;
@@ -846,43 +867,51 @@ void stdLangWrite(PKVM* vm) {
 // 'math' library methods.
 // -----------------------
 
-void stdMathFloor(PKVM* vm) {
+DEF(stdMathFloor,
+  "floor(value:num) -> num\n") {
+
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-
   RET(VAR_NUM(floor(num)));
 }
 
-void stdMathCeil(PKVM* vm) {
+DEF(stdMathCeil,
+  "ceil(value:num) -> num\n") {
+
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-
   RET(VAR_NUM(ceil(num)));
 }
 
-void stdMathPow(PKVM* vm) {
+DEF(stdMathPow,
+  "pow(value:num) -> num\n") {
+
   double num, ex;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   if (!validateNumeric(vm, ARG(2), &ex, "Argument 2")) return;
-
   RET(VAR_NUM(pow(num, ex)));
 }
 
-void stdMathSqrt(PKVM* vm) {
+DEF(stdMathSqrt,
+  "sqrt(value:num) -> num\n") {
+
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-
   RET(VAR_NUM(sqrt(num)));
 }
 
-void stdMathAbs(PKVM* vm) {
+DEF(stdMathAbs,
+  "abs(value:num) -> num\n") {
+
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   if (num < 0) num = -num;
   RET(VAR_NUM(num));
 }
 
-void stdMathSign(PKVM* vm) {
+DEF(stdMathSign,
+  "sign(value:num) -> num\n") {
+
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   if (num < 0) num = -1;
@@ -891,11 +920,11 @@ void stdMathSign(PKVM* vm) {
   RET(VAR_NUM(num));
 }
 
-PK_DOC(
+DEF(stdMathHash,
   "hash(value:var) -> num\n"
   "Return the hash value of the variable, if it's not hashable it'll "
-  "return null.",
-static void stdMathHash(PKVM* vm)) {
+  "return null.") {
+
   if (IS_OBJ(ARG(1))) {
     if (!isObjectHashable(AS_OBJ(ARG(1))->type)) {
       RET(VAR_NULL);
@@ -904,31 +933,31 @@ static void stdMathHash(PKVM* vm)) {
   RET(VAR_NUM((double)varHashValue(ARG(1))));
 }
 
-PK_DOC(
+DEF(stdMathSine,
   "sin(rad:num) -> num\n"
   "Return the sine value of the argument [rad] which is an angle expressed "
-  "in radians.",
-static void stdMathSine(PKVM* vm)) {
+  "in radians.") {
+
   double rad;
   if (!validateNumeric(vm, ARG(1), &rad, "Argument 1")) return;
   RET(VAR_NUM(sin(rad)));
 }
 
-PK_DOC(
+DEF(stdMathCosine,
   "cos(rad:num) -> num\n"
   "Return the cosine value of the argument [rad] which is an angle expressed "
-  "in radians.",
-static void stdMathCosine(PKVM* vm)) {
+  "in radians.") {
+
   double rad;
   if (!validateNumeric(vm, ARG(1), &rad, "Argument 1")) return;
   RET(VAR_NUM(cos(rad)));
 }
 
-PK_DOC(
+DEF(stdMathTangent,
   "tan(rad:num) -> num\n"
   "Return the tangent value of the argument [rad] which is an angle expressed "
-  "in radians.",
-static void stdMathTangent(PKVM* vm)) {
+  "in radians.") {
+
   double rad;
   if (!validateNumeric(vm, ARG(1), &rad, "Argument 1")) return;
   RET(VAR_NUM(tan(rad)));
@@ -939,11 +968,12 @@ static void stdMathTangent(PKVM* vm)) {
 /*****************************************************************************/
 
 static void initializeBuiltinFN(PKVM* vm, BuiltinFn* bfn, const char* name,
-                                int length, int arity, pkNativeFn ptr) {
+                                int length, int arity, pkNativeFn ptr,
+                                const char* docstring) {
   bfn->name = name;
   bfn->length = length;
 
-  bfn->fn = newFunction(vm, name, length, NULL, true);
+  bfn->fn = newFunction(vm, name, length, NULL, true, docstring);
   bfn->fn->arity = arity;
   bfn->fn->native = ptr;
 }
@@ -952,32 +982,23 @@ void initializeCore(PKVM* vm) {
 
 #define INITIALIZE_BUILTIN_FN(name, fn, argc)                        \
   initializeBuiltinFN(vm, &vm->builtins[vm->builtins_count++], name, \
-                      (int)strlen(name), argc, fn);
+                      (int)strlen(name), argc, fn, DOCSTRING(fn));
+
+#define MODULE_ADD_FN(module, name, fn, argc) \
+  moduleAddFunctionInternal(vm, module, name, fn, argc, DOCSTRING(fn))
 
   // Initialize builtin functions.
   INITIALIZE_BUILTIN_FN("type_name",   coreTypeName,   1);
 
-  // TODO: (maybe remove is_*() functions) suspend by type_name.
-  //       and add is keyword with modules for builtin types
+  // TODO: Add is keyword with modules for builtin types.
   // ex: val is Num; val is null; val is List; val is Range
   //     List.append(l, e) # List is implicitly imported core module.
   //     String.lower(s)
 
-  INITIALIZE_BUILTIN_FN("is_null",     coreIsNull,     1);
-  INITIALIZE_BUILTIN_FN("is_bool",     coreIsBool,     1);
-  INITIALIZE_BUILTIN_FN("is_num",      coreIsNum,      1);
-
-  INITIALIZE_BUILTIN_FN("is_string",   coreIsString,   1);
-  INITIALIZE_BUILTIN_FN("is_list",     coreIsList,     1);
-  INITIALIZE_BUILTIN_FN("is_map",      coreIsMap,      1);
-  INITIALIZE_BUILTIN_FN("is_range",    coreIsRange,    1);
-  INITIALIZE_BUILTIN_FN("is_function", coreIsFunction, 1);
-  INITIALIZE_BUILTIN_FN("is_script",   coreIsScript,   1);
-  INITIALIZE_BUILTIN_FN("is_userobj",  coreIsUserObj,  1);
-
+  INITIALIZE_BUILTIN_FN("help",        coreHelp,      -1);
+  INITIALIZE_BUILTIN_FN("assert",      coreAssert,    -1);
   INITIALIZE_BUILTIN_FN("bin",         coreBin,        1);
   INITIALIZE_BUILTIN_FN("hex",         coreHex,        1);
-  INITIALIZE_BUILTIN_FN("assert",      coreAssert,    -1);
   INITIALIZE_BUILTIN_FN("yield",       coreYield,     -1);
   INITIALIZE_BUILTIN_FN("to_string",   coreToString,   1);
   INITIALIZE_BUILTIN_FN("print",       corePrint,     -1);
@@ -1003,25 +1024,25 @@ void initializeCore(PKVM* vm) {
   // Core Modules /////////////////////////////////////////////////////////////
 
   Script* lang = newModuleInternal(vm, "lang");
-  moduleAddFunctionInternal(vm, lang, "clock", stdLangClock,  0);
-  moduleAddFunctionInternal(vm, lang, "gc",    stdLangGC,     0);
-  moduleAddFunctionInternal(vm, lang, "disas", stdLangDisas,  1);
-  moduleAddFunctionInternal(vm, lang, "write", stdLangWrite, -1);
+  MODULE_ADD_FN(lang, "clock", stdLangClock,  0);
+  MODULE_ADD_FN(lang, "gc",    stdLangGC,     0);
+  MODULE_ADD_FN(lang, "disas", stdLangDisas,  1);
+  MODULE_ADD_FN(lang, "write", stdLangWrite, -1);
 #ifdef DEBUG
-  moduleAddFunctionInternal(vm, lang, "debug_break", stdLangDebugBreak, 0);
+  MODULE_ADD_FN(lang, "debug_break", stdLangDebugBreak, 0);
 #endif
 
   Script* math = newModuleInternal(vm, "math");
-  moduleAddFunctionInternal(vm, math, "floor", stdMathFloor,   1);
-  moduleAddFunctionInternal(vm, math, "ceil",  stdMathCeil,    1);
-  moduleAddFunctionInternal(vm, math, "pow",   stdMathPow,     2);
-  moduleAddFunctionInternal(vm, math, "sqrt",  stdMathSqrt,    1);
-  moduleAddFunctionInternal(vm, math, "abs",   stdMathAbs,     1);
-  moduleAddFunctionInternal(vm, math, "sign",  stdMathSign,    1);
-  moduleAddFunctionInternal(vm, math, "hash",  stdMathHash,    1);
-  moduleAddFunctionInternal(vm, math, "sin",   stdMathSine,    1);
-  moduleAddFunctionInternal(vm, math, "cos",   stdMathCosine,  1);
-  moduleAddFunctionInternal(vm, math, "tan",   stdMathTangent, 1);
+  MODULE_ADD_FN(math, "floor", stdMathFloor,   1);
+  MODULE_ADD_FN(math, "ceil",  stdMathCeil,    1);
+  MODULE_ADD_FN(math, "pow",   stdMathPow,     2);
+  MODULE_ADD_FN(math, "sqrt",  stdMathSqrt,    1);
+  MODULE_ADD_FN(math, "abs",   stdMathAbs,     1);
+  MODULE_ADD_FN(math, "sign",  stdMathSign,    1);
+  MODULE_ADD_FN(math, "hash",  stdMathHash,    1);
+  MODULE_ADD_FN(math, "sin",   stdMathSine,    1);
+  MODULE_ADD_FN(math, "cos",   stdMathCosine,  1);
+  MODULE_ADD_FN(math, "tan",   stdMathTangent, 1);
 
   // TODO: low priority - sinh, cosh, tanh, asin, acos, atan.
 

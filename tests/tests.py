@@ -4,13 +4,13 @@
 
 import os, sys, platform
 import subprocess, json, re
-from os.path import join
+from os.path import join, abspath, relpath
 
 ## TODO: Re write this in doctest (https://github.com/onqtam/doctest)
 
 ## The absolute path of this file, when run as a script.
 ## This file is not intended to be included in other files at the moment.
-THIS_PATH = os.path.abspath(os.path.dirname(__file__))
+THIS_PATH = abspath(os.path.dirname(__file__))
 
 ## All the test files.
 TEST_SUITE = {
@@ -42,9 +42,10 @@ SYSTEM_TO_BINARY_PATH = {
 
 ## This global variable will be set to true if any test failed.
 tests_failed = False
+
 def main():
 
-  ## this will enable ansi codes in windows terminal.
+  ## This will enable ANSI codes in windows terminal.
   os.system('')
   
   run_all_tests()
@@ -58,7 +59,7 @@ def run_all_tests():
   for suite in TEST_SUITE:
     print_title(suite)
     for test in TEST_SUITE[suite]:
-      path = os.path.join(THIS_PATH, test)
+      path = join(THIS_PATH, test)
       run_test_file(pocket, test, path)
 
 def run_test_file(pocket, test, path):
@@ -84,7 +85,7 @@ def get_pocket_binary():
   if system not in SYSTEM_TO_BINARY_PATH:
     error_exit("Unsupported platform %s" % system)
 
-  pocket = os.path.join(THIS_PATH, SYSTEM_TO_BINARY_PATH[system])
+  pocket = abspath(join(THIS_PATH, SYSTEM_TO_BINARY_PATH[system]))
   if not os.path.exists(pocket):
     error_exit("Pocket interpreter not found at: '%s'" % pocket)
 
@@ -92,8 +93,8 @@ def get_pocket_binary():
 
 def run_command(command):
   return subprocess.run(command,
-                          stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE)
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE)
 
 ## ----------------------------------------------------------------------------
 

@@ -25,7 +25,7 @@ HASH_CHECK_LIST = [
 ]
 
 ## A list of directory, contains C source files to perform static checks.
-## This will include both '.c' and '.h' files.
+## This will include '.c', '.h', '.py' and '.pk' files.
 C_SOURCE_DIRS = [
   "../src/",
   "../cli/",

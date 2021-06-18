@@ -63,13 +63,10 @@ directory. They were ran using a small python script in the test directory.
 
 ## Building From Source
 
-See [build documentation](https://thakeenathees.github.io/pocketlang/getting-started-build-from-source.html#using-a-build-script)
-for using an optional build script (Makefile, batch script for MSVC, SCons found in the `build/` directory).
-It can be build from source easily without any dependencies, or additional
-requirements except for a c99 compatible compiler. It can be compiled with the
-following command.
+It can be build from source easily without any dependencies, or additional requirements
+except for a c99 compatible compiler. It can be compiled with the following command.
 
-#### GCC
+#### GCC / MinGw / Clang (alias with gcc)
 ```
 gcc -o pocket cli/*.c src/*.c -Isrc/include -lm -Wno-int-to-pointer-cast
 ```
@@ -78,6 +75,22 @@ gcc -o pocket cli/*.c src/*.c -Isrc/include -lm -Wno-int-to-pointer-cast
 ```
 cl /Fepocket cli/*.c src/*.c /Isrc/include && rm *.obj
 ```
+
+#### Makefile
+```
+make
+```
+To run make file on windows with mingw, you require `make` and `find` unix command in your path.
+Which you can get from [msys2](https://www.msys2.org/) or [cygwin](https://www.cygwin.com/). Run
+`set PATH=<path-to-env/usr/bin/>;%PATH% && make`, this will override the system `find` command with
+unix `find` for the current session, and run the `make` script.
+
+#### Windows batch script
+```
+build
+```
+You don't have to run the script from a Visual Studio .NET developer command prompt, It'll search
+for the MSVS installation path and setup the build enviornment.
 
 ### For other compiler/IDE
 
