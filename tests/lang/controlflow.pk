@@ -9,13 +9,13 @@ assert(variable == 42, 'If statement failed.')
 if false then unreachable()
 elsif true then variable = null
 else unreachable() end
-assert(is_null(variable), 'elsif statement failed.')
+assert(variable == null)
 
 if false then unreachable()
 elsif false then unreachable()
 elsif false then unreachable()
 else variable = "changed" end
-assert(variable == "changed", 'Else statement failed.')
+assert(variable == "changed")
 
 if false then unreachable()
 elsif true

@@ -92,6 +92,7 @@ typedef enum {
   TK_MINUSEQ,    // -=
   TK_STAREQ,     // *=
   TK_DIVEQ,      // /=
+  //TK_MODEQ,    // %=
 
   TK_ANDEQ,      // &=
   TK_OREQ,       // |=
@@ -103,8 +104,6 @@ typedef enum {
   //TODO:
   //TK_SRIGHTEQ  // >>=
   //TK_SLEFTEQ   // <<=
-  //TK_MODEQ,    // %=
-  //TK_XOREQ,    // ^=
 
   // Keywords.
   TK_MODULE,     // module
@@ -1884,7 +1883,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   }
 
   Function* func = newFunction(compiler->vm, name, name_length,
-                               compiler->script, fn_type == FN_NATIVE);
+                               compiler->script, fn_type == FN_NATIVE, NULL);
   int fn_index = (int)compiler->script->functions.count - 1;
   if (fn_index == MAX_FUNCTIONS) {
     parseError(compiler, "A script should contain at most %d functions.",
@@ -2561,9 +2560,7 @@ static void compileStatement(Compiler* compiler) {
     compiler->new_local = false;
   }
 
-  // If running REPL mode, print the expression's evaluated value. Only if
-  // we're at the top level. Python does print local depth expression too.
-  // (it's just a design decision).
+  // If running REPL mode, print the expression's evaluated value.
   if (compiler->options && compiler->options->repl_mode &&
       compiler->func->ptr == compiler->script->body &&
       is_expression /*&& compiler->scope_depth == DEPTH_GLOBAL*/) {
@@ -2591,7 +2588,7 @@ static void compileTopLevelStatement(Compiler* compiler) {
 
   } else if (match(compiler, TK_MODULE)) {
     parseError(compiler, "Module name must be the first statement "
-      "of the script.");
+                          "of the script.");
 
   } else {
     compileStatement(compiler);

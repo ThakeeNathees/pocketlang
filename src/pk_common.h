@@ -80,10 +80,13 @@
 #include <stdio.h> //< Only needed here for ASSERT() macro and for release mode
                    //< TODO; macro use this to print a crash report.
 
-// This will terminate the compilation if the [condition] is false, because of
-// 1/0 evaluated. Use this to check missing enums in switch, or check if an
-// enum or macro has a specific value. (STATIC_ASSERT(ENUM_SUCCESS == 0)).
-#define STATIC_ASSERT(condition) ( 1 / ((int)(condition)) )
+#define TOSTRING(x) #x
+#define STRINGIFY(x) TOSTRING(x)
+
+// CONCAT_LINE(X) will result evaluvated X<__LINE__>.
+#define __CONCAT_LINE_INTERNAL_R(a, b) a ## b
+#define __CONCAT_LINE_INTERNAL_F(a, b) __CONCAT_LINE_INTERNAL_R(a, b)
+#define CONCAT_LINE(X) __CONCAT_LINE_INTERNAL_F(X, __LINE__)
 
 // The internal assertion macro, this will print error and break regardless of
 // the build target (debug or release). Use ASSERT() for debug assertion and
@@ -109,6 +112,11 @@
   #define DEBUG_BREAK() __builtin_trap()
 #endif
 
+// This will terminate the compilation if the [condition] is false, because of
+// char _assertion_failure_<__LINE__>[-1] evaluated.
+#define STATIC_ASSERT(condition) \
+  static char CONCAT_LINE(_assertion_failure_)[2*!!(condition) - 1]
+
 #define ASSERT(condition, message) __ASSERT(condition, message)
 
 #define ASSERT_INDEX(index, size) \
@@ -123,6 +131,8 @@
   } while (false)
 
 #else
+
+#define STATIC_ASSERT(condition) NO_OP
 
 #define DEBUG_BREAK() NO_OP
 #define ASSERT(condition, message) NO_OP
@@ -148,9 +158,6 @@
 // Using __ASSERT() for make it crash in release binary too.
 #define TODO __ASSERT(false, "TODO: It hasn't implemented yet.")
 #define OOPS "Oops a bug!! report please."
-
-#define TOSTRING(x) #x
-#define STRINGIFY(x) TOSTRING(x)
 
 // The formated string to convert double to string. It'll be with the minimum
 // length string representation of either a regular float or a scientific

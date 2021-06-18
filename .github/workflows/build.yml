@@ -12,7 +12,7 @@ jobs:
         run: |
           python3 tests/check.py
   
-  ## Compile and run test on linux system.
+  ## Compile and run test on linux.
   linux-build:
     runs-on: ubuntu-latest
     steps:
@@ -24,7 +24,7 @@ jobs:
         run: |
           python3 tests/tests.py
 
-  ## Compile and run tests on windows system.
+  ## Compile and run tests on windows.
   windows-build:
     runs-on: windows-latest
     steps:
@@ -36,7 +36,7 @@ jobs:
         run: |
           python3 tests/tests.py
 
-  ## Compile and run tests on macos system.
+  ## Compile and run tests on macos.
   macos-build:
     runs-on: macos-latest
     steps:

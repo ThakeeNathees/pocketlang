@@ -337,7 +337,8 @@ Script* newScript(PKVM* vm, String* path) {
 
   vmPushTempRef(vm, &script->_super);
   const char* fn_name = PK_IMPLICIT_MAIN_NAME;
-  script->body = newFunction(vm, fn_name, (int)strlen(fn_name), script, false);
+  script->body = newFunction(vm, fn_name, (int)strlen(fn_name),
+                             script, false, NULL/*TODO*/);
   script->body->arity = 0; // TODO: should it be 1 (ARGV)?.
   vmPopTempRef(vm);
 
@@ -345,7 +346,7 @@ Script* newScript(PKVM* vm, String* path) {
 }
 
 Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
-                      bool is_native) {
+                      bool is_native, const char* docstring) {
 
   Function* func = ALLOCATE(vm, Function);
   varInitObject(&func->_super, vm, OBJ_FUNC);
@@ -380,6 +381,10 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
     fn->stack_size = 0;
     func->fn = fn;
   }
+
+  // Both native and script (TODO:) functions support docstring.
+  func->docstring = docstring;
+
   return func;
 }
 
