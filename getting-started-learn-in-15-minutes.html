@@ -38,7 +38,7 @@
 <span class="n">x</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Creating a variable.</span>
 
 <span class="c1"># In pocketlang statements should end with a new line</span>
-<span class="c1"># or a semicollon. White space characters except for new</span>
+<span class="c1"># or a semicolon. White space characters except for new</span>
 <span class="c1"># lines are ignored in pocketlang.</span>
 <span class="n">a</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">b</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>
 
@@ -60,7 +60,7 @@
 <span class="c1"># If condition.</span>
 <span class="k">if</span> <span class="n">x</span> <span class="o">==</span> <span class="s1">&#39;foo&#39;</span>
     <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;bar&#39;</span><span class="p">)</span>
-<span class="k">elif</span> <span class="n">x</span> <span class="o">==</span> <span class="s1">&#39;bar&#39;</span>
+<span class="k">elsif</span> <span class="n">x</span> <span class="o">==</span> <span class="s1">&#39;bar&#39;</span>
     <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;baz&#39;</span><span class="p">)</span>
 <span class="k">end</span>
 
@@ -98,12 +98,12 @@
     <span class="k">return</span> <span class="k">func</span> <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;foo&#39;</span><span class="p">)</span> <span class="k">end</span>
 <span class="k">end</span>
 
-<span class="c1"># Concanative call operator &#39;-&gt;&#39;</span>
+<span class="c1"># Concatenative call operator &#39;-&gt;&#39;</span>
 
 <span class="n">str_lower</span><span class="p">(</span><span class="n">str_strip</span><span class="p">(</span><span class="s1">&#39;Foo &#39;</span><span class="p">))</span> <span class="c1"># This can be written as below</span>
 <span class="s1">&#39;Foo &#39;</span> <span class="o">-&gt;</span> <span class="n">str_strip</span> <span class="o">-&gt;</span> <span class="n">str_lower</span>
 
-<span class="s1">&#39;foo&#39;</span> <span class="o">-&gt;</span> <span class="nb">print</span> <span class="c1"># similer as print(&#39;foo&#39;)</span>
+<span class="s1">&#39;foo&#39;</span> <span class="o">-&gt;</span> <span class="nb">print</span> <span class="c1"># similar to print(&#39;foo&#39;)</span>
 
 <span class="c1"># Fibers &amp; Coroutine</span>
 <span class="c1">#-------------------</span>

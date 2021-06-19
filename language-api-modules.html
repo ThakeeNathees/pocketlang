@@ -33,10 +33,10 @@
 		<div id="content-wrapper">
 		<div id="content">
 			<h1>Import statements and Modules  <a href="#import-statements-and-modules" name="import-statements-and-modules" class="anchor">#</a></h1>
-<p>Each source file in pocketlang itself is a module that can be imported in another module, which makes it easier to split and share the project. There are two major kinds of modules in pocketlang. First one is core modules which are builtin to the VM and the second one is the local modlues where it's a written script file you'll import it with the path of it.</p>
+<p>Each source file in pocketlang itself is a module that can be imported in another module, which makes it easier to split and share the project. There are two major kinds of modules in pocketlang. First one is core modules which are builtin to the VM and the second one is the local modules where it's a written script file you'll import it with the path of it.</p>
 <h2>Importing a core module  <a href="#importing-a-core-module" name="importing-a-core-module" class="anchor">#</a></h2>
 <p>The import statement of the pocketlang is highly inspired from python's import syntax. Here how it looks like.</p>
-<div class="codehilite"><pre><span></span><span class="c1"># To import a core modlue.</span>
+<div class="codehilite"><pre><span></span><span class="c1"># To import a core module.</span>
 <span class="k">import</span> <span class="n">lang</span>
 
 <span class="c1"># Import multiple modules.</span>
@@ -45,7 +45,7 @@
 <span class="c1"># Import functions from a module.</span>
 <span class="k">from</span> <span class="n">lang</span> <span class="k">import</span> <span class="n">write</span><span class="p">,</span> <span class="n">gc</span>
 
-<span class="c1"># Using alias to bind with a differt name.</span>
+<span class="c1"># Using alias to bind with a different name.</span>
 <span class="k">import</span> <span class="n">math</span> <span class="k">as</span> <span class="n">foo</span>
 <span class="k">from</span> <span class="n">lang</span> <span class="k">import</span> <span class="n">clock</span> <span class="k">as</span> <span class="n">bar</span>
 
@@ -66,7 +66,7 @@
 </pre></div>
 
 
-<p>If the local scripts have defined a module name, they'll imported and binded with it's module name if not they've imported with an alias. If the local script don't have a module name and imported without an alias, every symbols (global variables, and functions) will be imported and that's similer to import all statement.</p>
+<p>If the local scripts have defined a module name, they'll imported and bound with it's module name if not they've imported with an alias. If the local script don't have a module name and imported without an alias, every symbols (global variables, and functions) will be imported and that's similar to import all statement.</p>
 <div class="codehilite"><pre><span></span><span class="c1"># &#39;foo.pk&#39; isn&#39;t defined a module name.</span>
 <span class="k">import</span> <span class="s1">&#39;foo.pk&#39;</span>
 <span class="n">fn</span><span class="p">()</span> <span class="c1">## The function imported from &#39;foo.pk&#39;</span>
@@ -76,14 +76,14 @@
 <span class="n">foo</span><span class="o">.</span><span class="n">fn</span><span class="p">()</span>
 
 <span class="c1"># &#39;bar.pk&#39; is defined with a module name &#39;bar&#39;.</span>
-<span class="c1"># It&#39;ll imported and binded as variable bar.</span>
+<span class="c1"># It&#39;ll be imported and bound as variable bar.</span>
 <span class="k">import</span> <span class="s1">&#39;bar.pk&#39;</span>
 <span class="n">bar</span><span class="o">.</span><span class="n">fn</span><span class="p">()</span>
 </pre></div>
 
 
 <h2>The module keyword.  <a href="#the-module-keyword." name="the-module-keyword." class="anchor">#</a></h2>
-<p>We can define a name to a modlue with the <code>module</code> keyword. The name will become the namespace for that module's functions and global variables when importing it.</p>
+<p>We can define a name to a module with the <code>module</code> keyword. The name will become the namespace for that module's functions and global variables when importing it.</p>
 <div class="codehilite"><pre><span></span><span class="c1"># &#39;foo.pk&#39;</span>
 <span class="k">module</span> <span class="nn">foo</span>
 </pre></div>
