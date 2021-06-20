@@ -17,7 +17,7 @@
 // Doc     : https://likle.github.io/cwalk/
 // About   : Path library for C/C++. Cross-Platform for Windows, MacOS and
 //           Linux. Supports UNIX and Windows path styles on those platforms.
-#include "thirdparty/cwalk/cwalk.c"
+#include "modules/thirdparty/cwalk/cwalk.c"
 
 /*****************************************************************************/
 /* CLI MODULES                                                               */

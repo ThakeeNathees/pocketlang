@@ -214,13 +214,12 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
       case OP_PUSH_FN:
       {
         int fn_index = READ_BYTE();
-        int name_index = func->owner->function_names.data[fn_index];
-        String* name = func->owner->names.data[name_index];
+        const char* name = func->owner->functions.data[fn_index]->name;
 
         // Prints: %5d [Fn:%s]\n
         ADD_INTEGER(vm, buff, fn_index, INT_WIDTH);
         pkByteBufferAddString(buff, vm, STR_AND_LEN(" [Fn:"));
-        pkByteBufferAddString(buff, vm, name->data, name->length);
+        pkByteBufferAddString(buff, vm, STR_AND_LEN(name));
         pkByteBufferAddString(buff, vm, STR_AND_LEN("]\n"));
         break;
       }

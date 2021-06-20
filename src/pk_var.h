@@ -273,10 +273,10 @@ struct Script {
   names:     ["v1", "fn1", "v2", "fn2", ...]
                0     1      2     3
 
-  fn_names:  [      1,         3 ] <-- function name
+  g_names:  [      1,         3 ] <-- function name
                     0          1   <-- it's index
 
-  functions: [      fn1,       fn2 ]
+  globals:  [      fn1,       fn2 ]
                     0          1
   */
 
@@ -285,8 +285,8 @@ struct Script {
 
   pkVarBuffer globals;         //< Script level global variables.
   pkUintBuffer global_names;   //< Name map to index in globals.
+
   pkFunctionBuffer functions;  //< Script level functions.
-  pkUintBuffer function_names; //< Name map to index in functions.
 
   pkStringBuffer names;        //< Name literals, attribute names, etc.
   pkVarBuffer literals;        //< Script literal constant values.
@@ -299,7 +299,7 @@ struct Script {
 typedef struct {
   pkByteBuffer opcodes;  //< Buffer of opcodes.
   pkUintBuffer oplines;  //< Line number of opcodes for debug (1 based).
-  int stack_size;      //< Maximum size of stack required.
+  int stack_size;        //< Maximum size of stack required.
 } Fn;
 
 struct Function {

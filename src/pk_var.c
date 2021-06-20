@@ -192,9 +192,6 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       markFunctionBuffer(vm, &scr->functions);
       vm->bytes_allocated += sizeof(Function*) * scr->functions.capacity;
 
-      // Integer buffer have no gray call.
-      vm->bytes_allocated += sizeof(uint32_t) * scr->function_names.capacity;
-
       markStringBuffer(vm, &scr->names);
       vm->bytes_allocated += sizeof(String*) * scr->names.capacity;
 
@@ -332,7 +329,6 @@ Script* newScript(PKVM* vm, String* path) {
   pkUintBufferInit(&script->global_names);
   pkVarBufferInit(&script->literals);
   pkFunctionBufferInit(&script->functions);
-  pkUintBufferInit(&script->function_names);
   pkStringBufferInit(&script->names);
 
   vmPushTempRef(vm, &script->_super);
@@ -358,6 +354,8 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
   Function* func = ALLOCATE(vm, Function);
   varInitObject(&func->_super, vm, OBJ_FUNC);
 
+  vmPushTempRef(vm, &func->_super); // func
+
   if (owner == NULL) {
     ASSERT(is_native, OOPS);
     func->name = name;
@@ -365,12 +363,8 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
     func->is_native = is_native;
 
   } else {
-    // Add the name in the script's function buffer.
-    vmPushTempRef(vm, &func->_super);
     pkFunctionBufferWrite(&owner->functions, vm, func);
     uint32_t name_index = scriptAddName(owner, vm, name, length);
-    pkUintBufferWrite(&owner->function_names, vm, name_index);
-    vmPopTempRef(vm);
 
     func->name = owner->names.data[name_index]->data;
     func->owner = owner;
@@ -380,9 +374,9 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
 
   if (is_native) {
     func->native = NULL;
+
   } else {
     Fn* fn = ALLOCATE(vm, Fn);
-
     pkByteBufferInit(&fn->opcodes);
     pkUintBufferInit(&fn->oplines);
     fn->stack_size = 0;
@@ -392,6 +386,7 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
   // Both native and script (TODO:) functions support docstring.
   func->docstring = docstring;
 
+  vmPopTempRef(vm); // func
   return func;
 }
 
@@ -903,7 +898,6 @@ void freeObject(PKVM* vm, Object* self) {
       pkUintBufferClear(&scr->global_names, vm);
       pkVarBufferClear(&scr->literals, vm);
       pkFunctionBufferClear(&scr->functions, vm);
-      pkUintBufferClear(&scr->function_names, vm);
       pkStringBufferClear(&scr->names, vm);
     } break;
 
@@ -950,11 +944,10 @@ uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
 }
 
 uint32_t scriptGetFunc(Script* script, const char* name, uint32_t length) {
-  for (uint32_t i = 0; i < script->function_names.count; i++) {
-    uint32_t name_index = script->function_names.data[i];
-    String* fn_name = script->names.data[name_index];
-    if (fn_name->length == length &&
-      strncmp(fn_name->data, name, length) == 0) {
+  for (uint32_t i = 0; i < script->functions.count; i++) {
+    const char* fn_name = script->functions.data[i]->name;
+    uint32_t fn_length = (uint32_t)strlen(fn_name);
+    if (fn_length == length && strncmp(fn_name, name, length) == 0) {
       return i;
     }
   }
