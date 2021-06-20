@@ -13,7 +13,6 @@ const char* read_line(uint32_t* length);
 void registerModules(PKVM* vm);
 
 // Path public functions (TODO: should I add a header for that?)
-void pathInit(void);
 bool pathIsAbsolute(const char* path);
 void pathGetDirName(const char* path, size_t* length);
 size_t pathNormalize(const char* path, char* buff, size_t buff_size);
@@ -139,9 +138,6 @@ int main(int argc, char** argv) {
   //  printf("%s\n%s", notice, help);
   //  return 0;
   //}
-
-  // Initialize cli.
-  pathInit();
 
   PkConfiguration config = pkNewConfiguration();
   config.error_fn = errorFunction;

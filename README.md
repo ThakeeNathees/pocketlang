@@ -80,7 +80,7 @@ cl /Fepocket cli/*.c src/*.c /Isrc/include && rm *.obj
 ```
 make
 ```
-To run make file on windows with mingw, you require `make` and `find` unix command in your path.
+To run make file on windows with `mingw`, you require `make` and `find` unix tools in your path.
 Which you can get from [msys2](https://www.msys2.org/) or [cygwin](https://www.cygwin.com/). Run
 `set PATH=<path-to-env/usr/bin/>;%PATH% && make`, this will override the system `find` command with
 unix `find` for the current session, and run the `make` script.

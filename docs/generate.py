@@ -25,14 +25,14 @@ STATIC_DIR = 'static/'
 
 ## Additional source files of wasm try online page.
 WASM_SOURCE_FILES = '''\
-	<script type="text/javascript"         src="{{ STATIC_DIR }}codejar/codejar.js"></script>
-    <script type="text/javascript"         src="{{ STATIC_DIR }}codejar/linenumbers.js"></script>
+  <script type="text/javascript" src="{{ STATIC_DIR }}codejar/codejar.js"></script>
+    <script type="text/javascript" src="{{ STATIC_DIR }}codejar/linenumbers.js"></script>
     <link rel="stylesheet" type="text/css" href="{{ STATIC_DIR }}codejar/style.css" />
     
-    <script type="text/javascript"         src="{{ STATIC_DIR }}prism/prism.js"></script>
+    <script type="text/javascript" src="{{ STATIC_DIR }}prism/prism.js"></script>
     <link rel="stylesheet" type="text/css" href="{{ STATIC_DIR }}prism/prism.css" />
 	
-	<script type="text/javascript"         src="{{ STATIC_DIR }}try_now.js"></script>
+  <script type="text/javascript" src="{{ STATIC_DIR }}try_now.js"></script>
 '''
 
 ## Navigation pages in order. Should match the path names.
@@ -142,11 +142,11 @@ def generate_page_context(src, dst, navigation):
 	static_dir = relative_static_dir(dst)
 	content = path_to_content(src)
 	ctx = new_context()
-	ctx[ '{{ TITLE }}'      ]   = title
-	ctx[ '{{ NAVIGATION }}' ]   = navigation
-	ctx[ '{{ CONTENT }}'    ]   = content
-	ctx[ '{{ HOME_URL }}'   ]   = ROOT_URL + 'index.html'
-	ctx[ '{{ STATIC_DIR }}' ]   = static_dir
+	ctx[ '{{ TITLE }}'      ] = title
+	ctx[ '{{ NAVIGATION }}' ] = navigation
+	ctx[ '{{ CONTENT }}'    ] = content
+	ctx[ '{{ HOME_URL }}'   ] = ROOT_URL + 'index.html'
+	ctx[ '{{ STATIC_DIR }}' ] = static_dir
 	return ctx;
 
 def get_validated_ext(path)	:
@@ -213,11 +213,11 @@ def custom_html_override(src, content):
 	## FIXME: I should create a pygment lexer.
 	## A dirty way to inject our keyword (to ruby's).
 	addnl_keywords = [
-		'null', 'from', 'import', 'as', 'func', 'native', 'elif', 'continue'
+		'null', 'from', 'import', 'as', 'func', 'native', 'continue'
 	]
 	not_keyword = [
 		 'alias', 'begin', 'case', 'class', 'next', 'nil', 'redo', 'rescue',
-		 'retry', 'elsif', 'ensure', 'undef', 'unless', 'super', 'until', 'when',
+		 'retry', 'ensure', 'undef', 'unless', 'super', 'until', 'when',
 		  'defined',
 	]
 
