@@ -89,6 +89,8 @@ typedef enum {
   PK_SCRIPT,
   PK_FUNCTION,
   PK_FIBER,
+  PK_CLASS,
+  PK_INST,
 } PkVarType;
 
 typedef struct PkStringPtr PkStringPtr;
@@ -386,7 +388,6 @@ PK_PUBLIC PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn);
 //PK_PUBLIC PkVar pkPushNull(PKVM* vm);
 //PK_PUBLIC PkVar pkPushBool(PKVM* vm, bool value);
 //PK_PUBLIC PkVar pkPushNumber(PKVM* vm, double value);
-
 
 #ifdef __cplusplus
 } // extern "C"

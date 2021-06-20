@@ -34,7 +34,8 @@ PkVarType pkGetValueType(const PkVar value) {
     case OBJ_SCRIPT: return PK_SCRIPT;
     case OBJ_FUNC:   return PK_FUNCTION;
     case OBJ_FIBER:  return PK_FIBER;
-    case OBJ_USER:   TODO; break;
+    case OBJ_CLASS:  return PK_CLASS;
+    case OBJ_INST:   return PK_INST;
   }
 
   UNREACHABLE();
@@ -83,6 +84,7 @@ DEFINE_BUFFER(Byte, uint8_t)
 DEFINE_BUFFER(Var, Var)
 DEFINE_BUFFER(String, String*)
 DEFINE_BUFFER(Function, Function*)
+DEFINE_BUFFER(Class, Class*)
 
 void pkByteBufferAddString(pkByteBuffer* self, PKVM* vm, const char* str,
                            uint32_t length) {
@@ -138,6 +140,7 @@ void markVarBuffer(PKVM* vm, pkVarBuffer* self) {
 
 MARK_OBJ_BUFFER(String)
 MARK_OBJ_BUFFER(Function)
+MARK_OBJ_BUFFER(Class)
 
 #undef MARK_OBJ_BUFFER
 
@@ -192,6 +195,9 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       markFunctionBuffer(vm, &scr->functions);
       vm->bytes_allocated += sizeof(Function*) * scr->functions.capacity;
 
+      markClassBuffer(vm, &scr->classes);
+      vm->bytes_allocated += sizeof(Class*) * scr->classes.count;
+
       markStringBuffer(vm, &scr->names);
       vm->bytes_allocated += sizeof(String*) * scr->names.capacity;
 
@@ -207,8 +213,10 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
 
       if (!func->is_native) {
         Fn* fn = func->fn;
+        vm->bytes_allocated += sizeof(Fn);
+
         vm->bytes_allocated += sizeof(uint8_t)* fn->opcodes.capacity;
-        vm->bytes_allocated += sizeof(int) * fn->oplines.capacity;
+        vm->bytes_allocated += sizeof(uint32_t) * fn->oplines.capacity;
       }
     } break;
 
@@ -237,9 +245,24 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
 
     } break;
 
-    case OBJ_USER:
-      TODO;
-      break;
+    case OBJ_CLASS:
+    {
+      Class* type = (Class*)obj;
+      vm->bytes_allocated += sizeof(Class);
+      markObject(vm, &type->owner->_super);
+      markObject(vm, &type->ctor->_super);
+      vm->bytes_allocated += sizeof(uint32_t) * type->field_names.capacity;
+    } break;
+
+    case OBJ_INST:
+    {
+      Instance* inst = (Instance*)obj;
+      if (!inst->is_native) {
+        Inst* ins = inst->ins;
+        vm->bytes_allocated += sizeof(Inst);
+        vm->bytes_allocated += sizeof(Var*) * ins->fields.capacity;
+      }
+    } break;
   }
 }
 
@@ -329,6 +352,7 @@ Script* newScript(PKVM* vm, String* path) {
   pkUintBufferInit(&script->global_names);
   pkVarBufferInit(&script->literals);
   pkFunctionBufferInit(&script->functions);
+  pkClassBufferInit(&script->classes);
   pkStringBufferInit(&script->names);
 
   vmPushTempRef(vm, &script->_super);
@@ -432,6 +456,59 @@ Fiber* newFiber(PKVM* vm, Function* fn) {
   *fiber->ret = VAR_NULL;
 
   return fiber;
+}
+
+Class* newClass(PKVM* vm, Script* scr, const char* name, uint32_t length) {
+  Class* type = ALLOCATE(vm, Class);
+  varInitObject(&type->_super, vm, OBJ_CLASS);
+
+  vmPushTempRef(vm, &type->_super); // type.
+
+  pkClassBufferWrite(&scr->classes, vm, type);
+  type->owner = scr;
+  type->name = scriptAddName(scr, vm, name, length);
+  pkUintBufferInit(&type->field_names);
+
+  // Can't use '$' in string format. (TODO)
+  String* ty_name = scr->names.data[type->name];
+  String* dollar = newStringLength(vm, "$", 1);
+  vmPushTempRef(vm, &dollar->_super); // dollar
+  String* ctor_name = stringFormat(vm, "@(Ctor:@)", dollar, ty_name);
+  vmPopTempRef(vm); // dollar
+
+  // Constructor.
+  vmPushTempRef(vm, &ctor_name->_super); // ctor_name
+  type->ctor = newFunction(vm, ctor_name->data, ctor_name->length,
+                           scr, false, NULL);
+  vmPopTempRef(vm); // ctor_name
+
+  vmPopTempRef(vm); // type.
+  return type;
+}
+
+Instance* newInstance(PKVM* vm, Class* ty, bool initialize) {
+
+  Instance* inst = ALLOCATE(vm, Instance);
+  varInitObject(&inst->_super, vm, OBJ_INST);
+
+  vmPushTempRef(vm, &inst->_super); // inst.
+
+  ASSERT(ty->name < ty->owner->names.count, OOPS);
+  inst->name = ty->owner->names.data[ty->name]->data;
+  inst->is_native = false;
+
+  Inst* ins = ALLOCATE(vm, Inst);
+  inst->ins = ins;
+  ins->type = ty;
+  pkVarBufferInit(&ins->fields);
+
+  if (initialize && ty->field_names.count != 0) {
+    pkVarBufferFill(&ins->fields, vm, VAR_NULL, ty->field_names.count);
+  }
+
+  vmPopTempRef(vm); // inst.
+
+  return inst;
 }
 
 List* rangeAsList(PKVM* vm, Range* self) {
@@ -678,8 +755,10 @@ static uint32_t _hashObject(Object* obj) {
     case OBJ_SCRIPT:
     case OBJ_FUNC:
     case OBJ_FIBER:
-    case OBJ_USER:
+    case OBJ_CLASS:
+    case OBJ_INST:
       TODO;
+      UNREACHABLE();
 
     default:
     L_unhashable:
@@ -898,6 +977,7 @@ void freeObject(PKVM* vm, Object* self) {
       pkUintBufferClear(&scr->global_names, vm);
       pkVarBufferClear(&scr->literals, vm);
       pkFunctionBufferClear(&scr->functions, vm);
+      pkClassBufferClear(&scr->classes, vm);
       pkStringBufferClear(&scr->names, vm);
     } break;
 
@@ -906,6 +986,7 @@ void freeObject(PKVM* vm, Object* self) {
       if (!func->is_native) {
         pkByteBufferClear(&func->fn->opcodes, vm);
         pkUintBufferClear(&func->fn->oplines, vm);
+        DEALLOCATE(vm, func->fn);
       }
     } break;
 
@@ -915,9 +996,26 @@ void freeObject(PKVM* vm, Object* self) {
       DEALLOCATE(vm, fiber->frames);
     } break;
 
-    case OBJ_USER:
-      TODO; // Remove OBJ_USER.
+    case OBJ_CLASS: {
+      Class* type = (Class*)self;
+      pkUintBufferClear(&type->field_names, vm);
+    } break;
+
+    case OBJ_INST:
+    {
+      Instance* inst = (Instance*)self;
+
+      if (inst->is_native) {
+        TODO;
+
+      } else {
+        Inst* ins = inst->ins;
+        pkVarBufferClear(&ins->fields, vm);
+        DEALLOCATE(vm, ins);
+      }
+
       break;
+    }
   }
 
   DEALLOCATE(vm, self);
@@ -943,23 +1041,36 @@ uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
   return self->names.count - 1;
 }
 
-uint32_t scriptGetFunc(Script* script, const char* name, uint32_t length) {
-  for (uint32_t i = 0; i < script->functions.count; i++) {
-    const char* fn_name = script->functions.data[i]->name;
-    uint32_t fn_length = (uint32_t)strlen(fn_name);
-    if (fn_length == length && strncmp(fn_name, name, length) == 0) {
-      return i;
+int scriptGetClass(Script* script, const char* name, uint32_t length) {
+  for (uint32_t i = 0; i < script->classes.count; i++) {
+    uint32_t name_ind = script->classes.data[i]->name;
+    ASSERT(name_ind < script->names.count, OOPS);
+    String* ty_name = script->names.data[name_ind];
+    if (ty_name->length == length &&
+        strncmp(ty_name->data, name, length) == 0) {
+      return (int)i;
     }
   }
   return -1;
 }
 
-uint32_t scriptGetGlobals(Script* script, const char* name, uint32_t length) {
+int scriptGetFunc(Script* script, const char* name, uint32_t length) {
+  for (uint32_t i = 0; i < script->functions.count; i++) {
+    const char* fn_name = script->functions.data[i]->name;
+    uint32_t fn_length = (uint32_t)strlen(fn_name);
+    if (fn_length == length && strncmp(fn_name, name, length) == 0) {
+      return (int)i;
+    }
+  }
+  return -1;
+}
+
+int scriptGetGlobals(Script* script, const char* name, uint32_t length) {
   for (uint32_t i = 0; i < script->global_names.count; i++) {
     uint32_t name_index = script->global_names.data[i];
     String* g_name = script->names.data[name_index];
     if (g_name->length == length && strncmp(g_name->data, name, length) == 0) {
-      return i;
+      return (int)i;
     }
   }
   return -1;
@@ -970,9 +1081,9 @@ uint32_t scriptAddGlobal(PKVM* vm, Script* script,
                     Var value) {
 
   // If already exists update the value.
-  uint32_t var_ind = scriptGetGlobals(script, name, length);
+  int var_ind = scriptGetGlobals(script, name, length);
   if (var_ind != -1) {
-    ASSERT(var_ind < script->globals.count, OOPS);
+    ASSERT(var_ind < (int)script->globals.count, OOPS);
     script->globals.data[var_ind] = value;
     return var_ind;
   }
@@ -985,13 +1096,15 @@ uint32_t scriptAddGlobal(PKVM* vm, Script* script,
   return script->globals.count - 1;
 }
 
-// Utility functions //////////////////////////////////////////////////////////
+/*****************************************************************************/
+/* UTILITY FUNCTIONS                                                         */
+/*****************************************************************************/
 
 const char* getPkVarTypeName(PkVarType type) {
   switch (type) {
-    case PK_NULL:     return "null";
-    case PK_BOOL:     return "bool";
-    case PK_NUMBER:   return "number";
+    case PK_NULL:     return "Null";
+    case PK_BOOL:     return "Bool";
+    case PK_NUMBER:   return "Number";
     case PK_STRING:   return "String";
     case PK_LIST:     return "List";
     case PK_MAP:      return "Map";
@@ -999,6 +1112,8 @@ const char* getPkVarTypeName(PkVarType type) {
     case PK_SCRIPT:   return "Script";
     case PK_FUNCTION: return "Function";
     case PK_FIBER:    return "Fiber";
+    case PK_CLASS:    return "Class";
+    case PK_INST:     return "Inst";
   }
 
   UNREACHABLE();
@@ -1013,15 +1128,16 @@ const char* getObjectTypeName(ObjectType type) {
     case OBJ_SCRIPT:  return "Script";
     case OBJ_FUNC:    return "Func";
     case OBJ_FIBER:   return "Fiber";
-    case OBJ_USER:    return "UserObj";
+    case OBJ_CLASS:   return "Class";
+    case OBJ_INST:    return "Inst";
   }
   UNREACHABLE();
 }
 
 const char* varTypeName(Var v) {
-  if (IS_NULL(v)) return "null";
-  if (IS_BOOL(v)) return "bool";
-  if (IS_NUM(v))  return "number";
+  if (IS_NULL(v)) return "Null";
+  if (IS_BOOL(v)) return "Bool";
+  if (IS_NUM(v))  return "Number";
 
   ASSERT(IS_OBJ(v), OOPS);
   Object* obj = AS_OBJ(v);
@@ -1299,9 +1415,40 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
         return;
       }
 
-      case OBJ_USER: {
-        // TODO:
-        pkByteBufferAddString(buff, vm, "[UserObj]", 9);
+      case OBJ_CLASS: {
+        const Class* ty = (const Class*)obj;
+        pkByteBufferAddString(buff, vm, "[Class:", 7);
+        String* ty_name = ty->owner->names.data[ty->name];
+        pkByteBufferAddString(buff, vm, ty_name->data, ty_name->length);
+        pkByteBufferWrite(buff, vm, ']');
+        return;
+      }
+
+      case OBJ_INST:
+      {
+        const Instance* inst = (const Instance*)obj;
+        pkByteBufferWrite(buff, vm, '[');
+        pkByteBufferAddString(buff, vm, inst->name,
+                              (uint32_t)strlen(inst->name));
+
+        if (!inst->is_native) {
+          const Class* ty = inst->ins->type;
+          const Inst* ins = inst->ins;
+          ASSERT(ins->fields.count == ty->field_names.count, OOPS);
+
+          pkByteBufferWrite(buff, vm, ':');
+          for (uint32_t i = 0; i < ty->field_names.count; i++) {
+            if (i != 0) pkByteBufferWrite(buff, vm, ',');
+
+            pkByteBufferWrite(buff, vm, ' ');
+            String* f_name = ty->owner->names.data[ty->field_names.data[i]];
+            pkByteBufferAddString(buff, vm, f_name->data, f_name->length);
+            pkByteBufferWrite(buff, vm, '=');
+            _toStringInternal(vm, ins->fields.data[i], buff, outer, repr);
+          }
+        }
+
+        pkByteBufferWrite(buff, vm, ']');
         return;
       }
     }
@@ -1351,7 +1498,8 @@ bool toBool(Var v) {
     case OBJ_SCRIPT:
     case OBJ_FUNC:
     case OBJ_FIBER:
-    case OBJ_USER:
+    case OBJ_CLASS:
+    case OBJ_INST:
       return true;
   }
 

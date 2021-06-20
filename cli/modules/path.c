@@ -126,10 +126,10 @@ static void _pathRelpath(PKVM* vm) {
   if (!pkGetArgString(vm, 2, &path)) return;
 
   char abs_from[FILENAME_MAX];
-  size_t len_from = pathAbs(from, abs_from, sizeof(abs_from));
+  pathAbs(from, abs_from, sizeof(abs_from));
 
   char abs_path[FILENAME_MAX];
-  size_t len_path = pathAbs(path, abs_path, sizeof(abs_path));
+  pathAbs(path, abs_path, sizeof(abs_path));
 
   char result[FILENAME_MAX];
   size_t len = cwk_path_get_relative(abs_from, abs_path,

@@ -13,6 +13,10 @@ import "basics.pk" ## will import all
 import "controlflow.pk" as if_test
 from "functions.pk" import fn1, fn2 as f2, fn3
 
+import "class.pk" as class_
+assert(class_.Vec(42, 3.14).y == 3.14)
+(vec = class_._Vec()).x = 'a'; assert(vec.x == 'a')
+
 ## If it has a module name it'll bind to that name.
 import 'import/module.pk'
 assert(module_name.get_module_name() == 'module_name')

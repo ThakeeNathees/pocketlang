@@ -755,6 +755,15 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
       DISPATCH();
     }
 
+    OPCODE(PUSH_INSTANCE):
+    {
+      uint8_t index = READ_BYTE();
+      ASSERT_INDEX(index, script->classes.count);
+      Instance* inst = newInstance(vm, script->classes.data[index], false);
+      PUSH(VAR_OBJ(inst));
+      DISPATCH();
+    }
+
     OPCODE(LIST_APPEND):
     {
       Var elem = PEEK(-1); // Don't pop yet, we need the reference for gc.
@@ -781,6 +790,21 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
 
       DROP(); // value
       DROP(); // key
+
+      DISPATCH();
+    }
+
+    OPCODE(INST_APPEND):
+    {
+      Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
+      Var inst = PEEK(-2);
+      ASSERT(IS_OBJ_TYPE(inst, OBJ_INST), OOPS);
+
+      Instance* inst_p = (Instance*)AS_OBJ(inst);
+      ASSERT(!inst_p->is_native, OOPS);
+      Inst* ins = inst_p->ins;
+      pkVarBufferWrite(&ins->fields, vm, value);
+      DROP(); // value
 
       DISPATCH();
     }
@@ -830,7 +854,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     OPCODE(PUSH_GLOBAL):
     {
       uint8_t index = READ_BYTE();
-      ASSERT(index < script->globals.count, OOPS);
+      ASSERT_INDEX(index, script->globals.count);
       PUSH(script->globals.data[index]);
       DISPATCH();
     }
@@ -838,7 +862,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     OPCODE(STORE_GLOBAL):
     {
       uint8_t index = READ_BYTE();
-      ASSERT(index < script->globals.count, OOPS);
+      ASSERT_INDEX(index, script->globals.count);
       script->globals.data[index] = PEEK(-1);
       DISPATCH();
     }
@@ -846,9 +870,18 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     OPCODE(PUSH_FN):
     {
       uint8_t index = READ_BYTE();
-      ASSERT(index < script->functions.count, OOPS);
+      ASSERT_INDEX(index, script->functions.count);
       Function* fn = script->functions.data[index];
       PUSH(VAR_OBJ(fn));
+      DISPATCH();
+    }
+
+    OPCODE(PUSH_TYPE):
+    {
+      uint8_t index = READ_BYTE();
+      ASSERT_INDEX(index, script->classes.count);
+      Class* ty = script->classes.data[index];
+      PUSH(VAR_OBJ(ty));
       DISPATCH();
     }
 
@@ -890,64 +923,73 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
       Fiber* call_fiber = vm->fiber;
       Var* callable = call_fiber->sp - argc - 1;
 
+      const Function* fn = NULL;
+
       if (IS_OBJ_TYPE(*callable, OBJ_FUNC)) {
-        const Function* fn = (const Function*)AS_OBJ(*callable);
+        fn = (const Function*)AS_OBJ(*callable);
 
-        // -1 argument means multiple number of args.
-        if (fn->arity != -1 && fn->arity != argc) {
-          char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", fn->arity);
-          String* msg = stringFormat(vm, "Expected exactly $ argument(s).",
-                                     buff);
-          RUNTIME_ERROR(msg);
-        }
-
-        if (fn->is_native) {
-
-          if (fn->native == NULL) {
-            RUNTIME_ERROR(stringFormat(vm,
-              "Native function pointer of $ was NULL.", fn->name));
-          }
-
-          // Update the current frame's ip.
-          UPDATE_FRAME();
-
-          // Next call frame starts here. (including return value).
-          call_fiber->ret = callable;
-          *(call_fiber->ret) = VAR_NULL; //< Set the return value to null.
-
-          fn->native(vm); //< Call the native function.
-
-          // Calling yield() will change vm->fiber to it's caller fiber, which
-          // would be null if we're not running the function with a fiber.
-          if (vm->fiber == NULL) return PK_RESULT_SUCCESS;
-
-          // Load the top frame to vm's execution variables.
-          if (vm->fiber != call_fiber) LOAD_FRAME();
-
-          // Pop function arguments except for the return value.
-          // Don't use 'vm->fiber' because calling fiber_new() and yield()
-          // would change the fiber.
-          call_fiber->sp = call_fiber->ret + 1;
-          CHECK_ERROR();
-
-        } else {
-
-          if (instruction == OP_CALL) {
-            UPDATE_FRAME(); //< Update the current frame's ip.
-            pushCallFrame(vm, fn, callable);
-            LOAD_FRAME();  //< Load the top frame to vm's execution variables.
-
-          } else {
-            ASSERT(instruction == OP_TAIL_CALL, OOPS);
-
-            reuseCallFrame(vm, fn);
-            LOAD_FRAME();  //< Re-load the frame to vm's execution variables.
-          }
-        }
+      } else if (IS_OBJ_TYPE(*callable, OBJ_CLASS)) {
+        fn = (const Function*)((Class*)AS_OBJ(*callable))->ctor;
 
       } else {
         RUNTIME_ERROR(stringFormat(vm, "$ $(@).", "Expected a function in "
-        "call, instead got", varTypeName(*callable), toString(vm, *callable)));
+                      "call, instead got",
+                      varTypeName(*callable), toString(vm, *callable)));
+        DISPATCH();
+      }
+
+      // If we reached here it's a valid callable.
+
+      // -1 argument means multiple number of args.
+      if (fn->arity != -1 && fn->arity != argc) {
+        char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", fn->arity);
+        String* msg = stringFormat(vm, "Expected exactly $ argument(s).",
+                                   buff);
+        RUNTIME_ERROR(msg);
+      }
+
+      if (fn->is_native) {
+
+        if (fn->native == NULL) {
+          RUNTIME_ERROR(stringFormat(vm,
+            "Native function pointer of $ was NULL.", fn->name));
+        }
+
+        // Update the current frame's ip.
+        UPDATE_FRAME();
+
+        // Next call frame starts here. (including return value).
+        call_fiber->ret = callable;
+        *(call_fiber->ret) = VAR_NULL; //< Set the return value to null.
+
+        fn->native(vm); //< Call the native function.
+
+        // Calling yield() will change vm->fiber to it's caller fiber, which
+        // would be null if we're not running the function with a fiber.
+        if (vm->fiber == NULL) return PK_RESULT_SUCCESS;
+
+        // Load the top frame to vm's execution variables.
+        if (vm->fiber != call_fiber) LOAD_FRAME();
+
+        // Pop function arguments except for the return value.
+        // Don't use 'vm->fiber' because calling fiber_new() and yield()
+        // would change the fiber.
+        call_fiber->sp = call_fiber->ret + 1;
+        CHECK_ERROR();
+
+      } else {
+
+        if (instruction == OP_CALL) {
+          UPDATE_FRAME(); //< Update the current frame's ip.
+          pushCallFrame(vm, fn, callable);
+          LOAD_FRAME();  //< Load the top frame to vm's execution variables.
+
+        } else {
+          ASSERT(instruction == OP_TAIL_CALL, OOPS);
+
+          reuseCallFrame(vm, fn);
+          LOAD_FRAME();  //< Re-load the frame to vm's execution variables.
+        }
       }
 
       DISPATCH();
@@ -1051,7 +1093,8 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
         case OBJ_SCRIPT:
         case OBJ_FUNC:
         case OBJ_FIBER:
-        case OBJ_USER:
+        case OBJ_CLASS:
+        case OBJ_INST:
           TODO; break;
         default:
           UNREACHABLE();
@@ -1433,6 +1476,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     OPCODE(IN):
       // TODO: Implement bool varContaines(vm, on, value);
       TODO;
+      UNREACHABLE();
 
     OPCODE(REPL_PRINT):
     {
@@ -1447,7 +1491,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     }
 
     OPCODE(END):
-      TODO;
+      UNREACHABLE();
       break;
 
     default:
@@ -1455,5 +1499,5 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
 
   }
 
-  return PK_RESULT_SUCCESS;
+  UNREACHABLE(); //return PK_RESULT_SUCCESS;
 }

@@ -33,7 +33,7 @@ const char* read_line(uint32_t* length) {
 // Read a line from stdin and returns it without the line ending.
 static void readLine(ByteBuffer* buff) {
   do {
-    char c = fgetc(stdin);
+    char c = (char)fgetc(stdin);
     if (c == EOF || c == '\n') break;
 
     byteBufferWrite(buff, (uint8_t)c);

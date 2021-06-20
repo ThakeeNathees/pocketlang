@@ -77,6 +77,14 @@
 /* COMMON MACROS                                                             */
 /*****************************************************************************/
 
+#if defined(__GNUC__)
+  #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
+  #pragma GCC diagnostic ignored "-Wunused-parameter"
+#elif defined(__clang__)
+  #pragma clang diagnostic ignored "-Wint-to-pointer-cast"
+  #pragma clang diagnostic ignored "-Wunused-parameter"
+#endif
+
 #include <stdio.h> //< Only needed here for ASSERT() macro and for release mode
                    //< TODO; macro use this to print a crash report.
 
