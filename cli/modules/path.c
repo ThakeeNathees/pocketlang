@@ -7,12 +7,9 @@
 #include <pocketlang.h>
 #include <stdio.h> /* defines FILENAME_MAX */
 
-// TODO: more cli/thirdparty to cli/modules/thirdparty to remove ".." in the
-//       relative import and split thirdparty sources into dependent directory.
-
-#include "../thirdparty/cwalk/cwalk.h"
+#include "thirdparty/cwalk/cwalk.h"
 #if defined(_WIN32) && (defined(_MSC_VER) || defined(__TINYC__))
-  #include "../thirdparty/dirent/dirent.h"
+  #include "thirdparty/dirent/dirent.h"
 #else
   #include <dirent.h>
 #endif
@@ -25,9 +22,6 @@
   #include <unistd.h>
   #define get_cwd getcwd
 #endif
-
-// TODO: No error is handled below. I should check for path with size more than
-// FILENAME_MAX.
 
 // TODO: this macros should be moved to a general place of in cli.
 #define TOSTRING(x) #x
@@ -54,7 +48,7 @@ size_t pathNormalize(const char* path, char* buff, size_t buff_size) {
 }
 
 size_t pathJoin(const char* path_a, const char* path_b, char* buffer,
-                        size_t buff_size) {
+                size_t buff_size) {
   return cwk_path_join(path_a, path_b, buffer, buff_size);
 }
 
@@ -77,7 +71,7 @@ static inline bool pathIsDirectoryExists(const char* path) {
   if (dir) { /* Directory exists. */
     closedir(dir);
     return true;
-  } else if (ENOENT == errno) { /* Directory does not exist. */
+  } else if (errno == ENOENT) { /* Directory does not exist. */
   } else { /* opendir() failed for some other reason. */
   }
 
@@ -86,6 +80,17 @@ static inline bool pathIsDirectoryExists(const char* path) {
 
 static inline bool pathIsExists(const char* path) {
   return pathIsFileExists(path) || pathIsDirectoryExists(path);
+}
+
+static inline size_t pathAbs(const char* path, char* buff, size_t buff_size) {
+
+  char cwd[FILENAME_MAX];
+
+  if (get_cwd(cwd, sizeof(cwd)) == NULL) {
+    // TODO: handle error.
+  }
+
+  return cwk_path_get_absolute(cwd, path, buff, buff_size);
 }
 
 /*****************************************************************************/
@@ -100,7 +105,9 @@ static void _pathSetStyleUnix(PKVM* vm) {
 
 static void _pathGetCWD(PKVM* vm) {
   char cwd[FILENAME_MAX];
-  get_cwd(cwd, sizeof(cwd)); // Check if res is NULL.
+  if (get_cwd(cwd, sizeof(cwd)) == NULL) {
+    // TODO: Handle error.
+  }
   pkReturnString(vm, cwd);
 }
 
@@ -108,11 +115,8 @@ static void _pathAbspath(PKVM* vm) {
   const char* path;
   if (!pkGetArgString(vm, 1, &path)) return;
 
-  char cwd[FILENAME_MAX];
-  get_cwd(cwd, sizeof(cwd)); // Check if res is NULL.
-
   char abspath[FILENAME_MAX];
-  size_t len = cwk_path_get_absolute(cwd, path, abspath, sizeof(abspath));
+  size_t len = pathAbs(path, abspath, sizeof(abspath));
   pkReturnStringLength(vm, abspath, len);
 }
 
@@ -121,15 +125,15 @@ static void _pathRelpath(PKVM* vm) {
   if (!pkGetArgString(vm, 1, &from)) return;
   if (!pkGetArgString(vm, 2, &path)) return;
 
-  // TODO: this won't work if both [from] and [path] doen't have a similler
-  // root path, so we need to get the absolute path of the both paths (if
-  // thre're not already) and call the cwalk_relative().
-  // ie.
-  //     a/b/c --> a/b/d.txt - works
-  //     a/b/c --> ../d.txt  - won't work
+  char abs_from[FILENAME_MAX];
+  size_t len_from = pathAbs(from, abs_from, sizeof(abs_from));
+
+  char abs_path[FILENAME_MAX];
+  size_t len_path = pathAbs(path, abs_path, sizeof(abs_path));
 
   char result[FILENAME_MAX];
-  size_t len = cwk_path_get_relative(from, path, result, sizeof(result));
+  size_t len = cwk_path_get_relative(abs_from, abs_path,
+                                     result, sizeof(result));
   pkReturnStringLength(vm, result, len);
 }
 

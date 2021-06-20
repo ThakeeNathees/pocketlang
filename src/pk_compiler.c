@@ -1942,6 +1942,17 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
 
   if (fn_type != FN_NATIVE) {
     compileBlockBody(compiler, BLOCK_FUNC);
+
+    // Tail call optimization disabled at debug mode.
+    if (compiler->options && !compiler->options->debug) {
+      if (compiler->is_last_call) {
+        ASSERT(_FN->opcodes.count >= 3, OOPS); // OP_CALL, argc, OP_POP
+        ASSERT(_FN->opcodes.data[_FN->opcodes.count - 1] == OP_POP, OOPS);
+        ASSERT(_FN->opcodes.data[_FN->opcodes.count - 3] == OP_CALL, OOPS);
+        _FN->opcodes.data[_FN->opcodes.count - 3] = OP_TAIL_CALL;
+      }
+    }
+
     consume(compiler, TK_END, "Expected 'end' after function definition end.");
     compilerExitBlock(compiler); // Parameter depth.
     emitFunctionEnd(compiler);
@@ -2153,6 +2164,31 @@ static int compilerImportName(Compiler* compiler, int line,
   UNREACHABLE();
 }
 
+// This will called by the compilerImportAll() function to import a single
+// entry from the imported script. (could be a function or global variable).
+static void compilerImportSingleEntry(Compiler* compiler,
+                                      const char* name, uint32_t length) {
+
+  // Special names are begins with '$' like function body (only for now).
+  // Skip them.
+  if (name[0] == '$') return;
+
+  // Line number of the variables which will be bind to the imported symbol.
+  int line = compiler->previous.line;
+
+  // Add the name to the **current** script's name buffer.
+  int name_index = (int)scriptAddName(compiler->script, compiler->vm,
+                                      name, length);
+
+  // Get the function from the script.
+  emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
+  emitShort(compiler, name_index);
+
+  int index = compilerImportName(compiler, line, name, length);
+  if (index != -1) emitStoreVariable(compiler, index, true);
+  emitOpcode(compiler, OP_POP);
+}
+
 // Import all from the script, which is also would be at the top of the stack
 // before executing the below instructions.
 static void compilerImportAll(Compiler* compiler, Script* script) {
@@ -2160,65 +2196,24 @@ static void compilerImportAll(Compiler* compiler, Script* script) {
   ASSERT(script != NULL, OOPS);
   ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
-  // Line number of the variables which will be bind to the imported symbol.
-  int line = compiler->previous.line;
-
-  // TODO: Refactor this to a loop rather than jumping with goto.
-
-  //                           !!! WARNING !!!
-  //
-  // The below code uses 'goto' statement to run same loop twice with different
-  // string buffer, instead of making the loop a function or writeing it twice.
-  // So modify the below code with caution.
-
   bool done = false;              //< A flag to jump out of the loop.
   pkUintBuffer* name_buff = NULL; //< The string buffer to iterate through.
-  goto L_first_buffer;            //< Skip pass the below iteration.
 
-  // --------------------------------------------------------------------------
-L_import_all_from_buffer:
-  // Iterate over the names and import them.
-  for (uint32_t i = 0; i < name_buff->count; i++) {
-    String* name = script->names.data[name_buff->data[i]];
-
-    // Special names are begins with '$' like function body (only for now).
-    // Skip them.
-    if (name->data[0] == '$') continue;
-
-    // Add the name to the **current** script's name buffer.
-    int name_index = (int)scriptAddName(compiler->script, compiler->vm,
-                                        name->data, name->length);
-    // Get the function from the script.
-    emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
-    emitShort(compiler, name_index);
-
-    int index = compilerImportName(compiler, line, name->data, name->length);
-    if (index != -1) emitStoreVariable(compiler, index, true);
-    emitOpcode(compiler, OP_POP);
+  // Import all functions.
+  for (uint32_t i = 0; i < script->functions.count; i++) {
+    const char* name = script->functions.data[i]->name;
+    uint32_t length = (uint32_t)strlen(name);
+    compilerImportSingleEntry(compiler, name, length);
   }
 
-  // If we have multiple buffer, we need to use an integer to keep track by
-  // incrementing it, But it's just 2 buffers so using a boolean 'done' here.
-  if (!done) {
-    done = true;
-    goto L_next_buffer;
-  } else {
-    goto L_import_done;
+  // Import all globals.
+  for (uint32_t i = 0; i < script->globals.count; i++) {
+    ASSERT(i < script->global_names.count, OOPS);
+    ASSERT(script->global_names.data[i] < script->names.count, OOPS);
+    const String* name = script->names.data[script->global_names.data[i]];
+
+    compilerImportSingleEntry(compiler, name->data, name->length);
   }
-  // --------------------------------------------------------------------------
-
-  // Set the buffer to function names and run the iteration.
-L_first_buffer:
-  name_buff = &script->function_names;
-  goto L_import_all_from_buffer;
-
-  // Set the buffer to global names and run the iteration.
-L_next_buffer:
-  name_buff = &script->global_names;
-  goto L_import_all_from_buffer;
-
-L_import_done:
-  return;
 }
 
 // from module import symbol [as alias [, symbol2 [as alias]]]
@@ -2488,6 +2483,9 @@ static void compileStatement(Compiler* compiler) {
   // print it's value when running in REPL mode.
   bool is_expression = false;
 
+  // If the statement is call, this will be set to true.
+  compiler->is_last_call = false;
+
   if (match(compiler, TK_BREAK)) {
     if (compiler->loop == NULL) {
       parseError(compiler, "Cannot use 'break' outside a loop.");
@@ -2536,6 +2534,9 @@ static void compileStatement(Compiler* compiler) {
           ASSERT(_FN->opcodes.count >= 2, OOPS); // OP_CALL, argc
           ASSERT(_FN->opcodes.data[_FN->opcodes.count - 2] == OP_CALL, OOPS);
           _FN->opcodes.data[_FN->opcodes.count - 2] = OP_TAIL_CALL;
+
+          // Now it's a return statement, not call.
+          compiler->is_last_call = false;
         }
       }
 
@@ -2576,6 +2577,10 @@ static void compileStatement(Compiler* compiler) {
 // as import statement, function define, and if we're running REPL mode top
 // level expression's evaluated value will be printed.
 static void compileTopLevelStatement(Compiler* compiler) {
+
+  // If the statement is call, this will be set to true.
+  compiler->is_last_call = false;
+
   if (match(compiler, TK_NATIVE)) {
     compileFunction(compiler, FN_NATIVE);
 
@@ -2682,7 +2687,7 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
   // If compilation failed, discard all the invalid functions and globals.
   if (compiler->has_errors) {
     script->globals.count = script->global_names.count = globals_count;
-    script->functions.count = script->function_names.count = functions_count;
+    script->functions.count = functions_count;
   }
 
 #if DEBUG_DUMP_COMPILED_CODE

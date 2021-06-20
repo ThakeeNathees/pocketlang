@@ -27,8 +27,8 @@
 
 // A macro to declare a function, with docstring, which is defined as
 // _pk_doc_<fn> = docstring; That'll used to generate function help text.
-#define DEF(fn, docstring)               \
-  const char* DOCSTRING(fn) = docstring; \
+#define DEF(fn, docstring)                      \
+  static const char* DOCSTRING(fn) = docstring; \
   static void fn(PKVM* vm)
 
 /*****************************************************************************/
@@ -82,20 +82,6 @@ PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
   __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
   Script* script = (Script*)AS_OBJ(scr);
 
-  // TODO: Currently it's O(n) and could be optimized to O(log(n)) but does it
-  //       worth it?
-  //
-  // 'function_names' buffer is un-necessary since the function itself has the
-  // reference to the function name and it can be refactored into a index
-  // buffer in an "increasing-name" order which can be used to binary search.
-  // Similer for 'global_names' refactor them from VarBuffer to GlobalVarBuffer
-  // where GlobalVar is struct { const char* name, Var value };
-  //
-  // "increasing-name" order index buffer:
-  //   A buffer of int where each is an index in the function buffer and each
-  //   points to different functions in an "increasing-name" (could be hash
-  //   value) order. If we have more than some threshold number of function
-  //   use binary search. (remember to skip literal functions).
   for (uint32_t i = 0; i < script->functions.count; i++) {
     const char* fn_name = script->functions.data[i]->name;
     if (strcmp(name, fn_name) == 0) {
@@ -770,15 +756,11 @@ static inline void assertModuleNameDef(PKVM* vm, Script* script,
 static void moduleAddGlobalInternal(PKVM* vm, Script* script,
                                     const char* name, Var value) {
 
-  // Ensure the name isn't predefined.
+  // Ensure the name isn't defined already.
   assertModuleNameDef(vm, script, name);
 
-  // TODO: move this to pk_var.h and use it in the compilerAddVariable
-  // function.
-  uint32_t name_index = scriptAddName(script, vm, name,
-                                      (uint32_t)strlen(name));
-  pkUintBufferWrite(&script->global_names, vm, name_index);
-  pkVarBufferWrite(&script->globals, vm, value);
+  // Add the value to the globals buffer.
+  scriptAddGlobal(vm, script, name, (uint32_t)strlen(name), value);
 }
 
 // An internal function to add a function to the given [script].

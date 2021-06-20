@@ -1,7 +1,10 @@
 
-// To implement.
-
+// In good first issue
 - Refactor fiber into a module and is_done as an attribute.
+- floats like ".5".
+- Implement argparse.
+
+// To implement.
 
 - def f(x)
     f(x) ## not tco, unless return f(x)
@@ -10,13 +13,6 @@
 
 - implement 'lang.getMaxCallDepth()' (default=1000 like python) and
   setMaxCallDepth(val) to change stack size at runtime.
-
-- move moduleAddGlobalInternal() to var.h (also other var functions).
-
-- refactor build.bat batch script to powershell
-  refactor makefile and setup a github action.
-
-- floats like ".5".
 
 - change or add => to_string() to value.as_string
   and add as_repr, as_bool.
@@ -29,13 +25,6 @@
     this(a, b) // Something like this.
     fn(a, b) // May be closure support?
   end
-
-- Implement argparse.
-    - -v --version
-    - emit opcodes
-    - maybe write a similar .pyc file for pocket
-    - --docs to generate docs from cstring.
-    - dump compiled code to a file.
 
 - In keyword.
 - Structs (maybe enums).
@@ -52,10 +41,7 @@
 - Make it possible to override function names.
       - To do so the functions and global variables should be in the same
         buffer as the property of the script.
-- Function docstring property.
 - Union tagging alter in var.
-- Github actions.
-
 
 // Add more.
 - Single header for embedding (script in pk, require file IO).
