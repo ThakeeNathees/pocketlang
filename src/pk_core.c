@@ -1647,3 +1647,6 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
 
   UNREACHABLE();
 }
+
+#undef DOCSTRING
+#undef DEF

@@ -1231,6 +1231,8 @@ static void exprName(Compiler* compiler) {
 
   if (result.type == NAME_NOT_DEFINED) {
     if (compiler->l_value && match(compiler, TK_EQ)) {
+      skipNewLines(compiler);
+
       int index = compilerAddVariable(compiler, start, length, line);
 
       // Compile the assigned value.
@@ -1266,6 +1268,8 @@ static void exprName(Compiler* compiler) {
         const bool is_global = result.type == NAME_GLOBAL_VAR;
 
         if (compiler->l_value && matchAssignment(compiler)) {
+          skipNewLines(compiler);
+
           TokenType assignment = compiler->previous.type;
           if (assignment != TK_EQ) {
             emitPushVariable(compiler, result.index, is_global);
@@ -1517,6 +1521,7 @@ static void exprAttrib(Compiler* compiler) {
   int index = scriptAddName(compiler->script, compiler->vm, name, length);
 
   if (compiler->l_value && matchAssignment(compiler)) {
+    skipNewLines(compiler);
 
     TokenType assignment = compiler->previous.type;
     if (assignment != TK_EQ) {
@@ -1544,6 +1549,7 @@ static void exprSubscript(Compiler* compiler) {
   consume(compiler, TK_RBRACKET, "Expected ']' after subscription ends.");
 
   if (compiler->l_value && matchAssignment(compiler)) {
+    skipNewLines(compiler);
 
     TokenType assignment = compiler->previous.type;
     if (assignment != TK_EQ) {
@@ -1666,12 +1672,8 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
   // Add the variable and return it's index.
 
   if (compiler->scope_depth == DEPTH_GLOBAL) {
-    Script* script = compiler->script;
-    uint32_t name_index = scriptAddName(script, compiler->vm, name, length);
-    pkUintBufferWrite(&script->global_names, compiler->vm, name_index);
-    pkVarBufferWrite(&script->globals, compiler->vm, VAR_NULL);
-    return compiler->script->globals.count - 1;
-
+    return (int)scriptAddGlobal(compiler->vm, compiler->script,
+                                name, length, VAR_NULL);
   } else {
     Local* local = &compiler->locals [compiler->local_count];
     local->name = name;

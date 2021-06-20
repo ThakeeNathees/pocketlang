@@ -228,8 +228,8 @@ PK_PUBLIC PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
 // Compile the [module] with the provided [source]. Set the compiler options
 // with the the [options] argument or set to NULL for default options.
 PK_PUBLIC PkResult pkCompileModule(PKVM* vm, PkHandle* module,
-                               PkStringPtr source,
-                               const PkCompileOptions* options);
+                                   PkStringPtr source,
+                                   const PkCompileOptions* options);
 
 // Interpret the source and return the result. Once it's done with the source
 // and path 'on_done' will be called to clean the string if it's not NULL.

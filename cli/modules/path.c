@@ -41,10 +41,6 @@
 /* PUBLIC FUNCTIONS                                                          */
 /*****************************************************************************/
 
-void pathInit(void) {
-  cwk_path_set_style(CWK_STYLE_UNIX);
-}
-
 bool pathIsAbsolute(const char* path) {
   return cwk_path_is_absolute(path);
 }
@@ -96,6 +92,12 @@ static inline bool pathIsExists(const char* path) {
 /* MODULE FUNCTIONS                                                          */
 /*****************************************************************************/
 
+static void _pathSetStyleUnix(PKVM* vm) {
+  bool value;
+  if (!pkGetArgBool(vm, 1, &value)) return;
+  cwk_path_set_style((value)? CWK_STYLE_UNIX : CWK_STYLE_WINDOWS);
+}
+
 static void _pathGetCWD(PKVM* vm) {
   char cwd[FILENAME_MAX];
   get_cwd(cwd, sizeof(cwd)); // Check if res is NULL.
@@ -119,6 +121,13 @@ static void _pathRelpath(PKVM* vm) {
   if (!pkGetArgString(vm, 1, &from)) return;
   if (!pkGetArgString(vm, 2, &path)) return;
 
+  // TODO: this won't work if both [from] and [path] doen't have a similler
+  // root path, so we need to get the absolute path of the both paths (if
+  // thre're not already) and call the cwalk_relative().
+  // ie.
+  //     a/b/c --> a/b/d.txt - works
+  //     a/b/c --> ../d.txt  - won't work
+
   char result[FILENAME_MAX];
   size_t len = cwk_path_get_relative(from, path, result, sizeof(result));
   pkReturnStringLength(vm, result, len);
@@ -130,7 +139,7 @@ static void _pathJoin(PKVM* vm) {
 
   if (argc > MAX_JOIN_PATHS) {
     pkSetRuntimeError(vm, "Cannot join more than " STRINGIFY(MAX_JOIN_PATHS)
-                      "paths.");
+                          "paths.");
     return;
   }
 
@@ -217,6 +226,7 @@ static void _pathIsDir(PKVM* vm) {
 void registerModulePath(PKVM* vm) {
   PkHandle* path = pkNewModule(vm, "path");
 
+  pkModuleAddFunction(vm, path, "setunix",   _pathSetStyleUnix, 1);
   pkModuleAddFunction(vm, path, "getcwd",    _pathGetCWD,    0);
   pkModuleAddFunction(vm, path, "abspath",   _pathAbspath,   1);
   pkModuleAddFunction(vm, path, "relpath",   _pathRelpath,   2);

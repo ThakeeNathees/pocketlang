@@ -340,7 +340,14 @@ Script* newScript(PKVM* vm, String* path) {
   script->body = newFunction(vm, fn_name, (int)strlen(fn_name),
                              script, false, NULL/*TODO*/);
   script->body->arity = 0; // TODO: should it be 1 (ARGV)?.
-  vmPopTempRef(vm);
+
+  // Add '__file__' variable with it's path as value. If the path starts with
+  // '$' It's a special file ($(REPL) or $(TRY)) and don't define __file__.
+  if (script->path->data[0] != '$') {
+    scriptAddGlobal(vm, script, "__file__", 8, VAR_OBJ(script->path));
+  }
+
+  vmPopTempRef(vm); // script.
 
   return script;
 }
@@ -922,6 +929,69 @@ void freeObject(PKVM* vm, Object* self) {
   DEALLOCATE(vm, self);
 }
 
+uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
+  uint32_t length) {
+
+  for (uint32_t i = 0; i < self->names.count; i++) {
+    String* _name = self->names.data[i];
+    if (_name->length == length && strncmp(_name->data, name, length) == 0) {
+      // Name already exists in the buffer.
+      return i;
+    }
+  }
+
+  // If we reach here the name doesn't exists in the buffer, so add it and
+  // return the index.
+  String* new_name = newStringLength(vm, name, length);
+  vmPushTempRef(vm, &new_name->_super);
+  pkStringBufferWrite(&self->names, vm, new_name);
+  vmPopTempRef(vm);
+  return self->names.count - 1;
+}
+
+uint32_t scriptGetFunc(Script* script, const char* name, uint32_t length) {
+  for (uint32_t i = 0; i < script->function_names.count; i++) {
+    uint32_t name_index = script->function_names.data[i];
+    String* fn_name = script->names.data[name_index];
+    if (fn_name->length == length &&
+      strncmp(fn_name->data, name, length) == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+uint32_t scriptGetGlobals(Script* script, const char* name, uint32_t length) {
+  for (uint32_t i = 0; i < script->global_names.count; i++) {
+    uint32_t name_index = script->global_names.data[i];
+    String* g_name = script->names.data[name_index];
+    if (g_name->length == length && strncmp(g_name->data, name, length) == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+uint32_t scriptAddGlobal(PKVM* vm, Script* script,
+                    const char* name, uint32_t length,
+                    Var value) {
+
+  // If already exists update the value.
+  uint32_t var_ind = scriptGetGlobals(script, name, length);
+  if (var_ind != -1) {
+    ASSERT(var_ind < script->globals.count, OOPS);
+    script->globals.data[var_ind] = value;
+    return var_ind;
+  }
+
+  // If we're reached here that means we don't already have a variable with
+  // that name, create new one and set the value.
+  uint32_t name_ind = scriptAddName(script, vm, name, length);
+  pkUintBufferWrite(&script->global_names, vm, name_ind);
+  pkVarBufferWrite(&script->globals, vm, value);
+  return script->globals.count - 1;
+}
+
 // Utility functions //////////////////////////////////////////////////////////
 
 const char* getPkVarTypeName(PkVarType type) {
@@ -1293,47 +1363,4 @@ bool toBool(Var v) {
   }
 
   UNREACHABLE();
-}
-
-uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
-                       uint32_t length) {
-
-  for (uint32_t i = 0; i < self->names.count; i++) {
-    String* _name = self->names.data[i];
-    if (_name->length == length && strncmp(_name->data, name, length) == 0) {
-      // Name already exists in the buffer.
-      return i;
-    }
-  }
-
-  // If we reach here the name doesn't exists in the buffer, so add it and
-  // return the index.
-  String* new_name = newStringLength(vm, name, length);
-  vmPushTempRef(vm, &new_name->_super);
-  pkStringBufferWrite(&self->names, vm, new_name);
-  vmPopTempRef(vm);
-  return self->names.count - 1;
-}
-
-int scriptGetFunc(Script* script, const char* name, uint32_t length) {
-  for (uint32_t i = 0; i < script->function_names.count; i++) {
-    uint32_t name_index = script->function_names.data[i];
-    String* fn_name = script->names.data[name_index];
-    if (fn_name->length == length &&
-      strncmp(fn_name->data, name, length) == 0) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-int scriptGetGlobals(Script* script, const char* name, uint32_t length) {
-  for (uint32_t i = 0; i < script->global_names.count; i++) {
-    uint32_t name_index = script->global_names.data[i];
-    String* g_name = script->names.data[name_index];
-    if (g_name->length == length && strncmp(g_name->data, name, length) == 0) {
-      return i;
-    }
-  }
-  return -1;
 }

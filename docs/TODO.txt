@@ -11,26 +11,23 @@
 - implement 'lang.getMaxCallDepth()' (default=1000 like python) and
   setMaxCallDepth(val) to change stack size at runtime.
 
-- Recursive call to anonymous functions. use 'this' keyword
-
 - move moduleAddGlobalInternal() to var.h (also other var functions).
 
 - refactor build.bat batch script to powershell
   refactor makefile and setup a github action.
 
-- Hex, binary literals and floats like ".5".
+- floats like ".5".
 
 - change or add => to_string() to value.as_string
   and add as_repr, as_bool.
 
 - Make bool and num are incompatible (also it increase performance a bit).
   1 + true - make it not allowed.
-
-- support new line just after '=' (and other places)
   
 - literal function recursive call.
-  func(a, b)
-    self(a, b) // Something like this.
+  fn = func(a, b)
+    this(a, b) // Something like this.
+    fn(a, b) // May be closure support?
   end
 
 - Implement argparse.
@@ -39,6 +36,7 @@
     - maybe write a similar .pyc file for pocket
     - --docs to generate docs from cstring.
     - dump compiled code to a file.
+
 - In keyword.
 - Structs (maybe enums).
 - Implement file IO (require structs).

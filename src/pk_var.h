@@ -515,6 +515,24 @@ Var mapRemoveKey(PKVM* vm, Map* self, Var key);
 // resumed anymore.
 bool fiberHasError(Fiber* fiber);
 
+// Add the name (string literal) to the string buffer if not already exists and
+// return it's index in the buffer.
+uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
+                       uint32_t length);
+
+// Search for the function name in the script and return it's index in it's
+// [functions] buffer. If not found returns -1.
+uint32_t scriptGetFunc(Script* script, const char* name, uint32_t length);
+
+// Search for the global variable name in the script and return it's index in
+// it's [globals] buffer. If not found returns -1.
+uint32_t scriptGetGlobals(Script* script, const char* name, uint32_t length);
+
+// Add a global [value] to the [scrpt] and return its index.
+uint32_t scriptAddGlobal(PKVM* vm, Script* script,
+                         const char* name, uint32_t length,
+                         Var value);
+
 // Release all the object owned by the [self] including itself.
 void freeObject(PKVM* vm, Object* self);
 
@@ -558,18 +576,5 @@ String * toRepr(PKVM * vm, const Var value);
 
 // Returns the truthy value of the var.
 bool toBool(Var v);
-
-// Add the name (string literal) to the string buffer if not already exists and
-// return it's index in the buffer.
-uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
-                       uint32_t length);
-
-// Search for the function name in the script and return it's index in it's
-// [functions] buffer. If not found returns -1.
-int scriptGetFunc(Script* script, const char* name, uint32_t length);
-
-// Search for the global variable name in the script and return it's index in
-// it's [globals] buffer. If not found returns -1.
-int scriptGetGlobals(Script* script, const char* name, uint32_t length);
 
 #endif // VAR_H

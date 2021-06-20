@@ -22,31 +22,19 @@ void writeFunction(PKVM* vm, const char* text) {
   js_writeFunction(text);
 }
 
-PkStringPtr resolvePath(PKVM* vm, const char* from, const char* name) {
-  PkStringPtr result;
-  result.string = NULL;
-  return result;
-}
-
-PkStringPtr loadScript(PKVM* vm, const char* path) {
-  PkStringPtr result;
-  result.string = NULL;
-  return result;
-}
-
 EMSCRIPTEN_KEEPALIVE
 int runSource(const char* source) {
   
   PkConfiguration config = pkNewConfiguration();
   config.error_fn = errorPrint;
   config.write_fn = writeFunction;
-  config.load_script_fn = loadScript;
-  config.resolve_path_fn = resolvePath;
+  config.load_script_fn = NULL;
+  config.resolve_path_fn = NULL;
 
   PKVM* vm = pkNewVM(&config);
   
   PkStringPtr src = { source, NULL, NULL };
-  PkStringPtr module = { "@try", NULL, NULL };
+  PkStringPtr module = { "$(TRY)", NULL, NULL };
   PkResult result = pkInterpretSource(vm, src, module, NULL);
 
   pkFreeVM(vm);

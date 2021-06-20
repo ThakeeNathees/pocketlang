@@ -6,12 +6,12 @@
 ## uses of tabs and trailing white spaces, etc.
 
 import os, sys, re
-from os.path import join
+from os.path import join, abspath, dirname
 from os import listdir
 
 ## The absolute path of this file, when run as a script.
 ## This file is not intended to be included in other files at the moment.
-THIS_PATH = os.path.abspath(os.path.dirname(__file__))
+THIS_PATH = abspath(dirname(__file__))
 
 ## Converts a list of relative paths from the working directory
 ## to a list of relative paths from this file's absolute directory.

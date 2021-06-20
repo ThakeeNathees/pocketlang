@@ -4,13 +4,13 @@
 
 import os, sys, platform
 import subprocess, json, re
-from os.path import join, abspath, relpath
+from os.path import join, abspath, dirname, relpath
 
 ## TODO: Re write this in doctest (https://github.com/onqtam/doctest)
 
 ## The absolute path of this file, when run as a script.
 ## This file is not intended to be included in other files at the moment.
-THIS_PATH = abspath(os.path.dirname(__file__))
+THIS_PATH = abspath(dirname(__file__))
 
 ## All the test files.
 TEST_SUITE = {
