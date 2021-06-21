@@ -42,26 +42,53 @@ PkVarType pkGetValueType(const PkVar value) {
 }
 
 PkHandle* pkNewString(PKVM* vm, const char* value) {
-  return vmNewHandle(vm, VAR_OBJ(newString(vm, value)));
+  String* str = newString(vm, value);
+  vmPushTempRef(vm, &str->_super); // str
+  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(str));
+  vmPopTempRef(vm); // str
+  return handle;
 }
 
 PkHandle* pkNewStringLength(PKVM* vm, const char* value, size_t len) {
-  return vmNewHandle(vm, VAR_OBJ(newStringLength(vm, value, (uint32_t)len)));
+  String* str = newStringLength(vm, value, (uint32_t)len);
+  vmPushTempRef(vm, &str->_super); // str
+  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(str));
+  vmPopTempRef(vm); // str
+  return handle;
 }
 
 PkHandle* pkNewList(PKVM* vm) {
-  return vmNewHandle(vm, VAR_OBJ(newList(vm, MIN_CAPACITY)));
+  List* list = newList(vm, MIN_CAPACITY);
+  vmPushTempRef(vm, &list->_super); // list
+  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(list));
+  vmPopTempRef(vm); // list
+  return handle;
 }
 
 PkHandle* pkNewMap(PKVM* vm) {
-  return vmNewHandle(vm, VAR_OBJ(newMap(vm)));
+  Map* map = newMap(vm);
+  vmPushTempRef(vm, &map->_super); // map
+  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(map));
+  vmPopTempRef(vm); // map
+  return handle;
 }
 
 PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn) {
   __ASSERT(IS_OBJ_TYPE(fn->value, OBJ_FUNC), "Fn should be of type function.");
 
   Fiber* fiber = newFiber(vm, (Function*)AS_OBJ(fn->value));
-  return vmNewHandle(vm, VAR_OBJ(fiber));
+  vmPushTempRef(vm, &fiber->_super); // fiber
+  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(fiber));
+  vmPopTempRef(vm); // fiber
+  return handle;
+}
+
+PkHandle* pkNewInstNative(PKVM* vm, void* data, uint32_t id) {
+  Instance* inst = newInstanceNative(vm, data, id);
+  vmPushTempRef(vm, &inst->_super); // inst
+  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(inst));
+  vmPopTempRef(vm); // inst
+  return handle;
 }
 
 /*****************************************************************************/
@@ -508,6 +535,22 @@ Instance* newInstance(PKVM* vm, Class* ty, bool initialize) {
 
   vmPopTempRef(vm); // inst.
 
+  return inst;
+}
+
+Instance* newInstanceNative(PKVM* vm, void* data, uint32_t id) {
+  Instance* inst = ALLOCATE(vm, Instance);
+  varInitObject(&inst->_super, vm, OBJ_INST);
+  inst->is_native = true;
+  inst->native_id = id;
+
+  if (vm->config.inst_name_fn != NULL) {
+    inst->name = vm->config.inst_name_fn(id);
+  } else {
+    inst->name = "$(?)";
+  }
+
+  inst->native = data;
   return inst;
 }
 
@@ -1006,7 +1049,10 @@ void freeObject(PKVM* vm, Object* self) {
       Instance* inst = (Instance*)self;
 
       if (inst->is_native) {
-        TODO;
+        if (vm->config.free_inst_fn != NULL) {
+          // TODO: Allow user to set error when freeing the object.
+          vm->config.free_inst_fn(vm, inst->native);
+        }
 
       } else {
         Inst* ins = inst->ins;
@@ -1446,6 +1492,15 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
             pkByteBufferWrite(buff, vm, '=');
             _toStringInternal(vm, ins->fields.data[i], buff, outer, repr);
           }
+        } else {
+          pkByteBufferWrite(buff, vm, ':');
+
+          char buff_addr[STR_HEX_BUFF_SIZE];
+          char* ptr = (char*)buff_addr;
+          (*ptr++) = '0'; (*ptr++) = 'x';
+          const int len = snprintf(ptr, sizeof(buff_addr) - 2,
+                                "%08x", (unsigned int)(uintptr_t)inst->native);
+          pkByteBufferAddString(buff, vm, buff_addr, (uint32_t)len);
         }
 
         pkByteBufferWrite(buff, vm, ']');

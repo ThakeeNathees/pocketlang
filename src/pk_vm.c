@@ -30,6 +30,9 @@ PkConfiguration pkNewConfiguration(void) {
   config.write_fn = NULL;
   config.read_fn = NULL;
 
+  config.free_inst_fn = NULL;
+  config.inst_name_fn = NULL;
+
   config.load_script_fn = NULL;
   config.resolve_path_fn = NULL;
   config.user_data = NULL;

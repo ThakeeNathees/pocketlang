@@ -3,7 +3,7 @@
  *  Distributed Under The MIT License
  */
 
-#include "common.h"
+#include "internal.h"
 
 typedef struct {
   uint8_t* data;

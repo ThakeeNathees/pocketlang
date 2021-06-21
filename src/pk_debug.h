@@ -6,7 +6,7 @@
 #ifndef DEBUG_H
 #define DEBUG_H
 
-#include "pk_common.h"
+#include "pk_internal.h"
 #include "pk_var.h"
 
 // Dump the value of the [value] without a new line at the end to the buffer
