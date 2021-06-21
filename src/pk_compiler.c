@@ -17,8 +17,12 @@
 #define MAX_VARIABLES 256
 
 // The maximum number of functions a script could contain. Also it's limited by
-// it's opcode which is using a single byte value to identify the local.
+// it's opcode which is using a single byte value to identify.
 #define MAX_FUNCTIONS 256
+
+// The maximum number of classes a script could contain. Also it's limited by
+// it's opcode which is using a single byte value to identify.
+#define MAX_CLASSES 255
 
 // The maximum number of names that were used before defined. Its just the size
 // of the Forward buffer of the compiler. Feel free to increase it if it
@@ -107,6 +111,7 @@ typedef enum {
 
   // Keywords.
   TK_MODULE,     // module
+  TK_CLASS,      // class
   TK_FROM,       // from
   TK_IMPORT,     // import
   TK_AS,         // as
@@ -170,6 +175,7 @@ typedef struct {
 // List of keywords mapped into their identifiers.
 static _Keyword _keywords[] = {
   { "module",   6, TK_MODULE   },
+  { "class",    5, TK_CLASS    },
   { "from",     4, TK_FROM     },
   { "import",   6, TK_IMPORT   },
   { "as",       2, TK_AS       },
@@ -973,6 +979,7 @@ typedef enum {
   NAME_LOCAL_VAR,  //< Including parameter.
   NAME_GLOBAL_VAR,
   NAME_FUNCTION,
+  NAME_CLASS,
   NAME_BUILTIN,    //< Native builtin function.
 } NameDefnType;
 
@@ -1021,6 +1028,14 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
   index = scriptGetGlobals(compiler->script, name, length);
   if (index != -1) {
     result.type = NAME_GLOBAL_VAR;
+    result.index = index;
+    return result;
+  }
+
+  // Search through classes.
+  index = scriptGetClass(compiler->script, name, length);
+  if (index != -1) {
+    result.type = NAME_CLASS;
     result.index = index;
     return result;
   }
@@ -1140,6 +1155,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_SRIGHT     */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_SLEFT      */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_MODULE     */   NO_RULE,
+  /* TK_CLASS      */   NO_RULE,
   /* TK_FROM       */   NO_RULE,
   /* TK_IMPORT     */   NO_RULE,
   /* TK_AS         */   NO_RULE,
@@ -1290,6 +1306,11 @@ static void exprName(Compiler* compiler) {
 
       case NAME_FUNCTION:
         emitOpcode(compiler, OP_PUSH_FN);
+        emitByte(compiler, result.index);
+        break;
+
+      case NAME_CLASS:
+        emitOpcode(compiler, OP_PUSH_TYPE);
         emitByte(compiler, result.index);
         break;
 
@@ -1776,6 +1797,19 @@ static void compilerExitBlock(Compiler* compiler) {
   compiler->scope_depth--;
 }
 
+static void compilerPushFunc(Compiler* compiler, Func* fn,
+                             Function* func, int index) {
+  fn->outer_func = compiler->func;
+  fn->ptr = func;
+  fn->depth = compiler->scope_depth;
+  fn->index = index;
+  compiler->func = fn;
+}
+
+static void compilerPopFunc(Compiler* compiler) {
+  compiler->func = compiler->func->outer_func;
+}
+
 /*****************************************************************************/
 /* COMPILING (EMIT BYTECODE)                                                 */
 /*****************************************************************************/
@@ -1864,6 +1898,94 @@ typedef enum {
 static void compileStatement(Compiler* compiler);
 static void compileBlockBody(Compiler* compiler, BlockType type);
 
+// Compile a type and return it's index in the script's types buffer.
+static int compileType(Compiler* compiler) {
+
+  // Consume the name of the type.
+  consume(compiler, TK_NAME, "Expected a type name.");
+  const char* name = compiler->previous.start;
+  int name_len = compiler->previous.length;
+  NameSearchResult result = compilerSearchName(compiler, name, name_len);
+  if (result.type != NAME_NOT_DEFINED) {
+    parseError(compiler, "Name '%.*s' already exists.", name_len, name);
+  }
+
+  // Create a new type.
+  Class* type = newClass(compiler->vm, compiler->script,
+                         name, (uint32_t)name_len);
+  type->ctor->arity = 0;
+
+  // Check count exceeded.
+  int fn_index = (int)compiler->script->functions.count - 1;
+  if (fn_index == MAX_FUNCTIONS) {
+    parseError(compiler, "A script should contain at most %d functions.",
+               MAX_FUNCTIONS);
+  }
+
+  int ty_index = (int)(compiler->script->classes.count - 1);
+  if (ty_index == MAX_CLASSES) {
+    parseError(compiler, "A script should contain at most %d types.",
+               MAX_CLASSES);
+  }
+
+  // Compile the constructor function.
+  ASSERT(compiler->func->ptr == compiler->script->body, OOPS);
+  Func curr_fn;
+  compilerPushFunc(compiler, &curr_fn, type->ctor, fn_index);
+  compilerEnterBlock(compiler);
+
+  // Push an instance on the stack.
+  emitOpcode(compiler, OP_PUSH_INSTANCE);
+  emitByte(compiler, ty_index);
+
+  skipNewLines(compiler);
+  TokenType next = peek(compiler);
+  while (next != TK_END && next != TK_EOF) {
+
+    // Compile field name.
+    consume(compiler, TK_NAME, "Expected a type name.");
+    const char* f_name = compiler->previous.start;
+    int f_len = compiler->previous.length;
+
+    uint32_t f_index = scriptAddName(compiler->script, compiler->vm,
+                                     f_name, f_len);
+
+    // TODO: Add a string compare macro.
+    String* new_name = compiler->script->names.data[f_index];
+    for (uint32_t i = 0; i < type->field_names.count; i++) {
+      String* prev = compiler->script->names.data[type->field_names.data[i]];
+      if (new_name->hash == prev->hash && new_name->length == prev->length &&
+          memcmp(new_name->data, prev->data, prev->length) == 0) {
+        parseError(compiler, "Class field with name '%s' already exists.",
+                   new_name->data);
+      }
+    }
+
+    pkUintBufferWrite(&type->field_names, compiler->vm, f_index);
+
+    // Consume the assignment expression.
+    consume(compiler, TK_EQ, "Expected an assignment after field name.");
+    compileExpression(compiler); // Assigned value.
+    consumeEndStatement(compiler);
+
+    // At this point the stack top would be the expression.
+    emitOpcode(compiler, OP_INST_APPEND);
+
+    skipNewLines(compiler);
+    next = peek(compiler);
+  }
+  consume(compiler, TK_END, "Expected 'end' after type declaration end.");
+
+  compilerExitBlock(compiler);
+
+  // At this point, the stack top would be the constructed instance. Return it.
+  emitFunctionEnd(compiler);
+
+  compilerPopFunc(compiler);
+
+  return -1; // TODO;
+}
+
 // Compile a function and return it's index in the script's function buffer.
 static int compileFunction(Compiler* compiler, FuncType fn_type) {
 
@@ -1892,13 +2014,8 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
                MAX_FUNCTIONS);
   }
 
-  Func curr_func;
-  curr_func.outer_func = compiler->func;
-  curr_func.ptr = func;
-  curr_func.depth = compiler->scope_depth;
-  curr_func.index = fn_index;
-
-  compiler->func = &curr_func;
+  Func curr_fn;
+  compilerPushFunc(compiler, &curr_fn, func, fn_index);
 
   int argc = 0;
   compilerEnterBlock(compiler); // Parameter depth.
@@ -1968,7 +2085,8 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   printf("%s", buff.data);
   pkByteBufferClear(&buff, compiler->vm);
 #endif
-  compiler->func = compiler->func->outer_func;
+
+  compilerPopFunc(compiler);
 
   return fn_index;
 }
@@ -2156,6 +2274,7 @@ static int compilerImportName(Compiler* compiler, int line,
       return result.index;
 
     case NAME_FUNCTION:
+    case NAME_CLASS:
     case NAME_BUILTIN:
       parseError(compiler, "Name '%.*s' already exists.", length, name);
       return -1;
@@ -2196,8 +2315,12 @@ static void compilerImportAll(Compiler* compiler, Script* script) {
   ASSERT(script != NULL, OOPS);
   ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
-  bool done = false;              //< A flag to jump out of the loop.
-  pkUintBuffer* name_buff = NULL; //< The string buffer to iterate through.
+  // Import all types.
+  for (uint32_t i = 0; i < script->classes.count; i++) {
+    uint32_t name_ind = script->classes.data[i]->name;
+    String* name = script->names.data[name_ind];
+    compilerImportSingleEntry(compiler, name->data, name->length);
+  }
 
   // Import all functions.
   for (uint32_t i = 0; i < script->functions.count; i++) {
@@ -2581,7 +2704,10 @@ static void compileTopLevelStatement(Compiler* compiler) {
   // If the statement is call, this will be set to true.
   compiler->is_last_call = false;
 
-  if (match(compiler, TK_NATIVE)) {
+  if (match(compiler, TK_CLASS)) {
+    compileType(compiler);
+
+  } else if (match(compiler, TK_NATIVE)) {
     compileFunction(compiler, FN_NATIVE);
 
   } else if (match(compiler, TK_DEF)) {
@@ -2624,10 +2750,11 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
   ASSERT(script->body != NULL, OOPS);
   pkByteBufferClear(&script->body->fn->opcodes, vm);
 
-  // Remember the count of the globals and functions, If the compilation failed
-  // discard all the globals and functions added by the compilation.
+  // Remember the count of the globals, functions and types, If the compilation
+  // failed discard all the globals and functions added by the compilation.
   uint32_t globals_count = script->globals.count;
   uint32_t functions_count = script->functions.count;
+  uint32_t types_count = script->classes.count;
 
   Func curr_fn;
   curr_fn.depth = DEPTH_SCRIPT;
@@ -2688,6 +2815,7 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
   if (compiler->has_errors) {
     script->globals.count = script->global_names.count = globals_count;
     script->functions.count = functions_count;
+    script->classes.count = types_count;
   }
 
 #if DEBUG_DUMP_COMPILED_CODE

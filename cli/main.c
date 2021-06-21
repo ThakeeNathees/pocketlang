@@ -130,7 +130,7 @@ PkStringPtr loadScript(PKVM* vm, const char* path) {
 
 int main(int argc, char** argv) {
 
-  const char* usage = "usage: pocket [-c cmd | file]\n";
+  //const char* usage = "usage: pocket [-c cmd | file]\n";
 
   // TODO: implement arg parse, REPL.
 

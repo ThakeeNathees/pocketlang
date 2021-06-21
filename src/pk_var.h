@@ -187,6 +187,8 @@ typedef struct Range Range;
 typedef struct Script Script;
 typedef struct Function Function;
 typedef struct Fiber Fiber;
+typedef struct Class Class;
+typedef struct Instance Instance;
 
 // Declaration of buffer objects of different types.
 DECLARE_BUFFER(Uint, uint32_t)
@@ -194,6 +196,7 @@ DECLARE_BUFFER(Byte, uint8_t)
 DECLARE_BUFFER(Var, Var)
 DECLARE_BUFFER(String, String*)
 DECLARE_BUFFER(Function, Function*)
+DECLARE_BUFFER(Class, Class*)
 
 // Add all the characters to the buffer, byte buffer can also be used as a
 // buffer to write string (like a string stream). Note that this will not
@@ -209,16 +212,14 @@ typedef enum {
   OBJ_SCRIPT,
   OBJ_FUNC,
   OBJ_FIBER,
-  // TODO:
-  OBJ_USER,
+  OBJ_CLASS,
+  OBJ_INST,
 } ObjectType;
 
 // Base struct for all heap allocated objects.
 struct Object {
   ObjectType type;  //< Type of the object in \ref var_Object_Type.
   bool is_marked;   //< Marked when garbage collection's marking phase.
-  //Class* is;      //< The class the object IS. // No OOP in PK.
-
   Object* next;     //< Next object in the heap allocated link list.
 };
 
@@ -269,24 +270,11 @@ struct Script {
   String* module; //< Module name of the script.
   String* path;   //< Path of the script.
 
-  /*
-  names:     ["v1", "fn1", "v2", "fn2", ...]
-               0     1      2     3
-
-  g_names:  [      1,         3 ] <-- function name
-                    0          1   <-- it's index
-
-  globals:  [      fn1,       fn2 ]
-                    0          1
-  */
-
-  // TODO: (maybe) join the function buffer and variable buffers.
-  // and make if possible to override functions. (also have to allow builtin).
-
   pkVarBuffer globals;         //< Script level global variables.
   pkUintBuffer global_names;   //< Name map to index in globals.
 
-  pkFunctionBuffer functions;  //< Script level functions.
+  pkFunctionBuffer functions;  //< Functions of the script.
+  pkClassBuffer classes;       //< Classes of the script.
 
   pkStringBuffer names;        //< Name literals, attribute names, etc.
   pkVarBuffer literals;        //< Script literal constant values.
@@ -305,9 +293,9 @@ typedef struct {
 struct Function {
   Object _super;
 
-  const char* name;      //< Name in the script [owner] or C literal.
-  Script* owner;         //< Owner script of the function.
-  int arity;             //< Number of argument the function expects.
+  const char* name; //< Name in the script [owner] or C literal.
+  Script* owner;    //< Owner script of the function.
+  int arity;        //< Number of argument the function expects.
 
   // Docstring of the function, currently it's just the C string literal
   // pointer, refactor this into String* so that we can support public
@@ -328,10 +316,10 @@ typedef struct {
 } CallFrame;
 
 typedef enum {
-  FIBER_NEW,       //< Fiber haven't started yet.
-  FIBER_RUNNING,   //< Fiber is currently running.
-  FIBER_YIELDED,   //< Yielded fiber, can be resumed.
-  FIBER_DONE,      //< Fiber finished and cannot be resumed.
+  FIBER_NEW,     //< Fiber haven't started yet.
+  FIBER_RUNNING, //< Fiber is currently running.
+  FIBER_YIELDED, //< Yielded fiber, can be resumed.
+  FIBER_DONE,    //< Fiber finished and cannot be resumed.
 } FiberState;
 
 struct Fiber {
@@ -369,6 +357,33 @@ struct Fiber {
   String* error;
 };
 
+struct Class {
+  Object _super;
+
+  Script* owner; //< The script it belongs to.
+  uint32_t name; //< Index of the type's name in the script's name buffer.
+
+  Function* ctor; //< The constructor function.
+  pkUintBuffer field_names; //< Buffer of field names.
+  // TODO: ordered names buffer for binary search.
+};
+
+typedef struct {
+  Class* type;        //< Class this instance belongs to.
+  pkVarBuffer fields; //< Var buffer of the instance.
+} Inst;
+
+struct Instance {
+  Object _super;
+
+  const char* name;  //< Name of the type it belongs to.
+  bool is_native;    //< True if it's a native type instance.
+  union {
+    void* native;  //< C struct pointer. // TODO:
+    Inst* ins;    //< Module instance pointer.
+  };
+};
+
 /*****************************************************************************/
 /* "CONSTRUCTORS"                                                            */
 /*****************************************************************************/
@@ -392,7 +407,7 @@ String* newStringLength(PKVM* vm, const char* text, uint32_t length);
 #else // Macro implementation.
   // Allocate new string using the cstring [text].
   #define newString(vm, text) \
-    newStringLength(vm, text, (text == NULL) ? 0 : (uint32_t)strlen(text))
+    newStringLength(vm, text, (!text) ? 0 : (uint32_t)strlen(text))
 #endif
 
 // Allocate new List and return List*.
@@ -418,6 +433,14 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
 
 // Allocate new Fiber object around the function [fn] and return Fiber*.
 Fiber* newFiber(PKVM* vm, Function* fn);
+
+// Allocate new Class object and return Class* with name [name].
+Class* newClass(PKVM* vm, Script* scr, const char* name, uint32_t length);
+
+// Allocate new instance with of the base [type]. Note that if [initialize] is
+// false, the field value buffer of the instance would be un initialized (ie.
+// the buffer count = 0). Otherwise they'll be set to VAR_NULL.
+Instance* newInstance(PKVM* vm, Class* ty, bool initialize);
 
 /*****************************************************************************/
 /* METHODS                                                                   */
@@ -520,13 +543,17 @@ bool fiberHasError(Fiber* fiber);
 uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
                        uint32_t length);
 
+// Search for the type name in the script and return it's index in it's
+// [classes] buffer. If not found returns -1.
+int scriptGetClass(Script* script, const char* name, uint32_t length);
+
 // Search for the function name in the script and return it's index in it's
 // [functions] buffer. If not found returns -1.
-uint32_t scriptGetFunc(Script* script, const char* name, uint32_t length);
+int scriptGetFunc(Script* script, const char* name, uint32_t length);
 
 // Search for the global variable name in the script and return it's index in
 // it's [globals] buffer. If not found returns -1.
-uint32_t scriptGetGlobals(Script* script, const char* name, uint32_t length);
+int scriptGetGlobals(Script* script, const char* name, uint32_t length);
 
 // Add a global [value] to the [scrpt] and return its index.
 uint32_t scriptAddGlobal(PKVM* vm, Script* script,

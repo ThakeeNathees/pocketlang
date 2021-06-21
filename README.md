@@ -68,7 +68,7 @@ except for a c99 compatible compiler. It can be compiled with the following comm
 
 #### GCC / MinGw / Clang (alias with gcc)
 ```
-gcc -o pocket cli/*.c src/*.c -Isrc/include -lm -Wno-int-to-pointer-cast
+gcc -o pocket cli/*.c src/*.c -Isrc/include -lm
 ```
 
 #### MSVC

@@ -6,6 +6,8 @@
 
 // To implement.
 
+- no __file__ for core modules.
+
 - def f(x)
     f(x) ## not tco, unless return f(x)
   end

@@ -815,12 +815,14 @@ DEF(stdLangDisas,
   RET(VAR_OBJ(dump));
 }
 
+#ifdef DEBUG
 DEF(stdLangDebugBreak,
   "debug_break() -> null\n"
   "A debug function for development (will be removed).") {
 
   DEBUG_BREAK();
 }
+#endif
 
 DEF(stdLangWrite,
   "write(...) -> null\n"
@@ -1080,7 +1082,8 @@ Var varAdd(PKVM* vm, Var v1, Var v2) {
       case OBJ_SCRIPT:
       case OBJ_FUNC:
       case OBJ_FIBER:
-      case OBJ_USER:
+      case OBJ_CLASS:
+      case OBJ_INST:
         break;
     }
   }
@@ -1339,6 +1342,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
       // map = { "foo" : 42, "can't access" : 32 }
       // val = map.foo ## 42
       TODO;
+      UNREACHABLE();
     }
 
     case OBJ_RANGE:
@@ -1371,8 +1375,15 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     {
       Script* scr = (Script*)obj;
 
+      // Search in types.
+      int index = scriptGetClass(scr, attrib->data, attrib->length);
+      if (index != -1) {
+        ASSERT_INDEX((uint32_t)index, scr->classes.count);
+        return VAR_OBJ(scr->classes.data[index]);
+      }
+
       // Search in functions.
-      int index = scriptGetFunc(scr, attrib->data, attrib->length);
+      index = scriptGetFunc(scr, attrib->data, attrib->length);
       if (index != -1) {
         ASSERT_INDEX((uint32_t)index, scr->functions.count);
         return VAR_OBJ(scr->functions.data[index]);
@@ -1408,8 +1419,38 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     }
 
     case OBJ_FIBER:
-    case OBJ_USER:
       TODO;
+      UNREACHABLE();
+
+    case OBJ_CLASS:
+      TODO;
+      UNREACHABLE();
+
+    case OBJ_INST:
+    {
+      Instance* inst = (Instance*)obj;
+      if (inst->is_native) {
+        TODO;
+
+      } else {
+
+        // TODO: Optimize this with binary search.
+        Class* ty = inst->ins->type;
+        for (uint32_t i = 0; i < ty->field_names.count; i++) {
+          ASSERT_INDEX(i, ty->field_names.count);
+          ASSERT_INDEX(ty->field_names.data[i], ty->owner->names.count);
+          String* f_name = ty->owner->names.data[ty->field_names.data[i]];
+          if (f_name->hash == attrib->hash &&
+              f_name->length == attrib->length &&
+              memcmp(f_name->data, attrib->data, attrib->length) == 0) {
+            return inst->ins->fields.data[i];
+          }
+        }
+      }
+
+      ERR_NO_ATTRIB(vm, on, attrib);
+      return VAR_NULL;
+    }
 
     default:
       UNREACHABLE();
@@ -1485,6 +1526,15 @@ do {                                                                          \
         return;
       }
 
+      index = scriptGetClass(scr, attrib->data, attrib->length);
+      if (index != -1) {
+        ASSERT_INDEX((uint32_t)index, scr->classes.count);
+        ASSERT_INDEX(scr->classes.data[index]->name, scr->names.count);
+        String* name = scr->names.data[scr->classes.data[index]->name];
+        ATTRIB_IMMUTABLE(name->data);
+        return;
+      }
+
       ERR_NO_ATTRIB(vm, on, attrib);
       return;
     }
@@ -1499,9 +1549,38 @@ do {                                                                          \
       ERR_NO_ATTRIB(vm, on, attrib);
       return;
 
-    case OBJ_USER:
-      TODO; //ERR_NO_ATTRIB(vm, on, attrib);
+    case OBJ_CLASS:
+      ERR_NO_ATTRIB(vm, on, attrib);
       return;
+
+    case OBJ_INST:
+    {
+      Instance* inst = (Instance*)obj;
+      if (inst->is_native) {
+        TODO;
+        return;
+
+      } else {
+
+        // TODO: Optimize this with binary search.
+        Class* ty = inst->ins->type;
+        for (uint32_t i = 0; i < ty->field_names.count; i++) {
+          ASSERT_INDEX(i, ty->field_names.count);
+          ASSERT_INDEX(ty->field_names.data[i], ty->owner->names.count);
+          String* f_name = ty->owner->names.data[ty->field_names.data[i]];
+          if (f_name->hash == attrib->hash &&
+            f_name->length == attrib->length &&
+            memcmp(f_name->data, attrib->data, attrib->length) == 0) {
+            inst->ins->fields.data[i] = value;
+            return;
+          }
+        }
+        ERR_NO_ATTRIB(vm, on, attrib);
+        return;
+      }
+
+      UNREACHABLE();
+    }
 
     default:
       UNREACHABLE();
@@ -1574,8 +1653,11 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
     case OBJ_SCRIPT:
     case OBJ_FUNC:
     case OBJ_FIBER:
-    case OBJ_USER:
+    case OBJ_CLASS:
+    case OBJ_INST:
       TODO;
+      UNREACHABLE();
+
     default:
       UNREACHABLE();
   }
@@ -1621,8 +1703,11 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
     case OBJ_SCRIPT:
     case OBJ_FUNC:
     case OBJ_FIBER:
-    case OBJ_USER:
+    case OBJ_CLASS:
+    case OBJ_INST:
       TODO;
+      UNREACHABLE();
+
     default:
       UNREACHABLE();
   }

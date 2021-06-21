@@ -96,7 +96,7 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
     const char* op_name = op_names[opcodes[i]];
     uint32_t op_length = (uint32_t)strlen(op_name);
     pkByteBufferAddString(buff, vm, op_name, op_length);
-    for (uint32_t i = 0; i < 16 - op_length; i++) { // Padding.
+    for (uint32_t j = 0; j < 16 - op_length; j++) { // Padding.
       ADD_CHAR(vm, buff, ' ');
     }
 
@@ -124,10 +124,26 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
         NO_ARGS();
         break;
 
-      case OP_PUSH_LIST:   SHORT_ARG(); break;
-      case OP_PUSH_MAP:    NO_ARGS();   break;
-      case OP_LIST_APPEND: NO_ARGS();   break;
-      case OP_MAP_INSERT:  NO_ARGS();   break;
+      case OP_PUSH_LIST:     SHORT_ARG(); break;
+      case OP_PUSH_INSTANCE:
+      {
+        int ty_index = READ_BYTE();
+        ASSERT_INDEX((uint32_t)ty_index, func->owner->classes.count);
+        uint32_t name_ind = func->owner->classes.data[ty_index]->name;
+        ASSERT_INDEX(name_ind, func->owner->names.count);
+        String* ty_name = func->owner->names.data[name_ind];
+
+        // Prints: %5d [Ty:%s]\n
+        ADD_INTEGER(vm, buff, ty_index, INT_WIDTH);
+        pkByteBufferAddString(buff, vm, STR_AND_LEN(" [Ty:"));
+        pkByteBufferAddString(buff, vm, ty_name->data, ty_name->length);
+        pkByteBufferAddString(buff, vm, STR_AND_LEN("]\n"));
+        break;
+      }
+      case OP_PUSH_MAP:      NO_ARGS();   break;
+      case OP_LIST_APPEND:   NO_ARGS();   break;
+      case OP_MAP_INSERT:    NO_ARGS();   break;
+      case OP_INST_APPEND:   NO_ARGS();   break;
 
       case OP_PUSH_LOCAL_0:
       case OP_PUSH_LOCAL_1:
@@ -148,7 +164,7 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
 
         } else {
           arg = (int)(op - OP_PUSH_LOCAL_0);
-          for (int i = 0; i < INT_WIDTH; i++) ADD_CHAR(vm, buff, ' ');
+          for (int j = 0; j < INT_WIDTH; j++) ADD_CHAR(vm, buff, ' ');
         }
 
         if (arg < func->arity) {
@@ -181,7 +197,7 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
 
         } else {
           arg = (int)(op - OP_STORE_LOCAL_0);
-          for (int i = 0; i < INT_WIDTH; i++) ADD_CHAR(vm, buff, ' ');
+          for (int j = 0; j < INT_WIDTH; j++) ADD_CHAR(vm, buff, ' ');
         }
 
         if (arg < func->arity) {
@@ -221,6 +237,23 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
         pkByteBufferAddString(buff, vm, STR_AND_LEN(" [Fn:"));
         pkByteBufferAddString(buff, vm, STR_AND_LEN(name));
         pkByteBufferAddString(buff, vm, STR_AND_LEN("]\n"));
+        break;
+      }
+
+      case OP_PUSH_TYPE:
+      {
+        int ty_index = READ_BYTE();
+        ASSERT_INDEX((uint32_t)ty_index, func->owner->classes.count);
+        uint32_t name_ind = func->owner->classes.data[ty_index]->name;
+        ASSERT_INDEX(name_ind, func->owner->names.count);
+        String* ty_name = func->owner->names.data[name_ind];
+
+        // Prints: %5d [Ty:%s]\n
+        ADD_INTEGER(vm, buff, ty_index, INT_WIDTH);
+        pkByteBufferAddString(buff, vm, STR_AND_LEN(" [Ty:"));
+        pkByteBufferAddString(buff, vm, ty_name->data, ty_name->length);
+        pkByteBufferAddString(buff, vm, STR_AND_LEN("]\n"));
+
         break;
       }
 
