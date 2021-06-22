@@ -78,12 +78,14 @@ str_lower(str_strip('Foo ')) # This can be written as below
 # Fibers & Coroutine
 #-------------------
 
+import Fiber
+
 def fn(p1, p2)
 	print(yield(42)) # Prints 3.14
 end
 
-fb = fiber_new(fn)
-val = fiber_run(fb, 1, 2)
+fb = Fiber.new(fn)
+val = Fiber.run(fb, 1, 2)
 print(val) ## Prints 42
-fiber_resume(fb, 3.14)
+Fiber.resume(fb, 3.14)
 ```
