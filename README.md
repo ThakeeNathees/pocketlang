@@ -90,7 +90,7 @@ unix `find` for the current session, and run the `make` script.
 build
 ```
 You don't have to run the script from a Visual Studio .NET developer command prompt, It'll search
-for the MSVS installation path and setup the build enviornment.
+for the MSVS installation path and setup the build environment.
 
 ### For other compiler/IDE
 
