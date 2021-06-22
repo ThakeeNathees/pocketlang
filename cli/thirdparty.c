@@ -15,3 +15,8 @@
 //           Linux. Supports UNIX and Windows path styles on those platforms.
 #include "thirdparty/cwalk/cwalk.c"
 
+// Library : argparse
+// Source  : https://github.com/cofyc/argparse
+// About   : Command-line arguments parsing library.
+#include "thirdparty/argparse/argparse.c"
+

@@ -3,8 +3,8 @@
  *  Distributed Under The MIT License
  */
 
+#include "thirdparty/argparse/argparse.h"
 #include "internal.h"
-
 #include "modules.h"
 
 // FIXME: Everything below here is temporary and for testing.
@@ -121,17 +121,7 @@ PkStringPtr loadScript(PKVM* vm, const char* path) {
   return result;
 }
 
-int main(int argc, char** argv) {
-
-  //const char* usage = "usage: pocket [-c cmd | file]\n";
-
-  // TODO: implement arg parse, REPL.
-
-  //if (argc < 2) {
-  //  printf("%s\n%s", notice, help);
-  //  return 0;
-  //}
-
+int main(int argc, const char** argv) {
   PkConfiguration config = pkNewConfiguration();
   config.error_fn = errorFunction;
   config.write_fn = writeFunction;
@@ -144,8 +134,7 @@ int main(int argc, char** argv) {
   config.resolve_path_fn = resolvePath;
 
   PkCompileOptions options = pkNewCompilerOptions();
-  options.debug = true; // TODO: update this with cli args. (tco disabled).
-
+  options.debug = false;
   PKVM* vm = pkNewVM(&config);
 
   VmUserData user_data;
@@ -157,33 +146,57 @@ int main(int argc, char** argv) {
   // FIXME: this is temp till arg parse implemented.
   PkResult result;
 
-  if (argc == 1) {
-    options.repl_mode = true;
-    repl(vm, &options);
+  static const char* const usage[] = {
+    "pocket [option] ... [-c cmd | file | -] [arg] ...",
+    NULL,
+  };
 
-  } if (argc >= 3 && strcmp(argv[1], "-c") == 0) {
+  bool debug = false, quiet = false, version = false, help = false;
+  const char** cmd = NULL;
 
+  struct argparse_option cli_opts[] = {
+    OPT_STRING('c', "cmd", &cmd, "Evaluate and run the passed string."),
+    OPT_BOOLEAN('d', "debug", &debug, "Compile and run a debug version."),
+    OPT_BOOLEAN('h', "help", &help, "Prints this help message and exit."),
+    OPT_BOOLEAN('q', "quiet", &quiet,
+               "Don't print version and copyright statement on REPL startup."),
+    OPT_BOOLEAN('v', "version", &version,
+               "Prints the pocketlang version number and exit."),
+    OPT_END(),
+  };
+
+  struct argparse argparse;
+  argparse_init(&argparse, cli_opts, usage, 0);
+  argc = argparse_parse(&argparse, argc, argv);
+
+  if (debug) options.debug = debug;
+  else if (help) argparse_usage(&argparse);
+  else if (version) printf("pocketlang %s\n", PK_VERSION_STRING);
+  else if (cmd) {
     PkStringPtr source = { argv[2], NULL, NULL };
     PkStringPtr path = { "$(Source)", NULL, NULL };
-
     result = pkInterpretSource(vm, source, path, NULL);
     pkFreeVM(vm);
     return result;
-  }
+  } else if (quiet) TODO;
+  else if (argc >= 1 && argv[0] != NULL) {
+    PkStringPtr resolved = resolvePath(vm, ".", argv[0]);
+    PkStringPtr source = loadScript(vm, resolved.string);
 
-  PkStringPtr resolved = resolvePath(vm, ".", argv[1]);
-  PkStringPtr source = loadScript(vm, resolved.string);
-
-  if (source.string != NULL) {
-    result = pkInterpretSource(vm, source, resolved, &options);
-
+    if (source.string != NULL) {
+      result = pkInterpretSource(vm, source, resolved, &options);
+    } else {
+      result = PK_RESULT_COMPILE_ERROR;
+      fprintf(stderr, "Error: cannot open file at \"%s\"\n", resolved.string);
+      if (resolved.on_done != NULL) resolved.on_done(vm, resolved);
+      if (source.on_done != NULL) source.on_done(vm, source);
+    }
   } else {
-    result = PK_RESULT_COMPILE_ERROR;
-    fprintf(stderr, "Error: cannot open file at \"%s\"\n", resolved.string);
-    if (resolved.on_done != NULL) resolved.on_done(vm, resolved);
-    if (source.on_done != NULL) source.on_done(vm, source);
+    options.repl_mode = true;
+    repl(vm, &options);
   }
 
   pkFreeVM(vm);
   return result;
 }
+
