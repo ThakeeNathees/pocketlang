@@ -609,7 +609,9 @@ static void eatNumber(Compiler* compiler) {
           break;
         }
         if (!isValidBinNumLitChar(c)) {
-          lexError(compiler, "Binary literal can only contain 0s and 1s, found \"%c\".", c);
+          lexError(
+            compiler,
+            "Binary literal can only contain 0s and 1s, found \"%c\".", c);
           break;
         }
         eatChar(compiler); // Consume the digit.
@@ -628,7 +630,8 @@ static void eatNumber(Compiler* compiler) {
     eatChar(compiler); // Consume '0x'
     uint64_t hex = 0;
     c = peekChar(compiler);
-    if (!isValidNumLitHexChar(c)) { // The first digit should be either hex digit.
+    // The first digit should be either hex digit.
+    if (!isValidNumLitHexChar(c)) {
       lexError(compiler, "Invalid hex literal.");
     } else {
       do {
@@ -637,7 +640,11 @@ static void eatNumber(Compiler* compiler) {
           break;
         }
         if (!isValidNumLitHexChar(c)) {
-          lexError(compiler, "Hex literal must only contain characters 0-9, A-F, found \"%c\"", c);
+          lexError(
+            compiler,
+            "Hex literal must only contain characters 0-9, A-F, found \"%c\"",
+            c
+          );
           break;
         }
         eatChar(compiler); // Consume the digit.
@@ -666,15 +673,19 @@ static void eatNumber(Compiler* compiler) {
 
     if (peekChar(compiler) == '.' && utilIsDigit(peekNextChar(compiler))) {
       matchChar(compiler, '.');
-      while (utilIsDigit(peekChar(compiler)))
+      while (utilIsDigit(peekChar(compiler))) {
         eatChar(compiler);
+      }
     }
 
     // parse if in scientific notation format (MeN == M * 10 ** N)
     if (peekChar(compiler) == 'e' || peekChar(compiler) == 'E') {
       eatChar(compiler);
       if (!utilIsDigit(peekChar(compiler))) {
-        lexError(compiler, "Scientific notation number literal should have an exponent.");
+        lexError(
+          compiler,
+          "Scientific notation number literal should have an exponent."
+        );
       } else {
         // eat the exponent
         while (utilIsDigit(peekChar(compiler))) eatChar(compiler);
