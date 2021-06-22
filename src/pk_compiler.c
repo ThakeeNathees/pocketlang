@@ -5,6 +5,7 @@
 
 #include "pk_compiler.h"
 
+#include <ctype.h>
 #include "pk_core.h"
 #include "pk_buffers.h"
 #include "pk_utils.h"
@@ -574,20 +575,12 @@ static void eatName(Compiler* compiler) {
   setNextToken(compiler, type);
 }
 
-static inline bool isValidBinNumLitChar(char c) {
-  return (c == '0') || (c == '1');
-}
-
-static inline bool isValidNumLitHexChar(char c) {
-  return ('0' <= c && c <= '9') || ('a' <= c && c<= 'f');
-}
-
-static inline bool isNumLitTerminationChar(char c) {
-  return !isValidNumLitHexChar(c);
-}
-
 // Complete lexing a number literal.
 static void eatNumber(Compiler* compiler) {
+#define IS_VALID_HEX_CHAR(c) \
+  (('0' <= (c) && (c) <= '9') || ('a' <= (c) && (c) <= 'f'))
+#define IS_VALID_BIN_CHAR(c) (((c) == '0') || ((c) == '1'))
+#define IS_NUMLIT_TERM(c) (!isalnum(c))
   Var value = VAR_NULL; // The number value.
   char c = *compiler->token_start;
 
@@ -596,7 +589,7 @@ static void eatNumber(Compiler* compiler) {
     eatChar(compiler); // Consume '0b'
     uint64_t bin = 0;
     c = peekChar(compiler);
-    if (!isValidBinNumLitChar(c)) {
+    if (!IS_VALID_BIN_CHAR(c)) {
       lexError(
         compiler,
         "Binary literal has to contain at least one binary digit at the start."
@@ -604,11 +597,11 @@ static void eatNumber(Compiler* compiler) {
     } else {
       do {
         c = peekChar(compiler);
-        if (isNumLitTerminationChar(c)) {
+        if (IS_NUMLIT_TERM(c)) {
           // reached the end of the literal
           break;
         }
-        if (!isValidBinNumLitChar(c)) {
+        if (!IS_VALID_BIN_CHAR(c)) {
           lexError(
             compiler,
             "Binary literal can only contain 0s and 1s, found \"%c\".", c);
@@ -631,15 +624,15 @@ static void eatNumber(Compiler* compiler) {
     uint64_t hex = 0;
     c = peekChar(compiler);
     // The first digit should be either hex digit.
-    if (!isValidNumLitHexChar(c)) {
+    if (!IS_VALID_HEX_CHAR(c)) {
       lexError(compiler, "Invalid hex literal.");
     } else {
       do {
         c = peekChar(compiler);
-        if (isNumLitTerminationChar(c)) {
+        if (IS_NUMLIT_TERM(c)) {
           break;
         }
-        if (!isValidNumLitHexChar(c)) {
+        if (!IS_VALID_HEX_CHAR(c)) {
           lexError(
             compiler,
             "Hex literal must only contain characters 0-9, A-F, found \"%c\"",
@@ -679,8 +672,12 @@ static void eatNumber(Compiler* compiler) {
     }
 
     // parse if in scientific notation format (MeN == M * 10 ** N)
-    if (peekChar(compiler) == 'e' || peekChar(compiler) == 'E') {
+    char eChar = peekChar(compiler);
+    if (eChar == 'e' || eChar == 'E') {
       eatChar(compiler);
+      if (peekChar(compiler) == '+' || peekChar(compiler) == '-') {
+        eatChar(compiler);
+      }
       if (!utilIsDigit(peekChar(compiler))) {
         lexError(
           compiler,
@@ -704,6 +701,9 @@ static void eatNumber(Compiler* compiler) {
   }
 
   setNextValueToken(compiler, TK_NUMBER, value);
+#undef IS_VALID_BIN_CHAR
+#undef IS_VALID_HEX_CHAR
+#undef IS_NUMLIT_TERM
 }
 
 // Read and ignore chars till it reach new line or EOF.

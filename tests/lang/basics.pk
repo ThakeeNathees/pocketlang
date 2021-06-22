@@ -78,6 +78,12 @@ assert(~1 == -2)
 assert(~0b0 == -1)
 assert(~0x1 == -2)
 
+assert(1.345e1 == 13.45)
+assert(3.45e5 == 345000)
+assert(3.45e+5 == 3.45e5)
+assert(3.45e-2 == 0.0345)
+assert(3.45E-2 == 3.45e-2)
+
 x = 42  ; assert((x&=51) == 34)
 x = 123 ; assert((x&=324) == 64)
 for i in 0..1000
