@@ -100,7 +100,7 @@ for the MSVS installation path and setup the build environment.
 4. Add `src/include` to include path.
 5. Compile.
 
-If you weren't able to compile it, please report by [opening an issue](https://github.com/ThakeeNathees/pocketlang/issues/new).
+If you weren't able to compile it, please us report by [opening an issue](https://github.com/ThakeeNathees/pocketlang/issues/new).
 
 
 ## References

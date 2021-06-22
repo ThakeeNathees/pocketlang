@@ -741,65 +741,6 @@ static void moduleAddFunctionInternal(PKVM* vm, Script* script,
 // 'lang' library methods.
 // -----------------------
 
-DEF(stdFiberNew,
-  "new(fn:Function) -> fiber\n"
-  "Create and return a new fiber from the given function [fn].") {
-
-  Function* fn;
-  if (!validateArgFunction(vm, 1, &fn)) return;
-  RET(VAR_OBJ(newFiber(vm, fn)));
-}
-
-DEF(stdFiberRun,
-  "run(fb:Fiber, ...) -> var\n"
-  "Runs the fiber's function with the provided arguments and returns it's "
-  "return value or the yielded value if it's yielded.") {
-
-  int argc = ARGC;
-  if (argc == 0) // Missing the fiber argument.
-    RET_ERR(newString(vm, "Missing argument - fiber."));
-
-  Fiber* fb;
-  if (!validateArgFiber(vm, 1, &fb)) return;
-
-  // Buffer of argument to call vmPrepareFiber().
-  Var* args[MAX_ARGC];
-
-  // ARG(1) is fiber, function arguments are ARG(2), ARG(3), ... ARG(argc).
-  for (int i = 1; i < argc; i++) {
-    args[i - 1] = &ARG(i + 1);
-  }
-
-  // Switch fiber and start execution.
-  if (vmPrepareFiber(vm, fb, argc - 1, args)) {
-    ASSERT(fb == vm->fiber, OOPS);
-    fb->state = FIBER_RUNNING;
-  }
-}
-
-DEF(stdFiberResume,
-  "fiber_resume(fb:Fiber) -> var\n"
-  "Resumes a yielded function from a previous call of fiber_run() function. "
-  "Return it's return value or the yielded value if it's yielded.") {
-
-  int argc = ARGC;
-  if (argc == 0) // Missing the fiber argument.
-    RET_ERR(newString(vm, "Expected at least 1 argument(s)."));
-  if (argc > 2) // Can only accept 1 argument for resume.
-    RET_ERR(newString(vm, "Expected at most 2 argument(s)."));
-
-  Fiber* fb;
-  if (!validateArgFiber(vm, 1, &fb)) return;
-
-  Var value = (argc == 1) ? VAR_NULL : ARG(2);
-
-  // Switch fiber and resume execution.
-  if (vmSwitchFiber(vm, fb, &value)) {
-    ASSERT(fb == vm->fiber, OOPS);
-    fb->state = FIBER_RUNNING;
-  }
-}
-
 DEF(stdLangClock,
   "clock() -> num\n"
   "Returns the number of seconds since the application started") {
@@ -965,6 +906,68 @@ DEF(stdMathTangent,
   RET(VAR_NUM(tan(rad)));
 }
 
+// 'Fiber' module methods.
+// -----------------------
+
+DEF(stdFiberNew,
+  "new(fn:Function) -> fiber\n"
+  "Create and return a new fiber from the given function [fn].") {
+
+  Function* fn;
+  if (!validateArgFunction(vm, 1, &fn)) return;
+  RET(VAR_OBJ(newFiber(vm, fn)));
+}
+
+DEF(stdFiberRun,
+  "run(fb:Fiber, ...) -> var\n"
+  "Runs the fiber's function with the provided arguments and returns it's "
+  "return value or the yielded value if it's yielded.") {
+
+  int argc = ARGC;
+  if (argc == 0) // Missing the fiber argument.
+    RET_ERR(newString(vm, "Missing argument - fiber."));
+
+  Fiber* fb;
+  if (!validateArgFiber(vm, 1, &fb)) return;
+
+  // Buffer of argument to call vmPrepareFiber().
+  Var* args[MAX_ARGC];
+
+  // ARG(1) is fiber, function arguments are ARG(2), ARG(3), ... ARG(argc).
+  for (int i = 1; i < argc; i++) {
+    args[i - 1] = &ARG(i + 1);
+  }
+
+  // Switch fiber and start execution.
+  if (vmPrepareFiber(vm, fb, argc - 1, args)) {
+    ASSERT(fb == vm->fiber, OOPS);
+    fb->state = FIBER_RUNNING;
+  }
+}
+
+DEF(stdFiberResume,
+  "fiber_resume(fb:Fiber) -> var\n"
+  "Resumes a yielded function from a previous call of fiber_run() function. "
+  "Return it's return value or the yielded value if it's yielded.") {
+
+  int argc = ARGC;
+  if (argc == 0) // Missing the fiber argument.
+    RET_ERR(newString(vm, "Expected at least 1 argument(s)."));
+  if (argc > 2) // Can only accept 1 argument for resume.
+    RET_ERR(newString(vm, "Expected at most 2 argument(s)."));
+
+  Fiber* fb;
+  if (!validateArgFiber(vm, 1, &fb)) return;
+
+  Var value = (argc == 1) ? VAR_NULL : ARG(2);
+
+  // Switch fiber and resume execution.
+  if (vmSwitchFiber(vm, fb, &value)) {
+    ASSERT(fb == vm->fiber, OOPS);
+    fb->state = FIBER_RUNNING;
+  }
+}
+
 /*****************************************************************************/
 /* CORE INITIALIZATION                                                       */
 /*****************************************************************************/
@@ -1038,13 +1041,7 @@ void initializeCore(PKVM* vm) {
   MODULE_ADD_FN(math, "sin",   stdMathSine,    1);
   MODULE_ADD_FN(math, "cos",   stdMathCosine,  1);
   MODULE_ADD_FN(math, "tan",   stdMathTangent, 1);
-
   // TODO: low priority - sinh, cosh, tanh, asin, acos, atan.
-
-  Script* Fiber = newModuleInternal(vm, "Fiber");
-  MODULE_ADD_FN(Fiber, "new",      stdFiberNew,     1);
-  MODULE_ADD_FN(Fiber, "run",      stdFiberRun,    -1);
-  MODULE_ADD_FN(Fiber, "resume",   stdFiberResume, -1);
 
   // Note that currently it's mutable (since it's a global variable, not
   // constant and pocketlang doesn't support constant) so the user shouldn't
@@ -1052,6 +1049,11 @@ void initializeCore(PKVM* vm) {
   // TODO: at varSetAttrib() we can detect if the user try to change an
   // attribute of a core module and we can throw an error.
   moduleAddGlobalInternal(vm, math, "PI", VAR_NUM(M_PI));
+
+  Script* fiber = newModuleInternal(vm, "Fiber");
+  MODULE_ADD_FN(fiber, "new",      stdFiberNew,     1);
+  MODULE_ADD_FN(fiber, "run",      stdFiberRun,    -1);
+  MODULE_ADD_FN(fiber, "resume",   stdFiberResume, -1);
 
 }
 
@@ -1284,8 +1286,7 @@ bool varLesser(Var v1, Var v2) {
 //
 // In C++11 this can be achieved (in a better way) with user defined literals
 // and constexpr. (Reference from my previous compiler written in C++).
-// https://github.com/ThakeeNathees/carbon/blob/89b11800132cbfeedcac0c992593afb5f0357236/include/core/internal.h#L174-L180
-// https://github.com/ThakeeNathees/carbon/blob/454d087f85f7fb9408eb0bc10ae702b8de844648/src/var/_string.cpp#L60-L77
+// https://github.com/ThakeeNathees/carbon/
 //
 // However there is a python script that's matching the CASE_ATTRIB() macro
 // calls and validate if the string and the hash values are matching.

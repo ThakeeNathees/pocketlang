@@ -20,17 +20,16 @@ def main():
   output  = join(TARGET_DIR, TARGET_NAME)
   exports = "\"EXPORTED_RUNTIME_METHODS=['ccall','cwrap']\""
   js_api  = JS_API_PATH
-  
+
   cmd = f"emcc {include} main.c {sources} -o {output} " +\
         f"-s {exports} --js-library {js_api}"
-  
+
   print(cmd)
   os.system(cmd)
-  
+
   shutil.copyfile(PAGE_SCRIPT, join(TARGET_DIR,PAGE_SCRIPT))
   os.remove(output) ## Not using the generated html file.
-  
-  
+
 def fix_path(path):
   return path.replace('\\', '/')
 

@@ -24,7 +24,7 @@ void writeFunction(PKVM* vm, const char* text) {
 
 EMSCRIPTEN_KEEPALIVE
 int runSource(const char* source) {
-  
+
   PkConfiguration config = pkNewConfiguration();
   config.error_fn = errorPrint;
   config.write_fn = writeFunction;
@@ -32,7 +32,7 @@ int runSource(const char* source) {
   config.resolve_path_fn = NULL;
 
   PKVM* vm = pkNewVM(&config);
-  
+
   PkStringPtr src = { source, NULL, NULL };
   PkStringPtr module = { "$(TRY)", NULL, NULL };
   PkResult result = pkInterpretSource(vm, src, module, NULL);
