@@ -103,6 +103,9 @@ for i in 0..1000
   x = i; assert((x^=-1) == -i-1)
 end
 
+assert(.5 == 0.5)
+assert(.333 == .333)
+assert(.1 + 1 == 1.1)
 
 # If we got here, that means all test were passed.
 print('All TESTS PASSED')

@@ -773,8 +773,15 @@ static void lexToken(Compiler* compiler) {
         break;
       }
 
-      case '.': // TODO: ".5" should be a valid number.
-        setNextTwoCharToken(compiler, '.', TK_DOT, TK_DOTDOT);
+      case '.':
+        if (matchChar(compiler, '.')) {
+          setNextToken(compiler, TK_DOTDOT); // '..'
+        } else if (utilIsDigit(peekChar(compiler))) {
+          eatChar(compiler);   // Consume the decimal point.
+          eatNumber(compiler); // Consume the rest of the number
+        } else {
+          setNextToken(compiler, TK_DOT);    // '.'
+        }
         return;
 
       case '=':
