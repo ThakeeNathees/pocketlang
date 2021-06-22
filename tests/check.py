@@ -2,8 +2,8 @@
 ## Copyright (c) 2020-2021 Thakee Nathees
 ## Distributed Under The MIT License
 
-## This will run a static checks on the source files, for line length,
-## uses of tabs and trailing white spaces, etc.
+## This will run static checks on the source files, for line length,
+## uses of tabs, and trailing white spaces, etc.
 
 import os, sys, re
 from os import listdir
@@ -79,7 +79,7 @@ def check_fnv1_hash(sources):
     fp.close()
 
 ## Check each source file ('.c', '.h', '.py') in the [dirs] contains tabs,
-## more than 79 characters and trailing white space.
+## more than 79 characters, and trailing white space.
 def check_static(dirs):
   valid_ext = ('.c', '.h', '.py', '.pk')
   for dir in dirs:
