@@ -6,7 +6,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include "pk_common.h"
+#include "pk_internal.h"
 
 // Returns the smallest power of two that is equal to or greater than [n].
 // Source : https://github.com/wren-lang/wren/blob/main/src/vm/wren_utils.h#L119

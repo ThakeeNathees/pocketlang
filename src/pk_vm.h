@@ -6,8 +6,8 @@
 #ifndef VM_H
 #define VM_H
 
-#include "pk_common.h"
 #include "pk_compiler.h"
+#include "pk_internal.h"
 #include "pk_var.h"
 
 // The maximum number of temporary object reference to protect them from being

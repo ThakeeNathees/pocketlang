@@ -6,7 +6,7 @@
 // The REPL (Read Evaluate Print Loop) implementation.
 // https://en.wikipedia.org/wiki/Read-eval-print_loop.
 
-#include "common.h"
+#include "internal.h"
 
 #include <ctype.h> // isspace
 #include "utils.h"
@@ -20,7 +20,9 @@
 const char* read_line(uint32_t* length) {
   const int size = 1024;
   char* mem = (char*)malloc(size);
-  fgets(mem, size, stdin);
+  if (fgets(mem, size, stdin) == NULL) {
+    // TODO: handle error.
+  }
   size_t len = strlen(mem);
 
   // FIXME: handle \r\n, this is temp.
@@ -61,7 +63,7 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
   user_data->repl_mode = true;
 
   // Print the copyright and license notice.
-  printf("%s\n", CLI_NOTICE);
+  printf("%s", CLI_NOTICE);
 
   // The main module that'll be used to compile and execute the input source.
   PkHandle* module = pkNewModule(vm, "$(REPL)");

@@ -6,8 +6,9 @@
 ## uses of tabs and trailing white spaces, etc.
 
 import os, sys, re
-from os.path import join, abspath, dirname
 from os import listdir
+from os.path import (
+  join, abspath, dirname, relpath)
 
 ## The absolute path of this file, when run as a script.
 ## This file is not intended to be included in other files at the moment.
@@ -17,6 +18,11 @@ THIS_PATH = abspath(dirname(__file__))
 ## to a list of relative paths from this file's absolute directory.
 def to_abs_paths(sources):
   return map(lambda s: os.path.join(THIS_PATH, s), sources)
+
+## Converts the path from absolute path to relative path from the
+## toplelve of the project.
+def to_tolevel_path(path):
+  return relpath(path, join(THIS_PATH, '..'))
 
 ## A list of source files, to check if the fnv1a hash values match it's
 ## corresponding cstring in the CASE_ATTRIB(name, hash) macro calls.
@@ -29,7 +35,14 @@ HASH_CHECK_LIST = [
 C_SOURCE_DIRS = [
   "../src/",
   "../cli/",
-  "../cli/modules/",
+]
+
+## A list of common header that just copied in different projects.
+## These common header cannot be re-used because we're trying to achieve
+## minimalistic with the count of the sources in pocketlang.
+COMMON_HEADERS = [
+  "../src/pk_common.h",
+  "../cli/common.h",
 ]
 
 ## This global variable will be set to true if any check failed.
@@ -38,6 +51,7 @@ checks_failed = False
 def main():
   check_fnv1_hash(to_abs_paths(HASH_CHECK_LIST))
   check_static(to_abs_paths(C_SOURCE_DIRS))
+  check_common_header_match(to_abs_paths(COMMON_HEADERS))
   if checks_failed:
     sys.exit(1)
   print("Static checks were passed.")
@@ -58,7 +72,7 @@ def check_fnv1_hash(sources):
       if val == hash: continue
       
       ## Path of the file relative to top-level.
-      file_path = os.path.relpath(file, join(THIS_PATH, '..'))
+      file_path = to_tolevel_path(file)
       report_error(f"{location(file_path, line_no)} - hash mismatch. "
         f"hash('{name}') = {hash} not {val}")
         
@@ -77,7 +91,7 @@ def check_static(dirs):
       fp = open(join(dir, file), 'r')
       
       ## Path of the file relative to top-level.
-      file_path = os.path.relpath(join(dir, file), join(THIS_PATH, '..'))
+      file_path = to_tolevel_path(join(dir, file))
 
       ## This will be set to true if the last line is empty.
       is_last_empty = False; line_no = 0
@@ -108,7 +122,24 @@ def check_static(dirs):
           is_last_empty = False
         
       fp.close()
-      
+
+## Assert all the content of the headers list below are the same.
+def check_common_header_match(headers):
+  headers = list(headers)
+  assert len(headers) >= 1
+  
+  content = ''
+  with open(headers[0], 'r') as f:
+    content = f.read()
+  
+  for i in range(1, len(headers)):
+    with open(headers[i], 'r') as f:
+      if f.read() != content:
+        main_header = to_tolevel_path(headers[0])
+        curr_header = to_tolevel_path(headers[i])
+        report_error("File content mismatch: \"%s\" and \"%s\"\n"
+                     "    These files contants should be the same."
+                     %(main_header, curr_header))
 
 ## Returns a formated string of the error location.
 def location(file, line):

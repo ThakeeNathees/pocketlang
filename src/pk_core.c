@@ -113,21 +113,21 @@ PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
   } while(false)
 
 // Check for errors in before calling the get arg public api function.
-#define CHECK_GET_ARG_API_ERRORS()                               \
-  do {                                                           \
-    __ASSERT(vm->fiber != NULL,                                  \
-             "This function can only be called at runtime.");    \
-    __ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index."); \
-    __ASSERT(value != NULL, "Argument [value] was NULL.");       \
+#define CHECK_GET_ARG_API_ERRORS()                                   \
+  do {                                                               \
+    __ASSERT(vm->fiber != NULL,                                      \
+             "This function can only be called at runtime.");        \
+    __ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index.");     \
+    __ASSERT(value != NULL, "Argument [value] was NULL.");           \
   } while (false)
 
-// Set error for incompatible type provided as an argument.
-#define ERR_INVALID_ARG_TYPE(m_type)                             \
-do {                                                             \
-  char buff[STR_INT_BUFF_SIZE];                                  \
-  sprintf(buff, "%d", arg);                                      \
-  VM_SET_ERROR(vm, stringFormat(vm, "Expected a " m_type         \
-                                " at argument $.", buff));       \
+// Set error for incompatible type provided as an argument. (TODO: got type).
+#define ERR_INVALID_ARG_TYPE(m_type)                                 \
+do {                                                                 \
+  char buff[STR_INT_BUFF_SIZE];                                      \
+  sprintf(buff, "%d", arg);                                          \
+  VM_SET_ERROR(vm, stringFormat(vm, "Expected a '$' at argument $.", \
+                                    m_type, buff));                  \
 } while (false)
 
 // pkGetArgc implementation (see pocketlang.h for description).
@@ -173,15 +173,45 @@ bool pkGetArgNumber(PKVM* vm, int arg, double* value) {
 }
 
 // pkGetArgString implementation (see pocketlang.h for description).
-bool pkGetArgString(PKVM* vm, int arg, const char** value) {
+bool pkGetArgString(PKVM* vm, int arg, const char** value, uint32_t* length) {
   CHECK_GET_ARG_API_ERRORS();
 
   Var val = ARG(arg);
   if (IS_OBJ_TYPE(val, OBJ_STRING)) {
-    *value = ((String*)AS_OBJ(val))->data;
+    String* str = (String*)AS_OBJ(val);
+    *value = str->data;
+    if (length) *length = str->length;
 
   } else {
     ERR_INVALID_ARG_TYPE("string");
+    return false;
+  }
+
+  return true;
+}
+
+// pkGetArgInstance implementation (see pocketlang.h for description).
+bool pkGetArgInst(PKVM* vm, int arg, uint32_t id, void** value) {
+  CHECK_GET_ARG_API_ERRORS();
+
+  Var val = ARG(arg);
+  bool is_native_instance = false;
+
+  if (IS_OBJ_TYPE(val, OBJ_INST)) {
+    Instance* inst = ((Instance*)AS_OBJ(val));
+    if (inst->is_native && inst->native_id == id) {
+      *value = inst->native;
+      is_native_instance = true;
+    }
+  }
+
+  if (!is_native_instance) {
+    const char* ty_name = "$(?)";
+    if (vm->config.inst_name_fn != NULL) {
+      ty_name = vm->config.inst_name_fn(id);
+    }
+
+    ERR_INVALID_ARG_TYPE(ty_name);
     return false;
   }
 
@@ -232,6 +262,16 @@ void pkReturnStringLength(PKVM* vm, const char* value, size_t length) {
 // pkReturnValue implementation (see pocketlang.h for description).
 void pkReturnValue(PKVM* vm, PkVar value) {
   RET(*(Var*)value);
+}
+
+// pkReturnHandle implementation (see pocketlang.h for description).
+void pkReturnHandle(PKVM* vm, PkHandle* handle) {
+  RET(handle->value);
+}
+
+// pkReturnInstNative implementation (see pocketlang.h for description).
+void pkReturnInstNative(PKVM* vm, void* data, uint32_t id) {
+  RET(VAR_OBJ(newInstanceNative(vm, data, id)));
 }
 
 const char* pkStringGetData(const PkVar value) {
