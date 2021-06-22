@@ -50,16 +50,16 @@ Note that the documentations are WIP and might not be up to date.
 Pocketlang supports [tail call](https://en.wikipedia.org/wiki/Tail_call) [optimization](https://wiki.c2.com/?TailCallOptimization).
 When a function returns a call, the callee can re-use the caller's stack frame, this will optimize memory from O(n) to O(1)
 and for [tail recursive](https://www.youtube.com/watch?v=-PX0BV9hGZY) it'll completely prevent stackoverflows and yet it's faster
-then tco disabled.
+than tco disabled.
 
-All the below benchmarks are ran on, Windows10 (64bit), ASUS N552VX, Intel Core i7-6700HQ 2.6GHz
+All benchmarks below were executed on: Windows10 (64bit), ASUS N552VX, Intel Core i7-6700HQ 2.6GHz
 with 12GB SODIMM Ram. And the language versions are: pocketlang (pre-alpha), wren v0.3.0,
 python v3.7.4, ruby v2.7.2.
 
 ![preformance](https://user-images.githubusercontent.com/41085900/120123257-6f043280-c1cb-11eb-8c20-a42153268a0f.png)
 
-The source files used to run benchmarks could be found at `test/benchmarks/`
-directory. They were ran using a small python script in the test directory.
+The source files used to run benchmarks can be found at `test/benchmarks/`
+directory. They were executed using a small python script in the test directory.
 
 ## Building From Source
 
