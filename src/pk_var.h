@@ -7,7 +7,7 @@
 #define VAR_H
 
 #include "pk_buffers.h"
-#include "pk_common.h"
+#include "pk_internal.h"
 
 /** @file
  * A simple dynamic type system library for small dynamic typed languages using
@@ -204,6 +204,7 @@ DECLARE_BUFFER(Class, Class*)
 void pkByteBufferAddString(pkByteBuffer* self, PKVM* vm, const char* str,
                            uint32_t length);
 
+// Type enums of the pocketlang heap allocated types.
 typedef enum {
   OBJ_STRING,
   OBJ_LIST,
@@ -377,10 +378,13 @@ struct Instance {
   Object _super;
 
   const char* name;  //< Name of the type it belongs to.
+
   bool is_native;    //< True if it's a native type instance.
+  uint32_t native_id;   //< Unique ID of this native instance.
+
   union {
     void* native;  //< C struct pointer. // TODO:
-    Inst* ins;    //< Module instance pointer.
+    Inst* ins;     //< Module instance pointer.
   };
 };
 
@@ -441,6 +445,12 @@ Class* newClass(PKVM* vm, Script* scr, const char* name, uint32_t length);
 // false, the field value buffer of the instance would be un initialized (ie.
 // the buffer count = 0). Otherwise they'll be set to VAR_NULL.
 Instance* newInstance(PKVM* vm, Class* ty, bool initialize);
+
+// Allocate new native instance and with [data] as the native type handle and
+// return Instance*. The [id] is the unique id of the instance, this would be
+// used to check if two instances are equal and used to get the name of the
+// instance using NativeTypeNameFn callback.
+Instance* newInstanceNative(PKVM* vm, void* data, uint32_t id);
 
 /*****************************************************************************/
 /* METHODS                                                                   */

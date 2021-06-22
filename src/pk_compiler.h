@@ -6,7 +6,7 @@
 #ifndef COMPILER_H
 #define COMPILER_H
 
-#include "pk_common.h"
+#include "pk_internal.h"
 #include "pk_var.h"
 
 typedef enum {

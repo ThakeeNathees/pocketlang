@@ -157,6 +157,17 @@ typedef void (*pkWriteFn) (PKVM* vm, const char* text);
 // contain a line ending (\n or \r\n).
 typedef PkStringPtr (*pkReadFn) (PKVM* vm);
 
+// A function callback, that'll be called when a native instance (wrapper) is
+// freed by by the garbage collector, to indicate that pocketlang is done with
+// the native instance.
+typedef void (*pkFreeInstFn) (PKVM* vm, void* instance);
+
+// A function callback to get the name of the native instance from pocketlang,
+// using it's [id]. The returned string won't be copied by pocketlang so it's
+// expected to be alived since the instance is alive and recomended to return
+// a C literal string.
+typedef const char* (*pkInstNameFn) (uint32_t id);
+
 // A function callback symbol for clean/free the pkStringResult.
 typedef void (*pkResultDoneFn) (PKVM* vm, PkStringPtr result);
 
@@ -278,6 +289,9 @@ struct PkConfiguration {
   pkWriteFn write_fn;
   pkReadFn read_fn;
 
+  pkFreeInstFn free_inst_fn;
+  pkInstNameFn inst_name_fn;
+
   pkResolvePathFn resolve_path_fn;
   pkLoadScriptFn load_script_fn;
 
@@ -337,7 +351,9 @@ PK_PUBLIC PkVar pkGetArg(const PKVM* vm, int arg);
 
 PK_PUBLIC bool pkGetArgBool(PKVM* vm, int arg, bool* value);
 PK_PUBLIC bool pkGetArgNumber(PKVM* vm, int arg, double* value);
-PK_PUBLIC bool pkGetArgString(PKVM* vm, int arg, const char** value);
+PK_PUBLIC bool pkGetArgString(PKVM* vm, int arg,
+                              const char** value, uint32_t* length);
+PK_PUBLIC bool pkGetArgInst(PKVM* vm, int arg, uint32_t id, void** value);
 PK_PUBLIC bool pkGetArgValue(PKVM* vm, int arg, PkVarType type, PkVar* value);
 
 // The functions follow are used to set the return value of the current native
@@ -349,6 +365,9 @@ PK_PUBLIC void pkReturnNumber(PKVM* vm, double value);
 PK_PUBLIC void pkReturnString(PKVM* vm, const char* value);
 PK_PUBLIC void pkReturnStringLength(PKVM* vm, const char* value, size_t len);
 PK_PUBLIC void pkReturnValue(PKVM* vm, PkVar value);
+PK_PUBLIC void pkReturnHandle(PKVM* vm, PkHandle* handle);
+
+PK_PUBLIC void pkReturnInstNative(PKVM* vm, void* data, uint32_t id);
 
 // Returns the cstring pointer of the given string. Make sure if the [value] is
 // a string before calling this function, otherwise it'll fail an assertion.
@@ -381,6 +400,12 @@ PK_PUBLIC PkHandle* pkNewModule(PKVM* vm, const char* name);
 
 // Create and return a new fiber around the function [fn].
 PK_PUBLIC PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn);
+
+// Create and return a native instance around the [data]. The [id] is the
+// unique id of the instance, this would be used to check if two instances are
+// equal and used to get the name of the instance using NativeTypeNameFn
+// callback.
+PK_PUBLIC PkHandle* pkNewInstNative(PKVM* vm, void* data, uint32_t id);
 
 // TODO: The functions below will push the primitive values on the stack
 // and return it's pointer as a PkVar. It's useful to convert your primitive

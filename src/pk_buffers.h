@@ -6,7 +6,7 @@
 #ifndef BUFFERS_TEMPLATE_H
 #define BUFFERS_TEMPLATE_H
 
-#include "pk_common.h"
+#include "pk_internal.h"
 
 // The macro 'DECLARE_BUFFER()' emulate the C++ template to declare and define
 // different types of buffer objects.

@@ -3,21 +3,14 @@
  *  Distributed Under The MIT License
  */
 
-#include "common.h"
+#include "internal.h"
+
+#include "modules.h"
 
 // FIXME: Everything below here is temporary and for testing.
 
 void repl(PKVM* vm, const PkCompileOptions* options);
 const char* read_line(uint32_t* length);
-
-void registerModules(PKVM* vm);
-
-// Path public functions (TODO: should I add a header for that?)
-bool pathIsAbsolute(const char* path);
-void pathGetDirName(const char* path, size_t* length);
-size_t pathNormalize(const char* path, char* buff, size_t buff_size);
-size_t pathJoin(const char* from, const char* path, char* buffer,
-                size_t buff_size);
 
 // ---------------------------------------
 
@@ -143,6 +136,10 @@ int main(int argc, char** argv) {
   config.error_fn = errorFunction;
   config.write_fn = writeFunction;
   config.read_fn = readFunction;
+
+  config.free_inst_fn = freeObj;
+  config.inst_name_fn = getObjName;
+
   config.load_script_fn = loadScript;
   config.resolve_path_fn = resolvePath;
 
