@@ -3,13 +3,15 @@
 // which makes more faster than other bytecode interpreted
 // VM language listed here.
 
-var start = +new Date();
+var start = process.hrtime();
 
-list = []
-for (var i = 0; i < 10000000; i++) { list.push(i) }
-sum = 0
-for (var i = 0; i < list.length; i++) { sum += list[i]; }
-console.log(sum)
+var i=0, list=[];
+for (; i < 10000000; i++) list.push(i);
 
-var end = +new Date();
-console.log('elapsed: ' + (end - start)/1000 + 's');
+var sum = 0;
+for (i=0; i < list.length; i++) sum += list[i];
+console.log(sum);
+
+var end = process.hrtime(start);
+var secs = (end[0] + end[1] / 1e9).toFixed(6) + 's';
+console.log('elapsed:', secs);

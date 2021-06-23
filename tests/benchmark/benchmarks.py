@@ -6,11 +6,11 @@ from os.path import join
 
 ## All benchmark files. ## TODO: pass args for iterations.
 benchmarks = {
-  "factors"      : ['.pk', '.py', '.rb', '.wren'],
-  "fib"          : ['.pk', '.py', '.rb', '.wren'],
-  "list"         : ['.pk', '.py', '.rb'],
-  "loop"         : ['.pk', '.py', '.rb', ".wren"],
-  "primes"       : ['.pk', '.py', '.rb', ".wren"],
+  "factors"      : ['.pk', '.py', '.rb', '.js', '.wren'],
+  "fib"          : ['.pk', '.py', '.rb', '.js', '.wren'],
+  "list"         : ['.pk', '.py', '.rb', '.js'],
+  "loop"         : ['.pk', '.py', '.rb', '.js', '.wren'],
+  "primes"       : ['.pk', '.py', '.rb', '.js', '.wren'],
 }
 
 def main():
@@ -24,6 +24,7 @@ def run_all_benchmarks():
     if file.endswith('.py'  ) : return 'python'
     if file.endswith('.rb'  ) : return 'ruby'
     if file.endswith('.wren') : return 'wren'
+    if file.endswith('.js'  ) : return 'node'
     assert False
 
   for bm_name in benchmarks:
