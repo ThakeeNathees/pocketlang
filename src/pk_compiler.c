@@ -105,9 +105,8 @@ typedef enum {
   TK_SRIGHT,     // >>
   TK_SLEFT,      // <<
 
-  //TODO:
-  //TK_SRIGHTEQ  // >>=
-  //TK_SLEFTEQ   // <<=
+  TK_SRIGHTEQ,   // >>=
+  TK_SLEFTEQ,    // <<=
 
   // Keywords.
   TK_MODULE,     // module
@@ -808,17 +807,27 @@ static void lexToken(Compiler* compiler) {
         return;
 
       case '>':
-        if (matchChar(compiler, '>'))
-          setNextToken(compiler, TK_SRIGHT);
-        else
+        if (matchChar(compiler, '>')) {
+          if (matchChar(compiler, '=')) {
+            setNextToken(compiler, TK_SRIGHTEQ);
+          } else {
+            setNextToken(compiler, TK_SRIGHT);
+          }
+        } else {
           setNextTwoCharToken(compiler, '=', TK_GT, TK_GTEQ);
+        }
         return;
 
       case '<':
-        if (matchChar(compiler, '<'))
-          setNextToken(compiler, TK_SLEFT);
-        else
+        if (matchChar(compiler, '<')) {
+          if (matchChar(compiler, '=')) {
+            setNextToken(compiler, TK_SLEFTEQ);
+          } else {
+            setNextToken(compiler, TK_SLEFT);
+          }
+        } else {
           setNextTwoCharToken(compiler, '=', TK_LT, TK_LTEQ);
+        }
         return;
 
       case '+':
@@ -991,6 +1000,8 @@ static bool matchAssignment(Compiler* compiler) {
   if (match(compiler, TK_ANDEQ)) return true;
   if (match(compiler, TK_OREQ)) return true;
   if (match(compiler, TK_XOREQ)) return true;
+  if (match(compiler, TK_SRIGHTEQ)) return true;
+  if (match(compiler, TK_SLEFTEQ)) return true;
   return false;
 }
 
@@ -1180,6 +1191,8 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_XOREQ      */   NO_RULE,
   /* TK_SRIGHT     */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_SLEFT      */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
+  /* TK_SRIGHTEQ   */   NO_RULE,
+  /* TK_SLEFTEQ    */   NO_RULE,
   /* TK_MODULE     */   NO_RULE,
   /* TK_CLASS      */   NO_RULE,
   /* TK_FROM       */   NO_RULE,
@@ -1876,10 +1889,12 @@ static void emitAssignment(Compiler* compiler, TokenType assignment) {
     case TK_MINUSEQ: emitOpcode(compiler, OP_SUBTRACT); break;
     case TK_STAREQ: emitOpcode(compiler, OP_MULTIPLY); break;
     case TK_DIVEQ: emitOpcode(compiler, OP_DIVIDE); break;
+    case TK_MODEQ: emitOpcode(compiler, OP_MOD); break;
     case TK_ANDEQ: emitOpcode(compiler, OP_BIT_AND); break;
     case TK_OREQ: emitOpcode(compiler, OP_BIT_OR); break;
     case TK_XOREQ: emitOpcode(compiler, OP_BIT_XOR); break;
-    case TK_MODEQ: emitOpcode(compiler, OP_MOD); break;
+    case TK_SRIGHTEQ: emitOpcode(compiler, OP_BIT_RSHIFT); break;
+    case TK_SLEFTEQ: emitOpcode(compiler, OP_BIT_LSHIFT); break;
     default:
       UNREACHABLE();
       break;
