@@ -31,6 +31,8 @@ l3 = l2 + l1 + l2; assert(l3 == [1,1,2,3,1,1,1,2,3])
 assert(!('abc' in 'a'))
 assert(42 in [12, 42, 3.14])
 assert(!('a' in ['abc']))
+assert('key' in {'key':'value'})
+assert(!('foo' in {'bar':'baz'}))
 
 ## Builtin functions tests.
 assert(to_string(42) == '42')

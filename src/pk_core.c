@@ -1302,7 +1302,11 @@ bool varContains(PKVM* vm, Var elem, Var container) {
       return false;
     } break;
 
-    case OBJ_MAP:
+    case OBJ_MAP: {
+      Map* map = (Map*)AS_OBJ(container);
+      return !IS_UNDEF(mapGet(map, elem));
+    } break;
+
     case OBJ_RANGE:
     case OBJ_SCRIPT:
     case OBJ_FUNC:
