@@ -30,11 +30,22 @@ HASH_CHECK_LIST = [
   "../src/pk_core.c",
 ]
 
+## A list of extension to perform static checks, of all the files in the
+## SOURCE_DIRS.
+CHECK_EXTENTIONS = ('.c', '.h', '.py', '.pk', '.js')
+
+## A list of strings, if a line contains it we allow it to be longer than
+## 79 characters, It's not "the correct way" but it works.
+ALLOW_LONG = ('http://', 'https://', '<script ', '<link ')
+
 ## A list of directory, contains C source files to perform static checks.
-## This will include '.c', '.h', '.py' and '.pk' files.
-C_SOURCE_DIRS = [
+## This will include all files with extension from CHECK_EXTENTIONS.
+SOURCE_DIRS = [
   "../src/",
   "../cli/",
+
+  "../docs/",
+  "../docs/try/",
 ]
 
 ## A list of common header that just copied in different projects.
@@ -50,7 +61,7 @@ checks_failed = False
 
 def main():
   check_fnv1_hash(to_abs_paths(HASH_CHECK_LIST))
-  check_static(to_abs_paths(C_SOURCE_DIRS))
+  check_static(to_abs_paths(SOURCE_DIRS))
   check_common_header_match(to_abs_paths(COMMON_HEADERS))
   if checks_failed:
     sys.exit(1)
@@ -81,11 +92,10 @@ def check_fnv1_hash(sources):
 ## Check each source file ('.c', '.h', '.py') in the [dirs] contains tabs,
 ## more than 79 characters, and trailing white space.
 def check_static(dirs):
-  valid_ext = ('.c', '.h', '.py', '.pk')
   for dir in dirs:
     
     for file in listdir(dir):
-      if not file.endswith(valid_ext): continue
+      if not file.endswith(CHECK_EXTENTIONS): continue
       if os.path.isdir(join(dir, file)): continue
       
       fp = open(join(dir, file), 'r')
@@ -104,7 +114,11 @@ def check_static(dirs):
           report_error(f"{_location} - contains tab(s) ({repr(line)}).")
             
         if len(line) >= 80:
-          if 'http://' in line or 'https://' in line: continue
+          skip = False
+          for ignore in ALLOW_LONG:
+            if ignore in line: skip = True; break
+          if skip: continue
+          
           _location = location(file_path, line_no)
           report_error(
             f"{_location} - contains {len(line)} (> 79) characters.")

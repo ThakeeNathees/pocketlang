@@ -68,12 +68,28 @@ def call(fn, x)
 	return func print('foo') end
 end
 
-# Concatenative call operator '->'
+# Classes (WIP)
+#--------------
 
-str_lower(str_strip('Foo ')) # This can be written as below
-'Foo ' -> str_strip -> str_lower
+class _Vector
+  x = 0; y = 0
+end
 
-'foo' -> print # similar to print('foo')
+def Vector(x, y)
+  ret = _Vector()
+  ret.x = x; ret.y = y
+  return ret
+end
+
+def vecAdd(v1, v2)
+  return Vector(v1.x + v2.x,
+                v1.y + v2.y)
+end
+
+v1 = Vector(1, 2)
+v2 = Vector(3, 4)
+v3 = vecAdd(v1, v2)
+print(v3) # [_Vector: x=4, y=6]
 
 # Fibers & Coroutine
 #-------------------
