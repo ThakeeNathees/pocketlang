@@ -8,12 +8,14 @@ instruction pointer) for that function, which can be run and once yielded
 resumed.
 
 ```ruby
+import Fiber
+
 def fn(h, w)
 	print(h, w)
 end
 
-fb = fiber_new(fn)              # Create a fiber.
-fiber_run(fb, 'hello', 'world') # Run the fiber.
+fb = Fiber.new(fn)              # Create a fiber.
+Fiber.run(fb, 'hello', 'world') # Run the fiber.
 ```
 
 ## %% Yielding %%
@@ -24,36 +26,42 @@ from (not the caller of the function). And you can pass values between
 fibers when they yield.
 
 ```ruby
+import Fiber
+
 def fn()
 	print('running')
 	yield()
 	print('resumed')
 end
 
-fb = fiber_new(fn)
-fiber_run(fb)    # Prints 'running'.
+fb = Fiber.new(fn)
+Fiber.run(fb)    # Prints 'running'.
 print('before resumed')
-fiber_resume(fb) # Prints 'resumed'.
+Fiber.resume(fb) # Prints 'resumed'.
 ```
 
 Yield from the fiber with a value.
 
 ```ruby
+import Fiber
+
 def fn()
 	print('running')
 	yield(42) # Return 42.
 	print('resumed')
 end
 
-fb = fiber_new(fn)
-val = fiber_run(fb) # Prints 'running'.
+fb = Fiber.new(fn)
+val = Fiber.run(fb) # Prints 'running'.
 print(val)          # Prints 42.
-fiber_resume(fb)    # Prints 'resumed'.
+Fiber.resume(fb)    # Prints 'resumed'.
 ```
 
 Resume the fiber with a value.
 
 ```ruby
+import Fiber
+
 def fn()
 	print('running')
 	val = yield() # Resumed value.
@@ -61,28 +69,30 @@ def fn()
 	print('resumed')
 end
 
-fb = fiber_new(fn)
-val = fiber_run(fb)  # Prints 'running'.
-fiber_resume(fb, 42) # Resume with 42, Prints 'resumed'.
+fb = Fiber.new(fn)
+val = Fiber.run(fb)  # Prints 'running'.
+Fiber.resume(fb, 42) # Resume with 42, Prints 'resumed'.
 ```
 
 Once a fiber is done execution, trying to resume it will cause a runtime
-error. To check if the fiber is finished it's execution use the function
-`fiber_is_done` and use the function `fiber_get_func` to get it's function,
+error. To check if the fiber is finished check its attribute
+`is_done` and use the attribute `function` to get it's function,
 which could be used to create a new fiber to "re-start" the fiber.
 
 ```ruby
-fiber_run(fb = fiber_new(
+import Fiber
+
+Fiber.run(fb = Fiber.new(
 func()
   for i in 0..5 do
     yield(i)
   end
 end))
 
-while not fiber_is_done(fb)
-	fiber_resume(fb)
+while not fb.is_done
+	Fiber.resume(fb)
 end
 
 # Get the function from the fiber.
-fn = fiber_get_func(fb)
+fn = Fiber.get_func(fb)
 ```

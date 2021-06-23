@@ -1,7 +1,6 @@
 
 // In good first issue
-- Refactor fiber into a module and is_done as an attribute.
-- floats like ".5".
+- Refactor is_done as an attribute.
 - Implement argparse.
 
 // To implement.

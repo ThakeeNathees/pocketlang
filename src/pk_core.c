@@ -663,87 +663,6 @@ DEF(coreMapRemove,
   RET(mapRemoveKey(vm, map, key));
 }
 
-// Fiber functions.
-// ----------------
-
-DEF(coreFiberNew,
-  "fiber_new(fn:Function) -> fiber\n"
-  "Create and return a new fiber from the given function [fn].") {
-
-  Function* fn;
-  if (!validateArgFunction(vm, 1, &fn)) return;
-  RET(VAR_OBJ(newFiber(vm, fn)));
-}
-
-DEF(coreFiberGetFunc,
-  "fiber_get_func(fb:Fiber) -> function\n"
-  "Retruns the fiber's functions. Which is usefull if you want to re-run the "
-  "fiber, you can get the function and crate a new fiber.") {
-
-  Fiber* fb;
-  if (!validateArgFiber(vm, 1, &fb)) return;
-  RET(VAR_OBJ(fb->func));
-}
-
-DEF(coreFiberIsDone,
-  "fiber_is_done(fb:Fiber) -> bool\n"
-  "Returns true if the fiber [fb] is done running and can no more resumed.") {
-
-  Fiber* fb;
-  if (!validateArgFiber(vm, 1, &fb)) return;
-  RET(VAR_BOOL(fb->state == FIBER_DONE));
-}
-
-DEF(coreFiberRun,
-  "fiber_run(fb:Fiber, ...) -> var\n"
-  "Runs the fiber's function with the provided arguments and returns it's "
-  "return value or the yielded value if it's yielded.") {
-
-  int argc = ARGC;
-  if (argc == 0) // Missing the fiber argument.
-    RET_ERR(newString(vm, "Missing argument - fiber."));
-
-  Fiber* fb;
-  if (!validateArgFiber(vm, 1, &fb)) return;
-
-  // Buffer of argument to call vmPrepareFiber().
-  Var* args[MAX_ARGC];
-
-  // ARG(1) is fiber, function arguments are ARG(2), ARG(3), ... ARG(argc).
-  for (int i = 1; i < argc; i++) {
-    args[i - 1] = &ARG(i + 1);
-  }
-
-  // Switch fiber and start execution.
-  if (vmPrepareFiber(vm, fb, argc - 1, args)) {
-    ASSERT(fb == vm->fiber, OOPS);
-    fb->state = FIBER_RUNNING;
-  }
-}
-
-DEF(coreFiberResume,
-  "fiber_resume(fb:Fiber) -> var\n"
-  "Resumes a yielded function from a previous call of fiber_run() function. "
-  "Return it's return value or the yielded value if it's yielded.") {
-
-  int argc = ARGC;
-  if (argc == 0) // Missing the fiber argument.
-    RET_ERR(newString(vm, "Expected at least 1 argument(s)."));
-  if (argc > 2) // Can only accept 1 argument for resume.
-    RET_ERR(newString(vm, "Expected at most 2 argument(s)."));
-
-  Fiber* fb;
-  if (!validateArgFiber(vm, 1, &fb)) return;
-
-  Var value = (argc == 1) ? VAR_NULL : ARG(2);
-
-  // Switch fiber and resume execution.
-  if (vmSwitchFiber(vm, fb, &value)) {
-    ASSERT(fb == vm->fiber, OOPS);
-    fb->state = FIBER_RUNNING;
-  }
-}
-
 /*****************************************************************************/
 /* CORE MODULE METHODS                                                       */
 /*****************************************************************************/
@@ -821,6 +740,65 @@ static void moduleAddFunctionInternal(PKVM* vm, Script* script,
 
 // 'lang' library methods.
 // -----------------------
+
+DEF(stdFiberNew,
+  "new(fn:Function) -> fiber\n"
+  "Create and return a new fiber from the given function [fn].") {
+
+  Function* fn;
+  if (!validateArgFunction(vm, 1, &fn)) return;
+  RET(VAR_OBJ(newFiber(vm, fn)));
+}
+
+DEF(stdFiberRun,
+  "run(fb:Fiber, ...) -> var\n"
+  "Runs the fiber's function with the provided arguments and returns it's "
+  "return value or the yielded value if it's yielded.") {
+
+  int argc = ARGC;
+  if (argc == 0) // Missing the fiber argument.
+    RET_ERR(newString(vm, "Missing argument - fiber."));
+
+  Fiber* fb;
+  if (!validateArgFiber(vm, 1, &fb)) return;
+
+  // Buffer of argument to call vmPrepareFiber().
+  Var* args[MAX_ARGC];
+
+  // ARG(1) is fiber, function arguments are ARG(2), ARG(3), ... ARG(argc).
+  for (int i = 1; i < argc; i++) {
+    args[i - 1] = &ARG(i + 1);
+  }
+
+  // Switch fiber and start execution.
+  if (vmPrepareFiber(vm, fb, argc - 1, args)) {
+    ASSERT(fb == vm->fiber, OOPS);
+    fb->state = FIBER_RUNNING;
+  }
+}
+
+DEF(stdFiberResume,
+  "fiber_resume(fb:Fiber) -> var\n"
+  "Resumes a yielded function from a previous call of fiber_run() function. "
+  "Return it's return value or the yielded value if it's yielded.") {
+
+  int argc = ARGC;
+  if (argc == 0) // Missing the fiber argument.
+    RET_ERR(newString(vm, "Expected at least 1 argument(s)."));
+  if (argc > 2) // Can only accept 1 argument for resume.
+    RET_ERR(newString(vm, "Expected at most 2 argument(s)."));
+
+  Fiber* fb;
+  if (!validateArgFiber(vm, 1, &fb)) return;
+
+  Var value = (argc == 1) ? VAR_NULL : ARG(2);
+
+  // Switch fiber and resume execution.
+  if (vmSwitchFiber(vm, fb, &value)) {
+    ASSERT(fb == vm->fiber, OOPS);
+    fb->state = FIBER_RUNNING;
+  }
+}
 
 DEF(stdLangClock,
   "clock() -> num\n"
@@ -1038,13 +1016,6 @@ void initializeCore(PKVM* vm) {
   // Map functions.
   INITIALIZE_BUILTIN_FN("map_remove",  coreMapRemove,  2);
 
-  // Fiber functions.
-  INITIALIZE_BUILTIN_FN("fiber_new",      coreFiberNew,     1);
-  INITIALIZE_BUILTIN_FN("fiber_get_func", coreFiberGetFunc, 1);
-  INITIALIZE_BUILTIN_FN("fiber_run",      coreFiberRun,    -1);
-  INITIALIZE_BUILTIN_FN("fiber_is_done",  coreFiberIsDone,  1);
-  INITIALIZE_BUILTIN_FN("fiber_resume",   coreFiberResume, -1);
-
   // Core Modules /////////////////////////////////////////////////////////////
 
   Script* lang = newModuleInternal(vm, "lang");
@@ -1069,6 +1040,11 @@ void initializeCore(PKVM* vm) {
   MODULE_ADD_FN(math, "tan",   stdMathTangent, 1);
 
   // TODO: low priority - sinh, cosh, tanh, asin, acos, atan.
+
+  Script* Fiber = newModuleInternal(vm, "Fiber");
+  MODULE_ADD_FN(Fiber, "new",      stdFiberNew,     1);
+  MODULE_ADD_FN(Fiber, "run",      stdFiberRun,    -1);
+  MODULE_ADD_FN(Fiber, "resume",   stdFiberResume, -1);
 
   // Note that currently it's mutable (since it's a global variable, not
   // constant and pocketlang doesn't support constant) so the user shouldn't
@@ -1459,8 +1435,22 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     }
 
     case OBJ_FIBER:
-      TODO;
-      UNREACHABLE();
+      {
+        Fiber* fb = (Fiber*)obj;
+        SWITCH_ATTRIB(attrib->data) {
+
+          CASE_ATTRIB("is_done", 0x789c2706):
+            return VAR_BOOL(fb->state == FIBER_DONE);
+
+          CASE_ATTRIB("function", 0x9ed64249):
+            return VAR_OBJ(fb->func);
+
+          CASE_DEFAULT:
+            ERR_NO_ATTRIB(vm, on, attrib);
+            return VAR_NULL;
+          }
+        UNREACHABLE();
+      }
 
     case OBJ_CLASS:
       TODO;
