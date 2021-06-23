@@ -1889,10 +1889,10 @@ static void emitAssignment(Compiler* compiler, TokenType assignment) {
     case TK_MINUSEQ: emitOpcode(compiler, OP_SUBTRACT); break;
     case TK_STAREQ: emitOpcode(compiler, OP_MULTIPLY); break;
     case TK_DIVEQ: emitOpcode(compiler, OP_DIVIDE); break;
+    case TK_MODEQ: emitOpcode(compiler, OP_MOD); break;
     case TK_ANDEQ: emitOpcode(compiler, OP_BIT_AND); break;
     case TK_OREQ: emitOpcode(compiler, OP_BIT_OR); break;
     case TK_XOREQ: emitOpcode(compiler, OP_BIT_XOR); break;
-    case TK_MODEQ: emitOpcode(compiler, OP_MOD); break;
     case TK_SRIGHTEQ: emitOpcode(compiler, OP_BIT_RSHIFT); break;
     case TK_SLEFTEQ: emitOpcode(compiler, OP_BIT_LSHIFT); break;
     default:
