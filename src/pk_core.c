@@ -912,6 +912,73 @@ DEF(stdMathTangent,
   RET(VAR_NUM(tan(rad)));
 }
 
+DEF(stdMathSinh,
+  "sinh(val) -> val\n"
+  "Return the hyperbolic sine value of the argument [val].") {
+
+  double val;
+  if (!validateNumeric(vm, ARG(1), &val, "Argument 1")) return;
+  RET(VAR_NUM(sinh(val)));
+}
+
+DEF(stdMathCosh,
+  "cosh(val) -> val\n"
+  "Return the hyperbolic cosine value of the argument [val].") {
+
+  double val;
+  if (!validateNumeric(vm, ARG(1), &val, "Argument 1")) return;
+  RET(VAR_NUM(cosh(val)));
+}
+
+DEF(stdMathTanh,
+  "tanh(val) -> val\n"
+  "Return the hyperbolic tangent value of the argument [val].") {
+
+  double val;
+  if (!validateNumeric(vm, ARG(1), &val, "Argument 1")) return;
+  RET(VAR_NUM(tanh(val)));
+}
+
+DEF(stdMathArcSine,
+  "asin(num) -> num\n"
+  "Return the arcsine value of the argument [num] which is an angle "
+  "expressed in radians.") {
+
+  double num;
+
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
+
+  if (num < -1 || 1 < num)
+    RET_ERR(newString(vm, "Argument should be between -1 and +1"));
+
+  RET(VAR_NUM(asin(num)));
+}
+
+DEF(stdMathArcCosine,
+  "acos(num) -> num\n"
+  "Return the arc cosine value of the argument [num] which is "
+  "an angle expressed in radians.") {
+
+  double num;
+
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
+
+  if (num < -1 || 1 < num)
+    RET_ERR(newString(vm, "Argument should be between -1 and +1"));
+
+  RET(VAR_NUM(acos(num)));
+}
+
+DEF(stdMathArcTangent,
+  "atan(num) -> num\n"
+  "Return the arc tangent value of the argument [num] which is "
+  "an angle expressed in radians.") {
+
+  double num;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
+  RET(VAR_NUM(atan(num)));
+}
+
 // 'Fiber' module methods.
 // -----------------------
 
@@ -1037,17 +1104,22 @@ void initializeCore(PKVM* vm) {
 #endif
 
   Script* math = newModuleInternal(vm, "math");
-  MODULE_ADD_FN(math, "floor", stdMathFloor,   1);
-  MODULE_ADD_FN(math, "ceil",  stdMathCeil,    1);
-  MODULE_ADD_FN(math, "pow",   stdMathPow,     2);
-  MODULE_ADD_FN(math, "sqrt",  stdMathSqrt,    1);
-  MODULE_ADD_FN(math, "abs",   stdMathAbs,     1);
-  MODULE_ADD_FN(math, "sign",  stdMathSign,    1);
-  MODULE_ADD_FN(math, "hash",  stdMathHash,    1);
-  MODULE_ADD_FN(math, "sin",   stdMathSine,    1);
-  MODULE_ADD_FN(math, "cos",   stdMathCosine,  1);
-  MODULE_ADD_FN(math, "tan",   stdMathTangent, 1);
-  // TODO: low priority - sinh, cosh, tanh, asin, acos, atan.
+  MODULE_ADD_FN(math, "floor", stdMathFloor,       1);
+  MODULE_ADD_FN(math, "ceil",  stdMathCeil,        1);
+  MODULE_ADD_FN(math, "pow",   stdMathPow,         2);
+  MODULE_ADD_FN(math, "sqrt",  stdMathSqrt,        1);
+  MODULE_ADD_FN(math, "abs",   stdMathAbs,         1);
+  MODULE_ADD_FN(math, "sign",  stdMathSign,        1);
+  MODULE_ADD_FN(math, "hash",  stdMathHash,        1);
+  MODULE_ADD_FN(math, "sin",   stdMathSine,        1);
+  MODULE_ADD_FN(math, "cos",   stdMathCosine,      1);
+  MODULE_ADD_FN(math, "tan",   stdMathTangent,     1);
+  MODULE_ADD_FN(math, "sinh",  stdMathSinh,        1);
+  MODULE_ADD_FN(math, "cosh",  stdMathCosh,        1);
+  MODULE_ADD_FN(math, "tanh",  stdMathTanh,        1);
+  MODULE_ADD_FN(math, "asin",  stdMathArcSine,     1);
+  MODULE_ADD_FN(math, "acos",  stdMathArcCosine,   1);
+  MODULE_ADD_FN(math, "atan",  stdMathArcTangent,  1);
 
   // Note that currently it's mutable (since it's a global variable, not
   // constant and pocketlang doesn't support constant) so the user shouldn't
