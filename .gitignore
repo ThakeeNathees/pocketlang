@@ -1,7 +1,9 @@
 
 # PocketLang ignore list
+.idea/
 .vs/
 .vscode/
+.DS_Store
 build/
 
 # Prerequisites
