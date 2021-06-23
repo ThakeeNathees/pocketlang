@@ -1477,9 +1477,15 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     }
 
     OPCODE(IN):
-      // TODO: Implement bool varContaines(vm, on, value);
-      TODO;
-      UNREACHABLE();
+    {
+      // Don't pop yet, we need the reference for gc.
+      Var container = PEEK(-1), elem = PEEK(-2);
+      bool contains = varContains(vm, elem, container);
+      DROP(); DROP(); // container, elem
+      PUSH(VAR_BOOL(contains));
+      CHECK_ERROR();
+      DISPATCH();
+    }
 
     OPCODE(REPL_PRINT):
     {

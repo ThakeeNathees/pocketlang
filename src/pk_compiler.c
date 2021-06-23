@@ -218,10 +218,8 @@ typedef enum {
   PREC_LOWEST,
   PREC_LOGICAL_OR,    // or
   PREC_LOGICAL_AND,   // and
-  PREC_LOGICAL_NOT,   // not
   PREC_EQUALITY,      // == !=
-  PREC_IN,            // in
-  PREC_IS,            // is
+  PREC_TEST,          // in is
   PREC_COMPARISION,   // < > <= >=
   PREC_BITWISE_OR,    // |
   PREC_BITWISE_XOR,   // ^
@@ -230,7 +228,7 @@ typedef enum {
   PREC_RANGE,         // ..
   PREC_TERM,          // + -
   PREC_FACTOR,        // * / %
-  PREC_UNARY,         // - ! ~
+  PREC_UNARY,         // - ! ~ not
   PREC_CHAIN_CALL,    // ->
   PREC_CALL,          // ()
   PREC_SUBSCRIPT,     // []
@@ -1192,10 +1190,10 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_FUNC       */ { exprFunc,      NULL,             NO_INFIX },
   /* TK_END        */   NO_RULE,
   /* TK_NULL       */ { exprValue,     NULL,             NO_INFIX },
-  /* TK_IN         */ { NULL,          exprBinaryOp,     PREC_IN },
+  /* TK_IN         */ { NULL,          exprBinaryOp,     PREC_TEST },
   /* TK_AND        */ { NULL,          exprAnd,          PREC_LOGICAL_AND },
   /* TK_OR         */ { NULL,          exprOr,           PREC_LOGICAL_OR },
-  /* TK_NOT        */ { exprUnaryOp,   NULL,             PREC_LOGICAL_NOT },
+  /* TK_NOT        */ { exprUnaryOp,   NULL,             PREC_UNARY },
   /* TK_TRUE       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_FALSE      */ { exprValue,     NULL,             NO_INFIX },
   /* TK_DO         */   NO_RULE,

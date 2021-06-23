@@ -27,6 +27,11 @@ l1 = [1] + []; assert(l1.length == 1); assert(l1[0] == 1)
 l2 = l1 + [1,2,3]; assert(l2.length == 4); assert(l2 == [1,1,2,3])
 l3 = l2 + l1 + l2; assert(l3 == [1,1,2,3,1,1,1,2,3])
 
+## in tests.
+assert(!('abc' in 'a'))
+assert(42 in [12, 42, 3.14])
+assert(!('a' in ['abc']))
+
 ## Builtin functions tests.
 assert(to_string(42) == '42')
 
