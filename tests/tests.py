@@ -6,7 +6,7 @@ import os, sys, platform
 import subprocess, json, re
 from os.path import join, abspath, dirname, relpath
 
-## TODO: Re write this in doctest (https://github.com/onqtam/doctest)
+## TODO: Re-write this in doctest (https://github.com/onqtam/doctest)
 
 ## The absolute path of this file, when run as a script.
 ## This file is not intended to be included in other files at the moment.
@@ -108,7 +108,7 @@ COLORS = {
     'END'       : '\033[0m' ,
 }
 
-## All tests messages are written to stdour because they're mixed
+## All tests messages are written to stdout because they're mixed
 ## and github actions io calls seems asynchronous. And ANSI colors
 ## not seems to working with multiline in github actions, so
 ## printing the message line by line.
