@@ -34,66 +34,46 @@
 		<div id="content">
 			<h1>Build From Source  <a href="#build-from-source" name="build-from-source" class="anchor">#</a></h1>
 <h2>Without a build script  <a href="#without-a-build-script" name="without-a-build-script" class="anchor">#</a></h2>
-<p>It can be build from source easily without any dependency, or additional
-requirements except for a c99 compatible compiler. And build systems are
-optional. It can be compiled with the following command.</p>
-<p>Using gcc</p>
-<div class="codehilite"><pre><span></span><span>gcc -o pocket cli/*.c src/*.c -Isrc/include -lm -Wno-int-to-pointer-cast</span>
+<p>It can be build from source easily without any dependencies, or additional
+requirements except for a c99 compatible compiler. It can be compiled with the
+following command.</p>
+<p>GCC / MinGw / Clang (alias with gcc)</p>
+<div class="codehilite"><pre><span></span><span>gcc -o pocket cli/*.c src/*.c -Isrc/include -lm</span>
 </pre></div>
 
 
-<p>Using MSVC</p>
+<p>MSVC</p>
 <div class="codehilite"><pre><span></span><span>cl /Fepocket cli/*.c src/*.c /Isrc/include &amp;&amp; rm *.obj</span>
 </pre></div>
 
 
-<p>For other compiler/IDE</p>
+<p>Makefile</p>
+<div class="codehilite"><pre><span></span><span>make</span>
+</pre></div>
+
+
+<p>To run make file on windows with <code>mingw</code>, you require <code>make</code> and <code>find</code> unix tools in your path.
+Which you can get from <a href="https://www.msys2.org/">msys2</a> or <a href="https://www.cygwin.com/">cygwin</a>. Run
+<code>set PATH=&lt;path-to-env/usr/bin/&gt;;%PATH% &amp;&amp; make</code>, this will override the system <code>find</code> command with
+unix <code>find</code> for the current session, and run the <code>make</code> script.</p>
+<p>Windows batch script</p>
+<div class="codehilite"><pre><span></span><span>build</span>
+</pre></div>
+
+
+<p>You don't have to run the script from a Visual Studio .NET developer command
+prompt, It'll search for the MSVS installation path and setup the build
+environment.</p>
+<h3>For other compiler/IDE</h3>
 <ol>
 <li>Create an empty project file / makefile.</li>
 <li>Add all C files in the src directory.</li>
-<li>Add all C files in the cli directory (<strong>not</strong> recursively).</li>
+<li>Add all C files in the cli directory (<strong>NOT</strong> recursively).</li>
 <li>Add <code>src/include</code> to include path.</li>
 <li>Compile.</li>
 </ol>
-<p>If you weren't able to compile it, please report by <a href="https://github.com/ThakeeNathees/pocketlang/issues/new">opening an issue</a>.</p>
-<h2>Using a build script  <a href="#using-a-build-script" name="using-a-build-script" class="anchor">#</a></h2>
-<p>You could find some of the build script for different build system in the <code>build/</code>
-directory. If you don't find a script for your preferred system, request on github
-by <a href="https://github.com/ThakeeNathees/pocketlang/issues/new">opening an issue</a> or
-feel free to contribute one.</p>
-<h2>Makefile  <a href="#makefile" name="makefile" class="anchor">#</a></h2>
-<div class="codehilite"><pre><span></span><span>cd build &amp;&amp; make</span>
-</pre></div>
-
-
-<p>I haven't tested the makefile on different platforms except for "windows subsystem for linux".
-And the makefile is still need to be improved. If you find any problems with the script or
-have any improvements, let us know in <a href="https://github.com/ThakeeNathees/pocketlang">github</a>.</p>
-<h2>Batch script with MSVC  <a href="#batch-script-with-msvc" name="batch-script-with-msvc" class="anchor">#</a></h2>
-<div class="codehilite"><pre><span></span><span>cd build &amp;&amp; build</span>
-</pre></div>
-
-
-<p>You don't need to run the script from a Visual Studio .NET Command Prompt,
-It'll search for the MSVS installation path and use it to compile. But if it
-can't, try running on VS command prompt.</p>
-<h2>SCons  <a href="#scons" name="scons" class="anchor">#</a></h2>
-<p>pocketlang mainly focused on <a href="https://www.scons.org/">scons</a>, and it's
-recommended to use it for contributions since it has various configurations
-and compiler support. It's a python based build system. You need to have
-python 3.6+ installed in your development environment. To install scons run
-<code>python3 -m pip install scons</code>. Make sure it's version is 3.0+ and for Visual
-Studio 2019 it require v3.1.1+. In Linux if scons using python2 instead of 3
-you'll have to edit <code>/usr/local/bin/scons</code> or <code>~/.local/bin/scons</code> to ensure
-that it points to <code>/usr/bin/env python3</code> and not <code>python</code></p>
-<div class="codehilite"><pre><span></span><span>cd build &amp;&amp; scons</span>
-</pre></div>
-
-
-<p>You can specify the number of jobs scons to use to speed up the building process
-using the -j flag (-j6, -j8). To generate Visual Studio project files add <code>vsproj=true</code>
-argument when building. To compile using mingw in windows use <code>use_mingw=true</code> argument.
-If your build failed feel free to <a href="https://github.com/ThakeeNathees/pocketlang/issues/new">open an issue</a>. </p>
+<p>If you weren't able to compile it, please us report by
+<a href="https://github.com/ThakeeNathees/pocketlang/issues/new">opening an issue</a>.</p>
 		</div>
 		</div>
 
