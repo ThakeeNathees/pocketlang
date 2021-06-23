@@ -1243,9 +1243,7 @@ Var varBitRshift(PKVM* vm, Var v1, Var v2) {
 
 Var varBitNot(PKVM* vm, Var v) {
   int64_t i;
-
   if (!validateInteger(vm, v, &i, "Unary operand")) return VAR_NULL;
-
   return VAR_NUM((double)(~i));
 }
 
@@ -1273,6 +1271,48 @@ bool varLesser(Var v1, Var v2) {
 
 #undef RIGHT_OPERAND
 #undef UNSUPPORTED_OPERAND_TYPES
+
+bool varContains(PKVM* vm, Var elem, Var container) {
+  if (!IS_OBJ(container)) {
+    VM_SET_ERROR(vm, stringFormat(vm, "'$' is not iterable.",
+                 varTypeName(container)));
+  }
+  Object* obj = AS_OBJ(container);
+
+  switch (obj->type) {
+    case OBJ_STRING: {
+      if (!IS_OBJ_TYPE(elem, OBJ_STRING)) {
+        VM_SET_ERROR(vm, stringFormat(vm, "Expected a string operand."));
+        return false;
+      }
+
+      String* sub = (String*)AS_OBJ(elem);
+      String* str = (String*)AS_OBJ(container);
+      if (sub->length > str->length) return false;
+
+      TODO;
+
+    } break;
+
+    case OBJ_LIST: {
+      List* list = (List*)AS_OBJ(container);
+      for (uint32_t i = 0; i < list->elements.count; i++) {
+        if (isValuesEqual(elem, list->elements.data[i])) return true;
+      }
+      return false;
+    } break;
+
+    case OBJ_MAP:
+    case OBJ_RANGE:
+    case OBJ_SCRIPT:
+    case OBJ_FUNC:
+    case OBJ_FIBER:
+    case OBJ_CLASS:
+    case OBJ_INST:
+      TODO;
+  }
+
+}
 
 // Here we're switching the FNV-1a hash value of the name (cstring). Which is
 // an efficient way than having multiple if (attrib == "name"). From O(n) * k
