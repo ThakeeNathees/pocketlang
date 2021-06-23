@@ -133,7 +133,7 @@ void markObject(PKVM* vm, Object* self) {
   self->is_marked = true;
 
   // Add the object to the VM's working_set so that we can recursively mark
-  // it's referenced objects later.
+  // its referenced objects later.
   if (vm->working_set_count >= vm->working_set_capacity) {
     vm->working_set_capacity *= 2;
     vm->working_set = (Object**)vm->config.realloc_fn(
@@ -213,7 +213,7 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       markVarBuffer(vm, &scr->globals);
       vm->bytes_allocated += sizeof(Var) * scr->globals.capacity;
 
-      // Integer buffer have no gray call.
+      // Integer buffer has no gray call.
       vm->bytes_allocated += sizeof(uint32_t) * scr->global_names.capacity;
 
       markVarBuffer(vm, &scr->literals);
@@ -450,8 +450,9 @@ Fiber* newFiber(PKVM* vm, Function* fn) {
   fiber->func = fn;
 
   if (fn->is_native) {
-    // For native functions we're only using stack for parameters, there wont
-    // be any locals or temps (which are belongs to the native "C" stack).
+    // For native functions, we're only using stack for parameters,
+    // there won't be any locals or temps (which are belongs to the
+    // native "C" stack).
     int stack_size = utilPowerOf2Ceil(fn->arity + 1);
     fiber->stack = ALLOCATE_ARRAY(vm, Var, stack_size);
     fiber->stack_size = stack_size;
@@ -571,7 +572,7 @@ List* rangeAsList(PKVM* vm, Range* self) {
 }
 
 String* stringLower(PKVM* vm, String* self) {
-  // If the string itself is already lower don't allocate new string.
+  // If the string itself is already lower, don't allocate new string.
   uint32_t index = 0;
   for (const char* c = self->data; *c != '\0'; c++, index++) {
     if (isupper(*c)) {
@@ -774,7 +775,7 @@ List* listJoin(PKVM* vm, List* l1, List* l2) {
   return list;
 }
 
-// Return a has value for the object.
+// Return a hash value for the object.
 static uint32_t _hashObject(Object* obj) {
 
   ASSERT(isObjectHashable(obj->type),
