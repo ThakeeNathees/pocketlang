@@ -5,6 +5,7 @@
 
 #include "pk_compiler.h"
 
+#include <ctype.h>
 #include "pk_core.h"
 #include "pk_buffers.h"
 #include "pk_utils.h"
@@ -576,60 +577,69 @@ static void eatName(Compiler* compiler) {
 
 // Complete lexing a number literal.
 static void eatNumber(Compiler* compiler) {
-
-  // TODO: scientific literals.
-
-  // TODO: 0b1012 parsed as to number tokens : 0b101 and 2
-  // Should be invalid binary literal error (also for hex).
-
+#define IS_VALID_HEX_CHAR(c) \
+  (('0' <= (c) && (c) <= '9') || ('a' <= (c) && (c) <= 'f'))
+#define IS_VALID_BIN_CHAR(c) (((c) == '0') || ((c) == '1'))
+#define IS_NUMLIT_TERM(c) (!isalnum(c))
   Var value = VAR_NULL; // The number value.
-
   char c = *compiler->token_start;
 
   // Binary literal.
   if (c == '0' && peekChar(compiler) == 'b') {
     eatChar(compiler); // Consume '0b'
-
     uint64_t bin = 0;
     c = peekChar(compiler);
-    if (c != '0' && c != '1') { // The first digit should be either 0 or 1.
-      lexError(compiler, "Invalid binary literal.");
-
+    if (!IS_VALID_BIN_CHAR(c)) {
+      lexError(
+        compiler,
+        "Binary literal has to contain at least one binary digit at the start."
+      );
     } else {
       do {
         c = peekChar(compiler);
-        if (c != '0' && c != '1') break;
+        if (IS_NUMLIT_TERM(c)) {
+          // reached the end of the literal
+          break;
+        }
+        if (!IS_VALID_BIN_CHAR(c)) {
+          lexError(
+            compiler,
+            "Binary literal can only contain 0s and 1s, found \"%c\".", c);
+          break;
+        }
         eatChar(compiler); // Consume the digit.
-
         // Check the length of the binary literal.
         int length = (int)(compiler->current_char - compiler->token_start);
         if (length > STR_BIN_BUFF_SIZE - 2) { // -2: '-\0' 0b is in both side.
           lexError(compiler, "Binary literal is too long.");
           break;
         }
-
         // "Append" the next digit at the end.
         bin = (bin << 1) | (c - '0');
-
       } while (true);
-
-      value = VAR_NUM((double)bin);
     }
-
+    value = VAR_NUM((double)bin);
   } else if (c == '0' && peekChar(compiler) == 'x') {
     eatChar(compiler); // Consume '0x'
-
-  #define IS_HEX_CHAR(c) (('0' <= c && c <= '9') || ('a' <= c && c<= 'f'))
-
     uint64_t hex = 0;
     c = peekChar(compiler);
-    if (!IS_HEX_CHAR(c)) { // The first digit should be either hex digit.
+    // The first digit should be either hex digit.
+    if (!IS_VALID_HEX_CHAR(c)) {
       lexError(compiler, "Invalid hex literal.");
-
     } else {
       do {
         c = peekChar(compiler);
-        if (!IS_HEX_CHAR(c)) break;
+        if (IS_NUMLIT_TERM(c)) {
+          break;
+        }
+        if (!IS_VALID_HEX_CHAR(c)) {
+          lexError(
+            compiler,
+            "Hex literal must only contain characters 0-9, A-F, found \"%c\"",
+            c
+          );
+          break;
+        }
         eatChar(compiler); // Consume the digit.
 
         // Check the length of the binary literal.
@@ -649,9 +659,6 @@ static void eatNumber(Compiler* compiler) {
 
       value = VAR_NUM((double)hex);
     }
-
-  #undef IS_HEX_CHAR
-
   } else {
     while (utilIsDigit(peekChar(compiler))) {
       eatChar(compiler);
@@ -659,12 +666,32 @@ static void eatNumber(Compiler* compiler) {
 
     if (peekChar(compiler) == '.' && utilIsDigit(peekNextChar(compiler))) {
       matchChar(compiler, '.');
-      while (utilIsDigit(peekChar(compiler)))
+      while (utilIsDigit(peekChar(compiler))) {
         eatChar(compiler);
+      }
+    }
+
+    // parse if in scientific notation format (MeN == M * 10 ** N)
+    char eChar = peekChar(compiler);
+    if (eChar == 'e' || eChar == 'E') {
+      eatChar(compiler);
+      if (peekChar(compiler) == '+' || peekChar(compiler) == '-') {
+        eatChar(compiler);
+      }
+      if (!utilIsDigit(peekChar(compiler))) {
+        lexError(
+          compiler,
+          "Scientific notation number literal should have an exponent."
+        );
+      } else {
+        // eat the exponent
+        while (utilIsDigit(peekChar(compiler))) eatChar(compiler);
+      }
     }
 
     errno = 0;
-    value = VAR_NUM(strtod(compiler->token_start, NULL));
+    // use atof here to support
+    value = VAR_NUM(atof(compiler->token_start));
     if (errno == ERANGE) {
       const char* start = compiler->token_start;
       int len = (int)(compiler->current_char - start);
@@ -674,6 +701,9 @@ static void eatNumber(Compiler* compiler) {
   }
 
   setNextValueToken(compiler, TK_NUMBER, value);
+#undef IS_VALID_BIN_CHAR
+#undef IS_VALID_HEX_CHAR
+#undef IS_NUMLIT_TERM
 }
 
 // Read and ignore chars till it reach new line or EOF.
