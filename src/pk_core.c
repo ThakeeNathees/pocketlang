@@ -1315,7 +1315,7 @@ bool varContains(PKVM* vm, Var elem, Var container) {
     case OBJ_INST:
       TODO;
   }
-
+  UNREACHABLE();
 }
 
 // Here we're switching the FNV-1a hash value of the name (cstring). Which is
