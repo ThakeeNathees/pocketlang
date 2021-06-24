@@ -1,6 +1,9 @@
 function reverse(list) {
-	var i=0, tmp, idx, count=list.length;
-	for (; i < count; i++) {
+	var i=0, tmp, idx;
+	var count = list.length;
+	var max = count / 2 | 0;
+
+	for (; i < max; i++) {
 		idx = count - i - 1;
 		tmp = list[idx];
 		list[idx] = list[i];
