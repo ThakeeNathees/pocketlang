@@ -62,9 +62,6 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
   VmUserData* user_data = (VmUserData*)pkGetUserData(vm);
   user_data->repl_mode = true;
 
-  // Print the copyright and license notice.
-  printf("%s", CLI_NOTICE);
-
   // The main module that'll be used to compile and execute the input source.
   PkHandle* module = pkNewModule(vm, "$(REPL)");
 
