@@ -29,8 +29,9 @@ BENCHMARKS = (
 ## Map from file extension to it's interpreter, Will be updated.
 INTERPRETERS = {
   '.pk'   : None,
+  '.lua'  : None,
   '.wren' : None,
-  '.rb'   : None,
+  '.js'   : None,
   '.rb'   : None,
 }
 
@@ -48,12 +49,12 @@ def run_all_benchmarsk():
     dir = join(THIS_PATH, benchmark)
     for file in os.listdir(dir):
       file = abspath(join(dir, file))
-      
+
       ext = get_ext(file) ## File extension.
       if ext not in INTERPRETERS: continue
       lang, interp = INTERPRETERS[ext]
       if not interp: continue
-      
+
       print("%-10s : "%lang, end=''); sys.stdout.flush()
       result = _run_command([interp, file])
       time = re.findall(r'elapsed:\s*([0-9\.]+)\s*s',
@@ -82,9 +83,10 @@ def update_interpreters():
   global INTERPRETERS
   INTERPRETERS['.pk']   = _find_interp('pocketlang', pocket)
   INTERPRETERS['.wren'] = _find_interp('wren',       'wren')
+  INTERPRETERS['.lua']  = _find_interp('lua',         'lua')
   INTERPRETERS['.rb']   = _find_interp('ruby',       'ruby')
   INTERPRETERS['.py']   = _find_interp('python',     python)
-  INTERPRETERS['.js']   = _find_interp('javascript', 'node')  
+  INTERPRETERS['.js']   = _find_interp('javascript', 'node')
 
 ## This will return the path of the pocket binary (on different platforms).
 ## The debug version of it for enabling the assertions.
@@ -151,6 +153,6 @@ def error_exit(msg):
   os.system('') ## This will enable ANSI codes in windows terminal.
   print(COLORS['RED'] + 'Error: ' + msg + COLORS['END'], end='')
   sys.exit(1)
-  
+
 if __name__ == '__main__':
   main()
