@@ -29,10 +29,11 @@ BENCHMARKS = (
 ## Map from file extension to it's interpreter, Will be updated.
 INTERPRETERS = {
   '.pk'   : None,
-  '.lua'  : None,
   '.wren' : None,
-  '.js'   : None,
+  '.py'   : None,
   '.rb'   : None,
+  '.lua'  : None,
+  '.js'   : None,
 }
 
 def main():
@@ -47,12 +48,11 @@ def run_all_benchmarsk():
   for benchmark in BENCHMARKS:
     print_title(benchmark)
     dir = join(THIS_PATH, benchmark)
-    for file in os.listdir(dir):
+    for file in _source_files(os.listdir(dir)):
       file = abspath(join(dir, file))
 
       ext = get_ext(file) ## File extension.
-      if ext not in INTERPRETERS: continue
-      lang, interp = INTERPRETERS[ext]
+      lang, interp, val = INTERPRETERS[ext]
       if not interp: continue
 
       print("%-10s : "%lang, end=''); sys.stdout.flush()
@@ -72,6 +72,18 @@ def _run_command(command):
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE)
 
+## Returns a list of valid source files to run benchmarks.
+def _source_files(files):
+  global INTERPRETERS
+  ret = []
+  for file in files:
+    ext = get_ext(file)
+    if ext not in INTERPRETERS: continue
+    ret.append(file)
+
+  ret.sort(key=lambda f : INTERPRETERS[get_ext(f)][2])
+  return ret
+
 ## ----------------------------------------------------------------------------
 ## UPDATE INTERPRETERS
 ## ----------------------------------------------------------------------------
@@ -81,12 +93,13 @@ def update_interpreters():
   python = 'python' if platform.system() == 'Windows' else 'python3'
   print_title("CHECKING FOR INTERPRETERS")
   global INTERPRETERS
-  INTERPRETERS['.pk']   = _find_interp('pocketlang', pocket)
-  INTERPRETERS['.wren'] = _find_interp('wren',       'wren')
-  INTERPRETERS['.lua']  = _find_interp('lua',         'lua')
-  INTERPRETERS['.rb']   = _find_interp('ruby',       'ruby')
-  INTERPRETERS['.py']   = _find_interp('python',     python)
-  INTERPRETERS['.js']   = _find_interp('javascript', 'node')
+  order = 0
+  INTERPRETERS['.pk']   = _find_interp('pocketlang', pocket, order); order+=1
+  INTERPRETERS['.wren'] = _find_interp('wren',       'wren', order); order+=1
+  INTERPRETERS['.py']   = _find_interp('python',     python, order); order+=1
+  INTERPRETERS['.rb']   = _find_interp('ruby',       'ruby', order); order+=1
+  INTERPRETERS['.lua']  = _find_interp('lua',        'lua',  order); order+=1
+  INTERPRETERS['.js']   = _find_interp('javascript', 'node', order); order+=1
 
 ## This will return the path of the pocket binary (on different platforms).
 ## The debug version of it for enabling the assertions.
@@ -102,15 +115,16 @@ def _get_pocket_binary():
   return pocket
 
 ## Find and return the interpreter from the path.
-## as (lang, interp) tuple.
-def _find_interp(lang, interpreter):
+## as (lang, interp, val) tuple, where the val is the additional.
+## data related to the interpreter.
+def _find_interp(lang, interpreter, val):
   print('%-25s' % ('Searching for %s ' % lang), end='')
   sys.stdout.flush()
   if which(interpreter):
     print_success('-- found')
-    return (lang, interpreter)
+    return (lang, interpreter, val)
   print_warning('-- not found (skipped)')
-  return (lang, None)
+  return (lang, None, val)
 
 ## Return the extension from the file name.
 def get_ext(file_name):
