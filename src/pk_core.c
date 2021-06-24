@@ -9,6 +9,7 @@
 #include <limits.h>
 #include <math.h>
 #include <time.h>
+#include <inttypes.h>
 
 #include "pk_debug.h"
 #include "pk_utils.h"
@@ -348,6 +349,25 @@ static inline bool validateInteger(PKVM* vm, Var var, int64_t* value,
   return false;
 }
 
+// Check if [var] is 32bit integer and is within the given range. If not
+// set error and return false.
+static inline bool validateIntegerRange(PKVM* vm, Var var, int64_t* value,
+                                   int64_t lower, int64_t upper,
+                                   const char* name) {
+  if (!validateInteger(vm, var, value, name)) return false;
+  if ((lower <= *value) && (*value <= upper)) return true;
+
+  char lowerChar[sizeof(int64_t)];
+  snprintf(lowerChar, sizeof(lowerChar), "%" PRIi64, lower);
+
+  char upperChar[sizeof(int64_t)];
+  snprintf(upperChar, sizeof(upperChar), "%" PRIi64, upper);
+
+  VM_SET_ERROR(vm, stringFormat(vm, "$ must be between $ and $, inclusive.",
+        name, lowerChar, upperChar));
+  return false;
+}
+
 // Index is could be larger than 32 bit integer, but the size in pocketlang
 // limited to 32 unsigned bit integer
 static inline bool validateIndex(PKVM* vm, int64_t index, uint32_t size,
@@ -610,8 +630,9 @@ DEF(coreExit,
   "exit([value:int]) -> null\n"
   "Sets the VM's fiber to NULL, causing the VM to return from execution "
   "and thereby terminating the process entirely. The exit code of the "
-  "process is the optional argument [value] given to exit(). If no argument "
-  "is given, the exit code is 1 by default.") {
+  "process is the optional argument [value] given to exit() which must be "
+  "between 0 and 255 inclusive. If no argument is given, the exit code is 1 "
+  "by default.") {
 
   int argc = ARGC;
   if (argc > 1) { // exit() or exit(val).
@@ -619,7 +640,8 @@ DEF(coreExit,
   }
 
   int64_t value;
-  if (!validateInteger(vm, ARG(1), &value, "Argument 1")) return;
+  // if (!validateInteger(vm, ARG(1), &value, "Argument 1")) return;
+  if (!validateIntegerRange(vm, ARG(1), &value, 0, 255, "Argument 1")) return;
 
   // TODO: this actually needs to be the VM fiber being set to null though.
   exit((argc == 1) ? value : EXIT_FAILURE);
