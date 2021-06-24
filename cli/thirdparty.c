@@ -9,9 +9,13 @@
 // directory to the list of source directory.
 
 // Library : cwalk
-// Source  : https://github.com/likle/cwalk
+// Source  : https://github.com/likle/cwalk/
 // Doc     : https://likle.github.io/cwalk/
 // About   : Path library for C/C++. Cross-Platform for Windows, MacOS and
 //           Linux. Supports UNIX and Windows path styles on those platforms.
 #include "thirdparty/cwalk/cwalk.c"
 
+// Library : argparse
+// Source  : https://github.com/cofyc/argparse/
+// About   : Command-line arguments parsing library.
+#include "thirdparty/argparse/argparse.c"

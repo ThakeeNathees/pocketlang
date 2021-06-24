@@ -4,8 +4,9 @@
  */
 
 #include "internal.h"
-
 #include "modules.h"
+
+#include "thirdparty/argparse/argparse.h"
 
 // FIXME: Everything below here is temporary and for testing.
 
@@ -123,14 +124,35 @@ PkStringPtr loadScript(PKVM* vm, const char* path) {
 
 int main(int argc, char** argv) {
 
-  //const char* usage = "usage: pocket [-c cmd | file]\n";
+  // Parse command line arguments.
 
-  // TODO: implement arg parse, REPL.
+  const char* usage[] = {
+    "usage: pocket [-c cmd | file]",
+    NULL,
+  };
 
-  //if (argc < 2) {
-  //  printf("%s\n%s", notice, help);
-  //  return 0;
-  //}
+  const char* cmd;
+  bool c = false, d = false, help = false, quiet = false, version = false;
+
+  struct argparse_option cli_opts[] = {
+      OPT_STRING( 'c', "cmd",   &cmd,   "Evaluate and run the passed string."),
+      OPT_BOOLEAN('h', "help",  &help,  "Prints this help message and exit."),
+      OPT_BOOLEAN('q', "quiet", &quiet, "Don't print version and copyright "
+                                        "statement on REPL startup."),
+      OPT_BOOLEAN('v', "version", &version, "Prints the pocketlang version "
+                                            "and exit."),
+      OPT_END(),
+  };
+  struct argparse argparse;
+  argparse_init(&argparse, cli_opts, usage, 0);
+  argc = argparse_parse(&argparse, argc, argv);
+
+  if (help) {
+    argparse_usage(&argparse);
+    return 0;
+  }
+
+  // Initialize pocket VM.
 
   PkConfiguration config = pkNewConfiguration();
   config.error_fn = errorFunction;
