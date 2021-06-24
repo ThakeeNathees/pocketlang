@@ -10,7 +10,7 @@
 
 // FIXME: Everything below here is temporary and for testing.
 
-void repl(PKVM* vm, const PkCompileOptions* options);
+int repl(PKVM* vm, const PkCompileOptions* options);
 const char* read_line(uint32_t* length);
 
 // ---------------------------------------
@@ -122,38 +122,8 @@ PkStringPtr loadScript(PKVM* vm, const char* path) {
   return result;
 }
 
-int main(int argc, char** argv) {
-
-  // Parse command line arguments.
-
-  const char* usage[] = {
-    "usage: pocket [-c cmd | file]",
-    NULL,
-  };
-
-  const char* cmd;
-  bool c = false, d = false, help = false, quiet = false, version = false;
-
-  struct argparse_option cli_opts[] = {
-      OPT_STRING( 'c', "cmd",   &cmd,   "Evaluate and run the passed string."),
-      OPT_BOOLEAN('h', "help",  &help,  "Prints this help message and exit."),
-      OPT_BOOLEAN('q', "quiet", &quiet, "Don't print version and copyright "
-                                        "statement on REPL startup."),
-      OPT_BOOLEAN('v', "version", &version, "Prints the pocketlang version "
-                                            "and exit."),
-      OPT_END(),
-  };
-  struct argparse argparse;
-  argparse_init(&argparse, cli_opts, usage, 0);
-  argc = argparse_parse(&argparse, argc, argv);
-
-  if (help) {
-    argparse_usage(&argparse);
-    return 0;
-  }
-
-  // Initialize pocket VM.
-
+// Create new pocket VM and set it's configuration.
+static PKVM* intializePocketVM() {
   PkConfiguration config = pkNewConfiguration();
   config.error_fn = errorFunction;
   config.write_fn = writeFunction;
@@ -165,47 +135,100 @@ int main(int argc, char** argv) {
   config.load_script_fn = loadScript;
   config.resolve_path_fn = resolvePath;
 
-  PkCompileOptions options = pkNewCompilerOptions();
-  options.debug = true; // TODO: update this with cli args. (tco disabled).
+  return pkNewVM(&config);
+}
 
-  PKVM* vm = pkNewVM(&config);
+int main(int argc, char** argv) {
 
+  // Parse command line arguments.
+
+  const char* usage[] = {
+    "pocket ... [-c cmd | file] ...",
+    NULL,
+  };
+
+  const char* cmd = NULL;
+  int debug = false, help = false, quiet = false, version = false;
+  struct argparse_option cli_opts[] = {
+      OPT_STRING('c', "cmd", (void*)&cmd,
+        "Evaluate and run the passed string.", NULL, 0, 0),
+
+      OPT_BOOLEAN('d', "debug", (void*)&debug,
+        "Compile and run the debug version.", NULL, 0, 0),
+
+      OPT_BOOLEAN('h', "help",  (void*)&help,
+        "Prints this help message and exit.", NULL, 0, 0),
+
+      OPT_BOOLEAN('q', "quiet", (void*)&quiet,
+        "Don't print version and copyright statement on REPL startup.",
+        NULL, 0, 0),
+
+      OPT_BOOLEAN('v', "version", &version,
+        "Prints the pocketlang version and exit.", NULL, 0, 0),
+      OPT_END(),
+  };
+
+  // Parse the options.
+  struct argparse argparse;
+  argparse_init(&argparse, cli_opts, usage, 0);
+  argc = argparse_parse(&argparse, argc, argv);
+
+  if (help) { // pocket --help.
+    argparse_usage(&argparse);
+    return 0;
+  }
+
+  if (version) { // pocket --version
+    fprintf(stdout, "pocketlang %s\n", PK_VERSION_STRING);
+    return 0;
+  }
+
+  int exitcode = 0;
+
+  // Create and initialize pocket VM.
+  PKVM* vm = intializePocketVM();
   VmUserData user_data;
   user_data.repl_mode = false;
   pkSetUserData(vm, &user_data);
 
   registerModules(vm);
 
-  // FIXME: this is temp till arg parse implemented.
-  PkResult result;
+  PkCompileOptions options = pkNewCompilerOptions();
+  options.debug = debug;
 
-  if (argc == 1) {
-    options.repl_mode = true;
-    repl(vm, &options);
+  if (cmd != NULL) { // pocket -c "print('foo')"
 
-  } if (argc >= 3 && strcmp(argv[1], "-c") == 0) {
-
-    PkStringPtr source = { argv[2], NULL, NULL };
+    PkStringPtr source = { cmd, NULL, NULL };
     PkStringPtr path = { "$(Source)", NULL, NULL };
+    PkResult result = pkInterpretSource(vm, source, path, NULL);
+    exitcode = (int)result;
 
-    result = pkInterpretSource(vm, source, path, NULL);
-    pkFreeVM(vm);
-    return result;
+  } if (argc == 0) { // Run on REPL mode.
+
+   // Print the copyright and license notice, if --quiet not set.
+    if (!quiet) {
+      printf("%s", CLI_NOTICE);
+    }
+
+    options.repl_mode = true;
+    exitcode = repl(vm, &options);
+
+  } else { // pocket file.pk ...
+
+    PkStringPtr resolved = resolvePath(vm, ".", argv[0]);
+    PkStringPtr source = loadScript(vm, resolved.string);
+
+    if (source.string != NULL) {
+      PkResult result = pkInterpretSource(vm, source, resolved, &options);
+      exitcode = (int)result;
+    } else {
+      fprintf(stderr, "Error: cannot open file at \"%s\"\n", resolved.string);
+      if (resolved.on_done != NULL) resolved.on_done(vm, resolved);
+      if (source.on_done != NULL) source.on_done(vm, source);
+    }
   }
 
-  PkStringPtr resolved = resolvePath(vm, ".", argv[1]);
-  PkStringPtr source = loadScript(vm, resolved.string);
-
-  if (source.string != NULL) {
-    result = pkInterpretSource(vm, source, resolved, &options);
-
-  } else {
-    result = PK_RESULT_COMPILE_ERROR;
-    fprintf(stderr, "Error: cannot open file at \"%s\"\n", resolved.string);
-    if (resolved.on_done != NULL) resolved.on_done(vm, resolved);
-    if (source.on_done != NULL) source.on_done(vm, source);
-  }
-
+  // Cleanup the VM and exit.
   pkFreeVM(vm);
-  return result;
+  return exitcode;
 }

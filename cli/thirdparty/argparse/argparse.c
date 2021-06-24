@@ -278,8 +278,10 @@ unknown:
     }
 
 end:
-    memmove(self->out + self->cpidx, self->argv,
+/* Modified By : https://www.github.com/ThakeeNathees */
+    memmove((void*)(self->out + self->cpidx), (void*)(self->argv),
             self->argc * sizeof(*self->out));
+/* -------------------------------------------------- */
     self->out[self->cpidx + self->argc] = NULL;
 
     return self->cpidx + self->argc;
@@ -300,7 +302,9 @@ argparse_usage(struct argparse *self)
     if (self->description)
         fprintf(stdout, "%s\n", self->description);
 
-    fputc('\n', stdout);
+/* Modified By : https://www.github.com/ThakeeNathees */
+//    fputc('\n', stdout);
+/* -------------------------------------------------- */
 
     const struct argparse_option *options;
 

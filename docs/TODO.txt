@@ -1,9 +1,9 @@
 
 // In good first issue
-- Refactor is_done as an attribute.
-- Implement argparse.
 
 // To implement.
+
+- refactor the build.bat script.
 
 - no __file__ for core modules.
 
@@ -27,9 +27,6 @@
     fn(a, b) // May be closure support?
   end
 
-- In keyword.
-- Structs (maybe enums).
-- Implement file IO (require structs).
 - Implement utf8 support.
 - Implement gdb like debugger (add color print for readability).
 - Initialize imported scripts (require fiber based vm).

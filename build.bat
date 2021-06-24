@@ -3,6 +3,7 @@
 ::  Distributed Under The MIT License
 
 @echo off
+Pushd "%~dp0"
 
 :: ----------------------------------------------------------------------------
 ::                      PARSE COMMAND LINE ARGS
@@ -20,16 +21,16 @@ shift
 
 :PARSE_ARGS
 if (%1)==(-clean) goto :CLEAN
-if (%1)==(-d) set debug_build=%2&& goto :SHIFT_ARG_2
-if (%1)==(-s) set shared_lib=%~2&& goto :SHIFT_ARG_2
+if (%1)==(-r) set debug_build=false&& goto :SHIFT_ARG_1
+if (%1)==(-s) set shared_lib=true&& goto :SHIFT_ARG_1
 if (%1)==() goto :CHECK_MSVC
 
 :PRINT_USAGE
 echo Usage: call build.bat [options ...]
 echo options:
-echo   -d trut/false   Set false to build release binary. Default is true.
-echo   -s true/false   Set true to build shared/dynamic library. Default is false.
-echo   -clean          Clean all compiled/generated intermediate binary.
+echo   -r      Compile the release version of pocketlang (default = debug)
+echo   -s      Link the pocket as shared library (default = static link).
+echo   -clean  Clean all compiled/generated intermediate binary.
 goto :END
 
 :: ----------------------------------------------------------------------------
@@ -116,9 +117,19 @@ cl /nologo /c %addnl_cdefines% %addnl_cflags% %root_dir%src\*.c
 if errorlevel 1 goto :FAIL
 
 :: If compiling shared lib, jump pass the lib/cli binaries.
-if "%shared_lib%"=="true" goto :BUILD_DLL
+if "%shared_lib%"=="true" (
+  set pklib=..\bin\pocket-dll.lib
+) else (
+  set pklib=..\bin\pocket.lib
+)
 
-lib /nologo %addnl_linkflags% /OUT:..\bin\pocket.lib *.obj
+:: If compiling shared lib, jump pass the lib/cli binaries.
+if "%shared_lib%"=="true" goto :SHARED
+lib /nologo %addnl_linkflags% /OUT:%pklib% *.obj
+goto :SRC_END
+:SHARED
+link /nologo /dll /out:..\bin\pocket.dll /implib:%pklib% *.obj
+:SRC_END
 if errorlevel 1 goto :FAIL
 
 :: Go inside cli\ from src\ build all cli files.
@@ -127,7 +138,7 @@ cl /nologo /c %addnl_cdefines% %addnl_cflags% /I%root_dir%src\include\ %root_dir
 if errorlevel 1 goto :FAIL
 
 :: Compile the cli executable.
-cl /nologo %addnl_cdefines% *.obj ..\bin\pocket.lib /Fe..\bin\pocket.exe
+cl /nologo %addnl_cdefines% *.obj %pklib% /Fe..\bin\pocket.exe
 if errorlevel 1 goto :FAIL
 
 :: Navigate to the build directory.
@@ -135,9 +146,8 @@ cd ..\..\
 goto :SUCCESS
 
 :BUILD_DLL
-link /nologo /dll /out:..\bin\pocket.dll /implib:..\bin\pocket-dll.lib *.obj
-if errorlevel 1 goto :FAIL
-cd ..\..\
+
+
 goto :SUCCESS
 
 :CLEAN
@@ -164,6 +174,7 @@ exit /b 1
 goto :END
 
 :END
+popd
 endlocal
 goto :eof
 
