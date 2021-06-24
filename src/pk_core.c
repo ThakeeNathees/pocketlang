@@ -606,13 +606,32 @@ DEF(coreInput,
   RET(VAR_OBJ(line));
 }
 
+DEF(coreExit,
+  "exit([value:int]) -> null\n"
+  "Sets the VM's fiber to NULL, causing the VM to return from execution "
+  "and thereby terminating the process entirely. The exit code of the "
+  "process is the optional argument [value] given to exit(). If no argument "
+  "is given, the exit code is 1 by default.") {
+
+  int argc = ARGC;
+  if (argc > 1) { // exit() or exit(val).
+    RET_ERR(newString(vm, "Invalid argument count."));
+  }
+
+  int64_t value;
+  if (!validateInteger(vm, ARG(1), &value, "Argument 1")) return;
+
+  // TODO: this actually needs to be the VM fiber being set to null though.
+  exit((argc == 1) ? value : EXIT_FAILURE);
+}
+
 // String functions.
 // -----------------
 
 // TODO: substring.
 
 DEF(coreStrChr,
-  "str_chr(value:number) -> string\n"
+  "str_chr(value:num) -> string\n"
   "Returns the ASCII string value of the integer argument.") {
   int64_t num;
   if (!validateInteger(vm, ARG(1), &num, "Argument 1")) return;
@@ -626,7 +645,7 @@ DEF(coreStrChr,
 }
 
 DEF(coreStrOrd,
-  "str_ord(value:string) -> number\n"
+  "str_ord(value:string) -> num\n"
   "Returns integer value of the given ASCII character.") {
 
   String* c;
@@ -1014,6 +1033,7 @@ void initializeCore(PKVM* vm) {
   INITIALIZE_BUILTIN_FN("to_string",   coreToString,   1);
   INITIALIZE_BUILTIN_FN("print",       corePrint,     -1);
   INITIALIZE_BUILTIN_FN("input",       coreInput,     -1);
+  INITIALIZE_BUILTIN_FN("exit",        coreExit,      -1);
 
   // String functions.
   INITIALIZE_BUILTIN_FN("str_chr",     coreStrChr,     1);
