@@ -6,6 +6,7 @@
 #include "pk_core.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <math.h>
 #include <time.h>
 
@@ -30,6 +31,9 @@
 #define DEF(fn, docstring)                      \
   static const char* DOCSTRING(fn) = docstring; \
   static void fn(PKVM* vm)
+
+// Checks if a number is a byte
+#define IS_NUM_BYTE(num) ((CHAR_MIN <= (num)) && ((num) <= CHAR_MAX))
 
 /*****************************************************************************/
 /* CORE PUBLIC API                                                           */
@@ -613,7 +617,9 @@ DEF(coreStrChr,
   int64_t num;
   if (!validateInteger(vm, ARG(1), &num, "Argument 1")) return;
 
-  // TODO: validate num is a byte.
+  if (!IS_NUM_BYTE(num)) {
+    RET_ERR(newString(vm, "The number is not in a byte range."));
+  }
 
   char c = (char)num;
   RET(VAR_OBJ(newStringLength(vm, &c, 1)));
