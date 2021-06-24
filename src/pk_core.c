@@ -631,7 +631,7 @@ DEF(coreExit,
   "Sets the VM's fiber to NULL, causing the VM to return from execution "
   "and thereby terminating the process entirely. The exit code of the "
   "process is the optional argument [value] given to exit() which must be "
-  "between 0 and 255 inclusive. If no argument is given, the exit code is 1 "
+  "between 0 and 255 inclusive. If no argument is given, the exit code is 0 "
   "by default.") {
 
   int argc = ARGC;
@@ -639,12 +639,14 @@ DEF(coreExit,
     RET_ERR(newString(vm, "Invalid argument count."));
   }
 
-  int64_t value;
-  // if (!validateInteger(vm, ARG(1), &value, "Argument 1")) return;
-  if (!validateIntegerRange(vm, ARG(1), &value, 0, 255, "Argument 1")) return;
+  int64_t value = 0;
+  if (argc == 1) {
+    if (!validateIntegerRange(vm, ARG(1), &value, 0, 255, "Argument 1"))
+      return;
+  }
 
   // TODO: this actually needs to be the VM fiber being set to null though.
-  exit((argc == 1) ? value : EXIT_FAILURE);
+  exit(value);
 }
 
 // String functions.
