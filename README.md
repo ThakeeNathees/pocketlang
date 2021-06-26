@@ -10,9 +10,7 @@ Including the compiler, bytecode VM and runtime, it's a standalone executable
 with zero external dependencies just as it's self descriptive name. The pocketlang
 VM can be embedded in another hosting program very easily.
 
-The language is written using [Wren Language](https://wren.io/) and their
-wonderful book [Crafting Interpreters](http://www.craftinginterpreters.com/) as
-a reference.
+[Wren Language](https://wren.io/) and their wonderful book [Crafting Interpreters](http://www.craftinginterpreters.com/) were used as a reference to write the language.
 
 ## What pocketlang looks like
 
