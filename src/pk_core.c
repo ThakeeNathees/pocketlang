@@ -121,7 +121,7 @@ PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
   do {                                                               \
     __ASSERT(vm->fiber != NULL,                                      \
              "This function can only be called at runtime.");        \
-    __ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index.");     \
+    __ASSERT(arg > 0 && arg <= ARGC, "Invalid argument index.");     \
     __ASSERT(value != NULL, "Argument [value] was NULL.");           \
   } while (false)
 
@@ -138,6 +138,26 @@ do {                                                                 \
 int pkGetArgc(const PKVM* vm) {
   __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
   return ARGC;
+}
+
+// pkCheckArgcRange implementation (see pocketlang.h for description).
+bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max) {
+  ASSERT(min <= max, "invalid argc range (min > max).");
+
+  if (argc < min) {
+    char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", min);
+    VM_SET_ERROR(vm, stringFormat(vm, "Expected at least %s argument(s).",
+                                       buff));
+    return false;
+
+  } else if (argc > max) {
+    char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", max);
+    VM_SET_ERROR(vm, stringFormat(vm, "Expected at most %s argument(s).",
+                                       buff));
+    return false;
+  }
+
+  return true;
 }
 
 // pkGetArg implementation (see pocketlang.h for description).
@@ -1511,7 +1531,27 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     {
       Instance* inst = (Instance*)obj;
       if (inst->is_native) {
-        TODO;
+
+        if (vm->config.inst_get_attrib_fn) {
+
+          // Temproarly change the fiber's "return address" to points to the
+          // below var 'ret' so that the users can use 'pkReturn...()' function
+          // to return the attribute as well.
+          Var* temp = vm->fiber->ret;
+          Var ret = VAR_NULL;
+          vm->fiber->ret = &ret;
+
+          PkStringPtr attr = { attrib->data, NULL, NULL,
+                               attrib->length, attrib->hash };
+          if (!vm->config.inst_get_attrib_fn(vm, inst->native, attr)) {
+            // TODO: if the attribute is '.as_string' return repr.
+            ERR_NO_ATTRIB(vm, on, attrib);
+            return VAR_NULL;
+          }
+
+          vm->fiber->ret = temp;
+          return ret;
+        }
 
       } else {
 

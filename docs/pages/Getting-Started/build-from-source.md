@@ -43,6 +43,6 @@ environment.
 4. Add `src/include` to include path.
 5. Compile.
 
-If you weren't able to compile it, please us report by
+If you weren't able to compile it, please report us by
 [opening an issue](https://github.com/ThakeeNathees/pocketlang/issues/new).
 

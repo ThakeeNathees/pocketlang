@@ -1,5 +1,6 @@
 
-// In good first issue
+// To good first issue
+Add '.title' attribute to string
 
 // To implement.
 

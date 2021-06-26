@@ -129,8 +129,9 @@ static PKVM* intializePocketVM() {
   config.write_fn = writeFunction;
   config.read_fn = readFunction;
 
-  config.free_inst_fn = freeObj;
+  config.inst_free_fn = freeObj;
   config.inst_name_fn = getObjName;
+  config.inst_get_attrib_fn = objGetAttrib;
 
   config.load_script_fn = loadScript;
   config.resolve_path_fn = resolvePath;
@@ -138,7 +139,7 @@ static PKVM* intializePocketVM() {
   return pkNewVM(&config);
 }
 
-int main(int argc, char** argv) {
+int main(int argc, const char** argv) {
 
   // Parse command line arguments.
 
@@ -198,8 +199,8 @@ int main(int argc, char** argv) {
 
   if (cmd != NULL) { // pocket -c "print('foo')"
 
-    PkStringPtr source = { cmd, NULL, NULL };
-    PkStringPtr path = { "$(Source)", NULL, NULL };
+    PkStringPtr source = { cmd, NULL, NULL, 0, 0 };
+    PkStringPtr path = { "$(Source)", NULL, NULL, 0, 0 };
     PkResult result = pkInterpretSource(vm, source, path, NULL);
     exitcode = (int)result;
 

@@ -1050,9 +1050,9 @@ void freeObject(PKVM* vm, Object* self) {
       Instance* inst = (Instance*)self;
 
       if (inst->is_native) {
-        if (vm->config.free_inst_fn != NULL) {
+        if (vm->config.inst_free_fn != NULL) {
           // TODO: Allow user to set error when freeing the object.
-          vm->config.free_inst_fn(vm, inst->native);
+          vm->config.inst_free_fn(vm, inst->native);
         }
 
       } else {
@@ -1341,11 +1341,9 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
         // Check if the list is recursive.
         OuterSequence* seq = outer;
         while (seq != NULL) {
-          if (seq->is_list) {
-            if (seq->list == list) {
-              pkByteBufferAddString(buff, vm, "[...]", 5);
-              return;
-            }
+          if (seq->is_list && seq->list == list) {
+            pkByteBufferAddString(buff, vm, "[...]", 5);
+            return;
           }
           seq = seq->outer;
         }
@@ -1372,11 +1370,9 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
         // Check if the map is recursive.
         OuterSequence* seq = outer;
         while (seq != NULL) {
-          if (!seq->is_list) {
-            if (seq->map == map) {
-              pkByteBufferAddString(buff, vm, "{...}", 5);
-              return;
-            }
+          if (!seq->is_list && seq->map == map) {
+            pkByteBufferAddString(buff, vm, "{...}", 5);
+            return;
           }
           seq = seq->outer;
         }
