@@ -171,7 +171,7 @@ int main(int argc, char** argv) {
   // Parse the options.
   struct argparse argparse;
   argparse_init(&argparse, cli_opts, usage, 0);
-  argc = argparse_parse(&argparse, argc, argv);
+  argc = argparse_parse(&argparse, argc, (const char **)argv);
 
   if (help) { // pocket --help.
     argparse_usage(&argparse);
