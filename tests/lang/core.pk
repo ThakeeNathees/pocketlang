@@ -37,7 +37,8 @@ assert(r.first == 1)
 assert(r.last == 5)
 
 ## Math functions
-from math import PI, sin, cos, tan, abs
+from math import PI, sin, cos, tan, abs, sinh,
+  cosh, tanh, asin, acos, atan
 
 assert(sin(0) == 0)
 assert(sin(PI/2) == 1)
@@ -50,6 +51,25 @@ for i in 0..1000
   assert(abs(sin(i) / cos(i) - tan(i)) < threshold)
 end
 
+assert((cosh(.5) - 1.1276259652063807) < threshold)
+assert((tanh(0.5) - 1.127625965206) < threshold)
+for i in 0..100
+  assert(abs(sinh(i) / cosh(i) - tanh(i)) < threshold)
+end
+
+assert(abs(acos(PI/4) - 0.5) < 0.35)
+assert(abs(atan(PI/4) - 0.5) < 0.2)
+
+assert((acos(0.5) - 1.1276259652063807) < threshold)
+assert((atan(0.3) - 1.1276259652063807) < threshold)
+
+x = -1; interval = 1000
+for i in 0..interval-1
+  x += 2/interval
+  assert(abs(sin(asin(x)) - x) < threshold)
+  assert(abs(cos(acos(x)) - x) < threshold)
+  assert(abs(tan(atan(x)) - x) < threshold)
+end
 
 # If we got here, that means all test were passed.
 print('All TESTS PASSED')
