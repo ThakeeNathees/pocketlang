@@ -259,8 +259,9 @@ struct Map {
 struct Range {
   Object _super;
 
-  double from; //< Beggining of the range inclusive.
-  double to;   //< End of the range exclusive.
+  double from; //< Beggining of the range.
+  double to;   //< End of the range.
+  bool inclusive; //< true if `to` property is included in range.
 };
 
 struct Script {
@@ -421,7 +422,7 @@ List* newList(PKVM* vm, uint32_t size);
 Map* newMap(PKVM* vm);
 
 // Allocate new Range object and return Range*.
-Range* newRange(PKVM* vm, double from, double to);
+Range* newRange(PKVM* vm, double from, double to, bool inclusive);
 
 // Allocate new Script object and return Script*.
 Script* newScript(PKVM* vm, String* path);
