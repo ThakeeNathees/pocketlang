@@ -5,12 +5,35 @@
 
 #include "modules.h"
 
+// Note: Everything here is for testing the native API, and will have to
+//       refactor everything.
+
 // Allocate a new module object of type [Ty].
 #define NEW_OBJ(Ty) (Ty*)malloc(sizeof(Ty))
 
 // Dellocate module object, allocated by NEW_OBJ(). Called by the freeObj
 // callback.
 #define FREE_OBJ(ptr) free(ptr)
+
+void initObj(Obj* obj, ObjType type) {
+  obj->type = type;
+}
+
+bool objGetAttrib(PKVM* vm, void* instance, PkStringPtr attrib) {
+
+  Obj* obj = (Obj*)instance;
+  // TODO: assert obj type is valid.
+
+  if (obj->type == OBJ_FILE) {
+    File* file = (File*)obj;
+    if (strcmp(attrib.string, "closed") == 0) {
+      pkReturnBool(vm, file->closed);
+      return true;
+    }
+  }
+
+  return false; // Attribute not found.
+}
 
 void freeObj(PKVM* vm, void* instance) {
 
@@ -278,16 +301,8 @@ void registerModulePath(PKVM* vm) {
 
 static void _fileOpen(PKVM* vm) {
 
-  // TODO: handle arg range using pocketlang native api.
-  // 1 <= argc <= 2
   int argc = pkGetArgc(vm);
-  if (argc == 0) {
-    pkSetRuntimeError(vm, "Expected at least 1 argument");
-    return;
-  } else if (argc > 2) {
-    pkSetRuntimeError(vm, "Expected at least 2 arguments");
-    return;
-  }
+  if (!pkCheckArgcRange(vm, argc, 1, 2)) return;
 
   const char* path;
   if (!pkGetArgString(vm, 1, &path, NULL)) return;
@@ -309,7 +324,7 @@ static void _fileOpen(PKVM* vm) {
 
       // TODO: (fmt, ...) va_arg for runtime error public api.
       // If we reached here, that means it's an invalid mode string.
-      pkSetRuntimeError(vm, "Invalid mode string");
+      pkSetRuntimeError(vm, "Invalid mode string.");
       return;
     } while (false);
   }
@@ -318,6 +333,7 @@ static void _fileOpen(PKVM* vm) {
 
   if (fp != NULL) {
     File* file = NEW_OBJ(File);
+    initObj(&file->_super, OBJ_FILE);
     file->fp = fp;
     file->mode = mode;
     file->closed = false;

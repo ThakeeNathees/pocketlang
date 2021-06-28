@@ -54,6 +54,13 @@ typedef struct {
 /* MODULE PUBLIC FUNCTIONS                                                   */
 /*****************************************************************************/
 
+// Initialize the native module object with it's default values.
+void initObj(Obj* obj, ObjType type);
+
+// A function callback called by pocket VM to get attribute of a native
+// instance.
+bool objGetAttrib(PKVM* vm, void* instance, PkStringPtr attrib);
+
 // The free callback of the object, that'll called by pocketlang when a
 // pocketlang native instance garbage collected.
 void freeObj(PKVM* vm, void* instance);

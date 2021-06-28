@@ -27,14 +27,7 @@ BENCHMARKS = (
 )
 
 ## Map from file extension to it's interpreter, Will be updated.
-INTERPRETERS = {
-  '.pk'   : None,
-  '.wren' : None,
-  '.py'   : None,
-  '.rb'   : None,
-  '.lua'  : None,
-  '.js'   : None,
-}
+INTERPRETERS = {}
 
 def main():
   update_interpreters()
@@ -46,7 +39,7 @@ def main():
 
 def run_all_benchmarsk():
   for benchmark in BENCHMARKS:
-    print_title(benchmark)
+    print_title(benchmark.title())
     dir = join(THIS_PATH, benchmark)
     for file in _source_files(os.listdir(dir)):
       file = abspath(join(dir, file))
@@ -55,7 +48,7 @@ def run_all_benchmarsk():
       lang, interp, val = INTERPRETERS[ext]
       if not interp: continue
 
-      print("%-10s : "%lang, end=''); sys.stdout.flush()
+      print(" %-10s : "%lang, end=''); sys.stdout.flush()
       result = _run_command([interp, file])
       time = re.findall(r'elapsed:\s*([0-9\.]+)\s*s',
                 result.stdout.decode('utf8'),
@@ -118,7 +111,7 @@ def _get_pocket_binary():
 ## as (lang, interp, val) tuple, where the val is the additional.
 ## data related to the interpreter.
 def _find_interp(lang, interpreter, val):
-  print('%-25s' % ('Searching for %s ' % lang), end='')
+  print('%-27s' % ('  Searching for %s ' % lang), end='')
   sys.stdout.flush()
   if which(interpreter):
     print_success('-- found')
@@ -136,9 +129,9 @@ def get_ext(file_name):
 ## ----------------------------------------------------------------------------
 
 def print_title(title):
-  print("----------------------------------")
+  print("-----------------------------------")
   print(" %s " % title)
-  print("----------------------------------")
+  print("-----------------------------------")
 
 ## ANSI color codes to print messages.
 COLORS = {

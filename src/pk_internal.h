@@ -54,6 +54,9 @@
 // The initial minimum capacity of a buffer to allocate.
 #define MIN_CAPACITY 8
 
+// The size of the error message buffer, used ar vsnprintf (since c99) buffer.
+#define ERROR_MESSAGE_SIZE 512
+
 /*****************************************************************************/
 /* ALLOCATION MACROS                                                         */
 /*****************************************************************************/
