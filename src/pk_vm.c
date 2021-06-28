@@ -1476,7 +1476,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
       double from_d = AS_NUM(from),
              to_d   = AS_NUM(to);
       if (instruction == OP_RANGE_IN) to_d += 1;
-      PUSH(VAR_OBJ(newRange(vm, from_d, to_d, false)));
+      PUSH(VAR_OBJ(newRange(vm, from_d, to_d)));
       DISPATCH();
     }
 

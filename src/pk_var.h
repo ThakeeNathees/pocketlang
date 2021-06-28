@@ -422,7 +422,7 @@ List* newList(PKVM* vm, uint32_t size);
 Map* newMap(PKVM* vm);
 
 // Allocate new Range object and return Range*.
-Range* newRange(PKVM* vm, double from, double to, bool inclusive);
+Range* newRange(PKVM* vm, double from, double to);
 
 // Allocate new Script object and return Script*.
 Script* newScript(PKVM* vm, String* path);

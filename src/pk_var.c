@@ -359,12 +359,11 @@ Map* newMap(PKVM* vm) {
   return map;
 }
 
-Range* newRange(PKVM* vm, double from, double to, bool inclusive) {
+Range* newRange(PKVM* vm, double from, double to) {
   Range* range = ALLOCATE(vm, Range);
   varInitObject(&range->_super, vm, OBJ_RANGE);
   range->from = from;
   range->to = to;
-  range->inclusive = inclusive;
   return range;
 }
 
@@ -1423,20 +1422,9 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
         const int len_to = snprintf(buff_to, sizeof(buff_to),
                                     DOUBLE_FMT, range->to);
 
-        const int len_operator = range->inclusive ? 2 : 3;
-
-        char* buf_operator;
-        if (range->inclusive) {
-          buf_operator = malloc(2);
-          buf_operator = "..";
-        } else {
-          buf_operator = malloc(3);
-          buf_operator = "...";
-        }
-
         pkByteBufferAddString(buff, vm, "[Range:", 7);
         pkByteBufferAddString(buff, vm, buff_from, len_from);
-        pkByteBufferAddString(buff, vm, buf_operator, len_operator);
+        pkByteBufferAddString(buff, vm, "..", 2);
         pkByteBufferAddString(buff, vm, buff_to, len_to);
         pkByteBufferWrite(buff, vm, ']');
         return;
