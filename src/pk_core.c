@@ -32,9 +32,6 @@
   static const char* DOCSTRING(fn) = docstring; \
   static void fn(PKVM* vm)
 
-// Checks if a number is a byte
-#define IS_NUM_BYTE(num) ((CHAR_MIN <= (num)) && ((num) <= CHAR_MAX))
-
 /*****************************************************************************/
 /* CORE PUBLIC API                                                           */
 /*****************************************************************************/
@@ -121,7 +118,7 @@ PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
   do {                                                               \
     __ASSERT(vm->fiber != NULL,                                      \
              "This function can only be called at runtime.");        \
-    __ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index.");     \
+    __ASSERT(arg > 0 && arg <= ARGC, "Invalid argument index.");     \
     __ASSERT(value != NULL, "Argument [value] was NULL.");           \
   } while (false)
 
@@ -138,6 +135,26 @@ do {                                                                 \
 int pkGetArgc(const PKVM* vm) {
   __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
   return ARGC;
+}
+
+// pkCheckArgcRange implementation (see pocketlang.h for description).
+bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max) {
+  ASSERT(min <= max, "invalid argc range (min > max).");
+
+  if (argc < min) {
+    char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", min);
+    VM_SET_ERROR(vm, stringFormat(vm, "Expected at least %s argument(s).",
+                                       buff));
+    return false;
+
+  } else if (argc > max) {
+    char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", max);
+    VM_SET_ERROR(vm, stringFormat(vm, "Expected at most %s argument(s).",
+                                       buff));
+    return false;
+  }
+
+  return true;
 }
 
 // pkGetArg implementation (see pocketlang.h for description).
@@ -303,6 +320,9 @@ bool pkFiberIsDone(const PkHandle* fiber) {
 /*****************************************************************************/
 /* VALIDATORS                                                                */
 /*****************************************************************************/
+
+// Evaluated to true of the [num] is in byte range.
+#define IS_NUM_BYTE(num) ((CHAR_MIN <= (num)) && ((num) <= CHAR_MAX))
 
 // Check if [var] is a numeric value (bool/number) and set [value].
 static inline bool isNumeric(Var var, double* value) {
@@ -607,12 +627,9 @@ DEF(coreInput,
 }
 
 DEF(coreExit,
-  "exit([value:int]) -> null\n"
-  "Sets the VM's fiber to NULL, causing the VM to return from execution "
-  "and thereby terminating the process entirely. The exit code of the "
-  "process is the optional argument [value] given to exit() which must be "
-  "between 0 and 255 inclusive. If no argument is given, the exit code is 0 "
-  "by default.") {
+  "exit([value:num]) -> null\n"
+  "Exit the process with an optional exit code provided by the argument "
+  "[value]. The default exit code is would be 0.") {
 
   int argc = ARGC;
   if (argc > 1) { // exit() or exit(val).
@@ -625,7 +642,7 @@ DEF(coreExit,
   }
 
   // TODO: this actually needs to be the VM fiber being set to null though.
-  exit(value);
+  exit((int)value);
 }
 
 // String functions.
@@ -967,11 +984,11 @@ DEF(stdMathArcSine,
   "expressed in radians.") {
 
   double num;
-
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
 
-  if (num < -1 || 1 < num)
+  if (num < -1 || 1 < num) {
     RET_ERR(newString(vm, "Argument should be between -1 and +1"));
+  }
 
   RET(VAR_NUM(asin(num)));
 }
@@ -982,11 +999,11 @@ DEF(stdMathArcCosine,
   "an angle expressed in radians.") {
 
   double num;
-
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
 
-  if (num < -1 || 1 < num)
+  if (num < -1 || 1 < num) {
     RET_ERR(newString(vm, "Argument should be between -1 and +1"));
+  }
 
   RET(VAR_NUM(acos(num)));
 }
@@ -1606,7 +1623,27 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     {
       Instance* inst = (Instance*)obj;
       if (inst->is_native) {
-        TODO;
+
+        if (vm->config.inst_get_attrib_fn) {
+
+          // Temproarly change the fiber's "return address" to points to the
+          // below var 'ret' so that the users can use 'pkReturn...()' function
+          // to return the attribute as well.
+          Var* temp = vm->fiber->ret;
+          Var ret = VAR_NULL;
+          vm->fiber->ret = &ret;
+
+          PkStringPtr attr = { attrib->data, NULL, NULL,
+                               attrib->length, attrib->hash };
+          if (!vm->config.inst_get_attrib_fn(vm, inst->native, attr)) {
+            // TODO: if the attribute is '.as_string' return repr.
+            ERR_NO_ATTRIB(vm, on, attrib);
+            return VAR_NULL;
+          }
+
+          vm->fiber->ret = temp;
+          return ret;
+        }
 
       } else {
 
@@ -1890,6 +1927,8 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
 
   UNREACHABLE();
 }
+
+#undef IS_NUM_BYTE
 
 #undef DOCSTRING
 #undef DEF

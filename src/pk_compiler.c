@@ -39,11 +39,6 @@
 // Max number of break statement in a loop statement to patch.
 #define MAX_BREAK_PATCH 256
 
-// The size of the compiler time error message buffer excluding the file path,
-// line number, and function name. Used for `vsprintf` and `vsnprintf` is not
-// available in C++98.
-#define ERROR_MESSAGE_SIZE 256
-
 // The name of a literal function.
 #define LITERAL_FN_NAME "$(LiteralFn)"
 
@@ -427,9 +422,8 @@ static void reportError(Compiler* compiler, const char* file, int line,
   // crash.
 
   char message[ERROR_MESSAGE_SIZE];
-  int length = vsprintf(message, fmt, args);
-  __ASSERT(length < ERROR_MESSAGE_SIZE, "Error message buffer should not "
-           "exceed the buffer");
+  int length = vsnprintf(message, sizeof(message), fmt, args);
+  __ASSERT(length >= 0, "Error message buffer failed at vsnprintf().");
   vm->config.error_fn(vm, PK_ERROR_COMPILE, file, line, message);
 }
 
@@ -991,17 +985,18 @@ static void consumeStartBlock(Compiler* compiler, TokenType delimiter) {
 
 // Returns a optional compound assignment.
 static bool matchAssignment(Compiler* compiler) {
-  if (match(compiler, TK_EQ)) return true;
-  if (match(compiler, TK_PLUSEQ)) return true;
-  if (match(compiler, TK_MINUSEQ)) return true;
-  if (match(compiler, TK_STAREQ)) return true;
-  if (match(compiler, TK_DIVEQ)) return true;
-  if (match(compiler, TK_MODEQ)) return true;
-  if (match(compiler, TK_ANDEQ)) return true;
-  if (match(compiler, TK_OREQ)) return true;
-  if (match(compiler, TK_XOREQ)) return true;
+  if (match(compiler, TK_EQ))       return true;
+  if (match(compiler, TK_PLUSEQ))   return true;
+  if (match(compiler, TK_MINUSEQ))  return true;
+  if (match(compiler, TK_STAREQ))   return true;
+  if (match(compiler, TK_DIVEQ))    return true;
+  if (match(compiler, TK_MODEQ))    return true;
+  if (match(compiler, TK_ANDEQ))    return true;
+  if (match(compiler, TK_OREQ))     return true;
+  if (match(compiler, TK_XOREQ))    return true;
   if (match(compiler, TK_SRIGHTEQ)) return true;
-  if (match(compiler, TK_SLEFTEQ)) return true;
+  if (match(compiler, TK_SLEFTEQ))  return true;
+
   return false;
 }
 
@@ -1885,16 +1880,16 @@ static void emitLoopJump(Compiler* compiler) {
 
 static void emitAssignment(Compiler* compiler, TokenType assignment) {
   switch (assignment) {
-    case TK_PLUSEQ: emitOpcode(compiler, OP_ADD); break;
-    case TK_MINUSEQ: emitOpcode(compiler, OP_SUBTRACT); break;
-    case TK_STAREQ: emitOpcode(compiler, OP_MULTIPLY); break;
-    case TK_DIVEQ: emitOpcode(compiler, OP_DIVIDE); break;
-    case TK_MODEQ: emitOpcode(compiler, OP_MOD); break;
-    case TK_ANDEQ: emitOpcode(compiler, OP_BIT_AND); break;
-    case TK_OREQ: emitOpcode(compiler, OP_BIT_OR); break;
-    case TK_XOREQ: emitOpcode(compiler, OP_BIT_XOR); break;
+    case TK_PLUSEQ:   emitOpcode(compiler, OP_ADD);        break;
+    case TK_MINUSEQ:  emitOpcode(compiler, OP_SUBTRACT);   break;
+    case TK_STAREQ:   emitOpcode(compiler, OP_MULTIPLY);   break;
+    case TK_DIVEQ:    emitOpcode(compiler, OP_DIVIDE);     break;
+    case TK_MODEQ:    emitOpcode(compiler, OP_MOD);        break;
+    case TK_ANDEQ:    emitOpcode(compiler, OP_BIT_AND);    break;
+    case TK_OREQ:     emitOpcode(compiler, OP_BIT_OR);     break;
+    case TK_XOREQ:    emitOpcode(compiler, OP_BIT_XOR);    break;
     case TK_SRIGHTEQ: emitOpcode(compiler, OP_BIT_RSHIFT); break;
-    case TK_SLEFTEQ: emitOpcode(compiler, OP_BIT_LSHIFT); break;
+    case TK_SLEFTEQ:  emitOpcode(compiler, OP_BIT_LSHIFT); break;
     default:
       UNREACHABLE();
       break;
