@@ -261,7 +261,6 @@ struct Range {
 
   double from; //< Beggining of the range.
   double to;   //< End of the range.
-  bool inclusive; //< true if `to` property is included in range.
 };
 
 struct Script {
