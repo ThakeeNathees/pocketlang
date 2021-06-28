@@ -14,12 +14,11 @@ def get_all_primes(n)
   for i in 0..n
     if is_prime(i)
 		list_append(res, i)
-	end
   end
   return res
 end
 
 primes = get_all_primes(20)
-assert(primes == [2, 3, 5, 7, 11, 13, 17, 19])
+assert(primes == [2, 3, 5, 7, 11, 13, 17, 19, 23])
 
 print('primes =', primes)

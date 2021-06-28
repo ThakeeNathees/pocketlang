@@ -5,7 +5,7 @@ assert(hex(255) == '0xff' and hex(10597059) == '0xa1b2c3')
 assert(hex(-4294967295) == '-0xffffffff') ## the largest.
 
 
-## string attributes.
+## String attributes.
 assert(''.length == 0)
 assert('test'.length == 4)
 assert(''.lower == '' and ''.upper == '')
@@ -17,11 +17,11 @@ assert('tEST+InG'.upper == 'TEST+ING')
 assert(' trim '.strip == 'trim')
 assert(''.strip == '')
 
-## List attribute
+## List attribute.
 assert([].length == 0)
 assert([1, 2, 3].length == 3)
 
-## Function
+## Function.
 assert(print.arity == -1)
 assert(hex.arity == 1)
 assert(func(a, b)end .arity == 2)
@@ -30,8 +30,14 @@ def fn(p1, p2, p3) end
 assert(fn.name == "fn")
 assert(fn.arity == 3)
 
-## range
+## Range inclusive.
 r = 1..5
+assert(r.as_list == [1, 2, 3, 4, 5])
+assert(r.first == 1)
+assert(r.last == 6) # this is bad, its kind of unclear
+
+# Range exclusive.
+r = 1...5
 assert(r.as_list == [1, 2, 3, 4])
 assert(r.first == 1)
 assert(r.last == 5)
@@ -64,7 +70,7 @@ assert((acos(0.5) - 1.1276259652063807) < threshold)
 assert((atan(0.3) - 1.1276259652063807) < threshold)
 
 x = -1; interval = 1000
-for i in 0..interval-1
+for i in 0...interval-1
   x += 2/interval
   assert(abs(sin(asin(x)) - x) < threshold)
   assert(abs(cos(acos(x)) - x) < threshold)
