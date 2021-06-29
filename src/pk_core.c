@@ -1201,6 +1201,8 @@ void initializeCore(PKVM* vm) {
   MODULE_ADD_FN(math, "asin",  stdMathArcSine,     1);
   MODULE_ADD_FN(math, "acos",  stdMathArcCosine,   1);
   MODULE_ADD_FN(math, "atan",  stdMathArcTangent,  1);
+  MODULE_ADD_FN(math, "log10", stdMathLog10,       1);
+  MODULE_ADD_FN(math, "round", stdMathRound,       1);
 
   // Note that currently it's mutable (since it's a global variable, not
   // constant and pocketlang doesn't support constant) so the user shouldn't
