@@ -28,6 +28,7 @@ def to_tolevel_path(path):
 ## corresponding cstring in the CASE_ATTRIB(name, hash) macro calls.
 HASH_CHECK_LIST = [
   "../src/pk_core.c",
+  "../src/pk_var.c",
 ]
 
 ## A list of extension to perform static checks, of all the files in the
@@ -68,7 +69,7 @@ def main():
   print("Static checks were passed.")
 
 def check_fnv1_hash(sources):
-  PATTERN = r'CASE_ATTRIB\(\s*"([A-Za-z0-9_]+)"\s*,\s*(0x[0-9abcdef]+)\)'
+  PATTERN = r'CHECK_HASH\(\s*"([A-Za-z0-9_]+)"\s*,\s*(0x[0-9abcdef]+)\)'
   for file in sources:
     fp = open(file, 'r')
     
