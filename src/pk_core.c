@@ -648,11 +648,34 @@ DEF(coreExit,
 // String functions.
 // -----------------
 
-// TODO: substring.
+DEF(coreStrSub,
+  "str_sub(str:string, pos:num, len:num) -> string\n"
+  "Returns a substring from a given string supplied. In addition, "
+  "the position and length of the substring are provided when this "
+  "function is called. For example: `str_sub(str, pos, len)`.") {
+
+  int64_t len, pos;
+
+  String* str = NULL;
+  if (!validateArgString(vm, 1, &str)) return;
+  if (!validateInteger(vm, ARG(2), &pos, "Argument 2")) return;
+  if (!validateInteger(vm, ARG(3), &len, "Argument 3")) return;
+
+  if (str->length < pos || str->length < len)
+    RET_ERR(newString(vm, "Index out of range."));
+
+  // Edge case, empty string.
+  if (len == 0) RET(VAR_OBJ(newStringLength(vm, "", 0)));
+
+  String* sub_str = newStringLength(vm, str->data + pos, (uint32_t)len);
+
+  RET(VAR_OBJ(sub_str));
+}
 
 DEF(coreStrChr,
   "str_chr(value:num) -> string\n"
   "Returns the ASCII string value of the integer argument.") {
+
   int64_t num;
   if (!validateInteger(vm, ARG(1), &num, "Argument 1")) return;
 
@@ -1123,6 +1146,7 @@ void initializeCore(PKVM* vm) {
   INITIALIZE_BUILTIN_FN("exit",        coreExit,      -1);
 
   // String functions.
+  INITIALIZE_BUILTIN_FN("str_sub",     coreStrSub,     3);
   INITIALIZE_BUILTIN_FN("str_chr",     coreStrChr,     1);
   INITIALIZE_BUILTIN_FN("str_ord",     coreStrOrd,     1);
 

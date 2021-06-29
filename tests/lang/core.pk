@@ -30,6 +30,16 @@ def fn(p1, p2, p3) end
 assert(fn.name == "fn")
 assert(fn.arity == 3)
 
+## String functions
+assert(str_sub('c programming', 2, 11) == 'programming')
+assert(str_sub('foobarbaz', 2, 3) == 'oba')
+assert(str_sub('abcdef', 1, 2) == 'bc')
+assert(str_sub('I am a boy', 0, 4) == 'I am')
+assert(str_sub('programming', 2, 0) == '')
+assert(str_sub('foobar', 5, 0) == '')
+assert(str_sub('foobar', 0, 6) == 'foobar')
+assert(str_sub('', 0, 0) == '')
+
 ## range
 r = 1..5
 assert(r.as_list == [1, 2, 3, 4])
@@ -73,3 +83,4 @@ end
 
 # If we got here, that means all test were passed.
 print('All TESTS PASSED')
+
