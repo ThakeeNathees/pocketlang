@@ -1,9 +1,11 @@
 ## Core builtin functions and attribute tests.
 
+## Math functions
+from math import *
+
 assert(hex(12648430) == '0xc0ffee')
 assert(hex(255) == '0xff' and hex(10597059) == '0xa1b2c3')
 assert(hex(-4294967295) == '-0xffffffff') ## the largest.
-
 
 ## string attributes.
 assert(''.length == 0)
@@ -46,10 +48,6 @@ assert(r.as_list == [1, 2, 3, 4])
 assert(r.first == 1)
 assert(r.last == 5)
 
-## Math functions
-from math import PI, sin, cos, tan, abs, sinh,
-  cosh, tanh, asin, acos, atan
-
 assert(sin(0) == 0)
 assert(sin(PI/2) == 1)
 
@@ -80,6 +78,11 @@ for i in 0..interval-1
   assert(abs(cos(acos(x)) - x) < threshold)
   assert(abs(tan(atan(x)) - x) < threshold)
 end
+
+assert(abs(log10(2) - 0.3010299956639812) < threshold)
+assert(round(1.4) == 1)
+assert(round(1.5) == 2)
+assert(round(-1.5) == -2)
 
 # If we got here, that means all test were passed.
 print('All TESTS PASSED')

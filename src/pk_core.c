@@ -114,21 +114,27 @@ PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
   } while(false)
 
 // Check for errors in before calling the get arg public api function.
-#define CHECK_GET_ARG_API_ERRORS()                                   \
-  do {                                                               \
-    __ASSERT(vm->fiber != NULL,                                      \
-             "This function can only be called at runtime.");        \
-    __ASSERT(arg > 0 && arg <= ARGC, "Invalid argument index.");     \
-    __ASSERT(value != NULL, "Argument [value] was NULL.");           \
+#define CHECK_GET_ARG_API_ERRORS()                                          \
+  do {                                                                      \
+    __ASSERT(vm->fiber != NULL,                                             \
+             "This function can only be called at runtime.");               \
+    if (arg != 0) {/* If Native setter, the value would be at fiber->ret */ \
+      __ASSERT(arg > 0 && arg <= ARGC, "Invalid argument index.");          \
+    }                                                                       \
+    __ASSERT(value != NULL, "Argument [value] was NULL.");                  \
   } while (false)
 
 // Set error for incompatible type provided as an argument. (TODO: got type).
-#define ERR_INVALID_ARG_TYPE(m_type)                                 \
-do {                                                                 \
-  char buff[STR_INT_BUFF_SIZE];                                      \
-  sprintf(buff, "%d", arg);                                          \
-  VM_SET_ERROR(vm, stringFormat(vm, "Expected a '$' at argument $.", \
-                                    m_type, buff));                  \
+#define ERR_INVALID_ARG_TYPE(m_type)                                        \
+do {                                                                        \
+  if (arg != 0) { /* If Native setter, arg index would be 0. */             \
+    char buff[STR_INT_BUFF_SIZE];                                           \
+    sprintf(buff, "%d", arg);                                               \
+    VM_SET_ERROR(vm, stringFormat(vm, "Expected a '$' at argument $.",      \
+                                      m_type, buff));                       \
+  } else {                                                                  \
+    VM_SET_ERROR(vm, stringFormat(vm, "Expected a '$'.", m_type));          \
+  }                                                                         \
 } while (false)
 
 // pkGetArgc implementation (see pocketlang.h for description).
@@ -654,22 +660,23 @@ DEF(coreStrSub,
   "the position and length of the substring are provided when this "
   "function is called. For example: `str_sub(str, pos, len)`.") {
 
-  int64_t len, pos;
+  String* str;
+  int64_t pos, len;
 
-  String* str = NULL;
   if (!validateArgString(vm, 1, &str)) return;
   if (!validateInteger(vm, ARG(2), &pos, "Argument 2")) return;
   if (!validateInteger(vm, ARG(3), &len, "Argument 3")) return;
 
-  if (str->length < pos || str->length < len)
+  if (pos < 0 || str->length < pos)
     RET_ERR(newString(vm, "Index out of range."));
+
+  if (str->length < pos + len)
+    RET_ERR(newString(vm, "Substring length exceeded the limit."));
 
   // Edge case, empty string.
   if (len == 0) RET(VAR_OBJ(newStringLength(vm, "", 0)));
 
-  String* sub_str = newStringLength(vm, str->data + pos, (uint32_t)len);
-
-  RET(VAR_OBJ(sub_str));
+  RET(VAR_OBJ(newStringLength(vm, str->data + pos, (uint32_t)len)));
 }
 
 DEF(coreStrChr,
@@ -700,7 +707,6 @@ DEF(coreStrOrd,
     RET(VAR_NUM((double)c->data[0]));
   }
 }
-
 
 // List functions.
 // ---------------
@@ -1043,16 +1049,18 @@ DEF(stdMathArcTangent,
 }
 
 DEF(stdMathLog10,
-    "log10(value:num) -> num\n"
-    "Return the logarithm to base 10 of argument [value]") {
+  "log10(value:num) -> num\n"
+  "Return the logarithm to base 10 of argument [value]") {
+
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(log10(num)));
 }
 
 DEF(stdMathRound,
-    "round(value:num) -> num\n"
-    ) {
+  "round(value:num) -> num\n"
+  "Round to nearest integer, away from zero and return the number.") {
+
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(round(num)));
@@ -1479,27 +1487,10 @@ bool varContains(PKVM* vm, Var elem, Var container) {
   UNREACHABLE();
 }
 
-// Here we're switching the FNV-1a hash value of the name (cstring). Which is
-// an efficient way than having multiple if (attrib == "name"). From O(n) * k
-// to O(1) where n is the length of the string and k is the number of string
-// comparison.
-//
-// ex:
-//     SWITCH_ATTRIB(str) { // str = "length"
-//       CASE_ATTRIB("length", 0x83d03615) : { return string->length; }
-//     }
-//
-// In C++11 this can be achieved (in a better way) with user defined literals
-// and constexpr. (Reference from my previous compiler written in C++).
-// https://github.com/ThakeeNathees/carbon/
-//
-// However there is a python script that's matching the CASE_ATTRIB() macro
-// calls and validate if the string and the hash values are matching.
-// TODO: port it to the CI/CD process at github actions.
-//
-#define SWITCH_ATTRIB(name) switch (utilHashString(name))
-#define CASE_ATTRIB(name, hash) case hash
-#define CASE_DEFAULT default
+// TODO: The ERR_NO_ATTRIB() macro should splited into 2 to for setter and
+// getter and for the setter, the error message should be "object has no
+// mutable attribute", to indicate that there might be an attribute with the
+// name might be exists (but not accessed in a setter).
 
 // Set error for accessing non-existed attribute.
 #define ERR_NO_ATTRIB(vm, on, attrib)                                        \
@@ -1519,21 +1510,21 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     case OBJ_STRING:
     {
       String* str = (String*)obj;
-      SWITCH_ATTRIB(attrib->data) {
+      switch (attrib->hash) {
 
-        CASE_ATTRIB("length", 0x83d03615) :
+        case CHECK_HASH("length", 0x83d03615):
           return VAR_NUM((double)(str->length));
 
-        CASE_ATTRIB("lower", 0xb51d04ba) :
+        case CHECK_HASH("lower", 0xb51d04ba):
           return VAR_OBJ(stringLower(vm, str));
 
-        CASE_ATTRIB("upper", 0xa8c6a47) :
+        case CHECK_HASH("upper", 0xa8c6a47):
           return VAR_OBJ(stringUpper(vm, str));
 
-        CASE_ATTRIB("strip", 0xfd1b18d1) :
+        case CHECK_HASH("strip", 0xfd1b18d1):
           return VAR_OBJ(stringStrip(vm, str));
 
-        CASE_DEFAULT:
+        default:
           ERR_NO_ATTRIB(vm, on, attrib);
           return VAR_NULL;
       }
@@ -1544,12 +1535,12 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     case OBJ_LIST:
     {
       List* list = (List*)obj;
-      SWITCH_ATTRIB(attrib->data) {
+      switch (attrib->hash) {
 
-        CASE_ATTRIB("length", 0x83d03615) :
+        case CHECK_HASH("length", 0x83d03615):
           return VAR_NUM((double)(list->elements.count));
 
-        CASE_DEFAULT:
+        default:
           ERR_NO_ATTRIB(vm, on, attrib);
           return VAR_NULL;
       }
@@ -1570,22 +1561,22 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     case OBJ_RANGE:
     {
       Range* range = (Range*)obj;
-      SWITCH_ATTRIB(attrib->data) {
+      switch (attrib->hash) {
 
-        CASE_ATTRIB("as_list", 0x1562c22):
+        case CHECK_HASH("as_list", 0x1562c22):
           return VAR_OBJ(rangeAsList(vm, range));
 
         // We can't use 'start', 'end' since 'end' in pocketlang is a
         // keyword. Also we can't use 'from', 'to' since 'from' is a keyword
         // too. So, we're using 'first' and 'last' to access the range limits.
 
-        CASE_ATTRIB("first", 0x4881d841):
+        case CHECK_HASH("first", 0x4881d841):
           return VAR_NUM(range->from);
 
-        CASE_ATTRIB("last", 0x63e1d819):
+        case CHECK_HASH("last", 0x63e1d819):
           return VAR_NUM(range->to);
 
-        CASE_DEFAULT:
+        default:
           ERR_NO_ATTRIB(vm, on, attrib);
           return VAR_NULL;
       }
@@ -1625,15 +1616,15 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     case OBJ_FUNC:
     {
       Function* fn = (Function*)obj;
-      SWITCH_ATTRIB(attrib->data) {
+      switch (attrib->hash) {
 
-        CASE_ATTRIB("arity", 0x3e96bd7a) :
+        case CHECK_HASH("arity", 0x3e96bd7a):
           return VAR_NUM((double)(fn->arity));
 
-        CASE_ATTRIB("name", 0x8d39bde6) :
+        case CHECK_HASH("name", 0x8d39bde6):
           return VAR_OBJ(newString(vm, fn->name));
 
-        CASE_DEFAULT:
+        default:
           ERR_NO_ATTRIB(vm, on, attrib);
           return VAR_NULL;
       }
@@ -1643,15 +1634,15 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     case OBJ_FIBER:
       {
         Fiber* fb = (Fiber*)obj;
-        SWITCH_ATTRIB(attrib->data) {
+        switch (attrib->hash) {
 
-          CASE_ATTRIB("is_done", 0x789c2706):
+          case CHECK_HASH("is_done", 0x789c2706):
             return VAR_BOOL(fb->state == FIBER_DONE);
 
-          CASE_ATTRIB("function", 0x9ed64249):
+          case CHECK_HASH("function", 0x9ed64249):
             return VAR_OBJ(fb->func);
 
-          CASE_DEFAULT:
+          default:
             ERR_NO_ATTRIB(vm, on, attrib);
             return VAR_NULL;
           }
@@ -1664,48 +1655,12 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
     case OBJ_INST:
     {
-      Instance* inst = (Instance*)obj;
-      if (inst->is_native) {
-
-        if (vm->config.inst_get_attrib_fn) {
-
-          // Temproarly change the fiber's "return address" to points to the
-          // below var 'ret' so that the users can use 'pkReturn...()' function
-          // to return the attribute as well.
-          Var* temp = vm->fiber->ret;
-          Var ret = VAR_NULL;
-          vm->fiber->ret = &ret;
-
-          PkStringPtr attr = { attrib->data, NULL, NULL,
-                               attrib->length, attrib->hash };
-          if (!vm->config.inst_get_attrib_fn(vm, inst->native, attr)) {
-            // TODO: if the attribute is '.as_string' return repr.
-            ERR_NO_ATTRIB(vm, on, attrib);
-            return VAR_NULL;
-          }
-
-          vm->fiber->ret = temp;
-          return ret;
-        }
-
-      } else {
-
-        // TODO: Optimize this with binary search.
-        Class* ty = inst->ins->type;
-        for (uint32_t i = 0; i < ty->field_names.count; i++) {
-          ASSERT_INDEX(i, ty->field_names.count);
-          ASSERT_INDEX(ty->field_names.data[i], ty->owner->names.count);
-          String* f_name = ty->owner->names.data[ty->field_names.data[i]];
-          if (f_name->hash == attrib->hash &&
-              f_name->length == attrib->length &&
-              memcmp(f_name->data, attrib->data, attrib->length) == 0) {
-            return inst->ins->fields.data[i];
-          }
-        }
+      Var value;
+      if (!instGetAttrib(vm, (Instance*)obj, attrib, &value)) {
+        ERR_NO_ATTRIB(vm, on, attrib);
+        return VAR_NULL;
       }
-
-      ERR_NO_ATTRIB(vm, on, attrib);
-      return VAR_NULL;
+      return value;
     }
 
     default:
@@ -1811,31 +1766,16 @@ do {                                                                          \
 
     case OBJ_INST:
     {
-      Instance* inst = (Instance*)obj;
-      if (inst->is_native) {
-        TODO;
-        return;
-
-      } else {
-
-        // TODO: Optimize this with binary search.
-        Class* ty = inst->ins->type;
-        for (uint32_t i = 0; i < ty->field_names.count; i++) {
-          ASSERT_INDEX(i, ty->field_names.count);
-          ASSERT_INDEX(ty->field_names.data[i], ty->owner->names.count);
-          String* f_name = ty->owner->names.data[ty->field_names.data[i]];
-          if (f_name->hash == attrib->hash &&
-            f_name->length == attrib->length &&
-            memcmp(f_name->data, attrib->data, attrib->length) == 0) {
-            inst->ins->fields.data[i] = value;
-            return;
-          }
-        }
+      if (!instSetAttrib(vm, (Instance*)obj, attrib, value)) {
+        // If we has error by now, that means the set value type is
+        // incompatible. No need for us to set an other error, just return.
+        if (VM_HAS_ERROR(vm)) return;
         ERR_NO_ATTRIB(vm, on, attrib);
-        return;
       }
 
-      UNREACHABLE();
+      // If we reached here, that means the attribute exists and we have
+      // updated the value.
+      return;
     }
 
     default:
@@ -1846,9 +1786,6 @@ do {                                                                          \
 #undef ATTRIB_IMMUTABLE
 }
 
-#undef SWITCH_ATTRIB
-#undef CASE_ATTRIB
-#undef CASE_DEFAULT
 #undef ERR_NO_ATTRIB
 
 Var varGetSubscript(PKVM* vm, Var on, Var key) {
