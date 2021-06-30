@@ -701,6 +701,7 @@ DEF(coreStrOrd,
   }
 }
 
+
 // List functions.
 // ---------------
 
@@ -1041,6 +1042,22 @@ DEF(stdMathArcTangent,
   RET(VAR_NUM(atan(num)));
 }
 
+DEF(stdMathLog10,
+    "log10(value:num) -> num\n"
+    "Return the logarithm to base 10 of argument [value]") {
+  double num;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
+  RET(VAR_NUM(log10(num)));
+}
+
+DEF(stdMathRound,
+    "round(value:num) -> num\n"
+    ) {
+  double num;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
+  RET(VAR_NUM(round(num)));
+}
+
 // 'Fiber' module methods.
 // -----------------------
 
@@ -1184,6 +1201,8 @@ void initializeCore(PKVM* vm) {
   MODULE_ADD_FN(math, "asin",  stdMathArcSine,     1);
   MODULE_ADD_FN(math, "acos",  stdMathArcCosine,   1);
   MODULE_ADD_FN(math, "atan",  stdMathArcTangent,  1);
+  MODULE_ADD_FN(math, "log10", stdMathLog10,       1);
+  MODULE_ADD_FN(math, "round", stdMathRound,       1);
 
   // Note that currently it's mutable (since it's a global variable, not
   // constant and pocketlang doesn't support constant) so the user shouldn't
