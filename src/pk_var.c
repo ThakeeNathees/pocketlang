@@ -1052,7 +1052,7 @@ void freeObject(PKVM* vm, Object* self) {
       if (inst->is_native) {
         if (vm->config.inst_free_fn != NULL) {
           // TODO: Allow user to set error when freeing the object.
-          vm->config.inst_free_fn(vm, inst->native);
+          vm->config.inst_free_fn(vm, inst->native, inst->native_id);
         }
 
       } else {
@@ -1163,7 +1163,7 @@ bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value) {
       vm->fiber->ret = &val;
       PkStringPtr attr = { attrib->data, NULL, NULL,
                            attrib->length, attrib->hash };
-      vm->config.inst_get_attrib_fn(vm, inst->native, attr);
+      vm->config.inst_get_attrib_fn(vm, inst->native, inst->native_id, attr);
       vm->fiber->ret = temp;
 
       if (IS_UNDEF(val)) {
@@ -1225,7 +1225,8 @@ bool instSetAttrib(PKVM* vm, Instance* inst, String* attrib, Var value) {
       vm->fiber->ret = &attrib_ptr;
       PkStringPtr attr = { attrib->data, NULL, NULL,
                            attrib->length, attrib->hash };
-      bool exists = vm->config.inst_set_attrib_fn(vm, inst->native, attr);
+      bool exists = vm->config.inst_set_attrib_fn(vm, inst->native,
+                                                  inst->native_id, attr);
       vm->fiber->ret = temp;
 
       // If the type is incompatible there'll be an error by now, return false

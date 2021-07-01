@@ -1,9 +1,8 @@
 ## Example on how to integrate pocket VM with in your application.
-### This readme is incomplete (WIP)
 
-- Including this example this repository contains 3 examples on how to integrate
+- Including this example this repository contains several examples on how to integrate
 pocket VM with your application
-  - This example
+  - These examples (currently 2 examples)
   - The `cli/` application
   - The `docs/try/main.c` web assembly version of pocketlang
 
@@ -16,11 +15,13 @@ pocket VM with your application
 
 ----
 
-Compile the `example.c` file which contains examples on how to write your custom module
-to pocketlang, using the below command.
-
+#### `example1.c` - Contains how to pass values between pocket VM and C
 ```
-gcc example.c -o example ../../src/*.c -I../../src/include -lm
+gcc example1.c -o example1 ../../src/*.c -I../../src/include -lm
 ```
 
-Note that only calling C from pocket is completed and calling pocket from C is WIP.
+#### `example2.c` - Contains how to create your own custom native type in C
+```
+gcc example2.c -o example2 ../../src/*.c -I../../src/include -lm
+```
+

@@ -161,7 +161,7 @@ typedef PkStringPtr (*pkReadFn) (PKVM* vm);
 // A function callback, that'll be called when a native instance (wrapper) is
 // freed by by the garbage collector, to indicate that pocketlang is done with
 // the native instance.
-typedef void (*pkInstFreeFn) (PKVM* vm, void* instance);
+typedef void (*pkInstFreeFn) (PKVM* vm, void* instance, uint32_t id);
 
 // A function callback to get the name of the native instance from pocketlang,
 // using it's [id]. The returned string won't be copied by pocketlang so it's
@@ -174,7 +174,7 @@ typedef const char* (*pkInstNameFn) (uint32_t id);
 // functions. DON'T set an error to the VM if the attribute not exists. Example
 // if the '.as_string' attribute doesn't exists, pocket VM will use a default
 // to string value.
-typedef void (*pkInstGetAttribFn) (PKVM* vm, void* instance,
+typedef void (*pkInstGetAttribFn) (PKVM* vm, void* instance, uint32_t id,
                                    PkStringPtr attrib);
 
 // Use pkGetArg...(vm, 0, ptr) function to get the value of the attribute
@@ -184,7 +184,7 @@ typedef void (*pkInstGetAttribFn) (PKVM* vm, void* instance,
 // Pocket VM will handle it, On success update the native instance and return
 // true. And DON'T ever use 'pkReturn...()' in the attribute setter It's is a
 // void return function.
-typedef bool (*pkInstSetAttribFn) (PKVM* vm, void* instance,
+typedef bool (*pkInstSetAttribFn) (PKVM* vm, void* instance, uint32_t id,
                                    PkStringPtr attrib);
 
 // A function callback symbol for clean/free the pkStringResult.
