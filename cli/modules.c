@@ -19,10 +19,9 @@ void initObj(Obj* obj, ObjType type) {
   obj->type = type;
 }
 
-void objGetAttrib(PKVM* vm, void* instance, PkStringPtr attrib) {
-
+void objGetAttrib(PKVM* vm, void* instance, uint32_t id, PkStringPtr attrib) {
   Obj* obj = (Obj*)instance;
-  // TODO: assert obj type is valid.
+  ASSERT(obj->type == (ObjType)id, OOPS);
 
   if (obj->type == OBJ_FILE) {
     File* file = (File*)obj;
@@ -30,15 +29,14 @@ void objGetAttrib(PKVM* vm, void* instance, PkStringPtr attrib) {
       pkReturnBool(vm, file->closed);
       return;
     }
-
   }
 
   return; // Attribute not found.
 }
 
-bool objSetAttrib(PKVM* vm, void* instance, PkStringPtr attrib) {
+bool objSetAttrib(PKVM* vm, void* instance, uint32_t id, PkStringPtr attrib) {
   Obj* obj = (Obj*)instance;
-  // TODO: assert obj type is valid.
+  ASSERT(obj->type == (ObjType)id, OOPS);
 
   if (obj->type == OBJ_FILE) {
     File* file = (File*)obj;
@@ -48,10 +46,9 @@ bool objSetAttrib(PKVM* vm, void* instance, PkStringPtr attrib) {
   return false;
 }
 
-void freeObj(PKVM* vm, void* instance) {
-
+void freeObj(PKVM* vm, void* instance, uint32_t id) {
   Obj* obj = (Obj*)instance;
-  // TODO: assert obj type is valid.
+  ASSERT(obj->type == (ObjType)id, OOPS);
 
   // If the file isn't closed, close it to flush it's buffer.
   if (obj->type == OBJ_FILE) {

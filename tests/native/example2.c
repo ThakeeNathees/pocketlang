@@ -1,40 +1,46 @@
+/*
+ *  Copyright (c) 2020-2021 Thakee Nathees
+ *  Distributed Under The MIT License
+ */
+
+// This is an example on how to write your own custom type (Vector here) and
+// bind it with with the pocket VM.
 
 #include <pocketlang.h>
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
 // The script we're using to test the native Vector type.
-static const char* code = "                           \n\
-  import Vector # The native module.                  \n\
-  print('Module        =', Vector)                    \n\
-                                                      \n\
-  vec1 = Vector.new(1, 2) # Calling native method.    \n\
-  print('vec1          =', 'Vector.new(1, 2)')        \n\
-  print()                                             \n\
-                                                      \n\
-  # Using the native getter.                          \n\
-  print('vec1.x        =', vec1.x)                    \n\
-  print('vec1.y        =', vec1.y)                    \n\
-  print('vec1.length   =', vec1.length)               \n\
-  print()                                             \n\
-                                                      \n\
-  # Using the native setter.                          \n\
-  vec1.x = 3; vec1.y = 4;                             \n\
-  print('vec1.x        =', vec1.x)                    \n\
-  print('vec1.y        =', vec1.y)                    \n\
-  print('vec1.length   =', vec1.length)               \n\
-  print()                                             \n\
-                                                      \n\
-  vec2 = Vector.new(5, 6)                             \n\
-  vec3 = Vector.add(vec1, vec2)                       \n\
-  print('vec3          =', 'Vector.add(vec1, vec2)')  \n\
-  print('vec3.x        =', vec3.x)                    \n\
-  print('vec3.y        =', vec3.y)                    \n\
-                                                      \n\
-";
+static const char* code =
+  "  import Vector # The native module.                  \n"
+  "  print('Module        =', Vector)                    \n"
+  "                                                      \n"
+  "  vec1 = Vector.new(1, 2) # Calling native method.    \n"
+  "  print('vec1          =', 'Vector.new(1, 2)')        \n"
+  "  print()                                             \n"
+  "                                                      \n"
+  "  # Using the native getter.                          \n"
+  "  print('vec1.x        =', vec1.x)                    \n"
+  "  print('vec1.y        =', vec1.y)                    \n"
+  "  print('vec1.length   =', vec1.length)               \n"
+  "  print()                                             \n"
+  "                                                      \n"
+  "  # Using the native setter.                          \n"
+  "  vec1.x = 3; vec1.y = 4;                             \n"
+  "  print('vec1.x        =', vec1.x)                    \n"
+  "  print('vec1.y        =', vec1.y)                    \n"
+  "  print('vec1.length   =', vec1.length)               \n"
+  "  print()                                             \n"
+  "                                                      \n"
+  "  vec2 = Vector.new(5, 6)                             \n"
+  "  vec3 = Vector.add(vec1, vec2)                       \n"
+  "  print('vec3          =', 'Vector.add(vec1, vec2)')  \n"
+  "  print('vec3.x        =', vec3.x)                    \n"
+  "  print('vec3.y        =', vec3.y)                    \n"
+  "                                                      \n"
+  ;
 
 /*****************************************************************************/
 /* NATIVE TYPE DEFINES & CALLBACKS                                           */
@@ -46,11 +52,6 @@ typedef enum {
 } ObjType;
 
 typedef struct {
-  ObjType type;
-} Obj;
-
-typedef struct {
-  Obj base;    // "Inherits" objects.
   double x, y; // Vector variables.
 } Vector;
 
@@ -66,13 +67,12 @@ const char* getObjName(uint32_t id) {
 // Instance getter callback to get a value from the native instance.
 // The hash value and the length of the string are provided with the
 // argument [attrib].
-void objGetAttrib(PKVM* vm, void* instance, PkStringPtr attrib) {
+void objGetAttrib(PKVM* vm, void* instance, uint32_t id, PkStringPtr attrib) {
   
-  Obj* obj = (Obj*)instance;
-  
-  switch (obj->type) {
+  switch ((ObjType)id) {
     case OBJ_VECTOR: {
-      Vector* vector = ((Vector*)obj);
+      Vector* vector = ((Vector*)instance);
+
       if (strcmp(attrib.string, "x") == 0) {
         pkReturnNumber(vm, vector->x);
         return;
@@ -99,22 +99,22 @@ void objGetAttrib(PKVM* vm, void* instance, PkStringPtr attrib) {
 // Instance setter callback to set the value to the native instance.
 // The hash value and the length of the string are provided with the
 // argument [attrib].
-bool objSetAttrib(PKVM* vm, void* instance, PkStringPtr attrib) {
+bool objSetAttrib(PKVM* vm, void* instance, uint32_t id, PkStringPtr attrib) {
   
-  Obj* obj = (Obj*)instance;
-  
-  switch (obj->type) {
+  switch ((ObjType)id) {
     case OBJ_VECTOR: {
+      Vector* vector = ((Vector*)instance);
+
       if (strcmp(attrib.string, "x") == 0) {
         double x; // Get the number x.
         if (!pkGetArgNumber(vm, 0, &x)) return false;
-        ((Vector*)obj)->x = x;
+        vector->x = x;
         return true;
         
       } else if (strcmp(attrib.string, "y") == 0) {
         double y; // Get the number x.
         if (!pkGetArgNumber(vm, 0, &y)) return false;
-        ((Vector*)obj)->y = y;
+        vector->y = y;
         return true;
         
       }
@@ -128,10 +128,8 @@ bool objSetAttrib(PKVM* vm, void* instance, PkStringPtr attrib) {
 
 // The free object callback, called just before the native instance, garbage
 // collect.
-void freeObj(PKVM* vm, void* instance) {
-  Obj* obj = (Obj*)instance;
-  // Your cleanups.
-  free((void*)obj);
+void freeObj(PKVM* vm, void* instance, uint32_t id) {
+  free((void*)instance); // Your cleanups.
 }
 
 /*****************************************************************************/
@@ -148,9 +146,7 @@ void _vecNew(PKVM* vm) {
   
   // Create a new vector.
   Vector* vec = (Vector*)malloc(sizeof(Vector));
-  vec->base.type = OBJ_VECTOR;
   vec->x = x, vec->y = y;
-
   pkReturnInstNative(vm, (void*)vec, OBJ_VECTOR);
 }
 
@@ -162,7 +158,6 @@ void _vecAdd(PKVM* vm) {
   
   // Create a new vector.
   Vector* v3 = (Vector*)malloc(sizeof(Vector));
-  v3->base.type = OBJ_VECTOR;
   v3->x = v1->x + v2->x;
   v3->y = v1->y + v2->y;  
 
@@ -206,14 +201,12 @@ int main(int argc, char** argv) {
   config.inst_name_fn       = getObjName;
   config.inst_get_attrib_fn = objGetAttrib;
   config.inst_set_attrib_fn = objSetAttrib;
-  //config.load_script_fn   = loadScript;
-  //config.resolve_path_fn  = resolvePath;
 
   PKVM* vm = pkNewVM(&config);
   registerVector(vm);
   
-  PkStringPtr source = { code, NULL, NULL };
-  PkStringPtr path = { "./some/path/", NULL, NULL };
+  PkStringPtr source = { code, NULL, NULL, 0, 0 };
+  PkStringPtr path = { "./some/path/", NULL, NULL, 0, 0 };
   
   PkResult result = pkInterpretSource(vm, source, path, NULL/*options*/);
   pkFreeVM(vm);

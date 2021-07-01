@@ -59,11 +59,15 @@ void initObj(Obj* obj, ObjType type);
 
 // A function callback called by pocket VM to get attribute of a native
 // instance.
-void objGetAttrib(PKVM* vm, void* instance, PkStringPtr attrib);
+void objGetAttrib(PKVM* vm, void* instance, uint32_t id, PkStringPtr attrib);
+
+// A function callback called by pocket VM to set attribute of a native
+// instance.
+bool objSetAttrib(PKVM* vm, void* instance, uint32_t id, PkStringPtr attrib);
 
 // The free callback of the object, that'll called by pocketlang when a
 // pocketlang native instance garbage collected.
-void freeObj(PKVM* vm, void* instance);
+void freeObj(PKVM* vm, void* instance, uint32_t id);
 
 // The native instance get_name callback used to get the name of a native
 // instance from pocketlang. Here the id we're using is the ObjType enum.
