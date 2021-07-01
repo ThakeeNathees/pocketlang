@@ -4,23 +4,13 @@ Add '.title' attribute to string
 
 // To implement.
 
-- refactor the build.bat script.
-
-- no __file__ for core modules.
-
-- def f(x)
-    f(x) ## not tco, unless return f(x)
-  end
-  if a function's last statement is a call, we can perform tco.
+- make assert as a keyword (like python) and disable it on release build.
 
 - implement 'lang.getMaxCallDepth()' (default=1000 like python) and
   setMaxCallDepth(val) to change stack size at runtime.
 
 - change or add => to_string() to value.as_string
   and add as_repr, as_bool.
-
-- Make bool and num are incompatible (also it increase performance a bit).
-  1 + true - make it not allowed.
   
 - literal function recursive call.
   fn = func(a, b)
@@ -30,7 +20,6 @@ Add '.title' attribute to string
 
 - Implement utf8 support.
 - Implement gdb like debugger (add color print for readability).
-- Initialize imported scripts (require fiber based vm).
 - Complete all the TODO; macros.
 - implement MAX_ARGC checks (would cause a buffer overflow if not)
   when compiling and calling a function (also in fibers).

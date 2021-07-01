@@ -2215,7 +2215,7 @@ static Script* importFile(Compiler* compiler, const char* path) {
   }
 
   // Make a new script and to compile it.
-  Script* scr = newScript(vm, path_name);
+  Script* scr = newScript(vm, path_name, false);
   vmPushTempRef(vm, &scr->_super); // scr.
   mapSet(vm, vm->scripts, VAR_OBJ(path_name), VAR_OBJ(scr));
   vmPopTempRef(vm); // scr.

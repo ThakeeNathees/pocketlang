@@ -1,0 +1,11 @@
+
+g_val_1 = 0
+for i in 0..100
+  g_val_1 += 1
+end
+
+g_val_2 = get_a_value()
+
+def get_a_value()
+  return "baz"
+end

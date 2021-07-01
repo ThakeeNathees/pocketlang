@@ -143,7 +143,7 @@ PkResult pkInterpretSource(PKVM* vm, PkStringPtr source, PkStringPtr path,
   // Load a new script to the vm's scripts cache.
   Script* scr = vmGetScript(vm, path_name);
   if (scr == NULL) {
-    scr = newScript(vm, path_name);
+    scr = newScript(vm, path_name, false);
     vmPushTempRef(vm, &scr->_super); // scr.
     mapSet(vm, vm->scripts, VAR_OBJ(path_name), VAR_OBJ(scr));
     vmPopTempRef(vm); // scr.
@@ -548,7 +548,6 @@ static inline void pushCallFrame(PKVM* vm, const Function* fn, Var* rbp) {
   if (vm->fiber->stack_size <= needed) growStack(vm, needed);
 
   CallFrame* frame = vm->fiber->frames + vm->fiber->frame_count++;
-  *rbp = VAR_NULL;
   frame->rbp = rbp;
   frame->fn = fn;
   frame->ip = fn->fn->opcodes.data;
@@ -703,7 +702,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
 #define DISPATCH()   goto L_vm_main_loop
 
   // Trigger a break point here, if we're trying to debug the call stack.
-#if  DEBUG_DUMP_CALL_STACK
+#if DEBUG_DUMP_CALL_STACK
   DEBUG_BREAK();
 #endif
 
@@ -908,13 +907,32 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
       String* name = script->names.data[READ_SHORT()];
       Var scr = importScript(vm, name);
 
-      // TODO: implement fiber based execution.
-      //ASSERT(IS_OBJ_TYPE(script, OBJ_SCRIPT), OOPS);
-      //Script* scr = (Script*)AS_OBJ(script);
-      //if (!scr->initialized) vmRunScript(vm, scr);
-
+      ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), OOPS);
+      Script* module = (Script*)AS_OBJ(scr);
       PUSH(scr);
-      CHECK_ERROR();
+
+      // TODO: If the body doesn't have any statements (just the functions).
+      // This initialization call is un-necessary.
+
+      if (!module->initialized) {
+        module->initialized = true;
+
+        ASSERT(module->body != NULL, OOPS);
+
+        // Note that we're setting the main function's return address to the
+        // module itself (for every other function we'll push a null at the rbp
+        // before calling them and it'll be returned without modified if the
+        // function doesn't returned anything). Also We can't return from the
+        // body of the script, so the main function will return what's at the
+        // rbp without modifying it. So at the end of the main function the
+        // stack top would be the module itself.
+        Var* module_ret = vm->fiber->sp - 1;
+
+        UPDATE_FRAME(); //< Update the current frame's ip.
+        pushCallFrame(vm, module->body, module_ret);
+        LOAD_FRAME();  //< Load the top frame to vm's execution variables.
+      }
+
       DISPATCH();
     }
 
@@ -953,6 +971,10 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
         RUNTIME_ERROR(msg);
       }
 
+      // Next call frame starts here. (including return value).
+      call_fiber->ret = callable;
+      *(call_fiber->ret) = VAR_NULL; //< Set the return value to null.
+
       if (fn->is_native) {
 
         if (fn->native == NULL) {
@@ -962,10 +984,6 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
 
         // Update the current frame's ip.
         UPDATE_FRAME();
-
-        // Next call frame starts here. (including return value).
-        call_fiber->ret = callable;
-        *(call_fiber->ret) = VAR_NULL; //< Set the return value to null.
 
         fn->native(vm); //< Call the native function.
 

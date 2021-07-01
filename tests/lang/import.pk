@@ -35,6 +35,15 @@ assert(all_f3() == 'f3')
 import 'import/all_import.pk' as all_import
 assert(all_import.all_f1 == all_f1)
 
+## Test if the imported globals were initialized
+import 'import/globals.pk'
+assert(g_import != null)
+assert(g_import.g_var_1 == 3)
+assert(g_import.g_var_2 == g_import.get_a_value())
+
+import 'import/globals2.pk'
+assert(g_val_1 == 100)
+assert(g_val_2 == get_a_value())
 
 # If we got here, that means all test were passed.
 print('All TESTS PASSED')
