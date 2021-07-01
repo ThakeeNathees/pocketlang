@@ -161,7 +161,7 @@ typedef PkStringPtr (*pkReadFn) (PKVM* vm);
 // A function callback, that'll be called when a native instance (wrapper) is
 // freed by by the garbage collector, to indicate that pocketlang is done with
 // the native instance.
-typedef void (*pkInstFreeFn) (PKVM* vm, void* instance);
+typedef void (*pkInstFreeFn) (PKVM* vm, void* instance, uint32_t id);
 
 // A function callback to get the name of the native instance from pocketlang,
 // using it's [id]. The returned string won't be copied by pocketlang so it's
@@ -171,19 +171,21 @@ typedef const char* (*pkInstNameFn) (uint32_t id);
 
 // A get arribute callback, called by pocket VM when trying to get an attribute
 // from a native type. to return the value of the attribute use 'pkReturn...()'
-// functions, and return true. If the attribute not exists return false, But
-// DON'T set an error to the VM, this is necessary. Example if the '.as_string'
-// attribute doesn't exists, pocket VM will use a default to string value.
-typedef bool (*pkInstGetAttribFn) (PKVM* vm, void* instance,
+// functions. DON'T set an error to the VM if the attribute not exists. Example
+// if the '.as_string' attribute doesn't exists, pocket VM will use a default
+// to string value.
+typedef void (*pkInstGetAttribFn) (PKVM* vm, void* instance, uint32_t id,
                                    PkStringPtr attrib);
 
-// If the attribute dones't exists don't set an error, instead return false.
-// Pocket VM will handle it, however if the type of the value is incompatible
-// set an error with pkSetRuntimeError(); and return false, on success update
-// the native instance and return true. And do not ever use 'pkReturn...()'
-// function. This is a void return function.
-typedef bool (*pkInstSetAttribFn) (PKVM* vm, void* instance,
-                                   PkStringPtr attrib, PkVar value);
+// Use pkGetArg...(vm, 0, ptr) function to get the value of the attribute
+// and use 0 as the argument index, using any other arg index value cause UB.
+// 
+// If the attribute dones't exists DON'T set an error, instead return false.
+// Pocket VM will handle it, On success update the native instance and return
+// true. And DON'T ever use 'pkReturn...()' in the attribute setter It's is a
+// void return function.
+typedef bool (*pkInstSetAttribFn) (PKVM* vm, void* instance, uint32_t id,
+                                   PkStringPtr attrib);
 
 // A function callback symbol for clean/free the pkStringResult.
 typedef void (*pkResultDoneFn) (PKVM* vm, PkStringPtr result);
@@ -378,8 +380,10 @@ PK_PUBLIC PkVar pkGetArg(const PKVM* vm, int arg);
 // The functions below are used to extract the function arguments from the
 // stack as a type. They will first validate the argument's type and set a
 // runtime error if it's not and return false. Otherwise it'll set the [value]
-// with the extracted value. Note that the arguments are 1 based (to get the 
-// first argument use 1 not 0).
+// with the extracted value.
+// 
+// NOTE: The arguments are 1 based (to get the first argument use 1 not 0).
+//       Only use arg index 0 to get the value of attribute setter call.
 
 PK_PUBLIC bool pkGetArgBool(PKVM* vm, int arg, bool* value);
 PK_PUBLIC bool pkGetArgNumber(PKVM* vm, int arg, double* value);

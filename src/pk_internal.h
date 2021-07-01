@@ -78,4 +78,28 @@
 #define DEALLOCATE(vm, pointer) \
     vmRealloc(vm, pointer, 0, 0)
 
+/*****************************************************************************/
+/* REUSABLE INTERNAL MACROS                                                  */
+/*****************************************************************************/
+
+// Here we're switching the FNV-1a hash value of the name (cstring). Which is
+// an efficient way than having multiple if (attrib == "name"). From O(n) * k
+// to O(1) where n is the length of the string and k is the number of string
+// comparison.
+//
+// ex:
+//     switch (attrib->hash) { // str = "length"
+//       case CHECK_HASH("length", 0x83d03615) : { return string->length; }
+//     }
+//
+// In C++11 this can be achieved (in a better way) with user defined literals
+// and constexpr. (Reference from my previous compiler written in C++).
+// https://github.com/ThakeeNathees/carbon/
+//
+// However there is a python script that's matching the CHECK_HASH() macro
+// calls and validate if the string and the hash values are matching.
+// TODO: port it to the CI/CD process at github actions.
+//
+#define CHECK_HASH(name, hash) hash
+
 #endif // PK_INTERNAL

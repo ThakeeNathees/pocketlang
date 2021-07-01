@@ -132,6 +132,7 @@ static PKVM* intializePocketVM() {
   config.inst_free_fn = freeObj;
   config.inst_name_fn = getObjName;
   config.inst_get_attrib_fn = objGetAttrib;
+  config.inst_set_attrib_fn = objSetAttrib;
 
   config.load_script_fn = loadScript;
   config.resolve_path_fn = resolvePath;
