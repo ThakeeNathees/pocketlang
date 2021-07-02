@@ -708,7 +708,6 @@ DEF(coreStrOrd,
   }
 }
 
-
 // List functions.
 // ---------------
 
@@ -1090,7 +1089,7 @@ DEF(stdMathCbrt,
     "cbrt(value:num) -> num\n"
     "Returns the cuberoot of argument [value]"
    ) {
-  
+
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(cbrt(num)));
@@ -1131,7 +1130,6 @@ DEF(stdMathErfc,
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(erfc(num)));
 }
-
 
 // 'Fiber' module methods.
 // -----------------------
