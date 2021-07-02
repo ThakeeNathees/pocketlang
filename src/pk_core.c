@@ -1104,6 +1104,17 @@ DEF(stdMathGamma,
   RET(VAR_NUM(tgamma(num)));
 }
 
+#if defined(__USE_GNU) || defined(__USE_BSD)
+DEF(stdMathGamma,
+    "gamma(value:num) -> num\n"
+    "Returns the gamma function of argument [value]"
+   ) {
+  double num;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
+  RET(VAR_NUM(gamma(num)));
+}
+#endif
+
 DEF(stdMathLgamma,
     "lgamma(value:num) -> num\n"
     "Returns the complementary gamma function of argument [value]"
