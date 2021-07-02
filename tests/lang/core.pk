@@ -84,6 +84,19 @@ assert(round(1.4) == 1)
 assert(round(1.5) == 2)
 assert(round(-1.5) == -2)
 
+assert(log2(2) == 1)
+assert(log2(1) == 0)
+assert(round(log2(5)) == 2)
+
+assert(hypot(1,1) == sqrt(2))
+assert(round(hypot(3,5)) == 6)
+
+assert(cbrt(27) == 3)
+assert(abs(round(cbrt(9))) == 2)
+
+
+
+
 # If we got here, that means all test were passed.
 print('All TESTS PASSED')
 
