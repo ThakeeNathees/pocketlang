@@ -77,7 +77,7 @@ typedef struct PkHandle PkHandle;
 typedef void* PkVar;
 
 // Type enum of the pocketlang variables, this can be used to get the type
-// from a Var* in the method pkGetVarType().
+// from a PkVar in the method pkGetVarType().
 typedef enum {
   PK_NULL,
   PK_BOOL,
@@ -109,9 +109,6 @@ typedef enum {
 // or a function or evaluating an expression.
 typedef enum {
   PK_RESULT_SUCCESS = 0,    // Successfully finished the execution.
-
-  // This will be set to `true` if we're running REPL mode and reached an EOF
-  // unexpectedly, 
 
   // Unexpected EOF while compiling the source. This is another compile time
   // error that will ONLY be returned if we're compiling with the REPL mode set
@@ -216,7 +213,7 @@ PK_PUBLIC PkConfiguration pkNewConfiguration(void);
 // application.
 PK_PUBLIC PkCompileOptions pkNewCompilerOptions(void);
 
-// Allocate, initialize and returns a new VM
+// Allocate, initialize and returns a new VM.
 PK_PUBLIC PKVM* pkNewVM(PkConfiguration* config);
 
 // Clean the VM and dispose all the resources allocated by the VM.
@@ -332,14 +329,6 @@ struct PkCompileOptions {
   // Compile debug version of the source.
   bool debug;
 
-  // TODO: don't use FILE* pointer or any of <stdio.h> functions here.
-  //       instead add a stream option to vm.config.write_fn callback.
-  // 
-  // Dump the compiled opcodes to the given [dump_stream] FILE* could be stdio,
-  // stderr, or a file pointer.
-  //bool dump_opcodes;
-  //FILE* dump_stream;
-
   // Set to true if compiling in REPL mode, This will print repr version of
   // each evaluated non-null values. Note that if [repl_mode] is true the
   // [expression] should also be true otherwise it's incompatible, (will fail
@@ -443,9 +432,11 @@ PK_PUBLIC PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn);
 // callback.
 PK_PUBLIC PkHandle* pkNewInstNative(PKVM* vm, void* data, uint32_t id);
 
-// TODO: The functions below will push the primitive values on the stack
-// and return it's pointer as a PkVar. It's useful to convert your primitive
-// values as pocketlang variables.
+// TODO: Create a primitive (non garbage collected) variable buffer (or a
+// fixed size array) to store them and make the handle points to the variable
+// in that buffer, this will prevent us from invoking an allocation call for
+// each time we want to pass a primitive type.
+
 //PK_PUBLIC PkVar pkPushNull(PKVM* vm);
 //PK_PUBLIC PkVar pkPushBool(PKVM* vm, bool value);
 //PK_PUBLIC PkVar pkPushNumber(PKVM* vm, double value);

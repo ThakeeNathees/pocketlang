@@ -437,8 +437,12 @@ Map* newMap(PKVM* vm);
 // Allocate new Range object and return Range*.
 Range* newRange(PKVM* vm, double from, double to);
 
-// Allocate new Script object and return Script*.
-Script* newScript(PKVM* vm, String* path);
+// Allocate new Script object and return Script*, if the argument [is_core] is
+// true the script will be used as a core module and the body of the script
+// would be NULL and the [name] will be used as the module name. Otherwise the
+// [name] will be used as the path of the module and a main function will be
+// allocated for the module.
+Script* newScript(PKVM* vm, String* name, bool is_core);
 
 // Allocate new Function object and return Function*. Parameter [name] should
 // be the name in the Script's nametable. If the [owner] is NULL the function
