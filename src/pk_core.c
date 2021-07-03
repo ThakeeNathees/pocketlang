@@ -1048,9 +1048,10 @@ DEF(stdMathArcTangent,
 }
 
 DEF(stdMathLog10,
-    "log10(value:num) -> num\n"
-    "Return the logarithm to base 10 of argument [value]"
-    ) {
+  "log10(value:num) -> num\n"
+  "Return the logarithm to base 10 of argument [value]"
+  ) {
+
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(log10(num)));
@@ -1066,18 +1067,20 @@ DEF(stdMathRound,
 }
 
 DEF(stdMathLog2,
-    "log2(value:num) -> num\n"
-    "Returns the logarithm to base 2 of the argument [value]"
-   ) {
+  "log2(value:num) -> num\n"
+  "Returns the logarithm to base 2 of the argument [value]"
+  ) {
+
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(log2(num)));
 }
 
 DEF(stdMathHypot,
-    "hypot(x:num,y:num) -> num\n"
-    "Returns the hypotenuse of a right-angled triangle with side [x] and [y]"
-   ) {
+  "hypot(x:num,y:num) -> num\n"
+  "Returns the hypotenuse of a right-angled triangle with side [x] and [y]"
+  ) {
+
   double x, y;
   if (!validateNumeric(vm, ARG(1), &x, "Argument 1")) return;
   if (!validateNumeric(vm, ARG(2), &y, "Argument 2")) return;
@@ -1085,9 +1088,9 @@ DEF(stdMathHypot,
 }
 
 DEF(stdMathCbrt,
-    "cbrt(value:num) -> num\n"
-    "Returns the cuberoot of argument [value]"
-   ) {
+  "cbrt(value:num) -> num\n"
+  "Returns the cuberoot of argument [value]"
+  ) {
 
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
@@ -1095,9 +1098,10 @@ DEF(stdMathCbrt,
 }
 
 DEF(stdMathGamma,
-    "gamma(value:num) -> num\n"
-    "Returns the gamma function of argument [value]"
-   ) {
+  "gamma(value:num) -> num\n"
+  "Returns the gamma function of argument [value]"
+  ) {
+
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(tgamma(num)));
@@ -1105,9 +1109,10 @@ DEF(stdMathGamma,
 
 #if defined(__USE_GNU) || defined(__USE_BSD)
 DEF(stdMathGamma,
-    "gamma(value:num) -> num\n"
-    "Returns the gamma function of argument [value]"
-   ) {
+  "gamma(value:num) -> num\n"
+  "Returns the gamma function of argument [value]"
+  ) {
+
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(gamma(num)));
@@ -1115,27 +1120,30 @@ DEF(stdMathGamma,
 #endif
 
 DEF(stdMathLgamma,
-    "lgamma(value:num) -> num\n"
-    "Returns the complementary gamma function of argument [value]"
-   ) {
+  "lgamma(value:num) -> num\n"
+  "Returns the complementary gamma function of argument [value]"
+  ) {
+
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(lgamma(num)));
 }
 
 DEF(stdMathErf,
-    "erf(value:num) -> num\n"
-    "Returns the error function of argument [value]"
-   ) {
+  "erf(value:num) -> num\n"
+  "Returns the error function of argument [value]"
+  ) {
+
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(erf(num)));
 }
 
 DEF(stdMathErfc,
-    "erfc(value:num) -> num\n"
-    "Returns the complementary error function of argument [value]"
-   ) {
+  "erfc(value:num) -> num\n"
+  "Returns the complementary error function of argument [value]"
+  ) {
+
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(erfc(num)));
