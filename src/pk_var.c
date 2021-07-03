@@ -375,15 +375,11 @@ Script* newScript(PKVM* vm, String* name, bool is_core) {
 
   script->path = name;
   script->module = NULL;
-  script->initialized = false;
+  script->initialized = is_core;
   script->body = NULL;
 
-  // Core modules has its name as the module name, and since they don't have a
-  // main function, they doesn't need an initialization.
-  if (is_core) {
-    script->module = name;
-    script->initialized = true;
-  }
+  // Core modules has its name as the module name.
+  if (is_core) script->module = name;
 
   pkVarBufferInit(&script->globals);
   pkUintBufferInit(&script->global_names);
@@ -396,10 +392,7 @@ Script* newScript(PKVM* vm, String* name, bool is_core) {
   // if it's not a core module.
   if (!is_core) {
     vmPushTempRef(vm, &script->_super);
-    const char* fn_name = PK_IMPLICIT_MAIN_NAME;
-    script->body = newFunction(vm, fn_name, (int)strlen(fn_name),
-                               script, false, NULL/*TODO*/);
-    script->body->arity = 0;
+    scriptAddMain(vm, script);
 
     // Add '__file__' variable with it's path as value. If the path starts with
     // '$' It's a special file ($(REPL) or $(TRY)) and don't define __file__.
@@ -1157,6 +1150,16 @@ uint32_t scriptAddGlobal(PKVM* vm, Script* script,
   pkUintBufferWrite(&script->global_names, vm, name_ind);
   pkVarBufferWrite(&script->globals, vm, value);
   return script->globals.count - 1;
+}
+
+void scriptAddMain(PKVM* vm, Script* script) {
+  ASSERT(script->body == NULL, OOPS);
+
+  const char* fn_name = PK_IMPLICIT_MAIN_NAME;
+  script->body = newFunction(vm, fn_name, (int)strlen(fn_name),
+                             script, false, NULL/*TODO*/);
+  script->body->arity = 0;
+  script->initialized = false;
 }
 
 bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value) {

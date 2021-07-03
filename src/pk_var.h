@@ -295,7 +295,11 @@ struct Script {
   pkVarBuffer literals;        //< Script literal constant values.
 
   Function* body;              //< Script body is an anonymous function.
-  bool initialized;            //< Set to true just before the body executed.
+
+  // When a script has globals, it's body need to be executed to initialize the
+  // global values, this will be false if the module isn't initialized yet and
+  // we need to execute the script's body whe we're importing it.
+  bool initialized;
 };
 
 // Script function pointer.
@@ -587,6 +591,12 @@ int scriptGetGlobals(Script* script, const char* name, uint32_t length);
 uint32_t scriptAddGlobal(PKVM* vm, Script* script,
                          const char* name, uint32_t length,
                          Var value);
+
+// This will allocate a new implicit main function for the script and assign to
+// the script's body attribute. And the attribute initialized will be set to
+// false for the new function. Note that the body of the script should be NULL
+// before calling this function.
+void scriptAddMain(PKVM* vm, Script* script);
 
 // Get the attribut from the instance and set it [value]. On success return
 // true, if the attribute not exists it'll return false but won't set an error.
