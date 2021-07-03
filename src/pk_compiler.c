@@ -2215,7 +2215,7 @@ static Script* importFile(Compiler* compiler, const char* path) {
   }
 
   // Make a new script and to compile it.
-  Script* scr = newScript(vm, path_name);
+  Script* scr = newScript(vm, path_name, false);
   vmPushTempRef(vm, &scr->_super); // scr.
   mapSet(vm, vm->scripts, VAR_OBJ(path_name), VAR_OBJ(scr));
   vmPopTempRef(vm); // scr.
@@ -2766,7 +2766,7 @@ static void compileTopLevelStatement(Compiler* compiler) {
 }
 
 PkResult compile(PKVM* vm, Script* script, const char* source,
-             const PkCompileOptions* options) {
+                 const PkCompileOptions* options) {
 
   // Skip utf8 BOM if there is any.
   if (strncmp(source, "\xEF\xBB\xBF", 3) == 0) source += 3;
@@ -2781,10 +2781,14 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
   compiler->next_compiler = vm->compiler;
   vm->compiler = compiler;
 
+  // If the script doesn't has a body by default, it's probably was created by
+  // the native api function (pkNewModule() that'll return a module without a
+  // main function) so just create and add the function here.
+  if (script->body == NULL) scriptAddMain(vm, script);
+
   // If we're compiling for a script that was already compiled (when running
   // REPL or evaluating an expression) we don't need the old main anymore.
   // just use the globals and functions of the script and use a new body func.
-  ASSERT(script->body != NULL, OOPS);
   pkByteBufferClear(&script->body->fn->opcodes, vm);
 
   // Remember the count of the globals, functions and types, If the compilation

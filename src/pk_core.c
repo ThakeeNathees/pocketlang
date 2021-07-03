@@ -757,8 +757,7 @@ static Script* newModuleInternal(PKVM* vm, const char* name) {
              "A module named '$' already exists", name)->data);
   }
 
-  Script* scr = newScript(vm, _name);
-  scr->module = _name;
+  Script* scr = newScript(vm, _name, true);
   vmPopTempRef(vm); // _name
 
   // Add the script to core_libs.
