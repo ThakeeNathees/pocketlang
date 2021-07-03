@@ -38,7 +38,7 @@
 
 // Create a new module with the given [name] and returns as a Script* for
 // internal. Which will be wrapped by pkNewModule to return a pkHandle*.
-static Script* newModuleInternal(PKVM* vm, const char* name, bool is_core);
+static Script* newModuleInternal(PKVM* vm, const char* name);
 
 // The internal function to add global value to a module.
 static void moduleAddGlobalInternal(PKVM* vm, Script* script,
@@ -51,7 +51,7 @@ static void moduleAddFunctionInternal(PKVM* vm, Script* script,
 
 // pkNewModule implementation (see pocketlang.h for description).
 PkHandle* pkNewModule(PKVM* vm, const char* name) {
-  Script* module = newModuleInternal(vm, name, false);
+  Script* module = newModuleInternal(vm, name);
   return vmNewHandle(vm, VAR_OBJ(module));
 }
 
@@ -743,7 +743,7 @@ DEF(coreMapRemove,
 /*****************************************************************************/
 
 // Create a module and add it to the vm's core modules, returns the script.
-static Script* newModuleInternal(PKVM* vm, const char* name, bool is_core) {
+static Script* newModuleInternal(PKVM* vm, const char* name) {
 
   // Create a new Script for the module.
   String* _name = newString(vm, name);
@@ -757,7 +757,7 @@ static Script* newModuleInternal(PKVM* vm, const char* name, bool is_core) {
              "A module named '$' already exists", name)->data);
   }
 
-  Script* scr = newScript(vm, _name, is_core);
+  Script* scr = newScript(vm, _name, true);
   vmPopTempRef(vm); // _name
 
   // Add the script to core_libs.
@@ -1182,7 +1182,7 @@ void initializeCore(PKVM* vm) {
 
   // Core Modules /////////////////////////////////////////////////////////////
 
-  Script* lang = newModuleInternal(vm, "lang", true);
+  Script* lang = newModuleInternal(vm, "lang");
   MODULE_ADD_FN(lang, "clock", stdLangClock,  0);
   MODULE_ADD_FN(lang, "gc",    stdLangGC,     0);
   MODULE_ADD_FN(lang, "disas", stdLangDisas,  1);
@@ -1191,7 +1191,7 @@ void initializeCore(PKVM* vm) {
   MODULE_ADD_FN(lang, "debug_break", stdLangDebugBreak, 0);
 #endif
 
-  Script* math = newModuleInternal(vm, "math", true);
+  Script* math = newModuleInternal(vm, "math");
   MODULE_ADD_FN(math, "floor", stdMathFloor,       1);
   MODULE_ADD_FN(math, "ceil",  stdMathCeil,        1);
   MODULE_ADD_FN(math, "pow",   stdMathPow,         2);
@@ -1218,7 +1218,7 @@ void initializeCore(PKVM* vm) {
   // attribute of a core module and we can throw an error.
   moduleAddGlobalInternal(vm, math, "PI", VAR_NUM(M_PI));
 
-  Script* fiber = newModuleInternal(vm, "Fiber", true);
+  Script* fiber = newModuleInternal(vm, "Fiber");
   MODULE_ADD_FN(fiber, "new",      stdFiberNew,     1);
   MODULE_ADD_FN(fiber, "run",      stdFiberRun,    -1);
   MODULE_ADD_FN(fiber, "resume",   stdFiberResume, -1);
