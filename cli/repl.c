@@ -104,7 +104,7 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
     byteBufferWrite(&lines, '\0');
 
     // Compile the buffer to the module.
-    PkStringPtr source_ptr = { (const char*)lines.data, NULL, NULL };
+    PkStringPtr source_ptr = { (const char*)lines.data, NULL, NULL, 0, 0 };
     PkResult result = pkCompileModule(vm, module, source_ptr, options);
 
     if (result == PK_RESULT_UNEXPECTED_EOF) {

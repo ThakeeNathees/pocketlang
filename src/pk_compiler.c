@@ -2172,7 +2172,7 @@ static Script* importFile(Compiler* compiler, const char* path) {
   PKVM* vm = compiler->vm;
 
   // Resolve the path.
-  PkStringPtr resolved = { path, NULL, NULL };
+  PkStringPtr resolved = { path, NULL, NULL, 0, 0 };
   if (vm->config.resolve_path_fn != NULL) {
     resolved = vm->config.resolve_path_fn(vm, compiler->script->path->data,
                                           path);
