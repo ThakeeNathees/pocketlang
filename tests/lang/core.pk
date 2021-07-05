@@ -33,7 +33,7 @@ def fn(p1, p2, p3) end
 assert(fn.name == "fn")
 assert(fn.arity == 3)
 
-## String functions
+## String functions.
 assert(str_sub('c programming', 2, 11) == 'programming')
 assert(str_sub('foobarbaz', 2, 3) == 'oba')
 assert(str_sub('abcdef', 1, 2) == 'bc')
