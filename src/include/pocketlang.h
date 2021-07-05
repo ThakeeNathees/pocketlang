@@ -77,7 +77,7 @@ typedef struct PkHandle PkHandle;
 typedef void* PkVar;
 
 // Type enum of the pocketlang variables, this can be used to get the type
-// from a Var* in the method pkGetVarType().
+// from a PkVar in the method pkGetVarType().
 typedef enum {
   PK_NULL,
   PK_BOOL,
@@ -110,9 +110,6 @@ typedef enum {
 typedef enum {
   PK_RESULT_SUCCESS = 0,    // Successfully finished the execution.
 
-  // This will be set to `true` if we're running REPL mode and reached an EOF
-  // unexpectedly, 
-
   // Unexpected EOF while compiling the source. This is another compile time
   // error that will ONLY be returned if we're compiling with the REPL mode set
   // in the compile options. We need this specific error to indicate the host
@@ -128,7 +125,8 @@ typedef enum {
 /* POCKETLANG FUNCTION POINTERS & CALLBACKS                                  */
 /*****************************************************************************/
 
-// C function pointer which is callable from PocketLang.
+// C function pointer which is callable from pocketLang by native module
+// functions.
 typedef void (*pkNativeFn)(PKVM* vm);
 
 // A function that'll be called for all the allocation calls by PKVM.
@@ -160,13 +158,31 @@ typedef PkStringPtr (*pkReadFn) (PKVM* vm);
 // A function callback, that'll be called when a native instance (wrapper) is
 // freed by by the garbage collector, to indicate that pocketlang is done with
 // the native instance.
-typedef void (*pkFreeInstFn) (PKVM* vm, void* instance);
+typedef void (*pkInstFreeFn) (PKVM* vm, void* instance, uint32_t id);
 
 // A function callback to get the name of the native instance from pocketlang,
 // using it's [id]. The returned string won't be copied by pocketlang so it's
 // expected to be alived since the instance is alive and recomended to return
 // a C literal string.
 typedef const char* (*pkInstNameFn) (uint32_t id);
+
+// A get arribute callback, called by pocket VM when trying to get an attribute
+// from a native type. to return the value of the attribute use 'pkReturn...()'
+// functions. DON'T set an error to the VM if the attribute not exists. Example
+// if the '.as_string' attribute doesn't exists, pocket VM will use a default
+// to string value.
+typedef void (*pkInstGetAttribFn) (PKVM* vm, void* instance, uint32_t id,
+                                   PkStringPtr attrib);
+
+// Use pkGetArg...(vm, 0, ptr) function to get the value of the attribute
+// and use 0 as the argument index, using any other arg index value cause UB.
+// 
+// If the attribute dones't exists DON'T set an error, instead return false.
+// Pocket VM will handle it, On success update the native instance and return
+// true. And DON'T ever use 'pkReturn...()' in the attribute setter It's is a
+// void return function.
+typedef bool (*pkInstSetAttribFn) (PKVM* vm, void* instance, uint32_t id,
+                                   PkStringPtr attrib);
 
 // A function callback symbol for clean/free the pkStringResult.
 typedef void (*pkResultDoneFn) (PKVM* vm, PkStringPtr result);
@@ -197,7 +213,7 @@ PK_PUBLIC PkConfiguration pkNewConfiguration(void);
 // application.
 PK_PUBLIC PkCompileOptions pkNewCompilerOptions(void);
 
-// Allocate, initialize and returns a new VM
+// Allocate, initialize and returns a new VM.
 PK_PUBLIC PKVM* pkNewVM(PkConfiguration* config);
 
 // Clean the VM and dispose all the resources allocated by the VM.
@@ -270,13 +286,18 @@ PK_PUBLIC PkResult pkResumeFiber(PKVM* vm, PkHandle* fiber, PkVar value);
 /* POCKETLANG PUBLIC TYPE DEFINES                                            */
 /*****************************************************************************/
 
-// A string pointer wrapper to pass cstring from host application to pocketlang
-// vm, with a on_done() callback to clean it when the pocketlang vm is done with
-// the string.
+// A string pointer wrapper to pass c string between host application and
+// pocket VM. With a on_done() callback to clean it when the pocket VM is done
+// with the string.
 struct PkStringPtr {
   const char* string;     //< The string result.
   pkResultDoneFn on_done; //< Called once vm done with the string.
   void* user_data;        //< User related data.
+
+  // These values are provided by the pocket VM to the host application, you're
+  // not expected to set this when provideing string to the pocket VM.
+  uint32_t length;  //< Length of the string.
+  uint32_t hash;    //< Its 32 bit FNV-1a hash.
 };
 
 struct PkConfiguration {
@@ -289,8 +310,10 @@ struct PkConfiguration {
   pkWriteFn write_fn;
   pkReadFn read_fn;
 
-  pkFreeInstFn free_inst_fn;
+  pkInstFreeFn inst_free_fn;
   pkInstNameFn inst_name_fn;
+  pkInstGetAttribFn inst_get_attrib_fn;
+  pkInstSetAttribFn inst_set_attrib_fn;
 
   pkResolvePathFn resolve_path_fn;
   pkLoadScriptFn load_script_fn;
@@ -306,14 +329,6 @@ struct PkCompileOptions {
   // Compile debug version of the source.
   bool debug;
 
-  // TODO: don't use FILE* pointer or any of <stdio.h> functions here.
-  //       instead add a stream option to vm.config.write_fn callback.
-  // 
-  // Dump the compiled opcodes to the given [dump_stream] FILE* could be stdio,
-  // stderr, or a file pointer.
-  //bool dump_opcodes;
-  //FILE* dump_stream;
-
   // Set to true if compiling in REPL mode, This will print repr version of
   // each evaluated non-null values. Note that if [repl_mode] is true the
   // [expression] should also be true otherwise it's incompatible, (will fail
@@ -326,8 +341,11 @@ struct PkCompileOptions {
 /* NATIVE FUNCTION API                                                       */
 /*****************************************************************************/
 
-// Set a runtime error to vm.
+// Set a runtime error to VM.
 PK_PUBLIC void pkSetRuntimeError(PKVM* vm, const char* message);
+
+// TODO: Set a runtime error to VM, with the formated string.
+//PK_PUBLIC void pkSetRuntimeErrorFmt(PKVM* vm, const char* fmt, ...);
 
 // Return the type of the [value] this will help to get the type of the
 // variable that was extracted from pkGetArg() earlier.
@@ -336,6 +354,11 @@ PK_PUBLIC PkVarType pkGetValueType(const PkVar value);
 // Return the current functions argument count. This is needed for functions
 // registered with -1 argument count (which means variadic arguments).
 PK_PUBLIC int pkGetArgc(const PKVM* vm);
+
+// Check if the argc is in the range of (min <= argc <= max), if it's not, a
+// runtime error will be set and return false, otherwise return true. Assuming
+// that min <= max, and pocketlang won't validate this in release binary.
+PK_PUBLIC bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max);
 
 // Return the [arg] th argument as a PkVar. This pointer will only be
 // valid till the current function ends, because it points to the var at the
@@ -346,8 +369,10 @@ PK_PUBLIC PkVar pkGetArg(const PKVM* vm, int arg);
 // The functions below are used to extract the function arguments from the
 // stack as a type. They will first validate the argument's type and set a
 // runtime error if it's not and return false. Otherwise it'll set the [value]
-// with the extracted value. Note that the arguments are 1 based (to get the 
-// first argument use 1 not 0).
+// with the extracted value.
+// 
+// NOTE: The arguments are 1 based (to get the first argument use 1 not 0).
+//       Only use arg index 0 to get the value of attribute setter call.
 
 PK_PUBLIC bool pkGetArgBool(PKVM* vm, int arg, bool* value);
 PK_PUBLIC bool pkGetArgNumber(PKVM* vm, int arg, double* value);
@@ -407,9 +432,11 @@ PK_PUBLIC PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn);
 // callback.
 PK_PUBLIC PkHandle* pkNewInstNative(PKVM* vm, void* data, uint32_t id);
 
-// TODO: The functions below will push the primitive values on the stack
-// and return it's pointer as a PkVar. It's useful to convert your primitive
-// values as pocketlang variables.
+// TODO: Create a primitive (non garbage collected) variable buffer (or a
+// fixed size array) to store them and make the handle points to the variable
+// in that buffer, this will prevent us from invoking an allocation call for
+// each time we want to pass a primitive type.
+
 //PK_PUBLIC PkVar pkPushNull(PKVM* vm);
 //PK_PUBLIC PkVar pkPushBool(PKVM* vm, bool value);
 //PK_PUBLIC PkVar pkPushNumber(PKVM* vm, double value);

@@ -5,6 +5,9 @@
 
 #include "modules.h"
 
+// Note: Everything here is for testing the native API, and will have to
+//       refactor everything.
+
 // Allocate a new module object of type [Ty].
 #define NEW_OBJ(Ty) (Ty*)malloc(sizeof(Ty))
 
@@ -12,10 +15,40 @@
 // callback.
 #define FREE_OBJ(ptr) free(ptr)
 
-void freeObj(PKVM* vm, void* instance) {
+void initObj(Obj* obj, ObjType type) {
+  obj->type = type;
+}
 
+void objGetAttrib(PKVM* vm, void* instance, uint32_t id, PkStringPtr attrib) {
   Obj* obj = (Obj*)instance;
-  // TODO: assert obj type is valid.
+  ASSERT(obj->type == (ObjType)id, OOPS);
+
+  if (obj->type == OBJ_FILE) {
+    File* file = (File*)obj;
+    if (strcmp(attrib.string, "closed") == 0) {
+      pkReturnBool(vm, file->closed);
+      return;
+    }
+  }
+
+  return; // Attribute not found.
+}
+
+bool objSetAttrib(PKVM* vm, void* instance, uint32_t id, PkStringPtr attrib) {
+  Obj* obj = (Obj*)instance;
+  ASSERT(obj->type == (ObjType)id, OOPS);
+
+  if (obj->type == OBJ_FILE) {
+    File* file = (File*)obj;
+    // Nothing to change.
+  }
+
+  return false;
+}
+
+void freeObj(PKVM* vm, void* instance, uint32_t id) {
+  Obj* obj = (Obj*)instance;
+  ASSERT(obj->type == (ObjType)id, OOPS);
 
   // If the file isn't closed, close it to flush it's buffer.
   if (obj->type == OBJ_FILE) {
@@ -278,16 +311,8 @@ void registerModulePath(PKVM* vm) {
 
 static void _fileOpen(PKVM* vm) {
 
-  // TODO: handle arg range using pocketlang native api.
-  // 1 <= argc <= 2
   int argc = pkGetArgc(vm);
-  if (argc == 0) {
-    pkSetRuntimeError(vm, "Expected at least 1 argument");
-    return;
-  } else if (argc > 2) {
-    pkSetRuntimeError(vm, "Expected at least 2 arguments");
-    return;
-  }
+  if (!pkCheckArgcRange(vm, argc, 1, 2)) return;
 
   const char* path;
   if (!pkGetArgString(vm, 1, &path, NULL)) return;
@@ -309,7 +334,7 @@ static void _fileOpen(PKVM* vm) {
 
       // TODO: (fmt, ...) va_arg for runtime error public api.
       // If we reached here, that means it's an invalid mode string.
-      pkSetRuntimeError(vm, "Invalid mode string");
+      pkSetRuntimeError(vm, "Invalid mode string.");
       return;
     } while (false);
   }
@@ -318,6 +343,7 @@ static void _fileOpen(PKVM* vm) {
 
   if (fp != NULL) {
     File* file = NEW_OBJ(File);
+    initObj(&file->_super, OBJ_FILE);
     file->fp = fp;
     file->mode = mode;
     file->closed = false;

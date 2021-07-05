@@ -19,4 +19,4 @@ for i in 0..5
 end
 ```
 
-The complete language (including the internals and runtime) is a standalone executable with zero external dependency, that can be easily copied to a flash drive. And the language itself can be compiled from source in seconds without any dependencies (of cause you need a C compiler and **optionally** a build system).
+The complete language (including the internals and runtime) is a standalone executable with zero external dependency, that can be easily copied to a flash drive. And the language itself can be compiled from source in seconds without any dependencies (of course you need a C compiler and **optionally** a build system).

@@ -10,7 +10,8 @@ Including the compiler, bytecode VM and runtime, it's a standalone executable
 with zero external dependencies just as it's self descriptive name. The pocketlang
 VM can be embedded in another hosting program very easily.
 
-[Wren Language](https://wren.io/) and their wonderful book [Crafting Interpreters](http://www.craftinginterpreters.com/) were used as a reference to write the language.
+[Wren Language](https://wren.io/) and their wonderful book [Crafting Interpreters](http://www.craftinginterpreters.com/)
+were used as a reference to write this language.
 
 ## What pocketlang looks like
 
@@ -98,7 +99,7 @@ for the MSVS installation path and setup the build environment.
 4. Add `src/include` to include path.
 5. Compile.
 
-If you weren't able to compile it, please us report by [opening an issue](https://github.com/ThakeeNathees/pocketlang/issues/new).
+If you weren't able to compile it, please report us by [opening an issue](https://github.com/ThakeeNathees/pocketlang/issues/new).
 
 
 ## References
