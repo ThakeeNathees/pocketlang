@@ -39,9 +39,9 @@ bool objSetAttrib(PKVM* vm, void* instance, uint32_t id, PkStringPtr attrib) {
   ASSERT(obj->type == (ObjType)id, OOPS);
 
   if (obj->type == OBJ_FILE) {
-    [[maybe_unused]]
     File* file = (File*)obj;
     // Nothing to change.
+    (void)file;
   }
 
   return false;
