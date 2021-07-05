@@ -225,8 +225,7 @@ typedef enum {
   PREC_BITWISE_XOR,   // ^
   PREC_BITWISE_AND,   // &
   PREC_BITWISE_SHIFT, // << >>
-  PREC_RANGE_IN,      // ..
-  PREC_RANGE_EX,      // ...
+  PREC_RANGE,         // .. ...
   PREC_TERM,          // + -
   PREC_FACTOR,        // * / %
   PREC_UNARY,         // - ! ~ not
@@ -1158,8 +1157,8 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_EOF        */   NO_RULE,
   /* TK_LINE       */   NO_RULE,
   /* TK_DOT        */ { NULL,          exprAttrib,       PREC_ATTRIB },
-  /* TK_DOTDOT     */ { NULL,          exprBinaryOp,     PREC_RANGE_IN },
-  /* TK_DOTDOTDOT  */ { NULL,          exprBinaryOp,     PREC_RANGE_EX },
+  /* TK_DOTDOT     */ { NULL,          exprBinaryOp,     PREC_RANGE },
+  /* TK_DOTDOTDOT  */ { NULL,          exprBinaryOp,     PREC_RANGE },
   /* TK_COMMA      */   NO_RULE,
   /* TK_COLLON     */   NO_RULE,
   /* TK_SEMICOLLON */   NO_RULE,
@@ -1461,8 +1460,8 @@ static void exprBinaryOp(Compiler* compiler) {
   parsePrecedence(compiler, (Precedence)(getRule(op)->precedence + 1));
 
   switch (op) {
-    case TK_DOTDOT:    emitOpcode(compiler, OP_RANGE_IN);   break;
-    case TK_DOTDOTDOT: emitOpcode(compiler, OP_RANGE_EX);   break;
+    case TK_DOTDOT:    emitOpcode(compiler, OP_RANGE);   break;
+    case TK_DOTDOTDOT: emitOpcode(compiler, OP_RANGE);   break;
     case TK_PERCENT:   emitOpcode(compiler, OP_MOD);        break;
     case TK_AMP:       emitOpcode(compiler, OP_BIT_AND);    break;
     case TK_PIPE:      emitOpcode(compiler, OP_BIT_OR);     break;
