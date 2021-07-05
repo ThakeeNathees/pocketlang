@@ -129,8 +129,10 @@ static PKVM* intializePocketVM() {
   config.write_fn = writeFunction;
   config.read_fn = readFunction;
 
-  config.free_inst_fn = freeObj;
+  config.inst_free_fn = freeObj;
   config.inst_name_fn = getObjName;
+  config.inst_get_attrib_fn = objGetAttrib;
+  config.inst_set_attrib_fn = objSetAttrib;
 
   config.load_script_fn = loadScript;
   config.resolve_path_fn = resolvePath;
@@ -138,7 +140,7 @@ static PKVM* intializePocketVM() {
   return pkNewVM(&config);
 }
 
-int main(int argc, char** argv) {
+int main(int argc, const char** argv) {
 
   // Parse command line arguments.
 
@@ -171,7 +173,7 @@ int main(int argc, char** argv) {
   // Parse the options.
   struct argparse argparse;
   argparse_init(&argparse, cli_opts, usage, 0);
-  argc = argparse_parse(&argparse, argc, (const char **)argv);
+  argc = argparse_parse(&argparse, argc, argv);
 
   if (help) { // pocket --help.
     argparse_usage(&argparse);
@@ -198,12 +200,12 @@ int main(int argc, char** argv) {
 
   if (cmd != NULL) { // pocket -c "print('foo')"
 
-    PkStringPtr source = { cmd, NULL, NULL };
-    PkStringPtr path = { "$(Source)", NULL, NULL };
+    PkStringPtr source = { cmd, NULL, NULL, 0, 0 };
+    PkStringPtr path = { "$(Source)", NULL, NULL, 0, 0 };
     PkResult result = pkInterpretSource(vm, source, path, NULL);
     exitcode = (int)result;
 
-  } if (argc == 0) { // Run on REPL mode.
+  } else if (argc == 0) { // Run on REPL mode.
 
    // Print the copyright and license notice, if --quiet not set.
     if (!quiet) {

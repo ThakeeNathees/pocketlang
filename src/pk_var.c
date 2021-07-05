@@ -368,13 +368,19 @@ Range* newRange(PKVM* vm, double from, double to, bool inclusive) {
   return range;
 }
 
-Script* newScript(PKVM* vm, String* path) {
+Script* newScript(PKVM* vm, String* name, bool is_core) {
   Script* script = ALLOCATE(vm, Script);
   varInitObject(&script->_super, vm, OBJ_SCRIPT);
 
-  script->path = path;
+  ASSERT(name != NULL && name->length > 0, OOPS);
+
+  script->path = name;
   script->module = NULL;
-  script->initialized = false;
+  script->initialized = is_core;
+  script->body = NULL;
+
+  // Core modules has its name as the module name.
+  if (is_core) script->module = name;
 
   pkVarBufferInit(&script->globals);
   pkUintBufferInit(&script->global_names);
@@ -383,19 +389,22 @@ Script* newScript(PKVM* vm, String* path) {
   pkClassBufferInit(&script->classes);
   pkStringBufferInit(&script->names);
 
-  vmPushTempRef(vm, &script->_super);
-  const char* fn_name = PK_IMPLICIT_MAIN_NAME;
-  script->body = newFunction(vm, fn_name, (int)strlen(fn_name),
-                             script, false, NULL/*TODO*/);
-  script->body->arity = 0; // TODO: should it be 1 (ARGV)?.
+  // Add a implicit main function and the '__file__' global to the module, only
+  // if it's not a core module.
+  if (!is_core) {
+    vmPushTempRef(vm, &script->_super);
+    scriptAddMain(vm, script);
 
-  // Add '__file__' variable with it's path as value. If the path starts with
-  // '$' It's a special file ($(REPL) or $(TRY)) and don't define __file__.
-  if (script->path->data[0] != '$') {
-    scriptAddGlobal(vm, script, "__file__", 8, VAR_OBJ(script->path));
+    // Add '__file__' variable with it's path as value. If the path starts with
+    // '$' It's a special file ($(REPL) or $(TRY)) and don't define __file__.
+    if (script->path->data[0] != '$') {
+      scriptAddGlobal(vm, script, "__file__", 8, VAR_OBJ(script->path));
+    }
+
+    // TODO: Add ARGV as a global.
+
+    vmPopTempRef(vm); // script.
   }
-
-  vmPopTempRef(vm); // script.
 
   return script;
 }
@@ -1051,9 +1060,9 @@ void freeObject(PKVM* vm, Object* self) {
       Instance* inst = (Instance*)self;
 
       if (inst->is_native) {
-        if (vm->config.free_inst_fn != NULL) {
+        if (vm->config.inst_free_fn != NULL) {
           // TODO: Allow user to set error when freeing the object.
-          vm->config.free_inst_fn(vm, inst->native);
+          vm->config.inst_free_fn(vm, inst->native, inst->native_id);
         }
 
       } else {
@@ -1142,6 +1151,138 @@ uint32_t scriptAddGlobal(PKVM* vm, Script* script,
   pkUintBufferWrite(&script->global_names, vm, name_ind);
   pkVarBufferWrite(&script->globals, vm, value);
   return script->globals.count - 1;
+}
+
+void scriptAddMain(PKVM* vm, Script* script) {
+  ASSERT(script->body == NULL, OOPS);
+
+  const char* fn_name = PK_IMPLICIT_MAIN_NAME;
+  script->body = newFunction(vm, fn_name, (int)strlen(fn_name),
+                             script, false, NULL/*TODO*/);
+  script->body->arity = 0;
+  script->initialized = false;
+}
+
+bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value) {
+  ASSERT(inst != NULL, OOPS);
+  ASSERT(attrib != NULL, OOPS);
+  ASSERT(value != NULL, OOPS);
+
+  // This function should only be called at runtime.
+  ASSERT(vm->fiber != NULL, OOPS);
+
+  if (inst->is_native) {
+
+    if (vm->config.inst_get_attrib_fn) {
+      // Temproarly change the fiber's "return address" to points to the
+      // below var 'val' so that the users can use 'pkReturn...()' function
+      // to return the attribute as well.
+      Var* temp = vm->fiber->ret;
+      Var val = VAR_UNDEFINED;
+
+      vm->fiber->ret = &val;
+      PkStringPtr attr = { attrib->data, NULL, NULL,
+                           attrib->length, attrib->hash };
+      vm->config.inst_get_attrib_fn(vm, inst->native, inst->native_id, attr);
+      vm->fiber->ret = temp;
+
+      if (IS_UNDEF(val)) {
+
+        // FIXME: add a list of attribute overrides.
+        if (IS_CSTR_EQ(attrib, "as_string", 9,
+          CHECK_HASH("as_string", 0xbdef4147))) {
+          *value = VAR_OBJ(toRepr(vm, VAR_OBJ(inst)));
+          return true;
+        }
+
+        // If we reached here, the native instance don't have the attribute
+        // and no overriden attributes found, return false to indicate that the
+        // attribute doesn't exists.
+        return false;
+      }
+
+      // Attribute [val] updated by the hosting application.
+      *value = val;
+      return true;
+    }
+
+    // If the hosting application doesn't provided a getter function, we treat
+    // it as if the instance don't has the attribute.
+    return false;
+
+  } else {
+
+    // TODO: Optimize this with binary search.
+    Class* ty = inst->ins->type;
+    for (uint32_t i = 0; i < ty->field_names.count; i++) {
+      ASSERT_INDEX(i, ty->field_names.count);
+      ASSERT_INDEX(ty->field_names.data[i], ty->owner->names.count);
+      String* f_name = ty->owner->names.data[ty->field_names.data[i]];
+      if (IS_STR_EQ(f_name, attrib)) {
+        *value = inst->ins->fields.data[i];
+        return true;
+      }
+    }
+
+    // Couldn't find the attribute in it's type class, return false.
+    return false;
+  }
+
+  UNREACHABLE();
+}
+
+bool instSetAttrib(PKVM* vm, Instance* inst, String* attrib, Var value) {
+
+  if (inst->is_native) {
+
+    if (vm->config.inst_set_attrib_fn) {
+      // Temproarly change the fiber's "return address" to points to the
+      // below var 'ret' so that the users can use 'pkGetArg...()' function
+      // to validate and get the attribute.
+      Var* temp = vm->fiber->ret;
+      Var attrib_ptr = value;
+
+      vm->fiber->ret = &attrib_ptr;
+      PkStringPtr attr = { attrib->data, NULL, NULL,
+                           attrib->length, attrib->hash };
+      bool exists = vm->config.inst_set_attrib_fn(vm, inst->native,
+                                                  inst->native_id, attr);
+      vm->fiber->ret = temp;
+
+      // If the type is incompatible there'll be an error by now, return false
+      // and the user of this function has to check VM_HAS_ERROR() as well.
+      if (VM_HAS_ERROR(vm)) return false;
+
+      // If the attribute exists on the native type, the host application would
+      // returned true by now, return it.
+      return exists;
+    }
+
+    // If the host application doesn't provided a setter we treat it as it
+    // doesn't has the attribute.
+    return false;
+
+  } else {
+
+    // TODO: Optimize this with binary search.
+    Class* ty = inst->ins->type;
+    for (uint32_t i = 0; i < ty->field_names.count; i++) {
+      ASSERT_INDEX(i, ty->field_names.count);
+      ASSERT_INDEX(ty->field_names.data[i], ty->owner->names.count);
+      String* f_name = ty->owner->names.data[ty->field_names.data[i]];
+      if (f_name->hash == attrib->hash &&
+        f_name->length == attrib->length &&
+        memcmp(f_name->data, attrib->data, attrib->length) == 0) {
+        inst->ins->fields.data[i] = value;
+        return true;
+      }
+    }
+
+    // Couldn't find the attribute in it's type class, return false.
+    return false;
+  }
+
+  UNREACHABLE();
 }
 
 /*****************************************************************************/
@@ -1342,11 +1483,9 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
         // Check if the list is recursive.
         OuterSequence* seq = outer;
         while (seq != NULL) {
-          if (seq->is_list) {
-            if (seq->list == list) {
-              pkByteBufferAddString(buff, vm, "[...]", 5);
-              return;
-            }
+          if (seq->is_list && seq->list == list) {
+            pkByteBufferAddString(buff, vm, "[...]", 5);
+            return;
           }
           seq = seq->outer;
         }
@@ -1373,11 +1512,9 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
         // Check if the map is recursive.
         OuterSequence* seq = outer;
         while (seq != NULL) {
-          if (!seq->is_list) {
-            if (seq->map == map) {
-              pkByteBufferAddString(buff, vm, "{...}", 5);
-              return;
-            }
+          if (!seq->is_list && seq->map == map) {
+            pkByteBufferAddString(buff, vm, "{...}", 5);
+            return;
           }
           seq = seq->outer;
         }
@@ -1489,13 +1626,13 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
         pkByteBufferWrite(buff, vm, '[');
         pkByteBufferAddString(buff, vm, inst->name,
                               (uint32_t)strlen(inst->name));
+        pkByteBufferWrite(buff, vm, ':');
 
         if (!inst->is_native) {
           const Class* ty = inst->ins->type;
           const Inst* ins = inst->ins;
           ASSERT(ins->fields.count == ty->field_names.count, OOPS);
 
-          pkByteBufferWrite(buff, vm, ':');
           for (uint32_t i = 0; i < ty->field_names.count; i++) {
             if (i != 0) pkByteBufferWrite(buff, vm, ',');
 
@@ -1506,7 +1643,6 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
             _toStringInternal(vm, ins->fields.data[i], buff, outer, repr);
           }
         } else {
-          pkByteBufferWrite(buff, vm, ':');
 
           char buff_addr[STR_HEX_BUFF_SIZE];
           char* ptr = (char*)buff_addr;

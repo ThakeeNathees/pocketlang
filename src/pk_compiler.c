@@ -39,11 +39,6 @@
 // Max number of break statement in a loop statement to patch.
 #define MAX_BREAK_PATCH 256
 
-// The size of the compiler time error message buffer excluding the file path,
-// line number, and function name. Used for `vsprintf` and `vsnprintf` is not
-// available in C++98.
-#define ERROR_MESSAGE_SIZE 256
-
 // The name of a literal function.
 #define LITERAL_FN_NAME "$(LiteralFn)"
 
@@ -429,9 +424,8 @@ static void reportError(Compiler* compiler, const char* file, int line,
   // crash.
 
   char message[ERROR_MESSAGE_SIZE];
-  int length = vsprintf(message, fmt, args);
-  __ASSERT(length < ERROR_MESSAGE_SIZE, "Error message buffer should not "
-           "exceed the buffer");
+  int length = vsnprintf(message, sizeof(message), fmt, args);
+  __ASSERT(length >= 0, "Error message buffer failed at vsnprintf().");
   vm->config.error_fn(vm, PK_ERROR_COMPILE, file, line, message);
 }
 
@@ -997,17 +991,18 @@ static void consumeStartBlock(Compiler* compiler, TokenType delimiter) {
 
 // Returns a optional compound assignment.
 static bool matchAssignment(Compiler* compiler) {
-  if (match(compiler, TK_EQ)) return true;
-  if (match(compiler, TK_PLUSEQ)) return true;
-  if (match(compiler, TK_MINUSEQ)) return true;
-  if (match(compiler, TK_STAREQ)) return true;
-  if (match(compiler, TK_DIVEQ)) return true;
-  if (match(compiler, TK_MODEQ)) return true;
-  if (match(compiler, TK_ANDEQ)) return true;
-  if (match(compiler, TK_OREQ)) return true;
-  if (match(compiler, TK_XOREQ)) return true;
+  if (match(compiler, TK_EQ))       return true;
+  if (match(compiler, TK_PLUSEQ))   return true;
+  if (match(compiler, TK_MINUSEQ))  return true;
+  if (match(compiler, TK_STAREQ))   return true;
+  if (match(compiler, TK_DIVEQ))    return true;
+  if (match(compiler, TK_MODEQ))    return true;
+  if (match(compiler, TK_ANDEQ))    return true;
+  if (match(compiler, TK_OREQ))     return true;
+  if (match(compiler, TK_XOREQ))    return true;
   if (match(compiler, TK_SRIGHTEQ)) return true;
-  if (match(compiler, TK_SLEFTEQ)) return true;
+  if (match(compiler, TK_SLEFTEQ))  return true;
+
   return false;
 }
 
@@ -1893,16 +1888,16 @@ static void emitLoopJump(Compiler* compiler) {
 
 static void emitAssignment(Compiler* compiler, TokenType assignment) {
   switch (assignment) {
-    case TK_PLUSEQ: emitOpcode(compiler, OP_ADD); break;
-    case TK_MINUSEQ: emitOpcode(compiler, OP_SUBTRACT); break;
-    case TK_STAREQ: emitOpcode(compiler, OP_MULTIPLY); break;
-    case TK_DIVEQ: emitOpcode(compiler, OP_DIVIDE); break;
-    case TK_MODEQ: emitOpcode(compiler, OP_MOD); break;
-    case TK_ANDEQ: emitOpcode(compiler, OP_BIT_AND); break;
-    case TK_OREQ: emitOpcode(compiler, OP_BIT_OR); break;
-    case TK_XOREQ: emitOpcode(compiler, OP_BIT_XOR); break;
+    case TK_PLUSEQ:   emitOpcode(compiler, OP_ADD);        break;
+    case TK_MINUSEQ:  emitOpcode(compiler, OP_SUBTRACT);   break;
+    case TK_STAREQ:   emitOpcode(compiler, OP_MULTIPLY);   break;
+    case TK_DIVEQ:    emitOpcode(compiler, OP_DIVIDE);     break;
+    case TK_MODEQ:    emitOpcode(compiler, OP_MOD);        break;
+    case TK_ANDEQ:    emitOpcode(compiler, OP_BIT_AND);    break;
+    case TK_OREQ:     emitOpcode(compiler, OP_BIT_OR);     break;
+    case TK_XOREQ:    emitOpcode(compiler, OP_BIT_XOR);    break;
     case TK_SRIGHTEQ: emitOpcode(compiler, OP_BIT_RSHIFT); break;
-    case TK_SLEFTEQ: emitOpcode(compiler, OP_BIT_LSHIFT); break;
+    case TK_SLEFTEQ:  emitOpcode(compiler, OP_BIT_LSHIFT); break;
     default:
       UNREACHABLE();
       break;
@@ -2228,7 +2223,7 @@ static Script* importFile(Compiler* compiler, const char* path) {
   }
 
   // Make a new script and to compile it.
-  Script* scr = newScript(vm, path_name);
+  Script* scr = newScript(vm, path_name, false);
   vmPushTempRef(vm, &scr->_super); // scr.
   mapSet(vm, vm->scripts, VAR_OBJ(path_name), VAR_OBJ(scr));
   vmPopTempRef(vm); // scr.
@@ -2779,7 +2774,7 @@ static void compileTopLevelStatement(Compiler* compiler) {
 }
 
 PkResult compile(PKVM* vm, Script* script, const char* source,
-             const PkCompileOptions* options) {
+                 const PkCompileOptions* options) {
 
   // Skip utf8 BOM if there is any.
   if (strncmp(source, "\xEF\xBB\xBF", 3) == 0) source += 3;
@@ -2794,10 +2789,14 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
   compiler->next_compiler = vm->compiler;
   vm->compiler = compiler;
 
+  // If the script doesn't has a body by default, it's probably was created by
+  // the native api function (pkNewModule() that'll return a module without a
+  // main function) so just create and add the function here.
+  if (script->body == NULL) scriptAddMain(vm, script);
+
   // If we're compiling for a script that was already compiled (when running
   // REPL or evaluating an expression) we don't need the old main anymore.
   // just use the globals and functions of the script and use a new body func.
-  ASSERT(script->body != NULL, OOPS);
   pkByteBufferClear(&script->body->fn->opcodes, vm);
 
   // Remember the count of the globals, functions and types, If the compilation

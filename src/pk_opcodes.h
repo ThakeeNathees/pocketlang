@@ -110,9 +110,9 @@ OPCODE(PUSH_BUILTIN_FN, 1, 1)
 // Pop the stack top.
 OPCODE(POP, 0, -1)
 
-// Pop the path from the stack, import the module at the path and push the
-// script in the script. If the script is imported for the first time (not
-// cached) the script's body will be executed.
+// Push the pre-compiled module at the index (from opcode) on the stack, and
+// initialize the module (ie. run the main function) if it's not initialized
+// already.
 // params: 2 byte name index.
 OPCODE(IMPORT, 2, 1)
 
