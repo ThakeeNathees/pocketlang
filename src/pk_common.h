@@ -17,9 +17,11 @@
 #if defined(__GNUC__)
   #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
   #pragma GCC diagnostic ignored "-Wunused-parameter"
+  #pragma GCC diagnostic ignored "-Wtype-limits"
 #elif defined(__clang__)
   #pragma clang diagnostic ignored "-Wint-to-pointer-cast"
   #pragma clang diagnostic ignored "-Wunused-parameter"
+  #pragma clang diagnostic ignored "-Wtype-limits"
 #endif
 
 #include <stdio.h> //< Only needed here for ASSERT() macro and for release mode
@@ -64,22 +66,8 @@
 
 #define ASSERT(condition, message) __ASSERT(condition, message)
 
-#if defined(__GNUC__)
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wtype-limits"
-#elif defined(__clang__)
-  #pragma clang diagnostic push
-  #pragma clang diagnostic ignored "-Wtype-limits"
-#endif
-
 #define ASSERT_INDEX(index, size) \
   ASSERT(index >= 0 && index < size, "Index out of bounds.")
-
-#if defined(__GNUC__)
-  #pragma GCC diagnostic pop
-#elif defined(__clang__)
-  #pragma clang diagnostic pop
-#endif
 
 #define UNREACHABLE()                                                \
   do {                                                               \

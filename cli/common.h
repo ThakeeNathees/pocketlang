@@ -17,9 +17,11 @@
 #if defined(__GNUC__)
   #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
   #pragma GCC diagnostic ignored "-Wunused-parameter"
+  #pragma GCC diagnostic ignored "-Wtype-limits"
 #elif defined(__clang__)
   #pragma clang diagnostic ignored "-Wint-to-pointer-cast"
   #pragma clang diagnostic ignored "-Wunused-parameter"
+  #pragma clang diagnostic ignored "-Wtype-limits"
 #endif
 
 #include <stdio.h> //< Only needed here for ASSERT() macro and for release mode
