@@ -14,7 +14,7 @@ BUILD_DIR   = ./build
 SRC_DIRS = ./src ./cli
 INC_DIRS = ./src/include
 
-SRCS := $(shell find $(SRC_DIRS) -maxdepth 1 -name *.c)
+SRCS := $(foreach DIR,$(SRC_DIRS),$(wildcard $(DIR)/*.c))
 OBJS := $(SRCS:.c=.o)
 DEPS := $(OBJS:.o=.d)
 
