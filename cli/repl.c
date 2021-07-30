@@ -48,8 +48,9 @@ static void readLine(ByteBuffer* buff) {
 // empty to skip compilation of empty string.
 static inline bool is_str_empty(const char* line) {
   ASSERT(line != NULL, OOPS);
+  const char* c;
 
-  for (const char* c = line; *c != '\0'; c++) {
+  for (c = line; *c != '\0'; c++) {
     if (!isspace(*c)) return false;
   }
   return true;

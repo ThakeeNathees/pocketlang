@@ -662,18 +662,21 @@ String* stringFormat(PKVM* vm, const char* fmt, ...) {
   // determine the final string size to allocate.
   va_start(arg_list, fmt);
   size_t total_length = 0;
-  for (const char* c = fmt; *c != '\0'; c++) {
-    switch (*c) {
-      case '$':
-        total_length += strlen(va_arg(arg_list, const char*));
-        break;
+  {
+    const char* c;
+    for (c = fmt; *c != '\0'; c++) {
+      switch (*c) {
+        case '$':
+          total_length += strlen(va_arg(arg_list, const char*));
+              break;
 
-      case '@':
-        total_length += va_arg(arg_list, String*)->length;
-        break;
+        case '@':
+          total_length += va_arg(arg_list, String*)->length;
+              break;
 
-      default:
-        total_length++;
+        default:
+          total_length++;
+      }
     }
   }
   va_end(arg_list);
@@ -682,27 +685,30 @@ String* stringFormat(PKVM* vm, const char* fmt, ...) {
   String* result = _allocateString(vm, total_length);
   va_start(arg_list, fmt);
   char* buff = result->data;
-  for (const char* c = fmt; *c != '\0'; c++) {
-    switch (*c) {
-      case '$':
-      {
-        const char* string = va_arg(arg_list, const char*);
-        size_t length = strlen(string);
-        memcpy(buff, string, length);
-        buff += length;
-      } break;
+  {
+    const char *c;
+    for (c = fmt; *c != '\0'; c++) {
+      switch (*c) {
+        case '$': {
+          const char *string = va_arg(arg_list, const char*);
+          size_t length = strlen(string);
+          memcpy(buff, string, length);
+          buff += length;
+        }
+              break;
 
-      case '@':
-      {
-        String* string = va_arg(arg_list, String*);
-        memcpy(buff, string->data, string->length);
-        buff += string->length;
-      } break;
+        case '@': {
+          String *string = va_arg(arg_list, String*);
+          memcpy(buff, string->data, string->length);
+          buff += string->length;
+        }
+              break;
 
-      default:
-      {
-        *buff++ = *c;
-      } break;
+        default: {
+          *buff++ = *c;
+        }
+              break;
+      }
     }
   }
   va_end(arg_list);
@@ -736,8 +742,11 @@ void listInsert(PKVM* vm, List* self, uint32_t index, Var value) {
   if (IS_OBJ(value)) vmPopTempRef(vm);
 
   // Shift the existing elements down.
-  for (uint32_t i = self->elements.count - 1; i > index; i--) {
-    self->elements.data[i] = self->elements.data[i - 1];
+  {
+    uint32_t i;
+    for (i = self->elements.count - 1; i > index; i--) {
+      self->elements.data[i] = self->elements.data[i - 1];
+    }
   }
 
   // Insert the new element.
@@ -749,8 +758,11 @@ Var listRemoveAt(PKVM* vm, List* self, uint32_t index) {
   if (IS_OBJ(removed)) vmPushTempRef(vm, AS_OBJ(removed));
 
   // Shift the rest of the elements up.
-  for (uint32_t i = index; i < self->elements.count - 1; i++) {
-    self->elements.data[i] = self->elements.data[i + 1];
+  {
+    uint32_t i;
+    for (i = index; i < self->elements.count - 1; i++) {
+      self->elements.data[i] = self->elements.data[i + 1];
+    }
   }
 
   // Shrink the size if it's too much excess.
@@ -914,17 +926,23 @@ static void _mapResize(PKVM* vm, Map* self, uint32_t capacity) {
 
   self->entries = ALLOCATE_ARRAY(vm, MapEntry, capacity);
   self->capacity = capacity;
-  for (uint32_t i = 0; i < capacity; i++) {
-    self->entries[i].key = VAR_UNDEFINED;
-    self->entries[i].value = VAR_FALSE;
+  {
+    uint32_t i;
+    for (i = 0; i < capacity; i++) {
+      self->entries[i].key = VAR_UNDEFINED;
+      self->entries[i].value = VAR_FALSE;
+    }
   }
 
   // Insert the old entries to the new entries.
-  for (uint32_t i = 0; i < old_capacity; i++) {
-    // Skip the empty entries or tombstones.
-    if (IS_UNDEF(old_entries[i].key)) continue;
+  {
+    uint32_t i;
+    for (i = 0; i < old_capacity; i++) {
+      // Skip the empty entries or tombstones.
+      if (IS_UNDEF(old_entries[i].key)) continue;
 
-    _mapInsertEntry(self, old_entries[i].key, old_entries[i].value);
+      _mapInsertEntry(self, old_entries[i].key, old_entries[i].value);
+    }
   }
 
   DEALLOCATE(vm, old_entries);
@@ -1079,8 +1097,8 @@ void freeObject(PKVM* vm, Object* self) {
 
 uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
   uint32_t length) {
-
-  for (uint32_t i = 0; i < self->names.count; i++) {
+  uint32_t i;
+  for (i = 0; i < self->names.count; i++) {
     String* _name = self->names.data[i];
     if (_name->length == length && strncmp(_name->data, name, length) == 0) {
       // Name already exists in the buffer.
@@ -1088,7 +1106,7 @@ uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
     }
   }
 
-  // If we reach here the name doesn't exists in the buffer, so add it and
+  // If we reach here the name doesn't exist in the buffer, so add it and
   // return the index.
   String* new_name = newStringLength(vm, name, length);
   vmPushTempRef(vm, &new_name->_super);
@@ -1098,7 +1116,8 @@ uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
 }
 
 int scriptGetClass(Script* script, const char* name, uint32_t length) {
-  for (uint32_t i = 0; i < script->classes.count; i++) {
+  uint32_t i;
+  for (i = 0; i < script->classes.count; i++) {
     uint32_t name_ind = script->classes.data[i]->name;
     ASSERT(name_ind < script->names.count, OOPS);
     String* ty_name = script->names.data[name_ind];
@@ -1111,7 +1130,8 @@ int scriptGetClass(Script* script, const char* name, uint32_t length) {
 }
 
 int scriptGetFunc(Script* script, const char* name, uint32_t length) {
-  for (uint32_t i = 0; i < script->functions.count; i++) {
+  uint32_t i;
+  for (i = 0; i < script->functions.count; i++) {
     const char* fn_name = script->functions.data[i]->name;
     uint32_t fn_length = (uint32_t)strlen(fn_name);
     if (fn_length == length && strncmp(fn_name, name, length) == 0) {
@@ -1122,7 +1142,8 @@ int scriptGetFunc(Script* script, const char* name, uint32_t length) {
 }
 
 int scriptGetGlobals(Script* script, const char* name, uint32_t length) {
-  for (uint32_t i = 0; i < script->global_names.count; i++) {
+  uint32_t i;
+  for (i = 0; i < script->global_names.count; i++) {
     uint32_t name_index = script->global_names.data[i];
     String* g_name = script->names.data[name_index];
     if (g_name->length == length && strncmp(g_name->data, name, length) == 0) {
@@ -1213,7 +1234,8 @@ bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value) {
 
     // TODO: Optimize this with binary search.
     Class* ty = inst->ins->type;
-    for (uint32_t i = 0; i < ty->field_names.count; i++) {
+    uint32_t i;
+    for (i = 0; i < ty->field_names.count; i++) {
       ASSERT_INDEX(i, ty->field_names.count);
       ASSERT_INDEX(ty->field_names.data[i], ty->owner->names.count);
       String* f_name = ty->owner->names.data[ty->field_names.data[i]];
@@ -1265,7 +1287,8 @@ bool instSetAttrib(PKVM* vm, Instance* inst, String* attrib, Var value) {
 
     // TODO: Optimize this with binary search.
     Class* ty = inst->ins->type;
-    for (uint32_t i = 0; i < ty->field_names.count; i++) {
+    uint32_t i;
+    for (i = 0; i < ty->field_names.count; i++) {
       ASSERT_INDEX(i, ty->field_names.count);
       ASSERT_INDEX(ty->field_names.data[i], ty->owner->names.count);
       String* f_name = ty->owner->names.data[ty->field_names.data[i]];
@@ -1373,9 +1396,12 @@ bool isValuesEqual(Var v1, Var v2) {
       if (l1->elements.count != l2->elements.count) return false;
       Var* _v1 = l1->elements.data;
       Var* _v2 = l2->elements.data;
-      for (uint32_t i = 0; i < l1->elements.count; i++) {
-        if (!isValuesEqual(*_v1, *_v2)) return false;
-        _v1++, _v2++;
+      {
+        uint32_t i;
+        for (i = 0; i < l1->elements.count; i++) {
+          if (!isValuesEqual(*_v1, *_v2)) return false;
+          _v1++, _v2++;
+        }
       }
       return true;
     }
@@ -1450,9 +1476,10 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
           pkByteBufferAddString(buff, vm, str->data, str->length);
           return;
         } else {
+          const char* c;
           // If recursive return with quotes (ex: [42, "hello", 0..10]).
           pkByteBufferWrite(buff, vm, '"');
-          for (const char* c = str->data; *c != '\0'; c++) {
+          for (c = str->data; *c != '\0'; c++) {
             switch (*c) {
               case '"': pkByteBufferAddString(buff, vm, "\\\"", 2); break;
               case '\\': pkByteBufferAddString(buff, vm, "\\\\", 2); break;
@@ -1492,9 +1519,12 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
         seq_list.outer = outer; seq_list.is_list = true; seq_list.list = list;
 
         pkByteBufferWrite(buff, vm, '[');
-        for (uint32_t i = 0; i < list->elements.count; i++) {
-          if (i != 0) pkByteBufferAddString(buff, vm, ", ", 2);
-          _toStringInternal(vm, list->elements.data[i], buff, &seq_list, true);
+        {
+          uint32_t i;
+          for (i = 0; i < list->elements.count; i++) {
+            if (i != 0) pkByteBufferAddString(buff, vm, ", ", 2);
+            _toStringInternal(vm, list->elements.data[i], buff, &seq_list, true);
+          }
         }
         pkByteBufferWrite(buff, vm, ']');
         return;
@@ -1621,14 +1651,17 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
           const Inst* ins = inst->ins;
           ASSERT(ins->fields.count == ty->field_names.count, OOPS);
 
-          for (uint32_t i = 0; i < ty->field_names.count; i++) {
-            if (i != 0) pkByteBufferWrite(buff, vm, ',');
+          {
+            uint32_t i;
+            for (i = 0; i < ty->field_names.count; i++) {
+              if (i != 0) pkByteBufferWrite(buff, vm, ',');
 
-            pkByteBufferWrite(buff, vm, ' ');
-            String* f_name = ty->owner->names.data[ty->field_names.data[i]];
-            pkByteBufferAddString(buff, vm, f_name->data, f_name->length);
-            pkByteBufferWrite(buff, vm, '=');
-            _toStringInternal(vm, ins->fields.data[i], buff, outer, repr);
+              pkByteBufferWrite(buff, vm, ' ');
+              String *f_name = ty->owner->names.data[ty->field_names.data[i]];
+              pkByteBufferAddString(buff, vm, f_name->data, f_name->length);
+              pkByteBufferWrite(buff, vm, '=');
+              _toStringInternal(vm, ins->fields.data[i], buff, outer, repr);
+            }
           }
         } else {
 

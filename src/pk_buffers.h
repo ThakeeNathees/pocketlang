@@ -79,9 +79,10 @@
                                                                               \
     pk##m_name##BufferReserve(self, vm, self->count + count);                 \
                                                                               \
-    for (int i = 0; i < count; i++) {                                         \
+    {int i;                                                                   \
+     for (i = 0; i < count; i++) {                                            \
       self->data[self->count++] = data;                                       \
-    }                                                                         \
+    }}                                                                        \
   }                                                                           \
                                                                               \
   void pk##m_name##BufferWrite(pk##m_name##Buffer* self,                      \

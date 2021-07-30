@@ -77,8 +77,9 @@ uint32_t utilHashString(const char* string) {
 #define FNV_offset_basis_32_bit 2166136261u
 
   uint32_t hash = FNV_offset_basis_32_bit;
+  const char* c;
 
-  for (const char* c = string; *c != '\0'; c++) {
+  for (c = string; *c != '\0'; c++) {
     hash ^= *c;
     hash *= FNV_prime_32_bit;
   }

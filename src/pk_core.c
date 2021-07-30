@@ -83,7 +83,8 @@ PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
   __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
   Script* script = (Script*)AS_OBJ(scr);
 
-  for (uint32_t i = 0; i < script->functions.count; i++) {
+  uint32_t i;
+  for (i = 0; i < script->functions.count; i++) {
     const char* fn_name = script->functions.data[i]->name;
     if (strcmp(name, fn_name) == 0) {
       return vmNewHandle(vm, VAR_OBJ(script->functions.data[i]));
@@ -410,14 +411,16 @@ static inline bool validateIndex(PKVM* vm, int64_t index, uint32_t size,
 /*****************************************************************************/
 
 // findBuiltinFunction implementation (see core.h for description).
-int findBuiltinFunction(const PKVM* vm, const char* name, uint32_t length) {
-   for (uint32_t i = 0; i < vm->builtins_count; i++) {
+uint32_t findBuiltinFunction(const PKVM* vm, const char* name, uint32_t length) {
+  uint32_t i;
+  for (i = 0; i < vm->builtins_count; i++) {
      if (length == vm->builtins[i].length &&
        strncmp(name, vm->builtins[i].name, length) == 0) {
        return i;
      }
    }
-   return -1;
+   i = -1;
+   return i;
  }
 
 // getBuiltinFunction implementation (see core.h for description).
@@ -601,9 +604,12 @@ DEF(corePrint,
   // output.
   if (vm->config.write_fn == NULL) return;
 
-  for (int i = 1; i <= ARGC; i++) {
-    if (i != 1) vm->config.write_fn(vm, " ");
-    vm->config.write_fn(vm, toString(vm, ARG(i))->data);
+  {
+    int i;
+    for (i = 1; i <= ARGC; i++) {
+      if (i != 1) vm->config.write_fn(vm, " ");
+      vm->config.write_fn(vm, toString(vm, ARG(i))->data);
+    }
   }
 
   vm->config.write_fn(vm, "\n");
@@ -867,8 +873,9 @@ DEF(stdLangWrite,
   if (vm->config.write_fn == NULL) return;
 
   String* str; //< Will be cleaned by garbage collector;
+  int i;
 
-  for (int i = 1; i <= ARGC; i++) {
+  for (i = 1; i <= ARGC; i++) {
     Var arg = ARG(i);
     // If it's already a string don't allocate a new string instead use it.
     if (IS_OBJ_TYPE(arg, OBJ_STRING)) {
@@ -1093,8 +1100,11 @@ DEF(stdFiberRun,
   Var* args[MAX_ARGC];
 
   // ARG(1) is fiber, function arguments are ARG(2), ARG(3), ... ARG(argc).
-  for (int i = 1; i < argc; i++) {
-    args[i - 1] = &ARG(i + 1);
+  {
+    int i;
+    for (i = 1; i < argc; i++) {
+      args[i - 1] = &ARG(i + 1);
+    }
   }
 
   // Switch fiber and start execution.
@@ -1464,7 +1474,8 @@ bool varContains(PKVM* vm, Var elem, Var container) {
 
     case OBJ_LIST: {
       List* list = (List*)AS_OBJ(container);
-      for (uint32_t i = 0; i < list->elements.count; i++) {
+      uint32_t i;
+      for (i = 0; i < list->elements.count; i++) {
         if (isValuesEqual(elem, list->elements.data[i])) return true;
       }
       return false;

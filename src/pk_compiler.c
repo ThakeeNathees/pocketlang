@@ -553,8 +553,8 @@ static void eatName(Compiler* compiler) {
 
   TokenType type = TK_NAME;
 
-  int length = (int)(compiler->current_char - name_start);
-  for (int i = 0; _keywords[i].identifier != NULL; i++) {
+  int length = (int)(compiler->current_char - name_start), i;
+  for (i = 0; _keywords[i].identifier != NULL; i++) {
     if (_keywords[i].length == length &&
       strncmp(name_start, _keywords[i].identifier, length) == 0) {
       type = _keywords[i].tk_type;
@@ -1034,21 +1034,24 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
   NameSearchResult result;
   result.type = NAME_NOT_DEFINED;
 
-  for (int i = compiler->local_count - 1; i >= 0; i--) {
-    Local* local = &compiler->locals[i];
-    ASSERT(local->depth != DEPTH_GLOBAL, OOPS);
+  {
+    int i;
+    for (i = compiler->local_count - 1; i >= 0; i--) {
+      Local *local = &compiler->locals[i];
+      ASSERT(local->depth != DEPTH_GLOBAL, OOPS);
 
-    // Literal functions are not closures and ignore it's outer function's
-    // local variables.
-    if (compiler->func->depth >= local->depth) {
-      continue;
-    }
+      // Literal functions are not closures and ignore it's outer function's
+      // local variables.
+      if (compiler->func->depth >= local->depth) {
+        continue;
+      }
 
-    if (length == local->length) {
-      if (strncmp(local->name, name, length) == 0) {
-        result.type = NAME_LOCAL_VAR;
-        result.index = i;
-        return result;
+      if (length == local->length) {
+        if (strncmp(local->name, name, length) == 0) {
+          result.type = NAME_LOCAL_VAR;
+          result.index = i;
+          return result;
+        }
       }
     }
   }
@@ -1761,9 +1764,12 @@ static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
 static int compilerAddConstant(Compiler* compiler, Var value) {
   pkVarBuffer* literals = &compiler->script->literals;
 
-  for (uint32_t i = 0; i < literals->count; i++) {
-    if (isValuesSame(literals->data[i], value)) {
-      return i;
+  {
+    uint32_t i;
+    for (i = 0; i < literals->count; i++) {
+      if (isValuesSame(literals->data[i], value)) {
+        return i;
+      }
     }
   }
 
@@ -1989,12 +1995,15 @@ static int compileType(Compiler* compiler) {
 
     // TODO: Add a string compare macro.
     String* new_name = compiler->script->names.data[f_index];
-    for (uint32_t i = 0; i < type->field_names.count; i++) {
-      String* prev = compiler->script->names.data[type->field_names.data[i]];
-      if (new_name->hash == prev->hash && new_name->length == prev->length &&
-          memcmp(new_name->data, prev->data, prev->length) == 0) {
-        parseError(compiler, "Class field with name '%s' already exists.",
-                   new_name->data);
+    {
+      uint32_t i;
+      for (i = 0; i < type->field_names.count; i++) {
+        String *prev = compiler->script->names.data[type->field_names.data[i]];
+        if (new_name->hash == prev->hash && new_name->length == prev->length &&
+            memcmp(new_name->data, prev->data, prev->length) == 0) {
+          parseError(compiler, "Class field with name '%s' already exists.",
+                     new_name->data);
+        }
       }
     }
 
@@ -2070,7 +2079,8 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
 
       // TODO: move this to a functions.
       bool predefined = false;
-      for (int i = compiler->local_count - 1; i >= 0; i--) {
+      int i;
+      for (i = compiler->local_count - 1; i >= 0; i--) {
         Local* local = &compiler->locals[i];
         if (compiler->scope_depth != local->depth) break;
         if (local->length == param_len &&

@@ -14,7 +14,7 @@ void initializeCore(PKVM* vm);
 
 // Find the builtin function name and returns it's index in the builtins array
 // if not found returns -1.
-int findBuiltinFunction(const PKVM* vm, const char* name, uint32_t length);
+uint32_t findBuiltinFunction(const PKVM* vm, const char* name, uint32_t length);
 
 // Returns the builtin function at index [index].
 Function* getBuiltinFunction(const PKVM* vm, int index);

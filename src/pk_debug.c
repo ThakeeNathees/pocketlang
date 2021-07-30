@@ -93,11 +93,13 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
     ADD_INTEGER(vm, buff, i, INT_WIDTH - 1);
     pkByteBufferAddString(buff, vm, STR_AND_LEN("  "));
 
-    const char* op_name = op_names[opcodes[i]];
-    uint32_t op_length = (uint32_t)strlen(op_name);
-    pkByteBufferAddString(buff, vm, op_name, op_length);
-    for (uint32_t j = 0; j < 16 - op_length; j++) { // Padding.
-      ADD_CHAR(vm, buff, ' ');
+    {
+      const char *op_name = op_names[opcodes[i]];
+      uint32_t op_length = (uint32_t) strlen(op_name), j;
+      pkByteBufferAddString(buff, vm, op_name, op_length);
+      for (j = 0; j < 16 - op_length; j++) { // Padding.
+        ADD_CHAR(vm, buff, ' ');
+      }
     }
 
     Opcode op = (Opcode)func->fn->opcodes.data[i++];
@@ -163,8 +165,9 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
           ADD_INTEGER(vm, buff, arg, INT_WIDTH);
 
         } else {
+          int j;
           arg = (int)(op - OP_PUSH_LOCAL_0);
-          for (int j = 0; j < INT_WIDTH; j++) ADD_CHAR(vm, buff, ' ');
+          for (j = 0; j < INT_WIDTH; j++) ADD_CHAR(vm, buff, ' ');
         }
 
         if (arg < func->arity) {
@@ -196,8 +199,9 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
           ADD_INTEGER(vm, buff, arg, INT_WIDTH);
 
         } else {
+          int j;
           arg = (int)(op - OP_STORE_LOCAL_0);
-          for (int j = 0; j < INT_WIDTH; j++) ADD_CHAR(vm, buff, ' ');
+          for (j = 0; j < INT_WIDTH; j++) ADD_CHAR(vm, buff, ' ');
         }
 
         if (arg < func->arity) {
@@ -415,7 +419,8 @@ void dumpGlobalValues(PKVM* vm) {
   CallFrame* frame = &fiber->frames[frame_ind];
   Script* scr = frame->fn->owner;
 
-  for (uint32_t i = 0; i < scr->global_names.count; i++) {
+  uint32_t i;
+  for (i = 0; i < scr->global_names.count; i++) {
     String* name = scr->names.data[scr->global_names.data[i]];
     Var value = scr->globals.data[i];
     printf("%10s = ", name->data);
