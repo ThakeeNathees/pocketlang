@@ -4,7 +4,7 @@
 
 CC             = gcc
 CFLAGS         = -fPIC
-DEBUG_CFLAGS   = -D DEBUG -g3 -Og
+DEBUG_CFLAGS   = -D DEBUG -g3 -Og -ansi
 RELEASE_CFLAGS = -g -O3
 LDFLAGS        = -lm
 

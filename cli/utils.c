@@ -50,7 +50,8 @@ void byteBufferReserve(ByteBuffer* buffer, size_t size) {
 
 void byteBufferFill(ByteBuffer* buffer, uint8_t data, int count) {
   byteBufferReserve(buffer, buffer->count + count);
-  for (int i = 0; i < count; i++) {
+  int i;
+  for (i = 0; i < count; i++) {
     buffer->data[buffer->count++] = data;
   }
 }
@@ -62,7 +63,8 @@ void byteBufferWrite(ByteBuffer* buffer, uint8_t data) {
 void byteBufferAddString(ByteBuffer* buffer, const char* str,
                          uint32_t length) {
   byteBufferReserve(buffer, buffer->count + length);
-  for (uint32_t i = 0; i < length; i++) {
+  uint32_t i;
+  for (i = 0; i < length; i++) {
     buffer->data[buffer->count++] = *(str++);
   }
 }

@@ -170,7 +170,8 @@ PkResult pkRunFiber(PKVM* vm, PkHandle* fiber,
   Fiber* _fiber = (Fiber*)AS_OBJ(fb);
 
   Var* args[MAX_ARGC];
-  for (int i = 0; i < argc; i++) {
+  int i;
+  for (i = 0; i < argc; i++) {
     args[i] = &(argv[i]->value);
   }
 
@@ -258,21 +259,30 @@ void vmCollectGarbage(PKVM* vm) {
 
   // Mark the core libs and builtin functions.
   markObject(vm, &vm->core_libs->_super);
-  for (uint32_t i = 0; i < vm->builtins_count; i++) {
-    markObject(vm, &vm->builtins[i].fn->_super);
+  {
+    uint32_t i;
+    for (i = 0; i < vm->builtins_count; i++) {
+      markObject(vm, &vm->builtins[i].fn->_super);
+    }
   }
 
   // Mark the scripts cache.
   markObject(vm, &vm->scripts->_super);
 
   // Mark temp references.
-  for (int i = 0; i < vm->temp_reference_count; i++) {
-    markObject(vm, vm->temp_reference[i]);
+  {
+    int i;
+    for (i = 0; i < vm->temp_reference_count; i++) {
+      markObject(vm, vm->temp_reference[i]);
+    }
   }
 
   // Mark the handles.
-  for (PkHandle* h = vm->handles; h != NULL; h = h->next) {
-    markValue(vm, h->value);
+  {
+    PkHandle *h;
+    for (h = vm->handles; h != NULL; h = h->next) {
+      markValue(vm, h->value);
+    }
   }
 
   // Garbage collection triggered at the middle of a compilation.
@@ -359,8 +369,11 @@ bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var** argv) {
 
   // ARG1 is fiber, function arguments are ARG(2), ARG(3), ... ARG(argc).
   // And ret[0] is the return value, parameters starts at ret[1], ...
-  for (int i = 0; i < argc; i++) {
-    fiber->ret[1 + i] = *argv[i]; // +1: ret[0] is return value.
+  {
+    int i;
+    for (i = 0; i < argc; i++) {
+      fiber->ret[1 + i] = *argv[i]; // +1: ret[0] is return value.
+    }
   }
   fiber->sp += argc; // Parameters.
 
