@@ -142,7 +142,7 @@ COLORS = {
   'END'       : '\033[0m' ,
 }
 
-## Prints a warning message to stdour.
+## Prints a warning message to stdout.
 def print_warning(msg):
   os.system('') ## This will enable ANSI codes in windows terminal.
   for line in msg.splitlines():

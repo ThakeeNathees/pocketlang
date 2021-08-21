@@ -561,7 +561,7 @@ DEF(coreHex,
     RET(VAR_NULL);
   }
 
-  // TODO: spritnf limits only to 8 character hex value, we need to do it
+  // TODO: sprintf limits only to 8 character hex value, we need to do it
   // outself for a maximum of 16 character long (see bin() for reference).
   uint32_t _x = (uint32_t)((value < 0) ? -value : value);
   int length = sprintf(ptr, "%x", _x);
@@ -1486,7 +1486,7 @@ bool varContains(PKVM* vm, Var elem, Var container) {
   UNREACHABLE();
 }
 
-// TODO: The ERR_NO_ATTRIB() macro should splited into 2 to for setter and
+// TODO: The ERR_NO_ATTRIB() macro should splitted into 2 to for setter and
 // getter and for the setter, the error message should be "object has no
 // mutable attribute", to indicate that there might be an attribute with the
 // name might be exists (but not accessed in a setter).

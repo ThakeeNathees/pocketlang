@@ -55,7 +55,7 @@ All benchmarks below were executed on: Windows10 (64bit), ASUS N552VX, Intel Cor
 with 12GB SODIMM Ram. And the language versions are: pocketlang (pre-alpha), wren v0.3.0,
 python v3.7.4, ruby v2.7.2.
 
-![preformance](https://user-images.githubusercontent.com/41085900/120123257-6f043280-c1cb-11eb-8c20-a42153268a0f.png)
+![performance](https://user-images.githubusercontent.com/41085900/120123257-6f043280-c1cb-11eb-8c20-a42153268a0f.png)
 
 The source files used to run benchmarks can be found at `test/benchmarks/`
 directory. They were executed using a small python script in the test directory.

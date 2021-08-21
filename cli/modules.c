@@ -369,7 +369,7 @@ static void _fileRead(PKVM* vm) {
     return;
   }
 
-  // TODO: this is temproary.
+  // TODO: this is temporary.
   char buff[2048];
   fread((void*)buff, sizeof(char), sizeof(buff), file->fp);
   pkReturnString(vm, (const char*)buff);
