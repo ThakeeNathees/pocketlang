@@ -9,7 +9,7 @@
 #include "pk_buffers.h"
 #include "pk_internal.h"
 
-/** @file
+/**
  * A simple dynamic type system library for small dynamic typed languages using
  * a technique called NaN-tagging (optional). The method is inspired from the
  * wren (https://wren.io/) an awesome language written by Bob Nystrom the
@@ -277,6 +277,8 @@ struct Range {
   double to;   //< End of the range exclusive.
 };
 
+// In pocketlang, the terms Script and Module are interchangable. (Consider
+// renaming it to Module to be consistance with the terms).
 struct Script {
   Object _super;
 
@@ -395,14 +397,14 @@ typedef struct {
 struct Instance {
   Object _super;
 
-  const char* name;  //< Name of the type it belongs to.
+  const char* ty_name;  //< Name of the type it belongs to.
 
-  bool is_native;    //< True if it's a native type instance.
+  bool is_native;       //< True if it's a native type instance.
   uint32_t native_id;   //< Unique ID of this native instance.
 
   union {
-    void* native;  //< C struct pointer. // TODO:
-    Inst* ins;     //< Module instance pointer.
+    void* native; //< C struct pointer. // TODO:
+    Inst* ins;    //< Module instance pointer.
   };
 };
 

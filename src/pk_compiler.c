@@ -195,7 +195,7 @@ static _Keyword _keywords[] = {
   { "continue", 8, TK_CONTINUE },
   { "return",   6, TK_RETURN   },
 
-  { NULL,       0, (TokenType)(0) }, // Sentinel to mark the end of the array
+  { NULL,       0, (TokenType)(0) }, // Sentinel to mark the end of the array.
 };
 
 /*****************************************************************************/
@@ -1935,8 +1935,8 @@ typedef enum {
 static void compileStatement(Compiler* compiler);
 static void compileBlockBody(Compiler* compiler, BlockType type);
 
-// Compile a type and return it's index in the script's types buffer.
-static int compileType(Compiler* compiler) {
+// Compile a class and return it's index in the script's types buffer.
+static int compileClass(Compiler* compiler) {
 
   // Consume the name of the type.
   consume(compiler, TK_NAME, "Expected a type name.");
@@ -1947,10 +1947,10 @@ static int compileType(Compiler* compiler) {
     parseError(compiler, "Name '%.*s' already exists.", name_len, name);
   }
 
-  // Create a new type.
-  Class* type = newClass(compiler->vm, compiler->script,
-                         name, (uint32_t)name_len);
-  type->ctor->arity = 0;
+  // Create a new class.
+  Class* cls = newClass(compiler->vm, compiler->script,
+                        name, (uint32_t)name_len);
+  cls->ctor->arity = 0;
 
   // Check count exceeded.
   int fn_index = (int)compiler->script->functions.count - 1;
@@ -1959,8 +1959,8 @@ static int compileType(Compiler* compiler) {
                MAX_FUNCTIONS);
   }
 
-  int ty_index = (int)(compiler->script->classes.count - 1);
-  if (ty_index == MAX_CLASSES) {
+  int cls_index = (int)(compiler->script->classes.count - 1);
+  if (cls_index == MAX_CLASSES) {
     parseError(compiler, "A script should contain at most %d types.",
                MAX_CLASSES);
   }
@@ -1968,12 +1968,12 @@ static int compileType(Compiler* compiler) {
   // Compile the constructor function.
   ASSERT(compiler->func->ptr == compiler->script->body, OOPS);
   Func curr_fn;
-  compilerPushFunc(compiler, &curr_fn, type->ctor, fn_index);
+  compilerPushFunc(compiler, &curr_fn, cls->ctor, fn_index);
   compilerEnterBlock(compiler);
 
   // Push an instance on the stack.
   emitOpcode(compiler, OP_PUSH_INSTANCE);
-  emitByte(compiler, ty_index);
+  emitByte(compiler, cls_index);
 
   skipNewLines(compiler);
   TokenType next = peek(compiler);
@@ -1989,8 +1989,8 @@ static int compileType(Compiler* compiler) {
 
     // TODO: Add a string compare macro.
     String* new_name = compiler->script->names.data[f_index];
-    for (uint32_t i = 0; i < type->field_names.count; i++) {
-      String* prev = compiler->script->names.data[type->field_names.data[i]];
+    for (uint32_t i = 0; i < cls->field_names.count; i++) {
+      String* prev = compiler->script->names.data[cls->field_names.data[i]];
       if (new_name->hash == prev->hash && new_name->length == prev->length &&
           memcmp(new_name->data, prev->data, prev->length) == 0) {
         parseError(compiler, "Class field with name '%s' already exists.",
@@ -1998,7 +1998,7 @@ static int compileType(Compiler* compiler) {
       }
     }
 
-    pkUintBufferWrite(&type->field_names, compiler->vm, f_index);
+    pkUintBufferWrite(&cls->field_names, compiler->vm, f_index);
 
     // Consume the assignment expression.
     consume(compiler, TK_EQ, "Expected an assignment after field name.");
@@ -2011,7 +2011,7 @@ static int compileType(Compiler* compiler) {
     skipNewLines(compiler);
     next = peek(compiler);
   }
-  consume(compiler, TK_END, "Expected 'end' after type declaration end.");
+  consume(compiler, TK_END, "Expected 'end' after a class declaration end.");
 
   compilerExitBlock(compiler);
 
@@ -2352,7 +2352,7 @@ static void compilerImportAll(Compiler* compiler, Script* script) {
   ASSERT(script != NULL, OOPS);
   ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
-  // Import all types.
+  // Import all classes.
   for (uint32_t i = 0; i < script->classes.count; i++) {
     uint32_t name_ind = script->classes.data[i]->name;
     String* name = script->names.data[name_ind];
@@ -2742,7 +2742,7 @@ static void compileTopLevelStatement(Compiler* compiler) {
   compiler->is_last_call = false;
 
   if (match(compiler, TK_CLASS)) {
-    compileType(compiler);
+    compileClass(compiler);
 
   } else if (match(compiler, TK_NATIVE)) {
     compileFunction(compiler, FN_NATIVE);

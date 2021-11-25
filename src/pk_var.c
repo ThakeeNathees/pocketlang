@@ -506,7 +506,8 @@ Class* newClass(PKVM* vm, Script* scr, const char* name, uint32_t length) {
   type->name = scriptAddName(scr, vm, name, length);
   pkUintBufferInit(&type->field_names);
 
-  // Can't use '$' in string format. (TODO)
+  // Can't use '$' in string format, since it has a special meaning.
+  // TODO: escape the character.
   String* ty_name = scr->names.data[type->name];
   String* dollar = newStringLength(vm, "$", 1);
   vmPushTempRef(vm, &dollar->_super); // dollar
@@ -531,7 +532,7 @@ Instance* newInstance(PKVM* vm, Class* ty, bool initialize) {
   vmPushTempRef(vm, &inst->_super); // inst.
 
   ASSERT(ty->name < ty->owner->names.count, OOPS);
-  inst->name = ty->owner->names.data[ty->name]->data;
+  inst->ty_name = ty->owner->names.data[ty->name]->data;
   inst->is_native = false;
 
   Inst* ins = ALLOCATE(vm, Inst);
@@ -555,9 +556,9 @@ Instance* newInstanceNative(PKVM* vm, void* data, uint32_t id) {
   inst->native_id = id;
 
   if (vm->config.inst_name_fn != NULL) {
-    inst->name = vm->config.inst_name_fn(id);
+    inst->ty_name = vm->config.inst_name_fn(id);
   } else {
-    inst->name = "$(?)";
+    inst->ty_name = "$(?)";
   }
 
   inst->native = data;
@@ -1078,7 +1079,7 @@ void freeObject(PKVM* vm, Object* self) {
 }
 
 uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
-  uint32_t length) {
+                       uint32_t length) {
 
   for (uint32_t i = 0; i < self->names.count; i++) {
     String* _name = self->names.data[i];
@@ -1236,8 +1237,10 @@ bool instSetAttrib(PKVM* vm, Instance* inst, String* attrib, Var value) {
 
     if (vm->config.inst_set_attrib_fn) {
       // Temproarly change the fiber's "return address" to points to the
-      // below var 'ret' so that the users can use 'pkGetArg...()' function
-      // to validate and get the attribute.
+      // below var 'attrib_ptr' so that the users can use 'pkGetArg...()'
+      // function to validate and get the attribute (users should use 0 as the
+      // index of the argument since it's at the return address and we cannot
+      // ensure fiber->ret[1] will be in bounds).
       Var* temp = vm->fiber->ret;
       Var attrib_ptr = value;
 
@@ -1612,8 +1615,8 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
       {
         const Instance* inst = (const Instance*)obj;
         pkByteBufferWrite(buff, vm, '[');
-        pkByteBufferAddString(buff, vm, inst->name,
-                              (uint32_t)strlen(inst->name));
+        pkByteBufferAddString(buff, vm, inst->ty_name,
+                              (uint32_t)strlen(inst->ty_name));
         pkByteBufferWrite(buff, vm, ':');
 
         if (!inst->is_native) {

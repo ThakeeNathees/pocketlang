@@ -810,8 +810,6 @@ static void moduleAddFunctionInternal(PKVM* vm, Script* script,
   fn->arity = arity;
 }
 
-// TODO: make the below module functions as PK_DOC(name, doc);
-
 // 'lang' library methods.
 // -----------------------
 
@@ -1189,7 +1187,7 @@ DEF(stdFiberRun,
 }
 
 DEF(stdFiberResume,
-  "fiber_resume(fb:Fiber) -> var\n"
+  "resume(fb:Fiber) -> var\n"
   "Resumes a yielded function from a previous call of fiber_run() function. "
   "Return it's return value or the yielded value if it's yielded.") {
 
@@ -1678,7 +1676,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     {
       Script* scr = (Script*)obj;
 
-      // Search in types.
+      // Search in classes.
       int index = scriptGetClass(scr, attrib->data, attrib->length);
       if (index != -1) {
         ASSERT_INDEX((uint32_t)index, scr->classes.count);

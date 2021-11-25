@@ -4,19 +4,13 @@ Add '.title' attribute to string
 
 // To implement.
 
-- make assert as a keyword (like python) and disable it on release build.
-
 - implement 'lang.getMaxCallDepth()' (default=1000 like python) and
-  setMaxCallDepth(val) to change stack size at runtime.
+  setMaxCallDepth(val) to change stack size at runtime. (at: pushCallFrame())
+
+- make assert as a keyword (like python) and disable it on release build.
 
 - change or add => to_string() to value.as_string
   and add as_repr, as_bool.
-  
-- literal function recursive call.
-  fn = func(a, b)
-    this(a, b) // Something like this.
-    fn(a, b) // May be closure support?
-  end
 
 - Implement utf8 support.
 - Implement gdb like debugger (add color print for readability).
@@ -30,6 +24,11 @@ Add '.title' attribute to string
       - To do so the functions and global variables should be in the same
         buffer as the property of the script.
 - Union tagging alter in var.
+- literal function recursive call.
+  fn = func(a, b)
+    this(a, b) // Something like this.
+    fn(a, b) // May be closure support?
+  end
 
 // Add more.
 - Single header for embedding (script in pk, require file IO).
@@ -66,3 +65,6 @@ implement, and nothing would be work as expected.
   ...     _f() // _f not defined (no closure).
   ...   end
   Error: Expected an expression // expected Name '_f' not defined.
+
+  Update: The above code just terminates in repl without printing any
+          error messages.
