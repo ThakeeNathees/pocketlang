@@ -84,6 +84,23 @@ assert(round(1.4) == 1)
 assert(round(1.5) == 2)
 assert(round(-1.5) == -2)
 
+assert(abs(log2(2) - 1) < threshold)
+assert(abs(log2(1) - 0) < threshold)
+assert(abs(log2(5) - 2.321928094887362) < threshold)
+
+assert(abs(hypot(1,1) - 1.414213562373095) < threshold)
+assert(abs(hypot(3,5) - 5.830951894845301) < threshold)
+
+assert(abs(cbrt(27) - 3) < threshold)
+assert(abs(cbrt(9) - 2.080083823051904) < threshold)
+
+assert(abs(gamma(5) - 24) < threshold)
+assert(abs(gamma(2.2) - 1.101802490879713) < threshold)
+
+
+
+
+
 # If we got here, that means all test were passed.
 print('All TESTS PASSED')
 

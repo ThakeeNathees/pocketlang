@@ -1049,7 +1049,8 @@ DEF(stdMathArcTangent,
 
 DEF(stdMathLog10,
   "log10(value:num) -> num\n"
-  "Return the logarithm to base 10 of argument [value]") {
+  "Return the logarithm to base 10 of argument [value]"
+  ) {
 
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
@@ -1063,6 +1064,89 @@ DEF(stdMathRound,
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(round(num)));
+}
+
+DEF(stdMathLog2,
+  "log2(value:num) -> num\n"
+  "Returns the logarithm to base 2 of the argument [value]"
+  ) {
+
+  double num;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
+  RET(VAR_NUM(log2(num)));
+}
+
+DEF(stdMathHypot,
+  "hypot(x:num,y:num) -> num\n"
+  "Returns the hypotenuse of a right-angled triangle with side [x] and [y]"
+  ) {
+
+  double x, y;
+  if (!validateNumeric(vm, ARG(1), &x, "Argument 1")) return;
+  if (!validateNumeric(vm, ARG(2), &y, "Argument 2")) return;
+  RET(VAR_NUM(hypot(x, y)));
+}
+
+DEF(stdMathCbrt,
+  "cbrt(value:num) -> num\n"
+  "Returns the cuberoot of argument [value]"
+  ) {
+
+  double num;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
+  RET(VAR_NUM(cbrt(num)));
+}
+
+DEF(stdMathGamma,
+  "gamma(value:num) -> num\n"
+  "Returns the gamma function of argument [value]"
+  ) {
+
+  double num;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
+  RET(VAR_NUM(tgamma(num)));
+}
+
+#if defined(__USE_GNU) || defined(__USE_BSD)
+DEF(stdMathGamma,
+  "gamma(value:num) -> num\n"
+  "Returns the gamma function of argument [value]"
+  ) {
+
+  double num;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
+  RET(VAR_NUM(gamma(num)));
+}
+#endif
+
+DEF(stdMathLgamma,
+  "lgamma(value:num) -> num\n"
+  "Returns the complementary gamma function of argument [value]"
+  ) {
+
+  double num;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
+  RET(VAR_NUM(lgamma(num)));
+}
+
+DEF(stdMathErf,
+  "erf(value:num) -> num\n"
+  "Returns the error function of argument [value]"
+  ) {
+
+  double num;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
+  RET(VAR_NUM(erf(num)));
+}
+
+DEF(stdMathErfc,
+  "erfc(value:num) -> num\n"
+  "Returns the complementary error function of argument [value]"
+  ) {
+
+  double num;
+  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
+  RET(VAR_NUM(erfc(num)));
 }
 
 // 'Fiber' module methods.
@@ -1210,6 +1294,13 @@ void initializeCore(PKVM* vm) {
   MODULE_ADD_FN(math, "atan",  stdMathArcTangent,  1);
   MODULE_ADD_FN(math, "log10", stdMathLog10,       1);
   MODULE_ADD_FN(math, "round", stdMathRound,       1);
+  MODULE_ADD_FN(math, "log2",  stdMathLog2,        1);
+  MODULE_ADD_FN(math, "hypot", stdMathHypot,       2);
+  MODULE_ADD_FN(math, "cbrt",  stdMathCbrt,        1);
+  MODULE_ADD_FN(math, "gamma", stdMathGamma,       1);
+  MODULE_ADD_FN(math, "lgamma",stdMathLgamma,      1);
+  MODULE_ADD_FN(math, "erf",   stdMathErf,         1);
+  MODULE_ADD_FN(math, "erfc",  stdMathErfc,        1);
 
   // Note that currently it's mutable (since it's a global variable, not
   // constant and pocketlang doesn't support constant) so the user shouldn't
