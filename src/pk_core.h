@@ -46,7 +46,7 @@ Var varBitNot(PKVM* vm, Var v);               // Returns ~v.
 bool varGreater(Var v1, Var v2); // Returns v1 > v2.
 bool varLesser(Var v1, Var v2);  // Returns v1 < v2.
 
-// Returns elem in container.
+// Returns [elem] in [container].
 bool varContains(PKVM* vm, Var elem, Var container);
 
 // Returns the attribute named [attrib] on the variable [on].

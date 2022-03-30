@@ -74,7 +74,7 @@ const char* getObjName(uint32_t id) {
 /*****************************************************************************/
 
 #include "thirdparty/cwalk/cwalk.h"
-  #if defined(_WIN32) && (defined(_MSC_VER) || defined(__TINYC__))
+#if defined(_WIN32) && (defined(_MSC_VER) || defined(__TINYC__))
   #include "thirdparty/dirent/dirent.h"
 #else
   #include <dirent.h>

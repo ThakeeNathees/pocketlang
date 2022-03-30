@@ -73,7 +73,8 @@ typedef struct PkHandle PkHandle;
 
 // A temproary pointer to the pocketlang variable. This pointer is acquired
 // from the pocketlang's current stack frame and the pointer will become
-// dangling once after the stack frame is popped.
+// dangling once the stack frame is popped. If you want to keep the value
+// alive use `pkNewHandle()`.
 typedef void* PkVar;
 
 // Type enum of the pocketlang variables, this can be used to get the type
@@ -160,10 +161,10 @@ typedef PkStringPtr (*pkReadFn) (PKVM* vm);
 // the native instance.
 typedef void (*pkInstFreeFn) (PKVM* vm, void* instance, uint32_t id);
 
-// A function callback to get the name of the native instance from pocketlang,
-// using it's [id]. The returned string won't be copied by pocketlang so it's
-// expected to be alived since the instance is alive and recomended to return
-// a C literal string.
+// A function callback to get the type name of the native instance from
+// pocketlang, using it's [id]. The returned string won't be copied by
+// pocketlang so it's expected to be alived since the instance is alive and
+// recomended to return a C literal string.
 typedef const char* (*pkInstNameFn) (uint32_t id);
 
 // A get arribute callback, called by pocket VM when trying to get an attribute
@@ -226,9 +227,10 @@ PK_PUBLIC void pkSetUserData(PKVM* vm, void* user_data);
 PK_PUBLIC void* pkGetUserData(const PKVM* vm);
 
 // Create a new handle for the [value]. This is useful to keep the [value]
-// alive once it acquired from the stack. Do not use the [value] once
+// alive once it acquired from the stack. **DO NOT** use the [value] once
 // creating a new handle for it instead get the value from the handle by
-// using pkGetHandleValue() function.
+// using pkGetHandleValue() function (otherwise the [value] would become a
+// dangling pointer once it's stack frame is popped).
 PK_PUBLIC PkHandle* pkNewHandle(PKVM* vm, PkVar value);
 
 // Return the PkVar pointer in the handle, the returned pointer will be valid
