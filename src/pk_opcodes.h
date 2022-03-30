@@ -33,7 +33,7 @@ OPCODE(PUSH_FALSE, 0, 1)
 OPCODE(SWAP, 0, 0)
 
 // Push a new list to construct from literal.
-// param: 2 bytes list size (defalt is 0).
+// param: 2 bytes list size (default is 0).
 OPCODE(PUSH_LIST, 2, 1)
 
 // Push a new map to construct from literal.

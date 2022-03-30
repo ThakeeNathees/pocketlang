@@ -427,7 +427,7 @@ static void reportError(Compiler* compiler, const char* file, int line,
   vm->config.error_fn(vm, PK_ERROR_COMPILE, file, line, message);
 }
 
-// Error caused at the middle of lexing (and TK_ERROR will be lexed insted).
+// Error caused at the middle of lexing (and TK_ERROR will be lexed instead).
 static void lexError(Compiler* compiler, const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
@@ -442,7 +442,7 @@ static void parseError(Compiler* compiler, const char* fmt, ...) {
 
   Token* token = &compiler->previous;
 
-  // Lex errors would repored earlier by lexError and lexed a TK_ERROR token.
+  // Lex errors would reported earlier by lexError and lexed a TK_ERROR token.
   if (token->type == TK_ERROR) return;
 
   va_list args;
@@ -1898,7 +1898,7 @@ static void emitAssignment(Compiler* compiler, TokenType assignment) {
 
 static void emitFunctionEnd(Compiler* compiler) {
 
-  // Don't use emitOpcode(compiler, OP_RETURN); Because it'll recude the stack
+  // Don't use emitOpcode(compiler, OP_RETURN); Because it'll reduce the stack
   // size by -1, (return value will be popped). We really don't have to pop the
   // return value of the function, when returning from the end of the function,
   // because there'll always be a null value at the base of the current call
@@ -2635,9 +2635,9 @@ static void compileForStatement(Compiler* compiler) {
 // variable declaration, which will be handled.
 static void compileStatement(Compiler* compiler) {
 
-  // is_temproary will be set to true if the statement is an temporary
+  // is_temporary will be set to true if the statement is an temporary
   // expression, it'll used to be pop from the stack.
-  bool is_temproary = false;
+  bool is_temporary = false;
 
   // This will be set to true if the statement is an expression. It'll used to
   // print it's value when running in REPL mode.
@@ -2718,7 +2718,7 @@ static void compileStatement(Compiler* compiler) {
     consumeEndStatement(compiler);
 
     is_expression = true;
-    if (!compiler->new_local) is_temproary = true;
+    if (!compiler->new_local) is_temporary = true;
 
     compiler->new_local = false;
   }
@@ -2730,7 +2730,7 @@ static void compileStatement(Compiler* compiler) {
     emitOpcode(compiler, OP_REPL_PRINT);
   }
 
-  if (is_temproary) emitOpcode(compiler, OP_POP);
+  if (is_temporary) emitOpcode(compiler, OP_POP);
 }
 
 // Compile statements that are only valid at the top level of the script. Such
