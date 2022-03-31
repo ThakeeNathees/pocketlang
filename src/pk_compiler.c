@@ -55,6 +55,7 @@ typedef enum {
   // symbols
   TK_DOT,        // .
   TK_DOTDOT,     // ..
+  TK_DOTDOTDOT,  // ...
   TK_COMMA,      // ,
   TK_COLLON,     // :
   TK_SEMICOLLON, // ;
@@ -219,7 +220,7 @@ typedef enum {
   PREC_BITWISE_XOR,   // ^
   PREC_BITWISE_AND,   // &
   PREC_BITWISE_SHIFT, // << >>
-  PREC_RANGE,         // ..
+  PREC_RANGE,         // .. ...
   PREC_TERM,          // + -
   PREC_FACTOR,        // * / %
   PREC_UNARY,         // - ! ~ not
@@ -783,7 +784,11 @@ static void lexToken(Compiler* compiler) {
 
       case '.':
         if (matchChar(compiler, '.')) {
-          setNextToken(compiler, TK_DOTDOT); // '..'
+          if (matchChar(compiler, '.')) {
+            setNextToken(compiler, TK_DOTDOTDOT); // '...'
+          } else {
+            setNextToken(compiler, TK_DOTDOT); // '..'
+          }
         } else if (utilIsDigit(peekChar(compiler))) {
           eatChar(compiler);   // Consume the decimal point.
           eatNumber(compiler); // Consume the rest of the number
@@ -1148,6 +1153,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_LINE       */   NO_RULE,
   /* TK_DOT        */ { NULL,          exprAttrib,       PREC_ATTRIB },
   /* TK_DOTDOT     */ { NULL,          exprBinaryOp,     PREC_RANGE },
+  /* TK_DOTDOTDOT  */ { NULL,          exprBinaryOp,     PREC_RANGE },
   /* TK_COMMA      */   NO_RULE,
   /* TK_COLLON     */   NO_RULE,
   /* TK_SEMICOLLON */   NO_RULE,
@@ -1449,24 +1455,25 @@ static void exprBinaryOp(Compiler* compiler) {
   parsePrecedence(compiler, (Precedence)(getRule(op)->precedence + 1));
 
   switch (op) {
-    case TK_DOTDOT:  emitOpcode(compiler, OP_RANGE);      break;
-    case TK_PERCENT: emitOpcode(compiler, OP_MOD);        break;
-    case TK_AMP:     emitOpcode(compiler, OP_BIT_AND);    break;
-    case TK_PIPE:    emitOpcode(compiler, OP_BIT_OR);     break;
-    case TK_CARET:   emitOpcode(compiler, OP_BIT_XOR);    break;
-    case TK_PLUS:    emitOpcode(compiler, OP_ADD);        break;
-    case TK_MINUS:   emitOpcode(compiler, OP_SUBTRACT);   break;
-    case TK_STAR:    emitOpcode(compiler, OP_MULTIPLY);   break;
-    case TK_FSLASH:  emitOpcode(compiler, OP_DIVIDE);     break;
-    case TK_GT:      emitOpcode(compiler, OP_GT);         break;
-    case TK_LT:      emitOpcode(compiler, OP_LT);         break;
-    case TK_EQEQ:    emitOpcode(compiler, OP_EQEQ);       break;
-    case TK_NOTEQ:   emitOpcode(compiler, OP_NOTEQ);      break;
-    case TK_GTEQ:    emitOpcode(compiler, OP_GTEQ);       break;
-    case TK_LTEQ:    emitOpcode(compiler, OP_LTEQ);       break;
-    case TK_SRIGHT:  emitOpcode(compiler, OP_BIT_RSHIFT); break;
-    case TK_SLEFT:   emitOpcode(compiler, OP_BIT_LSHIFT); break;
-    case TK_IN:      emitOpcode(compiler, OP_IN);         break;
+    case TK_DOTDOT:    emitOpcode(compiler, OP_RANGE);   break;
+    case TK_DOTDOTDOT: emitOpcode(compiler, OP_RANGE);   break;
+    case TK_PERCENT:   emitOpcode(compiler, OP_MOD);        break;
+    case TK_AMP:       emitOpcode(compiler, OP_BIT_AND);    break;
+    case TK_PIPE:      emitOpcode(compiler, OP_BIT_OR);     break;
+    case TK_CARET:     emitOpcode(compiler, OP_BIT_XOR);    break;
+    case TK_PLUS:      emitOpcode(compiler, OP_ADD);        break;
+    case TK_MINUS:     emitOpcode(compiler, OP_SUBTRACT);   break;
+    case TK_STAR:      emitOpcode(compiler, OP_MULTIPLY);   break;
+    case TK_FSLASH:    emitOpcode(compiler, OP_DIVIDE);     break;
+    case TK_GT:        emitOpcode(compiler, OP_GT);         break;
+    case TK_LT:        emitOpcode(compiler, OP_LT);         break;
+    case TK_EQEQ:      emitOpcode(compiler, OP_EQEQ);       break;
+    case TK_NOTEQ:     emitOpcode(compiler, OP_NOTEQ);      break;
+    case TK_GTEQ:      emitOpcode(compiler, OP_GTEQ);       break;
+    case TK_LTEQ:      emitOpcode(compiler, OP_LTEQ);       break;
+    case TK_SRIGHT:    emitOpcode(compiler, OP_BIT_RSHIFT); break;
+    case TK_SLEFT:     emitOpcode(compiler, OP_BIT_LSHIFT); break;
+    case TK_IN:        emitOpcode(compiler, OP_IN);         break;
     default:
       UNREACHABLE();
   }

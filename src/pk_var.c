@@ -1564,7 +1564,7 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
 
         pkByteBufferAddString(buff, vm, "[Range:", 7);
         pkByteBufferAddString(buff, vm, buff_from, len_from);
-        pkByteBufferAddString(buff, vm, "..", 2);
+        pkByteBufferAddString(buff, vm, "...", 3);
         pkByteBufferAddString(buff, vm, buff_to, len_to);
         pkByteBufferWrite(buff, vm, ']');
         return;

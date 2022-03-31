@@ -9,9 +9,11 @@
 // #define OPCODE(name, params, stack)
 // #include "opcodes.h"
 //
-// first parameter is the opcode name, 2nd will be the size of the parameter
-// in bytes 3 one is how many stack slots it'll take after executing the
-// instruction.
+// Parameters:
+//  (1) Opcode name.
+//  (2) Size of parameter in bytes.
+//  (3) How many stack slots it (parameter) will take after executing the
+//      instruction.
 
 // Load the constant at index [arg] from the script's literals.
 // params: 2 byte (uint16_t) index value.
@@ -210,7 +212,8 @@ OPCODE(LTEQ, 0, -1)
 OPCODE(GT, 0, -1)
 OPCODE(GTEQ, 0, -1)
 
-OPCODE(RANGE, 0, -1) //< Pop 2 integer make range push.
+OPCODE(RANGE_IN, 0, -1) //< Pop 2 integer make range push.
+OPCODE(RANGE_EX, 0, -1) //< Pop 2 integer make range push.
 OPCODE(IN, 0, -1)
 
 // Print the repr string of the value at the stack top, used in REPL mode.

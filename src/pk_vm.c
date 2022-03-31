@@ -1483,7 +1483,8 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
       DISPATCH();
     }
 
-    OPCODE(RANGE):
+    OPCODE(RANGE_IN):
+    OPCODE(RANGE_EX):
     {
       Var to = PEEK(-1);   // Don't pop yet, we need the reference for gc.
       Var from = PEEK(-2); // Don't pop yet, we need the reference for gc.
@@ -1492,7 +1493,10 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
       }
       DROP(); // to
       DROP(); // from
-      PUSH(VAR_OBJ(newRange(vm, AS_NUM(from), AS_NUM(to))));
+      double from_d = AS_NUM(from),
+             to_d   = AS_NUM(to);
+      if (instruction == OP_RANGE_IN) to_d += 1;
+      PUSH(VAR_OBJ(newRange(vm, from_d, to_d)));
       DISPATCH();
     }
 

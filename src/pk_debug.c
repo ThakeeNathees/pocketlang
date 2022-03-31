@@ -366,7 +366,8 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
       case OP_LTEQ:
       case OP_GT:
       case OP_GTEQ:
-      case OP_RANGE:
+      case OP_RANGE_IN:
+      case OP_RANGE_EX:
       case OP_IN:
       case OP_REPL_PRINT:
       case OP_END:

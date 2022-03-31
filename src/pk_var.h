@@ -273,8 +273,8 @@ struct Map {
 struct Range {
   Object _super;
 
-  double from; //< Beggining of the range inclusive.
-  double to;   //< End of the range exclusive.
+  double from; //< Beggining of the range.
+  double to;   //< End of the range.
 };
 
 // In pocketlang, the terms Script and Module are interchangable. (Consider
