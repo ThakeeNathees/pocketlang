@@ -395,6 +395,7 @@ static inline bool validateIndex(PKVM* vm, int64_t index, uint32_t size,
       char buff[12]; sprintf(buff, "%d", arg);                               \
       VM_SET_ERROR(vm, stringFormat(vm, "Expected a " m_name                 \
                    " at argument $.", buff, false));                         \
+      return false;                                                          \
     }                                                                        \
     *value = (m_class*)AS_OBJ(var);                                          \
     return true;                                                             \
@@ -466,6 +467,10 @@ DEF(coreHelp,
     vm->config.write_fn(vm, "TODO: print help here\n");
 
   } else if (argc == 1) {
+
+    // TODO: Extend help() to work with modules and classes.
+    //       Add docstring (like python) to support it in pocketlang.
+
     Function* fn;
     if (!validateArgFunction(vm, 1, &fn)) return;
 
@@ -1047,8 +1052,7 @@ DEF(stdMathArcTangent,
 
 DEF(stdMathLog10,
   "log10(value:num) -> num\n"
-  "Return the logarithm to base 10 of argument [value]"
-  ) {
+  "Return the logarithm to base 10 of argument [value]") {
 
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
@@ -1066,8 +1070,7 @@ DEF(stdMathRound,
 
 DEF(stdMathLog2,
   "log2(value:num) -> num\n"
-  "Returns the logarithm to base 2 of the argument [value]"
-  ) {
+  "Returns the logarithm to base 2 of the argument [value]") {
 
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
@@ -1076,8 +1079,7 @@ DEF(stdMathLog2,
 
 DEF(stdMathHypot,
   "hypot(x:num,y:num) -> num\n"
-  "Returns the hypotenuse of a right-angled triangle with side [x] and [y]"
-  ) {
+  "Returns the hypotenuse of a right-angled triangle with side [x] and [y]") {
 
   double x, y;
   if (!validateNumeric(vm, ARG(1), &x, "Argument 1")) return;
@@ -1087,8 +1089,7 @@ DEF(stdMathHypot,
 
 DEF(stdMathCbrt,
   "cbrt(value:num) -> num\n"
-  "Returns the cuberoot of argument [value]"
-  ) {
+  "Returns the cuberoot of argument [value]") {
 
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
@@ -1097,19 +1098,18 @@ DEF(stdMathCbrt,
 
 DEF(stdMathGamma,
   "gamma(value:num) -> num\n"
-  "Returns the gamma function of argument [value]"
-  ) {
+  "Returns the gamma function of argument [value]") {
 
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(tgamma(num)));
 }
 
+// TODO: This makes the pocket source code not portable.
 #if defined(__USE_GNU) || defined(__USE_BSD)
 DEF(stdMathGamma,
   "gamma(value:num) -> num\n"
-  "Returns the gamma function of argument [value]"
-  ) {
+  "Returns the gamma function of argument [value]") {
 
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
@@ -1119,8 +1119,7 @@ DEF(stdMathGamma,
 
 DEF(stdMathLgamma,
   "lgamma(value:num) -> num\n"
-  "Returns the complementary gamma function of argument [value]"
-  ) {
+  "Returns the complementary gamma function of argument [value]") {
 
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
@@ -1129,8 +1128,7 @@ DEF(stdMathLgamma,
 
 DEF(stdMathErf,
   "erf(value:num) -> num\n"
-  "Returns the error function of argument [value]"
-  ) {
+  "Returns the error function of argument [value]") {
 
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
@@ -1139,8 +1137,7 @@ DEF(stdMathErf,
 
 DEF(stdMathErfc,
   "erfc(value:num) -> num\n"
-  "Returns the complementary error function of argument [value]"
-  ) {
+  "Returns the complementary error function of argument [value]") {
 
   double num;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
