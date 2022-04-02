@@ -1,6 +1,6 @@
 
 <p align="center" >
-<img src="https://user-images.githubusercontent.com/41085900/117528974-88fa8d00-aff2-11eb-8001-183c14786362.png" width="500" >
+<img src="https://user-images.githubusercontent.com/41085900/161365989-f3fd47bb-7ea7-4114-8e9b-2224e1193079.png" width="500" >
 </p>
 
 **Pocketlang** is a small (~3000 semicolons) and [fast](https://github.com/ThakeeNathees/pocketlang#performance)
@@ -79,10 +79,8 @@ cl /Fepocket cli/*.c src/*.c /Isrc/include && rm *.obj
 ```
 make
 ```
-To run make file on windows with `mingw`, you require `make` and `find` unix tools in your path.
-Which you can get from [msys2](https://www.msys2.org/) or [cygwin](https://www.cygwin.com/). Run
-`set PATH=<path-to-env/usr/bin/>;%PATH% && make`, this will override the system `find` command with
-unix `find` for the current session, and run the `make` script.
+To run the make file on windows with `mingw`, you require the GNU `make` tool which you can get
+from [msys2](https://www.msys2.org/) or [cygwin](https://www.cygwin.com/).
 
 #### Windows batch script
 ```

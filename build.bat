@@ -20,17 +20,21 @@ shift
 shift
 
 :PARSE_ARGS
-if (%1)==(-clean) goto :CLEAN
+if (%1)==(-h) goto :PRINT_USAGE
+if (%1)==(-c) goto :CLEAN
 if (%1)==(-r) set debug_build=false&& goto :SHIFT_ARG_1
 if (%1)==(-s) set shared_lib=true&& goto :SHIFT_ARG_1
 if (%1)==() goto :CHECK_MSVC
 
+echo Invalid argument "%1"
+
 :PRINT_USAGE
 echo Usage: call build.bat [options ...]
 echo options:
-echo   -r      Compile the release version of pocketlang (default = debug)
-echo   -s      Link the pocket as shared library (default = static link).
-echo   -clean  Clean all compiled/generated intermediate binary.
+echo   -h  display this message
+echo   -r  Compile the release version of pocketlang (default = debug)
+echo   -s  Link the pocket as shared library (default = static link).
+echo   -c  Clean all compiled/generated intermediate binary.
 goto :END
 
 :: ----------------------------------------------------------------------------
@@ -89,6 +93,12 @@ set addnl_cdefines=/D_CRT_SECURE_NO_WARNINGS
 set root_dir=..\..\..\
 
 if "%debug_build%"=="false" (
+
+  :: Not sure why, but the release build are much slower with this script.
+  :: I might have to double check the compilation flags.
+  echo TODO: This Batch script doesn't support release builds for now
+  exit /b 1
+  
 	set cflags=%cflags% -O2 -MD
 	set target_dir=build\release\
 ) else (
@@ -152,8 +162,8 @@ goto :SUCCESS
 
 :CLEAN
 
-if exist "debug" rmdir /S /Q "debug"
-if exist "release" rmdir /S /Q "release"
+if exist "build/debug" rmdir /S /Q "build/debug"
+if exist "build/release" rmdir /S /Q "build/release"
 
 echo.
 echo Files were cleaned.
