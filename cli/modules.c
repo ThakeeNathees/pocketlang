@@ -42,6 +42,7 @@ bool objSetAttrib(PKVM* vm, void* instance, uint32_t id, PkStringPtr attrib) {
   if (obj->type == OBJ_FILE) {
     File* file = (File*)obj;
     // Nothing to change.
+    (void)file;
   }
 
   return false;

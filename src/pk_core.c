@@ -523,7 +523,7 @@ DEF(coreBin,
   "bin(value:num) -> string\n"
   "Returns as a binary value string with '0x' prefix.") {
 
-  int64_t value;
+  int64_t value = 0;
   if (!validateInteger(vm, ARG(1), &value, "Argument 1")) return;
 
   char buff[STR_BIN_BUFF_SIZE];
@@ -554,7 +554,7 @@ DEF(coreHex,
   "hex(value:num) -> string\n"
   "Returns as a hexadecimal value string with '0x' prefix.") {
 
-  int64_t value;
+  int64_t value = 0;
   if (!validateInteger(vm, ARG(1), &value, "Argument 1")) return;
 
   char buff[STR_HEX_BUFF_SIZE];
@@ -667,8 +667,8 @@ DEF(coreStrSub,
   "the position and length of the substring are provided when this "
   "function is called. For example: `str_sub(str, pos, len)`.") {
 
-  String* str;
-  int64_t pos, len;
+  String* str = NULL;
+  int64_t pos = 0, len = 0;
 
   if (!validateArgString(vm, 1, &str)) return;
   if (!validateInteger(vm, ARG(2), &pos, "Argument 2")) return;
@@ -690,7 +690,7 @@ DEF(coreStrChr,
   "str_chr(value:num) -> string\n"
   "Returns the ASCII string value of the integer argument.") {
 
-  int64_t num;
+  int64_t num = 0;
   if (!validateInteger(vm, ARG(1), &num, "Argument 1")) return;
 
   if (!IS_NUM_BYTE(num)) {
@@ -894,7 +894,7 @@ DEF(stdLangWrite,
 DEF(stdMathFloor,
   "floor(value:num) -> num\n") {
 
-  double num;
+  double num = 0;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(floor(num)));
 }
@@ -902,7 +902,7 @@ DEF(stdMathFloor,
 DEF(stdMathCeil,
   "ceil(value:num) -> num\n") {
 
-  double num;
+  double num = 0;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(ceil(num)));
 }
@@ -910,7 +910,7 @@ DEF(stdMathCeil,
 DEF(stdMathPow,
   "pow(value:num) -> num\n") {
 
-  double num, ex;
+  double num = 0, ex = 0;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   if (!validateNumeric(vm, ARG(2), &ex, "Argument 2")) return;
   RET(VAR_NUM(pow(num, ex)));
@@ -919,7 +919,7 @@ DEF(stdMathPow,
 DEF(stdMathSqrt,
   "sqrt(value:num) -> num\n") {
 
-  double num;
+  double num = 0;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(sqrt(num)));
 }
@@ -927,7 +927,7 @@ DEF(stdMathSqrt,
 DEF(stdMathAbs,
   "abs(value:num) -> num\n") {
 
-  double num;
+  double num = 0;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   if (num < 0) num = -num;
   RET(VAR_NUM(num));
@@ -936,7 +936,7 @@ DEF(stdMathAbs,
 DEF(stdMathSign,
   "sign(value:num) -> num\n") {
 
-  double num;
+  double num = 0;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   if (num < 0) num = -1;
   else if (num > 0) num = +1;
@@ -962,7 +962,7 @@ DEF(stdMathSine,
   "Return the sine value of the argument [rad] which is an angle expressed "
   "in radians.") {
 
-  double rad;
+  double rad = 0;
   if (!validateNumeric(vm, ARG(1), &rad, "Argument 1")) return;
   RET(VAR_NUM(sin(rad)));
 }
@@ -972,7 +972,7 @@ DEF(stdMathCosine,
   "Return the cosine value of the argument [rad] which is an angle expressed "
   "in radians.") {
 
-  double rad;
+  double rad = 0;
   if (!validateNumeric(vm, ARG(1), &rad, "Argument 1")) return;
   RET(VAR_NUM(cos(rad)));
 }
@@ -982,7 +982,7 @@ DEF(stdMathTangent,
   "Return the tangent value of the argument [rad] which is an angle expressed "
   "in radians.") {
 
-  double rad;
+  double rad = 0;
   if (!validateNumeric(vm, ARG(1), &rad, "Argument 1")) return;
   RET(VAR_NUM(tan(rad)));
 }
@@ -991,7 +991,7 @@ DEF(stdMathSinh,
   "sinh(val) -> val\n"
   "Return the hyperbolic sine value of the argument [val].") {
 
-  double val;
+  double val = 0;
   if (!validateNumeric(vm, ARG(1), &val, "Argument 1")) return;
   RET(VAR_NUM(sinh(val)));
 }
@@ -1000,7 +1000,7 @@ DEF(stdMathCosh,
   "cosh(val) -> val\n"
   "Return the hyperbolic cosine value of the argument [val].") {
 
-  double val;
+  double val = 0;
   if (!validateNumeric(vm, ARG(1), &val, "Argument 1")) return;
   RET(VAR_NUM(cosh(val)));
 }
@@ -1009,7 +1009,7 @@ DEF(stdMathTanh,
   "tanh(val) -> val\n"
   "Return the hyperbolic tangent value of the argument [val].") {
 
-  double val;
+  double val = 0;
   if (!validateNumeric(vm, ARG(1), &val, "Argument 1")) return;
   RET(VAR_NUM(tanh(val)));
 }
@@ -1019,7 +1019,7 @@ DEF(stdMathArcSine,
   "Return the arcsine value of the argument [num] which is an angle "
   "expressed in radians.") {
 
-  double num;
+  double num = 0;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
 
   if (num < -1 || 1 < num) {
@@ -1034,7 +1034,7 @@ DEF(stdMathArcCosine,
   "Return the arc cosine value of the argument [num] which is "
   "an angle expressed in radians.") {
 
-  double num;
+  double num = 0;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
 
   if (num < -1 || 1 < num) {
@@ -1049,7 +1049,7 @@ DEF(stdMathArcTangent,
   "Return the arc tangent value of the argument [num] which is "
   "an angle expressed in radians.") {
 
-  double num;
+  double num = 0;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(atan(num)));
 }
@@ -1058,7 +1058,7 @@ DEF(stdMathLog10,
   "log10(value:num) -> num\n"
   "Return the logarithm to base 10 of argument [value]") {
 
-  double num;
+  double num = 0;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(log10(num)));
 }
@@ -1067,7 +1067,7 @@ DEF(stdMathRound,
   "round(value:num) -> num\n"
   "Round to nearest integer, away from zero and return the number.") {
 
-  double num;
+  double num = 0;
   if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
   RET(VAR_NUM(round(num)));
 }
@@ -1326,7 +1326,7 @@ void initializeCore(PKVM* vm) {
 #define RIGHT_OPERAND "Right operand"
 
 Var varAdd(PKVM* vm, Var v1, Var v2) {
-  double d1, d2;
+  double d1 = 0, d2 = 0;
 
   if (isNumeric(v1, &d1)) {
     if (validateNumeric(vm, v2, &d2, RIGHT_OPERAND)) {
@@ -1369,7 +1369,7 @@ Var varAdd(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varSubtract(PKVM* vm, Var v1, Var v2) {
-  double d1, d2;
+  double d1 = 0, d2 = 0;
 
   if (isNumeric(v1, &d1)) {
     if (validateNumeric(vm, v2, &d2, RIGHT_OPERAND)) {
@@ -1383,7 +1383,7 @@ Var varSubtract(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varMultiply(PKVM* vm, Var v1, Var v2) {
-  double d1, d2;
+  double d1 = 0, d2 = 0;
 
   if (isNumeric(v1, &d1)) {
     if (validateNumeric(vm, v2, &d2, RIGHT_OPERAND)) {
@@ -1397,7 +1397,7 @@ Var varMultiply(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varDivide(PKVM* vm, Var v1, Var v2) {
-  double d1, d2;
+  double d1 = 0, d2 = 0;
 
   if (isNumeric(v1, &d1)) {
     if (validateNumeric(vm, v2, &d2, RIGHT_OPERAND)) {
@@ -1411,7 +1411,7 @@ Var varDivide(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varModulo(PKVM* vm, Var v1, Var v2) {
-  double d1, d2;
+  double d1 = 0, d2 = 0;
 
   if (isNumeric(v1, &d1)) {
     if (validateNumeric(vm, v2, &d2, RIGHT_OPERAND)) {
@@ -1430,7 +1430,7 @@ Var varModulo(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varBitAnd(PKVM* vm, Var v1, Var v2) {
-  int64_t i1, i2;
+  int64_t i1 = 0, i2 = 0;
 
   if (isInteger(v1, &i1)) {
     if (validateInteger(vm, v2, &i2, RIGHT_OPERAND)) {
@@ -1444,7 +1444,7 @@ Var varBitAnd(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varBitOr(PKVM* vm, Var v1, Var v2) {
-  int64_t i1, i2;
+  int64_t i1 = 0, i2 = 0;
 
   if (isInteger(v1, &i1)) {
     if (validateInteger(vm, v2, &i2, RIGHT_OPERAND)) {
@@ -1458,7 +1458,7 @@ Var varBitOr(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varBitXor(PKVM* vm, Var v1, Var v2) {
-  int64_t i1, i2;
+  int64_t i1 = 0, i2 = 0;
 
   if (isInteger(v1, &i1)) {
     if (validateInteger(vm, v2, &i2, RIGHT_OPERAND)) {
@@ -1472,7 +1472,7 @@ Var varBitXor(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varBitLshift(PKVM* vm, Var v1, Var v2) {
-  int64_t i1, i2;
+  int64_t i1 = 0, i2 = 0;
 
   if (isInteger(v1, &i1)) {
     if (validateInteger(vm, v2, &i2, RIGHT_OPERAND)) {
@@ -1486,7 +1486,7 @@ Var varBitLshift(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varBitRshift(PKVM* vm, Var v1, Var v2) {
-  int64_t i1, i2;
+  int64_t i1 = 0, i2 = 0;
 
   if (isInteger(v1, &i1)) {
     if (validateInteger(vm, v2, &i2, RIGHT_OPERAND)) {
@@ -1500,13 +1500,13 @@ Var varBitRshift(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varBitNot(PKVM* vm, Var v) {
-  int64_t i;
+  int64_t i = 0;
   if (!validateInteger(vm, v, &i, "Unary operand")) return VAR_NULL;
   return VAR_NUM((double)(~i));
 }
 
 bool varGreater(Var v1, Var v2) {
-  double d1, d2;
+  double d1 = 0, d2 = 0;
 
   if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
     return d1 > d2;
@@ -1517,7 +1517,7 @@ bool varGreater(Var v1, Var v2) {
 }
 
 bool varLesser(Var v1, Var v2) {
-  double d1, d2;
+  double d1 = 0, d2 = 0;
 
   if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
     return d1 < d2;
@@ -1888,7 +1888,7 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
   switch (obj->type) {
     case OBJ_STRING:
     {
-      int64_t index;
+      int64_t index = 0;
       String* str = ((String*)obj);
       if (!validateInteger(vm, key, &index, "List index")) {
         return VAR_NULL;
@@ -1902,7 +1902,7 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
 
     case OBJ_LIST:
     {
-      int64_t index;
+      int64_t index = 0;
       pkVarBuffer* elems = &((List*)obj)->elements;
       if (!validateInteger(vm, key, &index, "List index")) {
         return VAR_NULL;
@@ -1962,7 +1962,7 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
 
     case OBJ_LIST:
     {
-      int64_t index;
+      int64_t index = 0;
       pkVarBuffer* elems = &((List*)obj)->elements;
       if (!validateInteger(vm, key, &index, "List index")) return;
       if (!validateIndex(vm, index, elems->count, "List")) return;
