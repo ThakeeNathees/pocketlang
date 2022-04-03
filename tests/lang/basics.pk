@@ -50,6 +50,15 @@ if a and b then assert(false) end
 if a or b then val = 42 else assert(false) end assert(val == 42)
 if get_true() or false then val = 12 end assert(val == 12)
 
+## Newer logical or implementation.
+## a or b  === if (a) return a else return b
+## a and b === if (!a) return a else return b
+a = null; b = [1, 2, 3]
+assert((a or b) == [1, 2, 3]) ## Note == has higher precedence than and/or.
+assert((a and b) == null)
+assert((b or a) == [1, 2, 3])
+assert((a or b) == b or a)
+
 ## Recursive to_string list/map
 l = [1]
 list_append(l, l)

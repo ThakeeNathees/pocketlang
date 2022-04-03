@@ -11,7 +11,7 @@ from path import *
 
 import "basics.pk" ## will import all
 import "controlflow.pk" as if_test
-from "functions.pk" import fn1, fn2 as f2, fn3
+from "functions.pk" import f1, f2 as fn2, f3
 
 import "class.pk" as class_
 assert(class_.Vec(42, 3.14).y == 3.14)
