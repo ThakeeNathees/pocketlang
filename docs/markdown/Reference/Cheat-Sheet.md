@@ -1,8 +1,5 @@
 
-# %% Learn pocketlang in 15 minutes %%
-
 ```ruby
-
 # This is a comment.
 
 x = 0  # Creating a variable.
@@ -29,9 +26,9 @@ func(x) return x*x end # Lambda/literal functions.
 
 # If condition.
 if x == 'foo'
-	print('bar')
+    print('bar')
 elsif x == 'bar'
-	print('baz')
+    print('baz')
 end
 
 # In a single line (should add 'then' keyword).
@@ -40,7 +37,7 @@ if x == 'foo' then print('bar') end
 # For loops, here 'do' keyword is optional if we have a
 # newline after the sequence (like 'then' in if statements).
 for i in 0..10 do
-	print(i)
+    print(i)
 end
 
 # While statement.
@@ -48,7 +45,7 @@ while x > 0 do print(x -= 1) end
 
 # In pocketlang variable's lifetime are scope based.
 if true then
-	local = null
+    local = null
 end
 #print(local) # Error: Name 'local' is not defined.
 
@@ -56,7 +53,7 @@ end
 #-----------
 
 def add(a, b)
-	return a + b
+    return a + b
 end
 
 # Functions can be assigned to a variable.
@@ -64,12 +61,12 @@ fn = func(x) return x*x end
 
 # Functions can be passed as an argument and can be returned.
 def call(fn, x)
-	fn(x)
-	return func print('foo') end
+    fn(x)
+    return func print('foo') end
 end
 
-# Classes (WIP)
-#--------------
+# Classes
+#--------
 
 class _Vector
   x = 0; y = 0
@@ -97,7 +94,7 @@ print(v3) # [_Vector: x=4, y=6]
 import Fiber
 
 def fn(p1, p2)
-	print(yield(42)) # Prints 3.14
+    print(yield(42)) # Prints 3.14
 end
 
 fb = Fiber.new(fn)

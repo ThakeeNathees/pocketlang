@@ -21,12 +21,14 @@ mergeInto(LibraryManager.library, {
       err_text = `  [at:${line}] ${msg}`;
     }
 
-    var out = document.getElementById("output");
+    var out = document.getElementById("code-output");
+    // To Indicate error (should be removed before each run request).
+    out.classList.add("has-error");
     out.innerText += err_text + '\n';
   },
 
   js_writeFunction : function(message) {
-    var out = document.getElementById("output");
+    var out = document.getElementById("code-output");
     out.innerText += AsciiToString(message)
   },
 });

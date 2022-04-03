@@ -1,8 +1,7 @@
-# %% Import statements and Modules %%
 
 Each source file in pocketlang itself is a module that can be imported in another module, which makes it easier to split and share the project. There are two major kinds of modules in pocketlang. First one is core modules which are builtin to the VM and the second one is the local modules where it's a written script file you'll import it with the path of it.
 
-## %% Importing a core module %%
+## Importing a core module
 
 The import statement of the pocketlang is highly inspired from python's import syntax. Here how it looks like.
 
@@ -25,7 +24,7 @@ from math import *
 
 ```
 
-## %% Importing a local module %%
+## Importing a local module
 
 Importing a local module is same as importing a core module but instead of using the module name, you have to use it's path (either relative or absolute).
 
@@ -58,7 +57,7 @@ bar.fn()
 
 ``` 
 
-## %% The module keyword. %%
+## The module keyword.
 
 We can define a name to a module with the `module` keyword. The name will become the namespace for that module's functions and global variables when importing it.
 

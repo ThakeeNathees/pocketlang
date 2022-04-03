@@ -46,10 +46,11 @@ Note that the documentations are WIP and might not be up to date.
 
 ## Performance
 
-Pocketlang supports [tail call](https://en.wikipedia.org/wiki/Tail_call) [optimization](https://wiki.c2.com/?TailCallOptimization).
-When a function returns a call, the callee can re-use the caller's stack frame, this will optimize memory from O(n) to O(1)
-and for [tail recursive](https://www.youtube.com/watch?v=-PX0BV9hGZY) it'll completely prevent stackoverflows and yet it's faster
-than tco disabled.
+Pocketlang uses [NaN-Boxing](https://leonardschuetz.ch/blog/nan-boxing/) which is a memory efficient way to represent
+dynamic types and dealing with them are much faster. It supports [tail call](https://en.wikipedia.org/wiki/Tail_call)
+[optimization](https://wiki.c2.com/?TailCallOptimization). When a function returns a call, the callee can re-use the
+caller's stack frame, this will optimize memory from O(n) to O(1) and for [tail recursive](https://www.youtube.com/watch?v=-PX0BV9hGZY)
+it'll completely prevent stackoverflows and yet it's faster.
 
 All benchmarks below were executed on: Windows10 (64bit), ASUS N552VX, Intel Core i7-6700HQ 2.6GHz
 with 12GB SODIMM Ram. And the language versions are: pocketlang (pre-alpha), wren v0.3.0,

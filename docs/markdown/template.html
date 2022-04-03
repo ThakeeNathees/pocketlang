@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg" href="{{ STATIC_DIR }}img/favicon.svg">
+  <script src="{{ STATIC_DIR }}highlight.js/highlight.min.js"></script>
+  <link rel="stylesheet" href="{{ STATIC_DIR }}highlight.js/colors.css">
+  <link rel="stylesheet" href="{{ STATIC_DIR }}rage_font/style.css">
+  <link rel="stylesheet" href="{{ STATIC_DIR }}css/style.css">
+  <link rel="stylesheet" href="{{ STATIC_DIR }}css/docs.css">
+  <title>Docs - pocketlang</title>
+</head>
+
+<body>
+
+  <!-- Navigation bar at the side of the page. -->
+  <div id="navigation" class="collapsed">
+    <!-- This tag will become top navbar for smaller screen (otherwise navigation top). -->
+    <div id="navtop">
+      <div class="flex flac flsb">
+        <a href="{{ URL_POCKET_HOME }}">
+          <div class="flex flac">
+            {{ LOGO_WHITE }}
+            <h1>Pocketlang Docs</h1>
+          </div>
+        </a>
+        <!-- Toggle menu icon. -->
+        <svg xmlns="http://www.w3.org/2000/svg" id="toggle-menu" viewBox="0 0 20 20" width="30" height="30">
+          <path d="M0 0h24v24H0z" fill="none"></path>
+          <path fill="currentColor" d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"></path>
+        </svg>
+      </div>
+    </div>
+    <!-- Generated navigation tree. -->
+    <div id="navtree">
+      <ul>
+        {{ NAVIGATION_TREE }}
+      </ul>
+    </div>
+  </div>
+
+  <!-- Main content of the page. Divided into the doc content and the table of content. -->
+  <div id="main">
+
+    <!-- Documentation body -->
+    <div id="content-body">
+      <h1>{{ PAGE_TITLE }} <a href="#{{ PAGE_TITLE }}" id="{{ PAGE_TITLE }}" class="anchor">#</a></h2> </h1>
+      <!-- Generated page content. -->
+      {{ PAGE_CONTENT }}
+      <!-- Footer. -->
+      <div id="content-footer">
+        <p>Made by <a href="https://www.github.com/ThakeeNathees">ThakeeNathees</a>
+          and contributers on <a href="https://www.github.com/">github</a>.</p>
+      </div>
+    </div>
+
+    <!-- Table of content. -->
+    <div id="table-of-content">
+      <h3>In this page</h3>
+      <ul>
+        {{ TOC_ENTRIES }}
+      </ul>
+    </div>
+
+  </div>
+
+  <script src="{{ STATIC_DIR }}js/docs.js"></script>
+  
+</body>
+</html>

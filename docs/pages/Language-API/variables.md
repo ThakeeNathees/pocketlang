@@ -1,5 +1,0 @@
-
-# %% Variables %%
-
-
-TODO

@@ -1,6 +1,4 @@
 
-# %% Fibers %%
-
 Pocketlang support coroutines via [fibers](https://en.wikipedia.org/wiki/Fiber_(computer_science))
 (light weight threads with cooperative multitask). A fiber object is a wrapper
 around a function, contains the execution state (simply the stack and the
@@ -11,14 +9,14 @@ resumed.
 import Fiber
 
 def fn(h, w)
-	print(h, w)
+  print(h, w)
 end
 
 fb = Fiber.new(fn)              # Create a fiber.
 Fiber.run(fb, 'hello', 'world') # Run the fiber.
 ```
 
-## %% Yielding %%
+## Yielding
 
 When a function is yielded, it's state will be stored in the fiber it's
 belongs to and will return from the function, to parent fiber it's running
@@ -29,9 +27,9 @@ fibers when they yield.
 import Fiber
 
 def fn()
-	print('running')
-	yield()
-	print('resumed')
+  print('running')
+  yield()
+  print('resumed')
 end
 
 fb = Fiber.new(fn)
@@ -46,9 +44,9 @@ Yield from the fiber with a value.
 import Fiber
 
 def fn()
-	print('running')
-	yield(42) # Return 42.
-	print('resumed')
+  print('running')
+  yield(42) # Return 42.
+  print('resumed')
 end
 
 fb = Fiber.new(fn)
@@ -63,10 +61,10 @@ Resume the fiber with a value.
 import Fiber
 
 def fn()
-	print('running')
-	val = yield() # Resumed value.
-	print(val)    # Prints 42.
-	print('resumed')
+  print('running')
+  val = yield() # Resumed value.
+  print(val)    # Prints 42.
+  print('resumed')
 end
 
 fb = Fiber.new(fn)
@@ -90,7 +88,7 @@ func()
 end))
 
 while not fb.is_done
-	Fiber.resume(fb)
+  Fiber.resume(fb)
 end
 
 # Get the function from the fiber.

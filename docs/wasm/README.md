@@ -1,4 +1,6 @@
 
+To compile pocketlang to wasm:
+
 1. Download and install emscripten using the guide from.
    https://emscripten.org/docs/getting_started/downloads.html
 
@@ -10,5 +12,4 @@
 
 4. Run 'python compile.py' to run compile.
 
-   
 
