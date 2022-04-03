@@ -439,32 +439,6 @@ static void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
   return realloc(memory, new_size);
 }
 
-// If failed to resolve it'll return false. Parameter [result] should be points
-// to the string which is the path that has to be resolved and once it resolved
-// the provided result's string's on_done() will be called and, it's string
-// will be updated with the new resolved path string.
-static inline bool resolveScriptPath(PKVM* vm, PkStringPtr* path_string) {
-  if (vm->config.resolve_path_fn == NULL) return true;
-
-  const char* path = path_string->string;
-  PkStringPtr resolved;
-
-  Fiber* fiber = vm->fiber;
-  if (fiber == NULL || fiber->frame_count <= 0) {
-    // fiber == NULL => vm haven't started yet and it's a root script.
-    resolved = vm->config.resolve_path_fn(vm, NULL, path);
-  } else {
-    const Function* fn = fiber->frames[fiber->frame_count - 1].fn;
-    resolved = vm->config.resolve_path_fn(vm, fn->owner->path->data, path);
-  }
-
-  // Done with the last string and update it with the new string.
-  if (path_string->on_done != NULL) path_string->on_done(vm, *path_string);
-  *path_string = resolved;
-
-  return path_string->string != NULL;
-}
-
 // Import and return Script object as Var. If the script is imported and
 // compiled here it'll set [is_new_script] to true otherwise (using the cached
 // script) set to false.

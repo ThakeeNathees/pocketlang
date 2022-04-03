@@ -71,6 +71,11 @@ for i in 0..100
   assert(i%2 == f(i))
 end
 
+## The below function caused a bug after compile time stack size calculation
+## bug fixed. Added here to check for regression.
+def h()
+  f() ## <-- Not tail called here (anymore) because it's not returned.
+end
 
 # If we got here, that means all test were passed.
 print('All TESTS PASSED')

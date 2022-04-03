@@ -224,7 +224,6 @@ typedef enum {
   PREC_TERM,          // + -
   PREC_FACTOR,        // * / %
   PREC_UNARY,         // - ! ~ not
-  PREC_CHAIN_CALL,    // ->
   PREC_CALL,          // ()
   PREC_SUBSCRIPT,     // []
   PREC_ATTRIB,        // .index
@@ -1126,7 +1125,6 @@ static void exprName(Compiler* compiler);
 static void exprOr(Compiler* compiler);
 static void exprAnd(Compiler* compiler);
 
-static void exprChainCall(Compiler* compiler);
 static void exprBinaryOp(Compiler* compiler);
 static void exprUnaryOp(Compiler* compiler);
 
@@ -1165,7 +1163,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_AMP        */ { NULL,          exprBinaryOp,     PREC_BITWISE_AND },
   /* TK_PIPE       */ { NULL,          exprBinaryOp,     PREC_BITWISE_OR },
   /* TK_CARET      */ { NULL,          exprBinaryOp,     PREC_BITWISE_XOR },
-  /* TK_ARROW      */ { NULL,          exprChainCall,    PREC_CHAIN_CALL },
+  /* TK_ARROW      */   NO_RULE,
   /* TK_PLUS       */ { NULL,          exprBinaryOp,     PREC_TERM },
   /* TK_MINUS      */ { exprUnaryOp,   exprBinaryOp,     PREC_TERM },
   /* TK_STAR       */ { NULL,          exprBinaryOp,     PREC_FACTOR },
@@ -1300,7 +1298,9 @@ static void exprName(Compiler* compiler) {
         compiler->new_local = true;
 
         // Ensure the local variable's index is equals to the stack top index.
-        ASSERT((compiler->stack_size - 1) == index, OOPS);
+        // If the compiler has errors, we cannot and don't have to assert.
+        ASSERT(compiler->has_errors || (compiler->stack_size - 1) == index,
+               OOPS);
 
         // We don't need to call emitStoreVariable (which emit STORE_LOCAL)
         // because the local is already at it's location in the stack, we just
@@ -1404,34 +1404,6 @@ void exprAnd(Compiler* compiler) {
   int andpatch = emitShort(compiler, 0xffff); //< Will be patched.
   parsePrecedence(compiler, PREC_LOGICAL_AND);
   patchJump(compiler, andpatch);
-
-  compiler->is_last_call = false;
-}
-
-static void exprChainCall(Compiler* compiler) {
-  skipNewLines(compiler);
-  parsePrecedence(compiler, (Precedence)(PREC_CHAIN_CALL + 1));
-  emitOpcode(compiler, OP_SWAP); // Swap the data with the function.
-
-  int argc = 1; // The initial data.
-
-  if (match(compiler, TK_LBRACE)) {
-    if (!match(compiler, TK_RBRACE)) {
-      do {
-        skipNewLines(compiler);
-        compileExpression(compiler);
-        skipNewLines(compiler);
-        argc++;
-      } while (match(compiler, TK_COMMA));
-      consume(compiler, TK_RBRACE, "Expected '}' after chain call "
-                                   "parameter list.");
-    }
-  }
-
-  // TODO: ensure argc < 256 (MAX_ARGC) 1byte.
-
-  emitOpcode(compiler, OP_CALL);
-  emitByte(compiler, argc);
 
   compiler->is_last_call = false;
 }
@@ -2101,16 +2073,6 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
 
   if (fn_type != FN_NATIVE) {
     compileBlockBody(compiler, BLOCK_FUNC);
-
-    // Tail call optimization disabled at debug mode.
-    if (compiler->options && !compiler->options->debug) {
-      if (compiler->is_last_call) {
-        ASSERT(_FN->opcodes.count >= 3, OOPS); // OP_CALL, argc, OP_POP
-        ASSERT(_FN->opcodes.data[_FN->opcodes.count - 1] == OP_POP, OOPS);
-        ASSERT(_FN->opcodes.data[_FN->opcodes.count - 3] == OP_CALL, OOPS);
-        _FN->opcodes.data[_FN->opcodes.count - 3] = OP_TAIL_CALL;
-      }
-    }
 
     consume(compiler, TK_END, "Expected 'end' after function definition end.");
     compilerExitBlock(compiler); // Parameter depth.
