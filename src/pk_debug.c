@@ -303,6 +303,8 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
       case OP_JUMP:
       case OP_JUMP_IF:
       case OP_JUMP_IF_NOT:
+      case OP_OR:
+      case OP_AND:
       {
         int offset = READ_SHORT();
 

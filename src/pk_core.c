@@ -406,6 +406,7 @@ static inline bool validateIndex(PKVM* vm, int64_t index, uint32_t size,
  VALIDATE_ARG_OBJ(Map, OBJ_MAP, "map")
  VALIDATE_ARG_OBJ(Function, OBJ_FUNC, "function")
  VALIDATE_ARG_OBJ(Fiber, OBJ_FIBER, "fiber")
+ VALIDATE_ARG_OBJ(Class, OBJ_CLASS, "class")
 
 /*****************************************************************************/
 /* SHARED FUNCTIONS                                                          */
@@ -839,6 +840,8 @@ DEF(stdLangGC,
 DEF(stdLangDisas,
   "disas(fn:Function) -> String\n"
   "Returns the disassembled opcode of the function [fn].") {
+
+  // TODO: support dissasemble class constructors and module main body.
 
   Function* fn;
   if (!validateArgFunction(vm, 1, &fn)) return;

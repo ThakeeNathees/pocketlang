@@ -1161,6 +1161,30 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
       DISPATCH();
     }
 
+    OPCODE(OR):
+    {
+      Var cond = PEEK(-1);
+      uint16_t offset = READ_SHORT();
+      if (toBool(cond)) {
+        ip += offset;
+      } else {
+        DROP();
+      }
+      DISPATCH();
+    }
+
+    OPCODE(AND):
+    {
+      Var cond = PEEK(-1);
+      uint16_t offset = READ_SHORT();
+      if (!toBool(cond)) {
+        ip += offset;
+      } else {
+        DROP();
+      }
+      DISPATCH();
+    }
+
     OPCODE(RETURN):
     {
 

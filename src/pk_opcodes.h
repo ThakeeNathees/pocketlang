@@ -144,21 +144,35 @@ OPCODE(ITER_TEST, 0, 0)
 // param: 2 bytes jump offset if the iteration should stop.
 OPCODE(ITER, 3, 0)
 
-// The address offset to jump to. It'll add the offset to ip.
+// Jumps forward by [offset]. ie. ip += offset.
 // param: 2 bytes jump address offset.
 OPCODE(JUMP, 2, 0)
 
-// The address offset to jump to. It'll SUBTRACT the offset to ip.
+// Jumps backward by [offset]. ie. ip -= offset.
 // param: 2 bytes jump address offset.
 OPCODE(LOOP, 2, 0)
 
-// Pop the stack top value and if it's true jump.
-// param: 2 bytes jump address.
+// Pop the stack top value and if it's true jump [offset] forward.
+// param: 2 bytes jump address offset.
 OPCODE(JUMP_IF, 2, -1)
 
-// Pop the stack top value and if it's false jump.
-// param: 2 bytes jump address.
+// Pop the stack top value and if it's false jump [offset] forward.
+// param: 2 bytes jump address offset.
 OPCODE(JUMP_IF_NOT, 2, -1)
+
+// If the stack top is true jump [offset] forward, otherwise pop and continue.
+// Here the stack change is -1 because after we compile an 'or' expression we
+// have pushed 2 values at the stack but one of them will either popped or
+// jumped over resulting only one value at the stack top.
+// param: 2 bytes jump address offset.
+OPCODE(OR, 2, -1)
+
+// If the stack top is false jump [offset] forward, otherwise pop and continue.
+// Here the stack change is -1 because after we compile an 'and' expression we
+// have pushed 2 values at the stack but one of them will either popped or
+// jumped over resulting only one value at the stack top.
+// param: 2 bytes jump address offset.
+OPCODE(AND, 2, -1)
 
 // Pop the stack top value and store it to the current stack frame's 0 index.
 // Then it'll pop the current stack frame.
