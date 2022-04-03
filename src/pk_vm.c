@@ -956,7 +956,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
         fn = (const Function*)((Class*)AS_OBJ(*callable))->ctor;
 
       } else {
-        RUNTIME_ERROR(stringFormat(vm, "$ $(@).", "Expected a function in "
+        RUNTIME_ERROR(stringFormat(vm, "$ $(@).", "Expected a callable to "
                       "call, instead got",
                       varTypeName(*callable), toString(vm, *callable)));
         DISPATCH();

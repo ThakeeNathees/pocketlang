@@ -1112,6 +1112,7 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
                                uint32_t length, int line);
 static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
                                const char* name, int length, int line);
+static void compilerChangeStack(Compiler* compiler, int num);
 
 // Forward declaration of grammar functions.
 static void parsePrecedence(Compiler* compiler, Precedence precedence);
@@ -1297,6 +1298,12 @@ static void exprName(Compiler* compiler) {
         // This will prevent the assignment from being popped out from the
         // stack since the assigned value itself is the local and not a temp.
         compiler->new_local = true;
+
+
+        //printf("%i -- %i %.*s\n", compiler->stack_size, index, length, start);
+        //ASSERT((compiler->stack_size - 1) == index, OOPS);
+
+
         emitStoreVariable(compiler, index, false);
       }
     } else {
@@ -1361,18 +1368,6 @@ static void exprName(Compiler* compiler) {
 
   compiler->is_last_call = false;
 }
-
-/*           a or b:             |        a and b:
-                                 |
-            (...)                |           (...)
-        .-- jump_if [offset]     |       .-- jump_if_not [offset]
-        |   (...)                |       |   (...)
-        |-- jump_if [offset]     |       |-- jump_if_not [offset]
-        |   push false           |       |   push true
-     .--+-- jump [offset]        |    .--+-- jump [offset]
-     |  '-> push true            |    |  '-> push false
-     '----> (...)                |    '----> (...)
-*/
 
 void exprOr(Compiler* compiler) {
   emitOpcode(compiler, OP_JUMP_IF);
@@ -1564,6 +1559,10 @@ static void exprCall(Compiler* compiler) {
 
   emitOpcode(compiler, OP_CALL);
   emitByte(compiler, argc);
+
+  // After the call the arguments will be popped and the callable
+  // will be replaced with the return value.
+  compilerChangeStack(compiler, -argc);
 
   compiler->is_last_call = true;
 }
@@ -1788,9 +1787,9 @@ static void compilerEnterBlock(Compiler* compiler) {
 static void compilerChangeStack(Compiler* compiler, int num) {
   compiler->stack_size += num;
 
-  // If the compiler has error (such as undefined name, that will not popped
+  // If the compiler has error (such as undefined name), that will not popped
   // because of the semantic error but it'll be popped once the expression
-  // parsing is done.
+  // parsing is done. So it's possible for negative size in error.
   if (!compiler->has_errors) ASSERT(compiler->stack_size >= 0, OOPS);
 
   if (compiler->stack_size > _FN->stack_size) {
@@ -1869,6 +1868,8 @@ static int emitShort(Compiler* compiler, int arg) {
 // should be handled).
 static void emitOpcode(Compiler* compiler, Opcode opcode) {
   emitByte(compiler, (int)opcode);
+  // If the opcode is OP_CALL the compiler should change the stack size
+  // manually because we don't know that here.
   compilerChangeStack(compiler, opcode_info[opcode].stack);
 }
 
