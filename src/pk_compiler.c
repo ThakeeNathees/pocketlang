@@ -1112,6 +1112,7 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
                                uint32_t length, int line);
 static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
                                const char* name, int length, int line);
+static void compilerChangeStack(Compiler* compiler, int num);
 
 // Forward declaration of grammar functions.
 static void parsePrecedence(Compiler* compiler, Precedence precedence);
@@ -1297,7 +1298,13 @@ static void exprName(Compiler* compiler) {
         // This will prevent the assignment from being popped out from the
         // stack since the assigned value itself is the local and not a temp.
         compiler->new_local = true;
-        emitStoreVariable(compiler, index, false);
+
+        // Ensure the local variable's index is equals to the stack top index.
+        ASSERT((compiler->stack_size - 1) == index, OOPS);
+
+        // We don't need to call emitStoreVariable (which emit STORE_LOCAL)
+        // because the local is already at it's location in the stack, we just
+        // don't pop it.
       }
     } else {
 
@@ -1362,56 +1369,41 @@ static void exprName(Compiler* compiler) {
   compiler->is_last_call = false;
 }
 
-/*           a or b:             |        a and b:
-                                 |
-            (...)                |           (...)
-        .-- jump_if [offset]     |       .-- jump_if_not [offset]
-        |   (...)                |       |   (...)
-        |-- jump_if [offset]     |       |-- jump_if_not [offset]
-        |   push false           |       |   push true
-     .--+-- jump [offset]        |    .--+-- jump [offset]
-     |  '-> push true            |    |  '-> push false
-     '----> (...)                |    '----> (...)
-*/
+// Compiling (expr a) or (expr b)
+//
+//            (expr a)
+//             |  At this point (expr a) is at the stack top.
+//             V
+//        .-- (OP_OR [offset])
+//        |    |  if true short circuit and skip (expr b)
+//        |    |  otherwise pop (expr a) and continue.
+//        |    V
+//        |   (expr b)
+//        |    |  At this point (expr b) is at the stack top.
+//        |    V
+//        '->  (...)
+//              At this point stack top would be
+//              either (expr a) or (expr b)
+//
+// Compiling 'and' expression is also similler but we jump if the (expr a) is
+// false.
 
 void exprOr(Compiler* compiler) {
-  emitOpcode(compiler, OP_JUMP_IF);
-  int true_offset_a = emitShort(compiler, 0xffff); //< Will be patched.
 
+  emitOpcode(compiler, OP_OR);
+  int orpatch = emitShort(compiler, 0xffff); //< Will be patched.
   parsePrecedence(compiler, PREC_LOGICAL_OR);
-  emitOpcode(compiler, OP_JUMP_IF);
-  int true_offset_b = emitShort(compiler, 0xffff); //< Will be patched.
-
-  emitOpcode(compiler, OP_PUSH_FALSE);
-  emitOpcode(compiler, OP_JUMP);
-  int end_offset = emitShort(compiler, 0xffff); //< Will be patched.
-
-  patchJump(compiler, true_offset_a);
-  patchJump(compiler, true_offset_b);
-  emitOpcode(compiler, OP_PUSH_TRUE);
-
-  patchJump(compiler, end_offset);
+  patchJump(compiler, orpatch);
 
   compiler->is_last_call = false;
 }
 
 void exprAnd(Compiler* compiler) {
-  emitOpcode(compiler, OP_JUMP_IF_NOT);
-  int false_offset_a = emitShort(compiler, 0xffff); //< Will be patched.
 
+  emitOpcode(compiler, OP_AND);
+  int andpatch = emitShort(compiler, 0xffff); //< Will be patched.
   parsePrecedence(compiler, PREC_LOGICAL_AND);
-  emitOpcode(compiler, OP_JUMP_IF_NOT);
-  int false_offset_b = emitShort(compiler, 0xffff); //< Will be patched.
-
-  emitOpcode(compiler, OP_PUSH_TRUE);
-  emitOpcode(compiler, OP_JUMP);
-  int end_offset = emitShort(compiler, 0xffff); //< Will be patched.
-
-  patchJump(compiler, false_offset_a);
-  patchJump(compiler, false_offset_b);
-  emitOpcode(compiler, OP_PUSH_FALSE);
-
-  patchJump(compiler, end_offset);
+  patchJump(compiler, andpatch);
 
   compiler->is_last_call = false;
 }
@@ -1564,6 +1556,10 @@ static void exprCall(Compiler* compiler) {
 
   emitOpcode(compiler, OP_CALL);
   emitByte(compiler, argc);
+
+  // After the call the arguments will be popped and the callable
+  // will be replaced with the return value.
+  compilerChangeStack(compiler, -argc);
 
   compiler->is_last_call = true;
 }
@@ -1788,9 +1784,9 @@ static void compilerEnterBlock(Compiler* compiler) {
 static void compilerChangeStack(Compiler* compiler, int num) {
   compiler->stack_size += num;
 
-  // If the compiler has error (such as undefined name, that will not popped
+  // If the compiler has error (such as undefined name), that will not popped
   // because of the semantic error but it'll be popped once the expression
-  // parsing is done.
+  // parsing is done. So it's possible for negative size in error.
   if (!compiler->has_errors) ASSERT(compiler->stack_size >= 0, OOPS);
 
   if (compiler->stack_size > _FN->stack_size) {
@@ -1869,6 +1865,8 @@ static int emitShort(Compiler* compiler, int arg) {
 // should be handled).
 static void emitOpcode(Compiler* compiler, Opcode opcode) {
   emitByte(compiler, (int)opcode);
+  // If the opcode is OP_CALL the compiler should change the stack size
+  // manually because we don't know that here.
   compilerChangeStack(compiler, opcode_info[opcode].stack);
 }
 
@@ -1900,10 +1898,11 @@ static void emitAssignment(Compiler* compiler, TokenType assignment) {
 static void emitFunctionEnd(Compiler* compiler) {
 
   // Don't use emitOpcode(compiler, OP_RETURN); Because it'll reduce the stack
-  // size by -1, (return value will be popped). We really don't have to pop the
-  // return value of the function, when returning from the end of the function,
-  // because there'll always be a null value at the base of the current call
-  // frame as the return value of the function.
+  // size by -1, (return value will be popped). This return is implictly added
+  // by the compiler.
+  // Since we're returning from the end of the function, there'll always be a
+  // null value at the base of the current call frame the reserved return value
+  // slot.
   emitByte(compiler, OP_RETURN);
 
   emitOpcode(compiler, OP_END);
@@ -2014,9 +2013,14 @@ static int compileClass(Compiler* compiler) {
   }
   consume(compiler, TK_END, "Expected 'end' after a class declaration end.");
 
-  compilerExitBlock(compiler);
+  // The instance pushed by the OP_PUSH_INSTANCE instruction is at the top
+  // of the stack, return it (Constructor will return the instance). Note that
+  // the emitFunctionEnd function will also add a return instruction but that's
+  // for functions which doesn't return anything explicitly. This return won't
+  // change compiler's stack size because it won't pop the return value.
+  emitOpcode(compiler, OP_RETURN);
 
-  // At this point, the stack top would be the constructed instance. Return it.
+  compilerExitBlock(compiler);
   emitFunctionEnd(compiler);
 
   compilerPopFunc(compiler);

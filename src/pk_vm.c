@@ -956,7 +956,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
         fn = (const Function*)((Class*)AS_OBJ(*callable))->ctor;
 
       } else {
-        RUNTIME_ERROR(stringFormat(vm, "$ $(@).", "Expected a function in "
+        RUNTIME_ERROR(stringFormat(vm, "$ $(@).", "Expected a callable to "
                       "call, instead got",
                       varTypeName(*callable), toString(vm, *callable)));
         DISPATCH();
@@ -1157,6 +1157,30 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
       uint16_t offset = READ_SHORT();
       if (!toBool(cond)) {
         ip += offset;
+      }
+      DISPATCH();
+    }
+
+    OPCODE(OR):
+    {
+      Var cond = PEEK(-1);
+      uint16_t offset = READ_SHORT();
+      if (toBool(cond)) {
+        ip += offset;
+      } else {
+        DROP();
+      }
+      DISPATCH();
+    }
+
+    OPCODE(AND):
+    {
+      Var cond = PEEK(-1);
+      uint16_t offset = READ_SHORT();
+      if (!toBool(cond)) {
+        ip += offset;
+      } else {
+        DROP();
       }
       DISPATCH();
     }
