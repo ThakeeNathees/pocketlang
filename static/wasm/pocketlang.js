@@ -1790,6 +1790,12 @@ var ASM_CONSTS = {
       abortOnCannotGrowMemory(requestedSize);
     }
 
+  function _exit(status) {
+      // void _exit(int status);
+      // http://pubs.opengroup.org/onlinepubs/000095399/functions/exit.html
+      exit(status);
+    }
+
   var SYSCALLS={mappings:{},buffers:[null,[],[]],printChar:function(stream, curr) {
         var buffer = SYSCALLS.buffers[stream];
         assert(buffer);
@@ -1854,12 +1860,14 @@ var ASM_CONSTS = {
         err_text = `  [at:${line}] ${msg}`;
       }
   
-      var out = document.getElementById("output");
+      var out = document.getElementById("code-output");
+      // To Indicate error (should be removed before each run request).
+      out.classList.add("has-error");
       out.innerText += err_text + '\n';
     }
 
   function _js_writeFunction(message) {
-      var out = document.getElementById("output");
+      var out = document.getElementById("code-output");
       out.innerText += AsciiToString(message)
     }
 
@@ -1900,6 +1908,7 @@ var asmLibraryArg = {
   "clock": _clock,
   "emscripten_memcpy_big": _emscripten_memcpy_big,
   "emscripten_resize_heap": _emscripten_resize_heap,
+  "exit": _exit,
   "fd_close": _fd_close,
   "fd_seek": _fd_seek,
   "fd_write": _fd_write,

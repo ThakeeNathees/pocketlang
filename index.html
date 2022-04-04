@@ -1,97 +1,168 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
-	<title>Home - PocketLang</title>
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<link rel="stylesheet" type="text/css" href="static/main.css">
-	<link rel="stylesheet" type="text/css" href="static/pygments.css">
-	<link rel="stylesheet" type="text/css" href="static/rage_font/style.css" />
-	
-	<!-- Additional javascript css files for wasm try. -->
-	
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg" href="./static/img/favicon.svg">
 
+  <script src="./static/codejar/linenumbers.js"></script>
+  <link rel="stylesheet" href="./static/codejar/style.css">
+
+  <script src="./static/codejar/codejar.js"></script>
+  <script src="./static/highlight.js/highlight.min.js"></script>
+  <link rel="stylesheet" href="./static/highlight.js/colors.css">
+
+  <link rel="stylesheet" href="./static/rage_font/style.css">
+  <link rel="stylesheet" href="./static/css/style.css">
+  <link rel="stylesheet" href="./static/css/home.css">
+  <title>Pocketlang</title>
 </head>
-	
-	<body>
-	
-	<!-- Title header. -->
-	<div class="container">
-	<div id="header">
-		<div id="header_content" class="container">
-		<a href="index.html">
-		<h1>pocketlang</h1>
-		<h2>A small and fast language</h2>
-		</a>
-		</div>
-	</div>
-	</div>
 
-	<div id="page">
-	<div id="main-wrapper" class="container">
-	<div id="main">
-	
-		<div id="content-wrapper">
-		<div id="content">
-			<h2>PocketLang is a small, fast and friendly language for scripting and embedding.  <a href="#pocketlang-is-a-small,-fast-and-friendly-language-for-scripting-and-embedding." name="pocketlang-is-a-small,-fast-and-friendly-language-for-scripting-and-embedding." class="anchor">#</a></h2>
-<p>With mixed syntax of ruby and python, that can be learned in less than an hour, and it's easy to embed into another application for scripting.</p>
-<div class="codehilite"><pre><span></span><span class="c1"># Python like import statement.</span>
-<span class="k">from</span> <span class="n">os</span> <span class="k">import</span> <span class="n">clock</span> <span class="k">as</span> <span class="n">now</span>
+<body>
 
-<span class="c1"># A recursive fibonacci function.</span>
-<span class="k">def</span> <span class="nf">fib</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
-  <span class="k">if</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="k">then</span> <span class="k">return</span> <span class="n">n</span> <span class="k">end</span>
-  <span class="k">return</span> <span class="n">fib</span><span class="p">(</span><span class="n">n</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">fib</span><span class="p">(</span><span class="n">n</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span>
-<span class="k">end</span>
+  <div id="navbar">
+    <a href=""><h1 id="pocketlang">pocketlang</h1></a>
+    <div>
+      <svg xmlns="http://www.w3.org/2000/svg" id="toggle-menu" viewBox="0 0 20 20" width="30" height="30">
+        <path d="M0 0h24v24H0z" fill="none"></path>
+        <path fill="currentColor" d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"></path>
+      </svg>
+      <ul>
+        <li><a href="docs/v0.1.0/Reference/Getting-Started.html">Docs</a></li>
+        <li><a href="">Download</a></li>
+        <li><a target="_blank" href="https://www.github.com/ThakeeNathees/pocketlang/">Github</a></li>
+      </ul>
+    </div>
+  </div>
 
-<span class="c1"># Print all fibonacci from 0 to 5 exclusive.</span>
-<span class="k">for</span> <span class="n">i</span> <span class="k">in</span> <span class="mi">0</span><span class="o">..</span><span class="mi">5</span>
-  <span class="nb">print</span><span class="p">(</span><span class="n">fib</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
-<span class="k">end</span>
-</pre></div>
+  <div id="main">
 
+    <section id="intro">
+      <div id="intro-text">
+        <h1>
+          Pocketlang is a small, fast and friendly language
+        </h1>
+        <p>
+          A dynamic typed, highlevel language language designed for scripting and
+          embedding easily. Supports object oriented programming, higher order
+          functions, closures(wip), fibers, garbage collection and more.
+        </p>
+        <a class="button" href="docs/v0.1.0/Reference/Getting-Started.html">Get Started</a>
+      </div>
+      <img src="./static/img/pocketlang.svg">
+    </section>
 
-<p>The complete language (including the internals and runtime) is a standalone executable with zero external dependency, that can be easily copied to a flash drive. And the language itself can be compiled from source in seconds without any dependencies (of course you need a C compiler and <strong>optionally</strong> a build system).</p>
-		</div>
-		</div>
+    <section id="what-pocketlang-looks-like">
+      <h1 class="section-title">What pocketlang looks like?</h1>
+      <p>
+        With mixed syntax of ruby and python, that can be learned in less than an hour, and it's
+        easy to embed into another application for scripting. Here is a smaple pocketlang code.
+      </p>
+<pre><code class="highlight ruby">
+# Python like import statement.
+from lang import clock as now
 
-		<div id="sidebar-wrapper">
-		<div id="sidebar">
-			<!-- <img src=" $sttaicdir/ icon.png" style="width:120px"> -->
-			<div class="navigation">
-<h3><strong>Getting Started</strong></h3>
-<ul class="menu">
-<li><a href="getting-started-try-it-now.html">Try It Now</a></li>
-<li><a href="getting-started-learn-in-15-minutes.html">Learn In 15 Minutes</a></li>
-<li><a href="getting-started-build-from-source.html">Build From Source</a></li>
-<li><a href="getting-started-contributing.html">Contributing</a></li>
-</ul>
-</div>
-<div class="navigation">
-<h3><strong>Language Api</strong></h3>
-<ul class="menu">
-<li><a href="language-api-variables.html">Variables</a></li>
-<li><a href="language-api-functions.html">Functions</a></li>
-<li><a href="language-api-fibers.html">Fibers</a></li>
-<li><a href="language-api-modules.html">Modules</a></li>
-</ul>
-</div>
+# A recursive fibonacci function.
+def fib(n)
+  if n &lt; 2 then return n end
+  return fib(n-1) + fib(n-2)
+end
 
-		</div>
-		</div>
+# Prints all fibonacci from 0 to 10 exclusive.
+for i in 0..10
+  print(fib(i))
+end
+</code></pre>
+    </section>
 
-	</div>
-	</div>
-	</div>
+    <section id="features">
+      <div id="features-grid">
 
-	<br>
-	
-	<div class="container">
-	<div id="footer">
-        <p>Made by <a href="https://github.com/ThakeeNathees">Thakee Nathees</a>
-		on <a href="https://github.com/ThakeeNathees/pocketlang">github</a>.</p>
-	</div>
-	</div>
+        <div class="feature">
+          <div class="feature-img">
+            <img src="./static/img/concurrent.svg">
+          </div>
+          <h2>Concurrent</h2>
+          <p>
+            Pocketlang's fibers (lightweight threads) allows you to write parallel
+            tasks easily, without worrying about thread safety.
+          </p>
+          <a href="">Learn more</a>
+        </div>
 
+        <div class="feature">
+          <div class="feature-img">
+            <img src="./static/img/gear.svg">
+          </div>
+          <h2>Embeddible</h2>
+          <p>
+            You can use PKVM as any other libraries in your application.
+            It's specifically designed to be embedded in other programs.
+          </p>
+          <a href="">Learn more</a>
+        </div>
 
-	</body>
+        <div class="feature">
+          <div class="feature-img">
+            <img src="./static/img/gc.svg">
+          </div>
+          <h2>Garbage Collected</h2>
+          <p>
+            With the pocketlan's garbage collector you can write code
+            without worrying about memory management.
+          </p>
+          <a href="">Learn more</a>
+        </div>
+        
+        <div class="feature">
+          <div class="feature-img">
+            <img src="./static/img/repl.svg">
+          </div>
+          <h2>REPL</h2>
+          <p>
+            The interactive prompt of pocketlang will makes it easier to test and play with it
+            on the command line.
+          </p>
+          <a href="">Learn more</a>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="try-it-now">
+      <h1 class="section-title">
+        Try it now
+        <a class="anchor" href="#try-it-now">#</a>
+      </h1>
+
+      <p class="code-area-label">code editor</p>
+      <div id="code-area-wrapper">
+        <div id="run-button" class="button">
+          <div>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+              <path fill="none" d="M0 0h24v24H0z"/>
+              <path fill="currentColor" d="M19.376 12.416L8.777 19.482A.5.5 0 0 1 8 19.066V4.934a.5.5 0 0 1 .777-.416l10.599 7.066a.5.5 0 0 1 0 .832z"/>
+            </svg>
+            <p>Run</p>
+          </div>
+        </div>
+        <div id="code-editor" class="editor language-ruby"></div>
+      </div>
+      
+      <p class="code-area-label">output</p>
+      <div id="code-output">...</div>
+
+    </section>
+
+  </div>
+
+  <div id="footer">
+    <p>Made by <a href="https://www.github.com/ThakeeNathees">ThakeeNathees</a>
+      and contributers on <a href="https://www.github.com/">github</a>.</p>
+  </div>
+  
+  <script async type="text/javascript" src="./static/wasm/pocketlang.js"></script>
+  <script src="./static/js/home.js"></script>
+
+</body>
 </html>
