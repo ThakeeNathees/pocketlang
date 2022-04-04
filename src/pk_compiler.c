@@ -373,11 +373,11 @@ struct Compiler {
   // "r-value".
   bool l_value;
 
-  // This will set to true after parsing a call expression, and will be reset
-  // to false before calling an infix rule. If this is true, that means the
-  // last expression that was parsed with by compileExpression() is a function
-  // call. Which is usefull to check if a return expression is function call
-  // to perform a tail call optimization.
+  // This value will be true after parsing a call expression, for every other
+  // Expressions it'll be false. This is **ONLY** to be used when compiling a
+  // return statement to check if the last parsed expression is a call to
+  // perform a tail call optimization (anywhere else this below boolean is
+  // meaningless).
   bool is_last_call;
 };
 
@@ -1259,16 +1259,12 @@ static void exprLiteral(Compiler* compiler) {
   int index = compilerAddConstant(compiler, value->value);
   emitOpcode(compiler, OP_PUSH_CONSTANT);
   emitShort(compiler, index);
-
-  compiler->is_last_call = false;
 }
 
 static void exprFunc(Compiler* compiler) {
   int fn_index = compileFunction(compiler, FN_LITERAL);
   emitOpcode(compiler, OP_PUSH_FN);
   emitByte(compiler, fn_index);
-
-  compiler->is_last_call = false;
 }
 
 // Local/global variables, script/native/builtin functions name.
@@ -1365,8 +1361,6 @@ static void exprName(Compiler* compiler) {
         UNREACHABLE(); // Case already handled.
     }
   }
-
-  compiler->is_last_call = false;
 }
 
 // Compiling (expr a) or (expr b)
@@ -1389,23 +1383,17 @@ static void exprName(Compiler* compiler) {
 // false.
 
 void exprOr(Compiler* compiler) {
-
   emitOpcode(compiler, OP_OR);
   int orpatch = emitShort(compiler, 0xffff); //< Will be patched.
   parsePrecedence(compiler, PREC_LOGICAL_OR);
   patchJump(compiler, orpatch);
-
-  compiler->is_last_call = false;
 }
 
 void exprAnd(Compiler* compiler) {
-
   emitOpcode(compiler, OP_AND);
   int andpatch = emitShort(compiler, 0xffff); //< Will be patched.
   parsePrecedence(compiler, PREC_LOGICAL_AND);
   patchJump(compiler, andpatch);
-
-  compiler->is_last_call = false;
 }
 
 static void exprBinaryOp(Compiler* compiler) {
@@ -1435,8 +1423,6 @@ static void exprBinaryOp(Compiler* compiler) {
     default:
       UNREACHABLE();
   }
-
-  compiler->is_last_call = false;
 }
 
 static void exprUnaryOp(Compiler* compiler) {
@@ -1451,8 +1437,6 @@ static void exprUnaryOp(Compiler* compiler) {
     default:
       UNREACHABLE();
   }
-
-  compiler->is_last_call = false;
 }
 
 static void exprGrouping(Compiler* compiler) {
@@ -1460,8 +1444,6 @@ static void exprGrouping(Compiler* compiler) {
   compileExpression(compiler);
   skipNewLines(compiler);
   consume(compiler, TK_RPARAN, "Expected ')' after expression.");
-
-  compiler->is_last_call = false;
 }
 
 static void exprList(Compiler* compiler) {
@@ -1486,8 +1468,6 @@ static void exprList(Compiler* compiler) {
 
   _FN->opcodes.data[size_index] = (size >> 8) & 0xff;
   _FN->opcodes.data[size_index + 1] = size & 0xff;
-
-  compiler->is_last_call = false;
 }
 
 static void exprMap(Compiler* compiler) {
@@ -1508,8 +1488,6 @@ static void exprMap(Compiler* compiler) {
 
   skipNewLines(compiler);
   consume(compiler, TK_RBRACE, "Expected '}' after map elements.");
-
-  compiler->is_last_call = false;
 }
 
 static void exprCall(Compiler* compiler) {
@@ -1532,8 +1510,6 @@ static void exprCall(Compiler* compiler) {
   // After the call the arguments will be popped and the callable
   // will be replaced with the return value.
   compilerChangeStack(compiler, -argc);
-
-  compiler->is_last_call = true;
 }
 
 static void exprAttrib(Compiler* compiler) {
@@ -1564,8 +1540,6 @@ static void exprAttrib(Compiler* compiler) {
     emitOpcode(compiler, OP_GET_ATTRIB);
     emitShort(compiler, index);
   }
-
-  compiler->is_last_call = false;
 }
 
 static void exprSubscript(Compiler* compiler) {
@@ -1590,7 +1564,6 @@ static void exprSubscript(Compiler* compiler) {
   } else {
     emitOpcode(compiler, OP_GET_SUBSCRIPT);
   }
-  compiler->is_last_call = false;
 }
 
 static void exprValue(Compiler* compiler) {
@@ -1602,8 +1575,6 @@ static void exprValue(Compiler* compiler) {
     default:
       UNREACHABLE();
   }
-
-  compiler->is_last_call = false;
 }
 
 static void parsePrecedence(Compiler* compiler, Precedence precedence) {
@@ -1615,17 +1586,26 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
     return;
   }
 
-  // Reset to false and this will set to true by the exprCall() function,
-  // If the next infix is call '('.
-  compiler->is_last_call = false;
   compiler->l_value = precedence <= PREC_LOWEST;
-
   prefix(compiler);
+
+  // The above expression cannot be a call '(', since call is an infix
+  // operator. But could be true (ex: x = f()). we set is_last_call to false
+  // here and if the next infix operator is call this will be set to true
+  // once the call expression is parsed.
+  compiler->is_last_call = false;
 
   while (getRule(compiler->current.type)->precedence >= precedence) {
     lexToken(compiler);
-    GrammarFn infix = getRule(compiler->previous.type)->infix;
+
+    TokenType op = compiler->previous.type;
+    GrammarFn infix = getRule(op)->infix;
+
     infix(compiler);
+
+    // TK_LPARAN '(' as infix is the call operator.
+    compiler->is_last_call = (op == TK_LPARAN);
+
   }
 }
 
@@ -2610,9 +2590,6 @@ static void compileStatement(Compiler* compiler) {
   // print it's value when running in REPL mode.
   bool is_expression = false;
 
-  // If the statement is call, this will be set to true.
-  compiler->is_last_call = false;
-
   if (match(compiler, TK_BREAK)) {
     if (compiler->loop == NULL) {
       parseError(compiler, "Cannot use 'break' outside a loop.");
@@ -2652,18 +2629,18 @@ static void compileStatement(Compiler* compiler) {
     if (matchEndStatement(compiler)) {
       emitOpcode(compiler, OP_PUSH_NULL);
       emitOpcode(compiler, OP_RETURN);
+
     } else {
       compileExpression(compiler); //< Return value is at stack top.
 
-      // Tail call optimization disabled at debug mode.
-      if (compiler->options && !compiler->options->debug) {
-        if (compiler->is_last_call) {
+      // If the last expression parsed with compileExpression() is a call
+      // is_last_call would be true by now.
+      if (compiler->is_last_call) {
+        // Tail call optimization disabled at debug mode.
+        if (compiler->options && !compiler->options->debug) {
           ASSERT(_FN->opcodes.count >= 2, OOPS); // OP_CALL, argc
           ASSERT(_FN->opcodes.data[_FN->opcodes.count - 2] == OP_CALL, OOPS);
           _FN->opcodes.data[_FN->opcodes.count - 2] = OP_TAIL_CALL;
-
-          // Now it's a return statement, not call.
-          compiler->is_last_call = false;
         }
       }
 
@@ -2704,9 +2681,6 @@ static void compileStatement(Compiler* compiler) {
 // as import statement, function define, and if we're running REPL mode top
 // level expression's evaluated value will be printed.
 static void compileTopLevelStatement(Compiler* compiler) {
-
-  // If the statement is call, this will be set to true.
-  compiler->is_last_call = false;
 
   if (match(compiler, TK_CLASS)) {
     compileClass(compiler);
