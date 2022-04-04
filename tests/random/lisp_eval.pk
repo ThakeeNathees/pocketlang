@@ -1,0 +1,99 @@
+
+## Evalivate a lisp like expression.
+##  - Only single digit numbers are allowed.
+##  - No space is allowed.
+##
+## (+(*23)(/9(-85))) is equivalent of
+## (+ (* 2 3) (/ 9 (-8 5))) = 9
+
+tests = {
+  "(+(*23)(/9(-85)))" : 9,
+  "(-(*33)(+5(-43)))" : 3,
+  "+(/6(+1(-65)))(-9(*42))" : 4,
+  "-(*(+2(*1(-54)))3)(+1(/88))" : 7
+}
+
+for expr in tests
+  r = eval(expr, 0); assert(r[1] != -1)
+  val = r[0]
+  assert(val == tests[expr])
+end
+
+print("ALL TESTS PASSED")
+
+## -------------------------------------------------
+
+## Return [value, index], if error index will be -1.
+def eval(expr, ind)
+  c = expr[ind]; ind += 1
+
+  if c == '('
+    r = eval(expr, ind)
+    val = r[0]
+    ind = r[1]
+    if ind == -1 then return [null, -1] end
+    if ind == expr.length then
+      print("Invalid expression.")
+      return [null, -1]
+    end
+    assert(ind < expr.length)
+    c = expr[ind]; ind += 1
+    if c != ')'
+      print("Expected ')'"); return [null, -1]
+    end
+    return [val, ind]
+  
+  elsif c == '+'
+    r = binary_op(expr, ind)
+    if not r[0] then return [null, -1] end
+    return [r[1] + r[2], r[3]]
+  
+  elsif c == '-'
+    r = binary_op(expr, ind)
+    if not r[0] then return [null, -1] end
+    return [r[1] - r[2], r[3]]
+  
+  elsif c == '*'
+    r = binary_op(expr, ind)
+    if not r[0] then return [null, -1] end
+    return [r[1] * r[2], r[3]]
+  
+  elsif c == '/'
+    r = binary_op(expr, ind)
+    if not r[0] then return [null, -1] end
+    return [r[1] / r[2], r[3]]
+    
+  elsif isnum(c)
+    val = str_ord(c) - str_ord('0')
+    assert(0 <= val and val < 10)
+    return [val, ind]
+
+  else
+    print("Uexpected token:", c)
+    return [null, -1]
+    
+  end ## switch(c)
+  
+end
+
+## return [success, v1, v2, index]
+def binary_op(expr, ind)
+  r = eval(expr, ind)
+  v1 = r[0]; ind = r[1]
+  if ind == -1 then return [false, null, null, -1] end
+    
+  r = eval(expr, ind)
+  v2 = r[0]; ind = r[1]
+  if ind == -1 then return [false, null, null, -1] end
+  
+  return [true, v1, v2, ind]
+end
+
+
+## Return true if c in numeric.
+def isnum(c)
+  k = str_ord(c) - str_ord('0')
+  ## TODO: k in 0..10
+  return (0 <= k and k < 10)
+end
+

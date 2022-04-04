@@ -24,6 +24,10 @@ TEST_SUITE = {
     "lang/import.pk",
   ),
 
+  "Random Scripts" : (
+    "random/lisp_eval.pk",
+  ),
+
   "Examples": (
     "examples/brainfuck.pk",
     "examples/fib.pk",
@@ -45,10 +49,6 @@ SYSTEM_TO_BINARY_PATH = {
 tests_failed = False
 
 def main():
-
-  ## This will enable ANSI codes in windows terminal.
-  os.system('')
-  
   run_all_tests()
   if tests_failed:
     sys.exit(1)
@@ -137,4 +137,6 @@ def print_title(title):
   print("----------------------------------")
   
 if __name__ == '__main__':
+  ## This will enable ANSI codes in windows terminal.
+  os.system('')
   main()
