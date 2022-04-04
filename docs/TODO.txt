@@ -1,18 +1,22 @@
 
-// To good first issue
-Add '.title' attribute to string
+// Language features.
+- Closure (literal function are would become closure).
+- Utf8 support.
+- Method
+  Reference: CPython
+  See: https://github.com/python/cpython/blob/6db2db91b96aaa1270c200ec931a2250fe2799c7/Python/ceval.c#L4344-L4380
+  Note: consider dynamic attribute for instances like python and make the variables defined at the class level
+        are static.
+- Make assert a keyword and disable it on release build.
 
 // To implement.
 
 - implement 'lang.getMaxCallDepth()' (default=1000 like python) and
   setMaxCallDepth(val) to change stack size at runtime. (at: pushCallFrame())
 
-- make assert as a keyword (like python) and disable it on release build.
-
 - change or add => to_string() to value.as_string
   and add as_repr, as_bool.
 
-- Implement utf8 support.
 - Implement gdb like debugger (add color print for readability).
 - Complete all the TODO; macros.
 - implement MAX_ARGC checks (would cause a buffer overflow if not)
@@ -24,11 +28,6 @@ Add '.title' attribute to string
       - To do so the functions and global variables should be in the same
         buffer as the property of the script.
 - Union tagging alter in var.
-- literal function recursive call.
-  fn = func(a, b)
-    this(a, b) // Something like this.
-    fn(a, b) // May be closure support?
-  end
 
 // Add more.
 - Single header for embedding (script in pk, require file IO).

@@ -1,5 +1,3 @@
 
 build/
-static/pocketlang.js
-static/pocketlang.wasm
-static/try_now.js
+static/wasm/

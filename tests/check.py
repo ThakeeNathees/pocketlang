@@ -21,7 +21,7 @@ def to_abs_paths(sources):
 
 ## Converts the path from absolute path to relative path from the
 ## toplelve of the project.
-def to_tolevel_path(path):
+def to_rel_path(path):
   return relpath(path, join(THIS_PATH, '..'))
 
 ## A list of source files, to check if the fnv1a hash values match it's
@@ -37,7 +37,7 @@ CHECK_EXTENTIONS = ('.c', '.h', '.py', '.pk', '.js')
 
 ## A list of strings, if a line contains it we allow it to be longer than
 ## 79 characters, It's not "the correct way" but it works.
-ALLOW_LONG = ('http://', 'https://', '<script ', '<link ')
+ALLOW_LONG = ('http://', 'https://', '<script ', '<link ', '<svg ')
 
 ## A list of directory, contains C source files to perform static checks.
 ## This will include all files with extension from CHECK_EXTENTIONS.
@@ -46,7 +46,7 @@ SOURCE_DIRS = [
   "../cli/",
 
   "../docs/",
-  "../docs/try/",
+  "../docs/wasm/",
 ]
 
 ## A list of common header that just copied in different projects.
@@ -84,7 +84,7 @@ def check_fnv1_hash(sources):
       if val == hash: continue
       
       ## Path of the file relative to top-level.
-      file_path = to_tolevel_path(file)
+      file_path = to_rel_path(file)
       report_error(f"{location(file_path, line_no)} - hash mismatch. "
         f"hash('{name}') = {hash} not {val}")
         
@@ -102,11 +102,16 @@ def check_static(dirs):
       fp = open(join(dir, file), 'r')
       
       ## Path of the file relative to top-level.
-      file_path = to_tolevel_path(join(dir, file))
+      file_path = to_rel_path(join(dir, file))
+      lines = list(fp.readlines())
+      fp.close()
+
+      if len(lines) > 0 and not lines[-1].endswith('\n'):
+        report_error(f"{file_path} - file isn't ending with new line.")
 
       ## This will be set to true if the last line is empty.
       is_last_empty = False; line_no = 0
-      for line in fp.readlines():
+      for line in lines:
         line_no += 1; line = line[:-1] # remove the line ending.
         
         ## Check if the line contains any tabs.
@@ -135,10 +140,10 @@ def check_static(dirs):
           is_last_empty = True
         else:
           is_last_empty = False
-        
-      fp.close()
 
+## TODO: Remove this check and resolve the cause.
 ## Assert all the content of the headers list below are the same.
+## some header are re-used by copying, so changes must be reflect.
 def check_common_header_match(headers):
   headers = list(headers)
   assert len(headers) >= 1
@@ -150,8 +155,8 @@ def check_common_header_match(headers):
   for i in range(1, len(headers)):
     with open(headers[i], 'r') as f:
       if f.read() != content:
-        main_header = to_tolevel_path(headers[0])
-        curr_header = to_tolevel_path(headers[i])
+        main_header = to_rel_path(headers[0])
+        curr_header = to_rel_path(headers[i])
         report_error("File content mismatch: \"%s\" and \"%s\"\n"
                      "    These files contants should be the same."
                      %(main_header, curr_header))
