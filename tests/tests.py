@@ -16,6 +16,7 @@ THIS_PATH = abspath(dirname(__file__))
 TEST_SUITE = {
   "Unit Tests": (
     "lang/basics.pk",
+    "lang/builtin_fn.pk",
     "lang/class.pk",
     "lang/core.pk",
     "lang/controlflow.pk",

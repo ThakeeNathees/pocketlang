@@ -730,6 +730,30 @@ DEF(coreListAppend,
   RET(VAR_OBJ(list));
 }
 
+// TODO: currently it takes one argument (to test string interpolation).
+//       Add join delimeter as an optional argument.
+DEF(coreListJoin,
+  "list_join(self:List) -> String\n"
+  "Concatinate the elements of the list and return as a string.") {
+
+  List* list;
+  if (!validateArgList(vm, 1, &list)) return;
+
+  pkByteBuffer buff;
+  pkByteBufferInit(&buff);
+
+  for (int i = 0; i < list->elements.count; i++) {
+    String* elem = toString(vm, list->elements.data[i]);
+    vmPushTempRef(vm, &elem->_super); // elem
+    pkByteBufferAddString(&buff, vm, elem->data, elem->length);
+    vmPopTempRef(vm);
+  }
+
+  String* str = newStringLength(vm, (const char*)buff.data, buff.count);
+  pkByteBufferClear(&buff, vm);
+  RET(VAR_OBJ(str));
+}
+
 // Map functions.
 // --------------
 
@@ -1259,6 +1283,7 @@ void initializeCore(PKVM* vm) {
 
   // List functions.
   INITIALIZE_BUILTIN_FN("list_append", coreListAppend, 2);
+  INITIALIZE_BUILTIN_FN("list_join",   coreListJoin,   1);
 
   // Map functions.
   INITIALIZE_BUILTIN_FN("map_remove",  coreMapRemove,  2);

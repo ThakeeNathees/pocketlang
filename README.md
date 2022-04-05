@@ -27,7 +27,7 @@ end
 
 # Prints all fibonacci from 0 to 10 exclusive.
 for i in 0..10
-  print(fib(i))
+  print("fib($i) = ${fib(i)}")
 end
 ```
 
