@@ -150,7 +150,7 @@ typedef enum {
   TK_STRING,     // string literal
 
   /* String interpolation
-   *  "a ${b} c ${d} e"
+   *  "a ${b} c $d e"
    * tokenized as:
    *   TK_STR_INTERP  "a "
    *   TK_NAME        b
@@ -367,8 +367,19 @@ struct Compiler {
   // expression at current depth.
   char si_quote[MAX_STR_INTERP_DEPTH];
 
-  bool has_errors;          //< True if any syntex error occurred at.
-  bool need_more_lines;     //< True if we need more lines in REPL mode.
+  // When we're parsing a name interpolated string (ie. "Hello $name!") we
+  // have to keep track of where the name ends to start the interpolation
+  // from there. The below value [si_name_end] will be NULL if we're not
+  // parsing a name interpolated string, otherwise it'll points to the end of
+  // the name.
+  //
+  // Also we're using [si_name_quote] to store the quote of the string to
+  // properly terminate.
+  const char* si_name_end;
+  char si_name_quote;
+
+  bool has_errors;      //< True if any syntex error occurred at.
+  bool need_more_lines; //< True if we need more lines in REPL mode.
 
   const PkCompileOptions* options; //< To configure the compilation.
 
@@ -506,6 +517,8 @@ static void resolveError(Compiler* compiler, int line, const char* fmt, ...) {
 
 // Forward declaration of lexer methods.
 
+static char peekChar(Compiler* compiler);
+static char peekNextChar(Compiler* compiler);
 static char eatChar(Compiler* compiler);
 static void setNextValueToken(Compiler* compiler, TokenType type, Var value);
 static void setNextToken(Compiler* compiler, TokenType type);
@@ -536,15 +549,32 @@ static void eatString(Compiler* compiler, bool single_quote) {
 
     if (c == '$') {
       if (compiler->si_depth < MAX_STR_INTERP_DEPTH) {
-
-        if (eatChar(compiler) != '{') {
-          lexError(compiler, "Expected '{' after '$'");
-        }
-
         tk_type = TK_STRING_INTERP;
-        compiler->si_depth++;
-        compiler->si_quote[compiler->si_depth - 1] = quote;
-        compiler->si_open_brace[compiler->si_depth - 1] = 0;
+
+        char c = peekChar(compiler);
+        if (c == '{') { // Expression interpolation (ie. "${expr}").
+          eatChar(compiler);
+          compiler->si_depth++;
+          compiler->si_quote[compiler->si_depth - 1] = quote;
+          compiler->si_open_brace[compiler->si_depth - 1] = 0;
+
+        } else { // Name Interpolation.
+          if (!utilIsName(c)) {
+            lexError(compiler, "Expected '{' or identifier after '$'.");
+
+          } else { // Name interpolation (ie. "Hello $name!").
+
+            // The pointer [ptr] will points to the character at where the
+            // interpolated string ends. (ie. the next character after name
+            // ends).
+            const char* ptr = compiler->current_char;
+            while (utilIsName(*(ptr)) || utilIsDigit(*(ptr))) {
+              ptr++;
+            }
+            compiler->si_name_end = ptr;
+            compiler->si_name_quote = quote;
+          }
+        }
 
       } else {
         lexError(compiler, "Maximum interpolation level reached (can only "
@@ -799,8 +829,24 @@ static void lexToken(Compiler* compiler) {
 
   while (peekChar(compiler) != '\0') {
     compiler->token_start = compiler->current_char;
-    char c = eatChar(compiler);
 
+    // If we're parsing a name interpolation and the current character is where
+    // the name end, continue parsing the string.
+    //
+    //        "Hello $name!"
+    //                    ^-- si_name_end
+    //
+    if (compiler->si_name_end != NULL) {
+      if (compiler->current_char == compiler->si_name_end) {
+        compiler->si_name_end = NULL;
+        eatString(compiler, compiler->si_name_quote == '\'');
+        return;
+      } else {
+        ASSERT(compiler->current_char < compiler->si_name_end, OOPS);
+      }
+    }
+
+    char c = eatChar(compiler);
     switch (c) {
 
       case '{': {
@@ -1775,6 +1821,9 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
   compiler->next.value = VAR_UNDEFINED;
 
   compiler->si_depth = 0;
+  compiler->si_name_end = NULL;
+  compiler->si_name_quote = '\0';
+
   compiler->scope_depth = DEPTH_GLOBAL;
   compiler->local_count = 0;
   compiler->stack_size = 0;

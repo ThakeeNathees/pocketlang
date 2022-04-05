@@ -137,5 +137,18 @@ assert(.5 == 0.5)
 assert(.333 == .333)
 assert(.1 + 1 == 1.1)
 
+def getLength(test)
+  assert(test == "test")
+  return 4
+end
+assert("${getLength('${"test"}')}" == "${2 + 2}")
+
+name = "World"
+assert("Hello $name!" == "Hello World!")
+b = 'vb'; d = 'vd'; f = 'vf'
+assert("a ${ b + ' c ${d + " e ${f}"}' }" == "a vb c vd e vf")
+assert("$b$d$f" == "vbvdvf")
+
+
 # If we got here, that means all test were passed.
 print('All TESTS PASSED')
