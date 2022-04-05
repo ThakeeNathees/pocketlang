@@ -8,11 +8,16 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300&display=swap');
 
 :root {
+
+  --scroll-bar-size: 15px;
+
   --color-theme: #336094;
-  --color-scrollbar: #a0aec0;
   --color-anchor: #cfcfcf;
   --color-link: #0969da;
   --color-default-font: #24292f;
+  --color-footer-bg: #e8e8e8;
+
+  --shadow: 0 8px 16px 0 rgba(0,0,0,0.2);
 
   --font-mono: 'JetBrains Mono', monospace;
 }
@@ -28,10 +33,6 @@
   font-family: 'Open Sans', sans-serif;
   color: inherit;
 }
-
-/* Scroll bar override (Not works with Firefox and IE) */
-::-webkit-scrollbar { width: 10px; height: 10px; } /* width */
-::-webkit-scrollbar-thumb { background: var(--color-scrollbar)  } /* Handle */
 
 pre:first-line {
   line-height: 0;
@@ -80,3 +81,25 @@ ul li {
 .fljc { justify-content: center; }
 .flsb { justify-content: space-between; }
 
+.relative { position: relative; }
+
+/*****************************************************************************/
+/* BUTTON                                                                    */
+/*****************************************************************************/
+
+.button {
+  display: inline-block;
+  padding: 10px 20px;
+  color: var(--color-theme);
+  border: 2px solid var(--color-theme);
+  border-radius: 5px;
+  transition: .2s;
+  font-weight: bolder;
+  height: 100%;
+  cursor: pointer;
+}
+
+.button:hover {
+  background-color: var(--color-theme);
+  color: white;
+}

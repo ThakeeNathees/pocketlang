@@ -1,0 +1,42 @@
+:root {
+  --navbar-height: 80px;
+  --fs-nav-title: 40px;
+}
+
+#navbar {
+  height: var(--navbar-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 50px;
+  color: white;
+  background-color: var(--color-theme);
+}
+
+#nav-title {
+  font-family: 'Rage Italic';
+  font-weight: normal;
+  font-size: var(--fs-nav-title);
+}
+
+#navbar ul li {
+  display: inline-block;
+  padding-left: 24px;
+}
+
+#navbar ul a:hover {
+  text-decoration: underline;
+}
+
+@media screen and (max-width: 620px) {
+
+  #navbar {
+    justify-content: center;
+    padding: 10px 50px;
+  }
+
+  #navbar ul {
+    display: none;
+  }
+
+}

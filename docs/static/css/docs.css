@@ -16,6 +16,7 @@
   --color-footer-font: #616161;
   --color-nav-section-hover: #5988bf;
   --color-nav-topics-border: #3b3b3b66;
+  --color-scrollbar: #a0aec0;
   
   /* Font size */
   --fs-nav-title : 20px;
@@ -25,6 +26,13 @@
   --fs-toc-item: 15px;
   --fs-footer: 13px;
 }
+
+/* Scroll bar override (Not works with Firefox and IE) */
+::-webkit-scrollbar {
+  width:  var(--scroll-bar-size);
+  height: var(--scroll-bar-size);
+}
+::-webkit-scrollbar-thumb { background: var(--color-scrollbar)  }
 
 html {
   scroll-padding-top: var(--navbar-height);
