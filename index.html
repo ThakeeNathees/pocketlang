@@ -4,29 +4,21 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/svg" href="./static/img/favicon.svg">
-
-  <script src="./static/codejar/linenumbers.js"></script>
-  <link rel="stylesheet" href="./static/codejar/style.css">
-
-  <script src="./static/codejar/codejar.js"></script>
   <script src="./static/highlight.js/highlight.min.js"></script>
-  <link rel="stylesheet" href="./static/highlight.js/colors.css">
-
+  <link rel="stylesheet" href="./static/highlight.js/theme_docs.css">
   <link rel="stylesheet" href="./static/rage_font/style.css">
   <link rel="stylesheet" href="./static/css/style.css">
+  <link rel="stylesheet" href="./static/css/navbar.css">
   <link rel="stylesheet" href="./static/css/home.css">
   <title>Pocketlang</title>
 </head>
 
 <body>
 
+  <!-- Sticky navigation bar at the top. -->
   <div id="navbar">
-    <a href=""><h1 id="pocketlang">pocketlang</h1></a>
+    <a href="#"><h1 id="nav-title">pocketlang</h1></a>
     <div>
-      <svg xmlns="http://www.w3.org/2000/svg" id="toggle-menu" viewBox="0 0 20 20" width="30" height="30">
-        <path d="M0 0h24v24H0z" fill="none"></path>
-        <path fill="currentColor" d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"></path>
-      </svg>
       <ul>
         <li><a href="docs/v0.1.0/Reference/Getting-Started.html">Docs</a></li>
         <li><a href="">Download</a></li>
@@ -37,28 +29,32 @@
 
   <div id="main">
 
-    <section id="intro">
+    <!-- Page intro section which will be 100vh. -->
+    <section id="page-intro">
       <div id="intro-text">
-        <h1>
-          Pocketlang is a small, fast and friendly language
-        </h1>
+        <h1>Pocketlang is a small fast and friendly language</h1>
         <p>
-          A dynamic typed, highlevel language language designed for scripting and
-          embedding easily. Supports object oriented programming, higher order
-          functions, closures(wip), fibers, garbage collection and more.
+          It's a dynamic typed, highlevel language language designed for scripting and
+          embedding easily. Supports classes, first class functions, closures, REPL,
+          garbage collection, fiber based concurrency, and more.
         </p>
-        <a class="button" href="docs/v0.1.0/Reference/Getting-Started.html">Get Started</a>
+        <div id="intro-buttons">
+          <a class="button" href="docs/v0.1.0/Reference/Getting-Started.html">Get Started</a>
+          <a class="button" target="_blank" href="try-online.html">Try Online</a>
+        </div>
       </div>
       <img src="./static/img/pocketlang.svg">
     </section>
 
+
+    <!-- What it looks like? -->
     <section id="what-pocketlang-looks-like">
       <h1 class="section-title">What pocketlang looks like?</h1>
       <p>
         With mixed syntax of ruby and python, that can be learned in less than an hour, and it's
         easy to embed into another application for scripting. Here is a smaple pocketlang code.
       </p>
-<pre><code class="highlight ruby">
+      <pre><code class="highlight ruby"><pre><code class="highlight ruby">
 # Python like import statement.
 from lang import clock as now
 
@@ -72,96 +68,55 @@ end
 for i in 0..10
   print(fib(i))
 end
-</code></pre>
+</code></pre></code></pre>
     </section>
 
     <section id="features">
       <div id="features-grid">
-
-        <div class="feature">
-          <div class="feature-img">
+                <div class="feature">
+          <div class="feature-logo">
             <img src="./static/img/concurrent.svg">
           </div>
           <h2>Concurrent</h2>
-          <p>
-            Pocketlang's fibers (lightweight threads) allows you to write parallel
-            tasks easily, without worrying about thread safety.
-          </p>
-          <a href="">Learn more</a>
+          <p>Pocketlang's fibers (lightweight threads) allows you to write paralleltasks easily, without worrying about thread safety.</p>
+          <a class="link" href="{{TODO}}">Learn more</a>
         </div>
-
         <div class="feature">
-          <div class="feature-img">
+          <div class="feature-logo">
             <img src="./static/img/gear.svg">
           </div>
           <h2>Embeddible</h2>
-          <p>
-            You can use PKVM as any other libraries in your application.
-            It's specifically designed to be embedded in other programs.
-          </p>
-          <a href="">Learn more</a>
+          <p>You can use PKVM as any other libraries in your application. It's specifically designed to be embedded in other programs.</p>
+          <a class="link" href="{{TODO}}">Learn more</a>
         </div>
-
         <div class="feature">
-          <div class="feature-img">
+          <div class="feature-logo">
             <img src="./static/img/gc.svg">
           </div>
           <h2>Garbage Collected</h2>
-          <p>
-            With the pocketlan's garbage collector you can write code
-            without worrying about memory management.
-          </p>
-          <a href="">Learn more</a>
+          <p>With the pocketlang's garbage collector you can write code without worrying about memory management.</p>
+          <a class="link" href="{{TODO}}">Learn more</a>
         </div>
-        
         <div class="feature">
-          <div class="feature-img">
+          <div class="feature-logo">
             <img src="./static/img/repl.svg">
           </div>
           <h2>REPL</h2>
-          <p>
-            The interactive prompt of pocketlang will makes it easier to test and play with it
-            on the command line.
-          </p>
-          <a href="">Learn more</a>
+          <p>The interactive prompt of pocketlang will makes it easier to test and play with it on the command line.</p>
+          <a class="link" href="{{TODO}}">Learn more</a>
         </div>
 
       </div>
     </section>
 
-    <section id="try-it-now">
-      <h1 class="section-title">
-        Try it now
-        <a class="anchor" href="#try-it-now">#</a>
-      </h1>
-
-      <p class="code-area-label">code editor</p>
-      <div id="code-area-wrapper">
-        <div id="run-button" class="button">
-          <div>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-              <path fill="none" d="M0 0h24v24H0z"/>
-              <path fill="currentColor" d="M19.376 12.416L8.777 19.482A.5.5 0 0 1 8 19.066V4.934a.5.5 0 0 1 .777-.416l10.599 7.066a.5.5 0 0 1 0 .832z"/>
-            </svg>
-            <p>Run</p>
-          </div>
-        </div>
-        <div id="code-editor" class="editor language-ruby"></div>
-      </div>
-      
-      <p class="code-area-label">output</p>
-      <div id="code-output">...</div>
-
-    </section>
+    <div id="footer">
+      <p>Made by <a class="link" href="https://www.github.com/ThakeeNathees">ThakeeNathees</a>
+        and contributers on <a class="link" href="https://www.github.com/">github</a>.</p>
+    </div>
 
   </div>
 
-  <div id="footer">
-    <p>Made by <a href="https://www.github.com/ThakeeNathees">ThakeeNathees</a>
-      and contributers on <a href="https://www.github.com/">github</a>.</p>
-  </div>
-  
-  <script async type="text/javascript" src="./static/wasm/pocketlang.js"></script>
+  <script src="./static/js/main.js"></script>
   <script src="./static/js/home.js"></script>
 
 </body>

@@ -1,25 +1,38 @@
 
 :root {
-  --navigation-width: 300px;
-
-  /* Horizontal padding of the content. */
-  --content-h-padding: 30px;
-
-  /* These values used to calculate margin top for smaller screen. */
-  --navtop-v-margin: 15px; /* Vertical margin. */
-  --navtop-height: 30px; /* Height of it's content. */
-
-  --navbar-height: calc(var(--navtop-v-margin) * 2 + var(--navtop-height));
 
   --nav-h-padding: 24px; /* Navigation content horizontal padding. */
+  --navigation-width: 300px; /* Width of the side navigation bar. */
+  --content-h-padding: 30px; /* Horizontal padding of the content. */
 
+  --navtop-v-margin: 15px; /* Vertical margin. */
+  --navtop-height: 30px; /* Height of it's content. */
+  --navbar-height: calc(var(--navtop-v-margin) * 2 + var(--navtop-height));
+
+  --pocket-logo-size: 55px;
   
-  --color-nav-bg: var(--color-theme);
-  --color-nav-font: white;
+  /* Colors */
   --color-title-underline: #d8dee4;
   --color-footer-font: #616161;
   --color-nav-section-hover: #5988bf;
+  --color-nav-topics-border: #3b3b3b66;
+  --color-scrollbar: #a0aec0;
+  
+  /* Font size */
+  --fs-nav-title : 20px;
+  --fs-nav-section: 16px;
+  --fs-nav-topics: 14px;
+  --fs-toc-title: 18px;
+  --fs-toc-item: 15px;
+  --fs-footer: 13px;
 }
+
+/* Scroll bar override (Not works with Firefox and IE) */
+::-webkit-scrollbar {
+  width:  var(--scroll-bar-size);
+  height: var(--scroll-bar-size);
+}
+::-webkit-scrollbar-thumb { background: var(--color-scrollbar)  }
 
 html {
   scroll-padding-top: var(--navbar-height);
@@ -36,15 +49,14 @@ html {
   top: 0; bottom: 0;
   z-index: 1;
   overflow-y: auto;
-  background-color: var(--color-nav-bg);
-  color: var(--color-nav-font);
+  background-color: var(--color-theme);
+  color: white;
   user-select: none;
 }
 
 #main {
   margin-left: var(--navigation-width);
   display: flex;
-  color: var(--color-default-font);
 }
 
 #content-body {
@@ -55,7 +67,6 @@ html {
 #table-of-content {
   position: sticky;
   top: 0;
-
   min-width: 300px;
   width: auto;
   max-width: 500px;
@@ -66,23 +77,22 @@ html {
 /* NAVIGATION                                                                */
 /*****************************************************************************/
 
-#navigation a {
-  color: var(--color-nav-font);
-}
-
-/* To show an empty space below, after toggiling in smaller screen. */
-#navtree {
-  padding-bottom: 30px;
-}
-
-/* For smaller screen the margin will be overriden. */
 #navtop {
-  padding: var(--nav-h-padding) 20px;
+  padding: var(--nav-h-padding);
 }
 
-/* Title on the navigation top. */
-#navtop h1 {
-  font-size: 18px;
+#nav-title {
+  font-size: var(--fs-nav-title);
+}
+
+#pocket-logo {
+  width: var(--pocket-logo-size);
+  height: var(--pocket-logo-size);
+}
+
+/* Override the color to match the background. */
+#pocket-logo path {
+  fill:white !important;
 }
 
 #toggle-menu {
@@ -91,10 +101,10 @@ html {
 }
 
 .nav-section {
-  font-size: 14px;
+  font-size: var(--fs-nav-section);
   font-weight: bolder;
   padding: 8px var(--nav-h-padding);
-  
+
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -118,44 +128,19 @@ html {
 }
 
 .nav-topics a {
-  font-size: 14px;
+  font-size: var(--fs-nav-topics);
   font-weight: normal;
   padding: 6px 0px 6px 15px;
   margin-left: var(--nav-h-padding);
-  border-left: 2px solid #3b3b3b66;
+  border-left: 2px solid var(--color-nav-topics-border);
 
   display: block;
   text-decoration: none;
 }
 
 /*****************************************************************************/
-/* MAIN                                                                      */
-/*****************************************************************************/
-
-#main a:not(.anchor) {
-  color: var(--color-link);
-}
-
-#main a:not(.anchor):hover {
-  text-decoration: underline;
-}
-
-#content-body ol, #content-body ul {
-  padding-left: 32px;
-  margin-bottom: 16px;
-}
-
-#content-body li {
-  margin-top: 8px;
-}
-
-/*****************************************************************************/
 /* TABLE OF CONTENT                                                          */
 /*****************************************************************************/
-
-#table-of-content a:hover {
-  text-decoration: underline;
-}
 
 #table-of-content {
   padding: 30px 30px 0px 10px;
@@ -163,19 +148,18 @@ html {
 
 #table-of-content h3 {
   margin-bottom: 10px;
-  font-size: 17px;
+  font-size: var(--fs-toc-title);
 }
 
 #table-of-content li {
+  font-size: var(--fs-toc-item);
   margin-top: 5px;
-  font-size: 15px;
   font-weight: 300;
 }
 
 #content-footer {
   font-weight: bolder;
-  font-size: 13px;
-
+  font-size: var(--fs-footer);
   margin-top: 30px;
   padding-top: 10px;
   margin-bottom: 30px;
@@ -214,14 +198,25 @@ html {
   line-height: 26px;
 }
 
-/*****************************************************************************/
-/* INLINE                                                                    */
-/*****************************************************************************/
+#content-body ol, #content-body ul {
+  padding-left: 32px;
+  margin-bottom: 16px;
+}
 
-.flex { display: flex; }
-.flac { align-items: center; }
-.fljc { justify-content: center; }
-.flsb { justify-content: space-between; }
+#content-body li {
+  margin-top: 8px;
+}
+
+/* Since content body <a> tags are auto generated, We cannot (mybe possible)
+  add the link classes, so we're re-defining the link style here. */
+
+#content-body a:not(.anchor) {
+  color: var(--color-link);
+}
+
+#content-body a:not(.anchor):hover {
+  text-decoration: underline;
+}
 
 /*****************************************************************************/
 /* MEDIA SIZE OVERRIDE                                                       */
@@ -233,6 +228,7 @@ html {
     width: 100%;
     bottom: auto;
   }
+  
   #navigation.collapsed {
     height: auto;
   }
@@ -241,7 +237,7 @@ html {
     padding: var(--navtop-v-margin) 20px;
   }
 
-  #logo-white {
+  #pocket-logo {
     display: none;
   }
 
@@ -250,13 +246,14 @@ html {
   }
 
   #table-of-content {
-    padding-left: var(--content-h-padding); /* Match the content body padding. */
+    /* Match the content body padding. */
+    padding-left: var(--content-h-padding);
     top: var(--navbar-height);
   }
 
   #main {
     margin-top: var(--navbar-height);
-    margin-left: 0;
+    margin-left: 0; /* No more sidebar. */
   }
 
   #toggle-menu {
