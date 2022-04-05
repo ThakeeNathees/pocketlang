@@ -166,10 +166,6 @@ html {
   margin : 30px 0px 5px 0px;
 }
 
-.editor, .editor span {
-  font-family: var(--font-mono);
-}
-
 #code-output {
   font-family: var(--font-mono);
   background-color: hsl(210, 0%, 99%);

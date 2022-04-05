@@ -26,6 +26,7 @@
   margin: 0;
   box-sizing: border-box;
   font-family: 'Open Sans', sans-serif;
+  color: inherit;
 }
 
 /* Scroll bar override (Not works with Firefox and IE) */
@@ -36,12 +37,12 @@ pre:first-line {
   line-height: 0;
 }
 
-code, code span {
+code, code span,
+.code, .code span {
   font-family: var(--font-mono);
 }
 
 a {
-  color: inherit;
   text-decoration: none;
 }
 
@@ -57,3 +58,25 @@ ul li {
 .anchor:hover {
   color: var(--color-theme);
 }
+
+.link:not(.anchor) {
+  color: var(--color-link);
+}
+
+.link:not(.anchor):hover {
+  text-decoration: underline;
+}
+
+/*****************************************************************************/
+/* INLINE                                                                    */
+/*****************************************************************************/
+
+.space-bottom { /* Add margin to have a space after that element. */
+  margin-bottom: 30px;
+}
+
+.flex { display: flex; }
+.flac { align-items: center; }
+.fljc { justify-content: center; }
+.flsb { justify-content: space-between; }
+

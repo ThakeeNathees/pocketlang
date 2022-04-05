@@ -37,15 +37,17 @@ THIS_PATH = abspath(dirname(__file__))
 BUILD_DIR = join(THIS_PATH, "build")
 STATIC_DIR = join(THIS_PATH, "static")
 MARKDOWN_DIR = join(THIS_PATH, "markdown")
+
+TEMPLATE_PATH = join(THIS_PATH, 'templates/docs.html')
 DOCS_URL_PATH = f"docs/{POCKETLANG_VERSION}/" ## Html generated at docs/* path.
 
 def main():
   check_wasm()
   clean()
   make_build_dir()
-  gen_home_page()
+  gen_site_pages()
   context = collect_doc_pages()
-  generate_pages(context)
+  gen_doc_pages(context)
   print("Docs generated successfully")
 
 ## INTERNAL ###################################################################
@@ -78,12 +80,13 @@ def make_build_dir():
   open(join(BUILD_DIR, '.nojekyll'), 'w').close()
   copytree(STATIC_DIR, join(BUILD_DIR, "static"))
 
-def gen_home_page():
-  template = read(join(THIS_PATH, "index.html"))
-  template = template.replace("{{ STATIC_DIR }}", "./static/")
-  template = template.replace("{{ DOCS_URL }}", DOCS_URL_PATH)
-  with open(join(BUILD_DIR, 'index.html'), 'w') as fp:
-    fp.write(template)
+def gen_site_pages():
+  for site_page in ["index.html"]:
+    template = read(join(THIS_PATH, f"templates/{site_page}"))
+    template = template.replace("{{ STATIC_DIR }}", "./static/")
+    template = template.replace("{{ DOCS_URL }}", DOCS_URL_PATH)
+    with open(join(BUILD_DIR, site_page), 'w') as fp:
+      fp.write(template)
 
 ## FIXME: wirte a better md -> html compiler (or use some libraries).
 ## Compile the markdown files to html. and return the a tuple of (html, topics)
@@ -162,17 +165,17 @@ def generate_navtree(context):
 def generate_toc_entries(topics):
   gen = ""
   for topic in topics:
-    gen += f'<li><a href="#{topic}">{topic.replace("-", " ")}</a></li>\n'
+    gen += f'<li><a class="link" href="#{topic}">{topic.replace("-", " ")}</a></li>\n'
   return gen
 
 ## Build the template page with the generated context.
-def generate_pages(context):
+def gen_doc_pages(context):
   navtree = generate_navtree(context)
 
-  template = read(join(MARKDOWN_DIR, 'template.html'))
+  template = read(TEMPLATE_PATH)
   template = template.replace("{{ NAVIGATION_TREE }}", navtree)
   template = template.replace("{{ LOGO_WHITE }}",
-                              read(join(STATIC_DIR, "img/logo-white.svg")))
+                              read(join(STATIC_DIR, "img/pocketlang.svg")))
   template = template.replace("{{ URL_POCKET_HOME }}", "../../index.html")
 
   for section in context:
