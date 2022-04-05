@@ -30,6 +30,16 @@
 // require more.
 #define MAX_FORWARD_NAMES 256
 
+// Pocketlang support two types of interpolation.
+//
+//   1. Name interpolation       ex: "Hello $name!"
+//   2. Expression interpolation ex: "Hello ${getName()}!"
+//
+// Consider a string: "a ${ b "c ${d}" } e" -- Here the depth of 'b' is 1 and
+// the depth of 'd' is 2 and so on. The maximum depth an expression can go is
+// defined as MAX_STR_INTERP_DEPTH below.
+#define MAX_STR_INTERP_DEPTH 8
+
 // The maximum number of constant literal a script can contain. Also it's
 // limited by it's opcode which is using a short value to identify.
 #define MAX_CONSTANTS (1 << 16)
@@ -139,16 +149,15 @@ typedef enum {
   TK_NUMBER,     // number literal
   TK_STRING,     // string literal
 
-  /* String interpolation (reference wren-lang)
-   * but it doesn't support recursive ex: "a \(b + "\(c)")"
-   *  "a \(b) c \(d) e"
+  /* String interpolation
+   *  "a ${b} c ${d} e"
    * tokenized as:
    *   TK_STR_INTERP  "a "
    *   TK_NAME        b
    *   TK_STR_INTERP  " c "
    *   TK_NAME        d
    *   TK_STRING     " e" */
-   // TK_STR_INTERP, //< not yet.
+   TK_STRING_INTERP,
 
 } TokenType;
 
@@ -334,6 +343,30 @@ struct Compiler {
   int current_line;         //< Line number of the current char.
   Token previous, current, next; //< Currently parsed tokens.
 
+  // The current depth of the string interpolation. 0 means we're not inside
+  // an interpolated string.
+  int si_depth;
+
+  // If we're parsing an interpolated string and found a TK_RBRACE (ie. '}')
+  // we need to know if that's belongs to the expression we're parsing, or the
+  // end of the current interpolation.
+  //
+  // To achieve that We need to keep track of the number of open brace at the
+  // current depth. If we don't have any open brace then the TK_RBRACE token
+  // is consumed to end the interpolation.
+  //
+  // If we're inside an interpolated string (ie. si_depth > 0)
+  // si_open_brace[si_depth - 1] will return the number of open brace at the
+  // current depth.
+  int si_open_brace[MAX_STR_INTERP_DEPTH];
+
+  // Since we're supporting both quotes (single and double), we need to keep
+  // track of the qoute the interpolation is surrounded by to properly
+  // terminate the string.
+  // here si_quote[si_depth - 1] will return the surrunded quote of the
+  // expression at current depth.
+  char si_quote[MAX_STR_INTERP_DEPTH];
+
   bool has_errors;          //< True if any syntex error occurred at.
   bool need_more_lines;     //< True if we need more lines in REPL mode.
 
@@ -379,6 +412,10 @@ struct Compiler {
   // perform a tail call optimization (anywhere else this below boolean is
   // meaningless).
   bool is_last_call;
+
+  // Since the compiler manually call some builtin functions we need to cache
+  // the index of the functions in order to prevent search for them each time.
+  int bifn_list_join;
 };
 
 typedef struct {
@@ -481,6 +518,9 @@ static void eatString(Compiler* compiler, bool single_quote) {
 
   char quote = (single_quote) ? '\'' : '"';
 
+  // For interpolated string it'll be TK_STRING_INTERP.
+  TokenType tk_type = TK_STRING;
+
   while (true) {
     char c = eatChar(compiler);
 
@@ -494,6 +534,25 @@ static void eatString(Compiler* compiler, bool single_quote) {
       break;
     }
 
+    if (c == '$') {
+      if (compiler->si_depth < MAX_STR_INTERP_DEPTH) {
+
+        if (eatChar(compiler) != '{') {
+          lexError(compiler, "Expected '{' after '$'");
+        }
+
+        tk_type = TK_STRING_INTERP;
+        compiler->si_depth++;
+        compiler->si_quote[compiler->si_depth - 1] = quote;
+        compiler->si_open_brace[compiler->si_depth - 1] = 0;
+
+      } else {
+        lexError(compiler, "Maximum interpolation level reached (can only "
+                 "interpolate upto depth %d).", MAX_STR_INTERP_DEPTH);
+      }
+      break;
+    }
+
     if (c == '\\') {
       switch (eatChar(compiler)) {
         case '"':  pkByteBufferWrite(&buff, compiler->vm, '"'); break;
@@ -502,6 +561,9 @@ static void eatString(Compiler* compiler, bool single_quote) {
         case 'n':  pkByteBufferWrite(&buff, compiler->vm, '\n'); break;
         case 'r':  pkByteBufferWrite(&buff, compiler->vm, '\r'); break;
         case 't':  pkByteBufferWrite(&buff, compiler->vm, '\t'); break;
+
+        // '$' In pocketlang string is used for interpolation.
+        case '$':  pkByteBufferWrite(&buff, compiler->vm, '$'); break;
 
         default:
           lexError(compiler, "Error: invalid escape character");
@@ -518,7 +580,7 @@ static void eatString(Compiler* compiler, bool single_quote) {
 
   pkByteBufferClear(&buff, compiler->vm);
 
-  setNextValueToken(compiler, TK_STRING, string);
+  setNextValueToken(compiler, tk_type, string);
 }
 
 // Returns the current char of the compiler on.
@@ -740,6 +802,39 @@ static void lexToken(Compiler* compiler) {
     char c = eatChar(compiler);
 
     switch (c) {
+
+      case '{': {
+
+        // If we're inside an interpolation, increase the open brace count
+        // of the current depth.
+        if (compiler->si_depth > 0) {
+          compiler->si_open_brace[compiler->si_depth - 1]++;
+        }
+        setNextToken(compiler, TK_LBRACE);
+        return;
+      }
+
+      case '}': {
+        // If we're inside of an interpolated string.
+        if (compiler->si_depth > 0) {
+
+          // No open braces, then end the expression and complete the string.
+          if (compiler->si_open_brace[compiler->si_depth - 1] == 0) {
+
+            char quote = compiler->si_quote[compiler->si_depth - 1];
+            compiler->si_depth--; //< Exit the depth.
+            eatString(compiler, quote == '\'');
+            return;
+
+          } else { // Decrease the open brace at the current depth.
+            compiler->si_open_brace[compiler->si_depth - 1]--;
+          }
+        }
+
+        setNextToken(compiler, TK_RBRACE);
+        return;
+      }
+
       case ',': setNextToken(compiler, TK_COMMA); return;
       case ':': setNextToken(compiler, TK_COLLON); return;
       case ';': setNextToken(compiler, TK_SEMICOLLON); return;
@@ -748,8 +843,6 @@ static void lexToken(Compiler* compiler) {
       case ')': setNextToken(compiler, TK_RPARAN); return;
       case '[': setNextToken(compiler, TK_LBRACKET); return;
       case ']': setNextToken(compiler, TK_RBRACKET); return;
-      case '{': setNextToken(compiler, TK_LBRACE); return;
-      case '}': setNextToken(compiler, TK_RBRACE); return;
       case '%':
         setNextTwoCharToken(compiler, '=', TK_PERCENT, TK_MODEQ);
         return;
@@ -1104,6 +1197,7 @@ static void emitAssignment(Compiler* compiler, TokenType assignment);
 static void emitFunctionEnd(Compiler* compiler);
 
 static void patchJump(Compiler* compiler, int addr_index);
+static void patchListSize(Compiler* compiler, int size_index, int size);
 static void patchForward(Compiler* compiler, Fn* fn, int index, int name);
 
 static int compilerAddConstant(Compiler* compiler, Var value);
@@ -1119,6 +1213,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type);
 static void compileExpression(Compiler* compiler);
 
 static void exprLiteral(Compiler* compiler);
+static void exprInterpolation(Compiler* compiler);
 static void exprFunc(Compiler* compiler);
 static void exprName(Compiler* compiler);
 
@@ -1217,6 +1312,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_NAME       */ { exprName,      NULL,             NO_INFIX },
   /* TK_NUMBER     */ { exprLiteral,   NULL,             NO_INFIX },
   /* TK_STRING     */ { exprLiteral,   NULL,             NO_INFIX },
+  /* TK_STRING_INTERP */ { exprInterpolation, NULL,      NO_INFIX },
 };
 
 static GrammarRule* getRule(TokenType type) {
@@ -1259,6 +1355,51 @@ static void exprLiteral(Compiler* compiler) {
   int index = compilerAddConstant(compiler, value->value);
   emitOpcode(compiler, OP_PUSH_CONSTANT);
   emitShort(compiler, index);
+}
+
+// Consider the bellow string.
+//
+//     "Hello $name!"
+//
+// This will be compiled as:
+//
+//     list_join(["Hello ", name, "!"])
+//
+static void exprInterpolation(Compiler* compiler) {
+  emitOpcode(compiler, OP_PUSH_BUILTIN_FN);
+  emitByte(compiler, compiler->bifn_list_join);
+
+  emitOpcode(compiler, OP_PUSH_LIST);
+  int size_index = emitShort(compiler, 0);
+
+  int size = 0;
+  do {
+    // Push the string on the stack and append it to the list.
+    exprLiteral(compiler);
+    emitOpcode(compiler, OP_LIST_APPEND);
+    size++;
+
+    // Compile the expression and append it to the list.
+    skipNewLines(compiler);
+    compileExpression(compiler);
+    emitOpcode(compiler, OP_LIST_APPEND);
+    size++;
+    skipNewLines(compiler);
+  } while (match(compiler, TK_STRING_INTERP));
+
+  // The last string is not TK_STRING_INTERP but it would be
+  // TK_STRING. Apped it.
+  consume(compiler, TK_STRING, "Non terminated interpolated string.");
+  exprLiteral(compiler);
+  emitOpcode(compiler, OP_LIST_APPEND);
+  size++;
+
+  patchListSize(compiler, size_index, size);
+
+  // Call the list_join function (which is at the stack top).
+  emitOpcode(compiler, OP_CALL);
+  emitByte(compiler, 1);
+
 }
 
 static void exprFunc(Compiler* compiler) {
@@ -1466,8 +1607,7 @@ static void exprList(Compiler* compiler) {
   skipNewLines(compiler);
   consume(compiler, TK_RBRACKET, "Expected ']' after list elements.");
 
-  _FN->opcodes.data[size_index] = (size >> 8) & 0xff;
-  _FN->opcodes.data[size_index + 1] = size & 0xff;
+  patchListSize(compiler, size_index, size);
 }
 
 static void exprMap(Compiler* compiler) {
@@ -1634,6 +1774,7 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
   compiler->next.line = 1;
   compiler->next.value = VAR_UNDEFINED;
 
+  compiler->si_depth = 0;
   compiler->scope_depth = DEPTH_GLOBAL;
   compiler->local_count = 0;
   compiler->stack_size = 0;
@@ -1644,6 +1785,10 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
   compiler->forwards_count = 0;
   compiler->new_local = false;
   compiler->is_last_call = false;
+
+  // Cache the required built functions.
+  compiler->bifn_list_join = findBuiltinFunction(compiler->vm, "list_join", 9);
+  ASSERT(compiler->bifn_list_join >= 0, OOPS);
 }
 
 // Add a variable and return it's index to the context. Assumes that the
@@ -1867,6 +2012,12 @@ static void patchJump(Compiler* compiler, int addr_index) {
 
   _FN->opcodes.data[addr_index] = (offset >> 8) & 0xff;
   _FN->opcodes.data[addr_index + 1] = offset & 0xff;
+}
+
+// Update the size value for OP_PUSH_LIST instruction.
+static void patchListSize(Compiler* compiler, int size_index, int size) {
+  _FN->opcodes.data[size_index] = (size >> 8) & 0xff;
+  _FN->opcodes.data[size_index + 1] = size & 0xff;
 }
 
 static void patchForward(Compiler* compiler, Fn* fn, int index, int name) {

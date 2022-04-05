@@ -1,0 +1,7 @@
+
+## TODO: add more test of built in functions.
+
+assert(list_join([1, 2, 3]) == "123")
+assert(list_join(["hello", " world"]) == "hello world")
+assert(list_join([[], []]) == "[][]")
+
