@@ -4,7 +4,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/svg" href="{{ STATIC_DIR }}img/favicon.svg">
   <script src="{{ STATIC_DIR }}highlight.js/highlight.min.js"></script>
-  <link rel="stylesheet" href="{{ STATIC_DIR }}highlight.js/colors.css">
+  <link rel="stylesheet" href="{{ STATIC_DIR }}highlight.js/theme_docs.css">
   <link rel="stylesheet" href="{{ STATIC_DIR }}rage_font/style.css">
   <link rel="stylesheet" href="{{ STATIC_DIR }}css/style.css">
   <link rel="stylesheet" href="{{ STATIC_DIR }}css/docs.css">
@@ -21,7 +21,7 @@
         <a href="{{ URL_POCKET_HOME }}">
           <div class="flex flac">
             {{ LOGO_WHITE }}
-            <h1>Pocketlang Docs</h1>
+            <h1 id="nav-title">Pocketlang Docs</h1>
           </div>
         </a>
         <!-- Toggle menu icon. -->
@@ -32,7 +32,7 @@
       </div>
     </div>
     <!-- Generated navigation tree. -->
-    <div id="navtree">
+    <div id="navtree" class="space-bottom">
       <ul>
         {{ NAVIGATION_TREE }}
       </ul>
@@ -64,6 +64,7 @@
 
   </div>
 
+  <script src="{{ STATIC_DIR }}js/main.js"></script>
   <script src="{{ STATIC_DIR }}js/docs.js"></script>
   
 </body>

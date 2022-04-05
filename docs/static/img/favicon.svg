@@ -48,18 +48,4 @@
        id="path888"
        sodipodi:nodetypes="cccccc" />
   </g>
-  <g
-     inkscape:groupmode="layer"
-     id="layer3"
-     inkscape:label="thread">
-    <path
-       style="fill:#ffffff;fill-opacity:0;stroke:#ffffff;stroke-width:0.499999;stroke-miterlimit:4;stroke-dasharray:1.5, 0.499999;stroke-dashoffset:0;stroke-opacity:1"
-       d="M 5.1515865,4.076792 55.384893,4.240495 52.344704,35.835092 30.408558,50.170762 8.2151632,35.952024 Z"
-       id="path2442" />
-    <path
-       style="fill:#ffffff;fill-opacity:0;stroke:#ffffff;stroke-width:0.499999;stroke-miterlimit:4;stroke-dasharray:1.5, 0.499999;stroke-dashoffset:0;stroke-opacity:1"
-       d="m 7.1160173,24.118664 c 4.7707617,-0.420949 16.9782977,1.496711 20.7200717,3.648229 3.250097,1.868804 9.775382,8.138358 8.980257,11.41241 -0.977976,4.026972 -3.414369,5.706203 -6.594878,5.799749 -3.180507,0.09354 -6.361015,-2.666014 -6.127154,-6.969054 0.233861,-4.303041 6.828738,-10.196331 12.020448,-11.739813 5.191709,-1.543481 16.884751,-1.870887 16.884751,-1.870887"
-       id="path2840"
-       sodipodi:nodetypes="csssssc" />
-  </g>
 </svg>

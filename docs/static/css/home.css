@@ -1,9 +1,22 @@
 
 :root {
-  --color-gray: #b4b4b4;
-  --shadow: 0 8px 16px 0 rgba(0,0,0,0.2);
-  --navbar-height: 80px; /* TODO: this value should be calc(). */
-  --max-content-width: 1100px;
+  --pocket-logo-size: 300px;
+  --intro-text-max-width: 700px;
+
+  --section-max-width: 1100px;
+  --section-padding: 20px;
+  --section-margin-bottom: 70px;
+
+  --feature-img-size: 64px;
+
+  --fs-intro-heading: 40px;
+  --fs-section-title: 35px;
+  --fs-feature-title: 24px;
+  --fs-footer: 13px;
+}
+
+body {
+  background-color: #F6F8F8;
 }
 
 p {
@@ -18,28 +31,49 @@ html {
 }
 
 /*****************************************************************************/
+/* BASIC LAYOUT                                                              */
+/*****************************************************************************/
+
+
+#navbar {
+  /* Other properties are defined at navbar.css */
+  transition: .2s;
+  position: fixed;
+  width: 100%;
+  z-index: 100;
+}
+
+#page-intro {
+  height: 100vh;
+  padding-top: var(--navbar-height); /* Because navbar is fixed. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/*****************************************************************************/
+/* SECTION                                                                   */
+/*****************************************************************************/
+
+section {
+  margin: 0 auto var(--section-margin-bottom) auto;
+  max-width: var(--section-max-width);
+  padding: var(--section-padding);
+}
+
+.section-title {
+  font-size: var(--fs-section-title);
+  margin: 0px 0px 30px 0px;
+}
+
+
+/*****************************************************************************/
 /* NAVBAR                                                                    */
 /*****************************************************************************/
 
-#navbar {
-  position: fixed;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  top: 0;
-  width: 100%;
-  padding: 15px 50px;
-  z-index: 100;
-  transition: .2s;
-  background-color: var(--color-theme);
-  color: white;
+#navbar.stick {
   box-shadow: var(--shadow);
-}
-
-#pocketlang {
-  font-family: 'Rage Italic';
-  font-weight: normal;
-  font-size: 40px;
+  transform: translateY(-5px);
 }
 
 #toggle-menu {
@@ -47,44 +81,32 @@ html {
   display: none;
 }
 
-#navbar ul li {
-  display: inline-block;
-  padding-left: 24px;
-}
-
-#navbar ul a:hover {
-  text-decoration: underline;
-}
-
 /*****************************************************************************/
-/* INTRO SECTION                                                             */
+/* PAGE INTRO                                                                */
 /*****************************************************************************/
-
-#intro {
-  height: 100vh;
-  padding-top: var(--navbar-height);
-  margin-bottom: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-#intro p {
-  margin: 30px 0px;
-}
 
 #intro-text {
-  max-width: 700px;
+  max-width: var(--intro-text-max-width);
 }
 
 #intro-text h1 {
-  font-size: 40px;
+  font-size: var(--fs-intro-heading);
   margin-bottom: 30px;
 }
 
-#intro img {
+#intro-text p {
+  margin: 30px 0px;
+}
+
+#page-intro img {
   margin: 0 auto;
-  height: 300px;
+  height: var(--pocket-logo-size);
+  width:  var(--pocket-logo-size);
+}
+
+#intro-buttons {
+  display: flex;
+  gap: 15px;
 }
 
 /*****************************************************************************/
@@ -103,12 +125,12 @@ html {
 }
 
 .feature img {
-  height: 64px;
+  height: var(--feature-img-size);
   margin-bottom: 16px;
 }
 
-.feature h2 {
-  font-size: 24px;
+.feature h2 { /* Feature title. */
+  font-size: var(--fs-feature-title);
 }
 
 .feature p {
@@ -117,15 +139,6 @@ html {
   margin: 16px 0;
 }
 
-.feature a {
-  color: var(--color-link)
-}
-
-.feature a:hover {
-  text-decoration: underline;
-}
-
-
 /*****************************************************************************/
 /* FOOTER                                                                    */
 /*****************************************************************************/
@@ -133,125 +146,34 @@ html {
 #footer {
   margin-top: 150px;
   padding: 20px;
-  background-color: rgb(232, 232, 232);
+  background-color: var(--color-footer-bg);
 }
+
 #footer p {
-  font-size: 13px;
+  font-size: var(--fs-footer);
   text-align: center;
   margin: 0;
-}
-
-#footer a {
-  color: var(--color-link);
-}
-
-#footer a:hover {
-  text-decoration: underline;
-}
-
-/*****************************************************************************/
-/* CODE EDITOR                                                               */
-/*****************************************************************************/
-
-#code-area-wrapper {
-  position: relative;
-}
-
-.codejar-linenumbers {
-  color: #969696 !important;
-}
-
-.code-area-label {
-  color: #9b9ea1;
-  margin : 30px 0px 5px 0px;
-}
-
-.editor, .editor span {
-  font-family: var(--font-mono);
-}
-
-#code-output {
-  font-family: var(--font-mono);
-  background-color: hsl(210, 0%, 99%);
-  color: hsl(210, 20%, 30%);
-  border: solid 1px hsl(200, 20%, 88%);
-  padding: 12px 16px;
-  border-radius: 3px;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-#run-button {
-  position: absolute;
-  right: 0;
-  z-index: 1;
-  margin: 8px;
-  height: auto;
-  padding: 5px;
-}
-
-#run-button p {
-  margin: 0px 5px 0px 0px;
-}
-
-#run-button div {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.has-error {
-  background-color: hsl(0deg 100% 95%) !important;
-  border-color: hsl(0deg 68% 50%) !important;
-}
-
-/*****************************************************************************/
-/* CLASSES                                                                   */
-/*****************************************************************************/
-
-section {
-  margin: 0 auto 70px auto;
-  max-width: var(--max-content-width);
-  padding: 20px;
-}
-
-.section-title {
-  font-size: 35px;
-  margin: 0px 0px 30px 0px;
-}
-
-.button {
-  display: inline-block;
-  padding: 10px 20px;
-  color: var(--color-theme);
-  border: 2px solid var(--color-theme);
-  border-radius: 5px;
-  transition: .2s;
-  font-weight: bolder;
-  height: 100%;
-  cursor: pointer;
-}
-
-.button:hover {
-  background-color: var(--color-theme);
-  color: white;
 }
 
 /*****************************************************************************/
 /* MEDIA SIZE OVERRIDE                                                       */
 /*****************************************************************************/
 
-@media screen and (max-width: 995px) {
+@media screen and (max-height: 500px) {
+  #page-intro {
+    height: auto;
+    padding-top: calc(var(--navbar-height) + 60px);
+  }
+}
 
-  #intro {
+@media screen and (max-width: 995px) {
+  #page-intro {
     height: auto;
     padding-top: calc(var(--navbar-height) + 30px);
   }
-
-  #intro img {
+  #page-intro img {
     display: none;
   }
-  
   #features-grid {
     grid-template-columns: repeat(2, 1fr);;
   }
@@ -259,58 +181,15 @@ section {
 
 @media screen and (max-width: 620px) {
 
-  #navbar {
-    padding: 10px 50px;
-  }
-
-  #toggle-menu {
-    display: block;
-  }
-
-  /* Re arrange the navbar to togglable sidebar. */
-  #navbar ul:not(.active) { left: -100% }
-  #navbar ul.active { left: 0 }
-  #navbar ul {
-    color: black;
-    position: fixed;
-    width: 60%;
-    height: 100vh;
-    top: 0; left:0;
-    padding-top: 50px;
-    background-color: white;
-    box-shadow: 0 16px 16px 0 rgba(0,0,0,0.5);
-    transition: .3s;
-  }
-  #navbar ul li { display: block; padding: 0; }
-  #navbar ul li a {
-    font-size: 1.5em;
-    padding-left: 20px;
-    display: block;
-    height: 50px;
-    line-height: 50px;
-
-  }
-  #navbar ul li::after {
-    content: "";
-    position: absolute;
-    left: 0; right: 0;
-    background-color: var(--color-gray);
-    width: 90%;
-    height: 1px;
-    margin: auto;
-  }
-  #navbar ul li a:hover {
-    background-color: var(--color-theme);
-    color: white;
-    text-decoration: none;
-  }
-
-
   #intro-text h1 {
     font-size: 35px;
   }
 
-  #intro-text a.button {
+  #intro-buttons {
+    flex-direction: column;
+  }
+
+  #intro-buttons a.button {
     width: 100%;
     text-align: center;
   }
@@ -322,4 +201,5 @@ section {
   .section-title {
     font-size: 30px;
   }
+
 }

@@ -6,6 +6,7 @@ from os.path import abspath, dirname, exists, isdir, join
 from shutil import copyfile, copytree, rmtree
 from markdown import markdown
 
+## FIXME: the below version string is hardcoded.
 POCKETLANG_VERSION = "v0.1.0"
 
 ## Page contnet will be ordered as the below list. Each entry in the DOC_PAGES
@@ -30,6 +31,62 @@ DOC_PAGES = {
   ],
 }
 
+## Site pages are template html files in the "./templates/" folder, which will
+## generated to the build directory.
+SITE_PAGES = [
+  "index.html",
+  "try-online.html",
+]
+
+## Display pocketlang syntax for the home page.
+WHAT_IT_LOOKS_LIKE = '''
+# Python like import statement.
+from lang import clock as now
+
+# A recursive fibonacci function.
+def fib(n)
+  if n < 2 then return n end
+  return fib(n-1) + fib(n-2)
+end
+
+# Prints all fibonacci from 0 to 10 exclusive.
+for i in 0..10
+  print(fib(i))
+end
+'''
+
+## Display features in the home page.
+POCKET_FEATURES = {
+  "Concurrent" : {
+    "icon" : "{{ STATIC_DIR }}img/concurrent.svg",
+    "desc" : "Pocketlang's fibers (lightweight threads) allows you to write "
+              "parallel tasks easily, without worrying about thread safety.",
+    "link" : "{{TODO}}"
+  },
+
+  "Embeddible" : {
+    "icon" : "{{ STATIC_DIR }}img/gear.svg",
+    "desc" : "You can use PKVM as any other libraries in your application. "
+             "It's specifically designed to be embedded in other programs.",
+    "link" : "{{TODO}}"
+  },
+
+  "Garbage Collected" : {
+    "icon" : "{{ STATIC_DIR }}img/gc.svg",
+    "desc" : "With the pocketlang's garbage collector you can write code "
+             "without worrying about memory management.",
+    "link" : "{{TODO}}"
+  },
+
+  "REPL" : {
+    "icon" : "{{ STATIC_DIR }}img/repl.svg",
+    "desc" : "The interactive prompt of pocketlang will makes it easier to "
+             "test and play with it on the command line.",
+    "link" : "{{TODO}}"
+  },
+
+}
+
 ## The absolute path of this file's directory, when run as a script.
 ## This file is not intended to be included in other files at the moment.
 THIS_PATH = abspath(dirname(__file__))
@@ -37,15 +94,24 @@ THIS_PATH = abspath(dirname(__file__))
 BUILD_DIR = join(THIS_PATH, "build")
 STATIC_DIR = join(THIS_PATH, "static")
 MARKDOWN_DIR = join(THIS_PATH, "markdown")
+
+TEMPLATE_PATH = join(THIS_PATH, 'templates/docs.html')
 DOCS_URL_PATH = f"docs/{POCKETLANG_VERSION}/" ## Html generated at docs/* path.
 
 def main():
+
+  ## Getting things ready.
   check_wasm()
   clean()
   make_build_dir()
-  gen_home_page()
+
+  ## Site pages generation.
+  gen_site_pages()
+
+  ## Documentation pages generation.
   context = collect_doc_pages()
-  generate_pages(context)
+  gen_doc_pages(context)
+
   print("Docs generated successfully")
 
 ## INTERNAL ###################################################################
@@ -78,12 +144,38 @@ def make_build_dir():
   open(join(BUILD_DIR, '.nojekyll'), 'w').close()
   copytree(STATIC_DIR, join(BUILD_DIR, "static"))
 
-def gen_home_page():
-  template = read(join(THIS_PATH, "index.html"))
-  template = template.replace("{{ STATIC_DIR }}", "./static/")
-  template = template.replace("{{ DOCS_URL }}", DOCS_URL_PATH)
-  with open(join(BUILD_DIR, 'index.html'), 'w') as fp:
-    fp.write(template)
+def generate_features():
+  gen = ""; indentation = '  ' * 4
+  def write(html_line):
+    nonlocal gen; nonlocal indentation
+    gen += indentation + html_line + '\n'
+  for feature_name in POCKET_FEATURES:
+    feature = POCKET_FEATURES[feature_name]
+    write('<div class="feature">')
+    write('  <div class="feature-logo">')
+    write(f'    <img src="{feature["icon"]}">')
+    write('  </div>')
+    write(f'  <h2>{feature_name}</h2>')
+    write(f'  <p>{feature["desc"]}</p>')
+    write(f'  <a class="link" href="{feature["link"]}">Learn more</a>')
+    write('</div>')
+  return gen
+
+def gen_site_pages():
+  for site_page in SITE_PAGES:
+    template = read(join(THIS_PATH, f"templates/{site_page}"))
+
+    if site_page == "index.html":
+      code_example = html.escape(WHAT_IT_LOOKS_LIKE)
+      template = template.replace("{{ WHAT_IT_LOOKS_LIKE }}", code_example)
+      template = template.replace("{{ POCKET_FEATURES }}", generate_features())
+
+    template = template.replace("{{ POCKETLANG_VERSION }}", POCKETLANG_VERSION)
+    template = template.replace("{{ STATIC_DIR }}", "./static/")
+    template = template.replace("{{ DOCS_URL }}", DOCS_URL_PATH)
+
+    with open(join(BUILD_DIR, site_page), 'w') as fp:
+      fp.write(template)
 
 ## FIXME: wirte a better md -> html compiler (or use some libraries).
 ## Compile the markdown files to html. and return the a tuple of (html, topics)
@@ -162,18 +254,20 @@ def generate_navtree(context):
 def generate_toc_entries(topics):
   gen = ""
   for topic in topics:
-    gen += f'<li><a href="#{topic}">{topic.replace("-", " ")}</a></li>\n'
+    gen += f'<li><a class="link" href="#{topic}">\m'
+    gen += f'  {topic.replace("-", " ")}\n'
+    gen += '</a></li>\n'
   return gen
 
 ## Build the template page with the generated context.
-def generate_pages(context):
+def gen_doc_pages(context):
   navtree = generate_navtree(context)
 
-  template = read(join(MARKDOWN_DIR, 'template.html'))
+  template = read(TEMPLATE_PATH)
   template = template.replace("{{ NAVIGATION_TREE }}", navtree)
   template = template.replace("{{ LOGO_WHITE }}",
-                              read(join(STATIC_DIR, "img/logo-white.svg")))
-  template = template.replace("{{ URL_POCKET_HOME }}", "../../index.html")
+                              read(join(STATIC_DIR, "img/pocketlang.svg")))
+  template = template.replace("{{ URL_POCKET_HOME }}", "../../../index.html")
 
   for section in context:
     section_dir = join(BUILD_DIR, DOCS_URL_PATH, section)
