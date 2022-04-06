@@ -2,7 +2,7 @@
 :root {
   --pocket-logo-size: 300px;
   --intro-text-max-width: 700px;
-  
+
   --section-max-width: 1100px;
   --section-padding: 20px;
   --section-margin-bottom: 70px;
@@ -189,7 +189,6 @@ section {
     flex-direction: column;
   }
 
-  
   #intro-buttons a.button {
     width: 100%;
     text-align: center;
