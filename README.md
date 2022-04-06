@@ -5,7 +5,7 @@
 
 **Pocketlang** is a small (~3000 semicolons) and [fast](https://github.com/ThakeeNathees/pocketlang#performance)
 functional language written in C. It's syntactically similar to Ruby and it can
-be learned [within 15 minutes](https://thakeenathees.github.io/pocketlang/getting-started-learn-in-15-minutes.html).
+be learned [within 15 minutes](https://thakeenathees.github.io/pocketlang/docs/v0.1.0/Reference/Cheat-Sheet.html).
 Including the compiler, bytecode VM and runtime, it's a standalone executable
 with zero external dependencies just as it's self descriptive name. The pocketlang
 VM can be embedded in another hosting program very easily.
@@ -33,7 +33,7 @@ end
 
 ## Try It Now
 
-You can [try pocketlang on your browser](https://thakeenathees.github.io/pocketlang/getting-started-try-it-now.html).
+You can [try pocketlang on your browser](https://thakeenathees.github.io/pocketlang/try-online.html).
 It's a [WebAssembly](https://webassembly.org/) build of the VM compiled using [emscripten](https://emscripten.org/).
 Note that in the webassembly version of the language, some features (input, file handling, relative import, etc.)
 have disabled, has limited memory allocations, and the stdout calls might be slower.

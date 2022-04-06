@@ -46,9 +46,6 @@ PkConfiguration pkNewConfiguration(void) {
 PkCompileOptions pkNewCompilerOptions(void) {
   PkCompileOptions options;
   options.debug = false;
-  // TODO:
-  //options.dump_opcodes = false;
-  //options.dump_stream = stdout;
   options.repl_mode = false;
   return options;
 }
