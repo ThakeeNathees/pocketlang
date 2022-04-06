@@ -34,10 +34,6 @@
   color: inherit;
 }
 
-pre:first-line {
-  line-height: 0;
-}
-
 code, code span,
 .code, .code span {
   font-family: var(--font-mono);

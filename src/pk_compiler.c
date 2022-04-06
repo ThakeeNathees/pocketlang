@@ -2894,7 +2894,7 @@ static void compileTopLevelStatement(Compiler* compiler) {
 
   // At the top level the stack size should be 0, before and after compiling
   // a top level statement, since there aren't any locals at the top level.
-  ASSERT(compiler->stack_size == 0, OOPS);
+  ASSERT(compiler->has_errors || compiler->stack_size == 0, OOPS);
 
   if (match(compiler, TK_CLASS)) {
     compileClass(compiler);
@@ -2921,7 +2921,7 @@ static void compileTopLevelStatement(Compiler* compiler) {
 
   // At the top level the stack size should be 0, before and after compiling
   // a top level statement, since there aren't any locals at the top level.
-  ASSERT(compiler->stack_size == 0, OOPS);
+  ASSERT(compiler->has_errors || compiler->stack_size == 0, OOPS);
 
 }
 

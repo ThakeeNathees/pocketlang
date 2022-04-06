@@ -43,13 +43,20 @@ body {
 
 #toolbar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   padding: 0 30px;
   color: white;
   height: var(--toolbar-height);
   background-color: var(--color-toolbar-bg);
   border-bottom: 2px solid var(--color-toolbar-border);
+}
+
+#code-example-titles {
+  white-space: nowrap;
+  color: var(--color-code-example-title);
+  overflow: hidden;
+  display: flex;
+  flex-grow: 1;
 }
 
 #run-button {
@@ -67,11 +74,6 @@ body {
 #run-button:hover {
   background-color: white;
   color: var(--color-toolbar-bg);
-}
-
-#code-example-titles {
-  color: var(--color-code-example-title);
-  display: flex;
 }
 
 .code-example-title {
@@ -140,6 +142,7 @@ body {
 @media screen and (max-width: 995px) {
   :root {
     --fs-code-example-title: 10px;
+    --fs-editor: 14px;
   }
 
   #code-area {
