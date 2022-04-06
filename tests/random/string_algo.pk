@@ -1,0 +1,51 @@
+
+def reverse_string(s)
+  ret = ''
+  for i in s.length-1 .. -1 ## -1 so ends at 0.
+    ret += s[i]
+  end
+  return ret  
+end
+
+def is_palindrome(s)
+  return reverse_string(s) == s
+end
+
+assert(reverse_string('abc') == 'cba')
+assert(reverse_string('123456') == '654321')
+assert(is_palindrome('racecar'))
+assert(!is_palindrome('foobar'))
+
+
+## An un-efficient function to check substrings.
+def string_find(s, sub)
+
+  ## Edge case.
+  if sub.length == 0 then return 0 end
+  if sub.length > s.length then return -1 end
+  if s.length == 0 then
+    if sub.length == 0 then return 0 end
+    return -1
+  end
+  
+  for i in 0..s.length
+    if s[i] == sub[0]
+      found = true
+      for j in 1..sub.length
+        if s[i+j] != sub[j]
+          found = false
+        end
+      end
+      if found then return i end
+    end
+  end
+  
+  return -1 ## Not found
+end
+
+assert(string_find("something", "thing") == 4)
+assert(string_find("a long string", "string") == 7)
+
+
+
+

@@ -8,6 +8,7 @@ THIS_PATH = abspath(dirname(__file__))
 
 POCKET_SOURCE_DIR = join(THIS_PATH, "../../../pocketlang/src/")
 JS_API_PATH = join(THIS_PATH, "io_api.js")
+MAIN_C = join(THIS_PATH, "main.c")
 TARGET_DIR = join(THIS_PATH, "../static/wasm/")
 TARGET_NAME = "pocketlang.html"
 
@@ -31,7 +32,7 @@ def main():
   exports = "\"EXPORTED_RUNTIME_METHODS=['ccall','cwrap']\""
   js_api  = JS_API_PATH
 
-  cmd = f"emcc {include} main.c {sources} -o {output} " +\
+  cmd = f"emcc {include} {MAIN_C} {sources} -o {output} " +\
         f"-s {exports} --js-library {js_api}"
   print(cmd)
   os.system(cmd)

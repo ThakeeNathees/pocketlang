@@ -140,7 +140,8 @@
 #define IS_OBJ(value)   ((value & _MASK_OBJECT) == _MASK_OBJECT)
 
 // Evaluate to true if the var is an object and type of [obj_type].
-#define IS_OBJ_TYPE(var, obj_type) IS_OBJ(var) && AS_OBJ(var)->type == obj_type
+#define IS_OBJ_TYPE(var, obj_type) \
+  (IS_OBJ(var) && (AS_OBJ(var)->type == (obj_type)))
 
 // Check if the 2 pocket strings are equal.
 #define IS_STR_EQ(s1, s2)          \
@@ -432,7 +433,7 @@ String* newStringLength(PKVM* vm, const char* text, uint32_t length);
 #else // Macro implementation.
   // Allocate new string using the cstring [text].
   #define newString(vm, text) \
-    newStringLength(vm, text, (!text) ? 0 : (uint32_t)strlen(text))
+    (newStringLength(vm, text, (!(text)) ? 0 : (uint32_t)strlen(text)))
 #endif
 
 // Allocate new List and return List*.

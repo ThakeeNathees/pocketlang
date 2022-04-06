@@ -1435,16 +1435,28 @@ static void exprInterpolation(Compiler* compiler) {
 
   // The last string is not TK_STRING_INTERP but it would be
   // TK_STRING. Apped it.
+  // Optimize case last string could be empty. Skip it.
   consume(compiler, TK_STRING, "Non terminated interpolated string.");
-  exprLiteral(compiler);
-  emitOpcode(compiler, OP_LIST_APPEND);
-  size++;
+  if (compiler->previous.type == TK_STRING /* != if syntax error. */) {
+    ASSERT(IS_OBJ_TYPE(compiler->previous.value, OBJ_STRING), OOPS);
+    String* str = (String*)AS_OBJ(compiler->previous.value);
+    if (str->length != 0) {
+      exprLiteral(compiler);
+      emitOpcode(compiler, OP_LIST_APPEND);
+      size++;
+    }
+  }
 
   patchListSize(compiler, size_index, size);
 
   // Call the list_join function (which is at the stack top).
   emitOpcode(compiler, OP_CALL);
   emitByte(compiler, 1);
+
+  // After the above call, the lits and the "list_join" function will be popped
+  // from the stack and a string will be pushed. The so the result stack effect
+  // is -1.
+  compilerChangeStack(compiler, -1);
 
 }
 
@@ -2139,12 +2151,10 @@ static int compileClass(Compiler* compiler) {
     uint32_t f_index = scriptAddName(compiler->script, compiler->vm,
                                      f_name, f_len);
 
-    // TODO: Add a string compare macro.
     String* new_name = compiler->script->names.data[f_index];
     for (uint32_t i = 0; i < cls->field_names.count; i++) {
       String* prev = compiler->script->names.data[cls->field_names.data[i]];
-      if (new_name->hash == prev->hash && new_name->length == prev->length &&
-          memcmp(new_name->data, prev->data, prev->length) == 0) {
+      if (IS_STR_EQ(new_name, prev)) {
         parseError(compiler, "Class field with name '%s' already exists.",
                    new_name->data);
       }
@@ -2339,7 +2349,7 @@ static Script* importFile(Compiler* compiler, const char* path) {
   // Check if the script already exists.
   Var entry = mapGet(vm->scripts, VAR_OBJ(path_name));
   if (!IS_UNDEF(entry)) {
-    ASSERT(AS_OBJ(entry)->type == OBJ_SCRIPT, OOPS);
+    ASSERT(IS_OBJ_TYPE(entry, OBJ_SCRIPT), OOPS);
 
     // Push the script on the stack.
     emitOpcode(compiler, OP_IMPORT);
@@ -2411,7 +2421,7 @@ static Script* importCoreLib(Compiler* compiler, const char* name_start,
   emitOpcode(compiler, OP_IMPORT);
   emitShort(compiler, index);
 
-  ASSERT(AS_OBJ(entry)->type == OBJ_SCRIPT, OOPS);
+  ASSERT(IS_OBJ_TYPE(entry, OBJ_SCRIPT), OOPS);
   return (Script*)AS_OBJ(entry);
 }
 
@@ -2882,6 +2892,10 @@ static void compileStatement(Compiler* compiler) {
 // level expression's evaluated value will be printed.
 static void compileTopLevelStatement(Compiler* compiler) {
 
+  // At the top level the stack size should be 0, before and after compiling
+  // a top level statement, since there aren't any locals at the top level.
+  ASSERT(compiler->stack_size == 0, OOPS);
+
   if (match(compiler, TK_CLASS)) {
     compileClass(compiler);
 
@@ -2904,6 +2918,11 @@ static void compileTopLevelStatement(Compiler* compiler) {
   } else {
     compileStatement(compiler);
   }
+
+  // At the top level the stack size should be 0, before and after compiling
+  // a top level statement, since there aren't any locals at the top level.
+  ASSERT(compiler->stack_size == 0, OOPS);
+
 }
 
 PkResult compile(PKVM* vm, Script* script, const char* source,

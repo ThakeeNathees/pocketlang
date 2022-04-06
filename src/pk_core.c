@@ -359,7 +359,7 @@ static inline bool isInteger(Var var, int64_t* value) {
   return false;
 }
 
-// Check if [var] is bool/number. If not set error and return false.
+// Check if [var] is bool/number. If not, it'll set error and return false.
 static inline bool validateNumeric(PKVM* vm, Var var, double* value,
                                    const char* name) {
   if (isNumeric(var, value)) return true;
@@ -367,7 +367,7 @@ static inline bool validateNumeric(PKVM* vm, Var var, double* value,
   return false;
 }
 
-// Check if [var] is 32 bit integer. If not set error and return false.
+// Check if [var] is 32 bit integer. If not, it'll set error and return false.
 static inline bool validateInteger(PKVM* vm, Var var, int64_t* value,
                                    const char* name) {
   if (isInteger(var, value)) return true;
@@ -381,6 +381,16 @@ static inline bool validateIndex(PKVM* vm, int64_t index, uint32_t size,
                                  const char* container) {
   if (index < 0 || size <= index) {
     VM_SET_ERROR(vm, stringFormat(vm, "$ index out of bound.", container));
+    return false;
+  }
+  return true;
+}
+
+// Check if the [condition] is true. If not, it'll set an error and return
+// false.
+static inline bool validateCond(PKVM* vm, bool condition, const char* err) {
+  if (!condition) {
+    VM_SET_ERROR(vm, newString(vm, err));
     return false;
   }
   return true;
@@ -483,7 +493,6 @@ DEF(coreHelp,
       vm->config.write_fn(vm, fn->docstring);
       vm->config.write_fn(vm, "\n\n");
     } else {
-      // TODO: A better message.
       vm->config.write_fn(vm, "function '");
       vm->config.write_fn(vm, fn->name);
       vm->config.write_fn(vm, "()' doesn't have a docstring.\n");
@@ -742,11 +751,11 @@ DEF(coreListJoin,
   pkByteBuffer buff;
   pkByteBufferInit(&buff);
 
-  for (int i = 0; i < list->elements.count; i++) {
+  for (uint32_t i = 0; i < list->elements.count; i++) {
     String* elem = toString(vm, list->elements.data[i]);
     vmPushTempRef(vm, &elem->_super); // elem
     pkByteBufferAddString(&buff, vm, elem->data, elem->length);
-    vmPopTempRef(vm);
+    vmPopTempRef(vm); // elem
   }
 
   String* str = newStringLength(vm, (const char*)buff.data, buff.count);
@@ -869,6 +878,9 @@ DEF(stdLangDisas,
 
   Function* fn;
   if (!validateArgFunction(vm, 1, &fn)) return;
+
+  if (!validateCond(vm, !fn->is_native,
+                    "Cannot disassemble native functions.")) return;
 
   pkByteBuffer buff;
   pkByteBufferInit(&buff);
@@ -1261,7 +1273,7 @@ void initializeCore(PKVM* vm) {
   // Initialize builtin functions.
   INITIALIZE_BUILTIN_FN("type_name",   coreTypeName,   1);
 
-  // TODO: Add is keyword with modules for builtin types.
+  // TODO: Add 'is' keyword with modules for builtin types.
   // ex: val is Num; val is null; val is List; val is Range
   //     List.append(l, e) # List is implicitly imported core module.
   //     String.lower(s)
@@ -1664,10 +1676,9 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
     case OBJ_MAP:
     {
-      // Not sure should I allow string values could be accessed with
-      // this way. ex:
       // map = { "foo" : 42, "can't access" : 32 }
-      // val = map.foo ## 42
+      // val = map.foo ## <-- This should be error
+      // Only the map's attributes are accessed here.
       TODO;
       UNREACHABLE();
     }

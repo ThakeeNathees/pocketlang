@@ -139,7 +139,20 @@ body {
 
 @media screen and (max-width: 995px) {
   :root {
-    --fs-editor: 14px;
     --fs-code-example-title: 10px;
+  }
+
+  #code-area {
+    flex-direction: column;
+  }
+
+  #code-editor::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  #code-output {
+    height: auto;
+    min-height: 150px;
   }
 }

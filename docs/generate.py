@@ -254,8 +254,8 @@ def generate_navtree(context):
 def generate_toc_entries(topics):
   gen = ""
   for topic in topics:
-    gen += f'<li><a class="link" href="#{topic}">\m'
-    gen += f'  {topic.replace("-", " ")}\n'
+    gen += f'<li><a class="link" href="#{topic}">'
+    gen += f'{topic.replace("-", " ")}'
     gen += '</a></li>\n'
   return gen
 
