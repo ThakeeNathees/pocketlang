@@ -8,7 +8,10 @@ function withLineNumbers(highlight, options = {}) {
             editor.addEventListener("scroll", () => lineNumbers.style.top = `-${editor.scrollTop}px`);
         }
         const code = editor.textContent || "";
-        const linesCount = code.replace(/\n+$/, "\n").split("\n").length + 1;
+
+        //const linesCount = code.replace(/\n+$/, "\n").split("\n").length + 1;
+        const linesCount = code.split("\n").length;
+
         let text = "";
         for (let i = 1; i < linesCount; i++) {
             text += `${i}\n`;

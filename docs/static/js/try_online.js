@@ -58,6 +58,12 @@ let code_example_titles = $$(".code-example-title");
 let code_highlight_fn = withLineNumbers(function(editor) {
   editor.textContent = editor.textContent;
   html = hljs.highlight(editor.textContent, {language : 'ruby'}).value;
+
+  // https://github.com/antonmedv/codejar/issues/22#issuecomment-773894139
+  if (html.length > 2 && html.substring(html.length - 2, html.length) != '\n\n') {
+    html += '\n'
+  }
+
   editor.innerHTML = html;
 });
 

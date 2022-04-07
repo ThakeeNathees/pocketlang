@@ -130,7 +130,7 @@ body {
   padding: 16px 32px;
 }
 
-#code-output.has-error {
+#code-output span.error-line {
   color: var(--color-output-error);
 }
 
