@@ -18,31 +18,50 @@ static const char* op_names[] = {
   #undef OPCODE
 };
 
-// Instead of writing foo("a long string", strlen("a long string") or
-// foo("a long string may be changed", 28) using _STR_AND_LEN would be cleaner.
-// And the strlen(literal cstring) will always optimized.
-#define STR_AND_LEN(str) str, (uint32_t)strlen(str)
-
-void dumpValue(PKVM* vm, Var value, pkByteBuffer* buff) {
+static void dumpValue(PKVM* vm, Var value) {
+  if (!vm->config.write_fn) return;
   String* repr = toRepr(vm, value);
-  vmPushTempRef(vm, &repr->_super);
-  pkByteBufferAddString(buff, vm, repr->data, repr->length);
-  vmPopTempRef(vm);
+  vm->config.write_fn(vm, repr->data);
+  // String repr will be garbage collected - No need to clean.
 }
 
-void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
+void dumpFunctionCode(PKVM* vm, Function* func) {
 
-#define INDENTATION "  "
-#define ADD_CHAR(vm, buff, c) pkByteBufferWrite(buff, vm, c)
-#define INT_WIDTH 5
-#define ADD_INTEGER(vm, buff, value, width)                          \
+  if (!vm->config.write_fn) return;
+
+#define _INDENTATION "  "
+#define _INT_WIDTH 5 // Width of the integer string to print.
+
+#define PRINT(str) vm->config.write_fn(vm, str)
+#define NEWLINE() PRINT("\n")
+
+#define _PRINT_INT(value, width)                                     \
   do {                                                               \
     char sbuff[STR_INT_BUFF_SIZE];                                   \
     int length;                                                      \
     if ((width) > 0) length = sprintf(sbuff, "%*d", (width), value); \
     else length = sprintf(sbuff, "%d", value);                       \
-    pkByteBufferAddString(buff, vm, sbuff, (uint32_t)length);        \
+    sbuff[length] = '\0';                                            \
+    PRINT(sbuff);                                                    \
   } while(false)
+#define PRINT_INT(value) _PRINT_INT(value, _INT_WIDTH)
+
+#define READ_BYTE() (opcodes[i++])
+#define READ_SHORT() (i += 2, opcodes[i - 2] << 8 | opcodes[i-1])
+
+#define NO_ARGS() NEWLINE()
+
+#define BYTE_ARG()          \
+  do {                      \
+    PRINT_INT(READ_BYTE()); \
+    NEWLINE();              \
+  } while (false)
+
+#define SHORT_ARG()          \
+  do {                       \
+    PRINT_INT(READ_SHORT()); \
+    NEWLINE();               \
+  } while (false)
 
   uint32_t i = 0;
   uint8_t* opcodes = func->fn->opcodes.data;
@@ -50,28 +69,11 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
   uint32_t line = 1, last_line = 0;
 
   // This will print: Instruction Dump of function 'fn' "path.pk"\n
-  pkByteBufferAddString(buff, vm,
-                        STR_AND_LEN("Instruction Dump of function '"));
-  pkByteBufferAddString(buff, vm, STR_AND_LEN(func->name));
-  pkByteBufferAddString(buff, vm, STR_AND_LEN("' \""));
-  pkByteBufferAddString(buff, vm, STR_AND_LEN(func->owner->path->data));
-  pkByteBufferAddString(buff, vm, STR_AND_LEN("\"\n"));
-
-#define READ_BYTE() (opcodes[i++])
-#define READ_SHORT() (i += 2, opcodes[i - 2] << 8 | opcodes[i-1])
-
-#define NO_ARGS() ADD_CHAR(vm, buff, '\n')
-#define BYTE_ARG()                                 \
-  do {                                             \
-    ADD_INTEGER(vm, buff, READ_BYTE(), INT_WIDTH); \
-    ADD_CHAR(vm, buff, '\n');                      \
-  } while (false)
-
-#define SHORT_ARG()                                 \
-  do {                                              \
-    ADD_INTEGER(vm, buff, READ_SHORT(), INT_WIDTH); \
-    ADD_CHAR(vm, buff, '\n');                       \
-  } while (false)
+  PRINT("Instruction Dump of function ");
+  PRINT(func->name);
+  PRINT(" ");
+  PRINT(func->owner->path->data);
+  NEWLINE();
 
   while (i < func->fn->opcodes.count) {
     ASSERT_INDEX(i, func->fn->opcodes.count);
@@ -80,25 +82,24 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
     line = lines[i];
     if (line != last_line) {
       last_line = line;
-      pkByteBufferAddString(buff, vm, STR_AND_LEN(INDENTATION));
-      ADD_INTEGER(vm, buff, line, INT_WIDTH - 1);
-      ADD_CHAR(vm, buff, ':');
+      PRINT(_INDENTATION);
+      _PRINT_INT(line, _INT_WIDTH - 1);
+      PRINT(":");
 
     } else {
-      pkByteBufferAddString(buff, vm, STR_AND_LEN(INDENTATION "     "));
+      PRINT(_INDENTATION "     ");
     }
 
     // Prints: INDENTATION "%4d  %-16s"
-
-    pkByteBufferAddString(buff, vm, STR_AND_LEN(INDENTATION));
-    ADD_INTEGER(vm, buff, i, INT_WIDTH - 1);
-    pkByteBufferAddString(buff, vm, STR_AND_LEN("  "));
+    PRINT(_INDENTATION);
+    _PRINT_INT(i, _INT_WIDTH - 1);
+    PRINT(_INDENTATION);
 
     const char* op_name = op_names[opcodes[i]];
     uint32_t op_length = (uint32_t)strlen(op_name);
-    pkByteBufferAddString(buff, vm, op_name, op_length);
+    PRINT(op_name);
     for (uint32_t j = 0; j < 16 - op_length; j++) { // Padding.
-      ADD_CHAR(vm, buff, ' ');
+      PRINT(" ");
     }
 
     Opcode op = (Opcode)func->fn->opcodes.data[i++];
@@ -110,10 +111,10 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
         Var value = func->owner->literals.data[index];
 
         // Prints: %5d [val]\n
-        ADD_INTEGER(vm, buff, index, INT_WIDTH);
-        ADD_CHAR(vm, buff, ' ');
-        dumpValue(vm, value, buff);
-        ADD_CHAR(vm, buff, '\n');
+        PRINT_INT(index);
+        PRINT(" ");
+        dumpValue(vm, value);
+        NEWLINE();
         break;
       }
 
@@ -135,10 +136,10 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
         String* ty_name = func->owner->names.data[name_ind];
 
         // Prints: %5d [Ty:%s]\n
-        ADD_INTEGER(vm, buff, ty_index, INT_WIDTH);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN(" [Ty:"));
-        pkByteBufferAddString(buff, vm, ty_name->data, ty_name->length);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN("]\n"));
+        PRINT_INT(ty_index);
+        PRINT(" [Ty:");
+        PRINT(ty_name->data);
+        PRINT("]\n");
         break;
       }
       case OP_PUSH_MAP:      NO_ARGS();   break;
@@ -161,21 +162,20 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
         int arg;
         if (op == OP_PUSH_LOCAL_N) {
           arg = READ_BYTE();
-          ADD_INTEGER(vm, buff, arg, INT_WIDTH);
+          PRINT_INT(arg);
 
         } else {
           arg = (int)(op - OP_PUSH_LOCAL_0);
-          for (int j = 0; j < INT_WIDTH; j++) ADD_CHAR(vm, buff, ' ');
+          for (int j = 0; j < _INT_WIDTH; j++) PRINT(" ");
         }
 
+        // Prints: (arg:%d)\n
         if (arg < func->arity) {
-          // Prints: (arg:%d)\n
-          pkByteBufferAddString(buff, vm, STR_AND_LEN(" (param:"));
-          ADD_INTEGER(vm, buff, arg, 1);
-          pkByteBufferAddString(buff, vm, STR_AND_LEN(")\n"));
-
+          PRINT(" (param:");
+          _PRINT_INT(arg, 1);
+          PRINT(")\n");
         } else {
-          ADD_CHAR(vm, buff, '\n');
+          NEWLINE();
         }
 
       } break;
@@ -194,21 +194,20 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
         int arg;
         if (op == OP_STORE_LOCAL_N) {
           arg = READ_BYTE();
-          ADD_INTEGER(vm, buff, arg, INT_WIDTH);
+          PRINT_INT(arg);
 
         } else {
           arg = (int)(op - OP_STORE_LOCAL_0);
-          for (int j = 0; j < INT_WIDTH; j++) ADD_CHAR(vm, buff, ' ');
+          for (int j = 0; j < _INT_WIDTH; j++) PRINT(" ");
         }
 
         if (arg < func->arity) {
           // Prints: (arg:%d)\n
-          pkByteBufferAddString(buff, vm, STR_AND_LEN(" (param:"));
-          ADD_INTEGER(vm, buff, arg, 1);
-          pkByteBufferAddString(buff, vm, STR_AND_LEN(")\n"));
-
+          PRINT(" (param:");
+          _PRINT_INT(arg, 1);
+          PRINT(")\n");
         } else {
-          ADD_CHAR(vm, buff, '\n');
+          NEWLINE();
         }
 
       } break;
@@ -219,12 +218,11 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
         int index = READ_BYTE();
         int name_index = func->owner->global_names.data[index];
         String* name = func->owner->names.data[name_index];
-
         // Prints: %5d '%s'\n
-        ADD_INTEGER(vm, buff, index, INT_WIDTH);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN(" '"));
-        pkByteBufferAddString(buff, vm, name->data, name->length);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN("'\n"));
+        PRINT_INT(index);
+        PRINT(" '");
+        PRINT(name->data);
+        PRINT("'\n");
         break;
       }
 
@@ -232,12 +230,11 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
       {
         int fn_index = READ_BYTE();
         const char* name = func->owner->functions.data[fn_index]->name;
-
         // Prints: %5d [Fn:%s]\n
-        ADD_INTEGER(vm, buff, fn_index, INT_WIDTH);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN(" [Fn:"));
-        pkByteBufferAddString(buff, vm, STR_AND_LEN(name));
-        pkByteBufferAddString(buff, vm, STR_AND_LEN("]\n"));
+        PRINT_INT(fn_index);
+        PRINT(" [Fn:");
+        PRINT(name);
+        PRINT("]\n");
         break;
       }
 
@@ -248,12 +245,11 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
         uint32_t name_ind = func->owner->classes.data[ty_index]->name;
         ASSERT_INDEX(name_ind, func->owner->names.count);
         String* ty_name = func->owner->names.data[name_ind];
-
         // Prints: %5d [Ty:%s]\n
-        ADD_INTEGER(vm, buff, ty_index, INT_WIDTH);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN(" [Ty:"));
-        pkByteBufferAddString(buff, vm, ty_name->data, ty_name->length);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN("]\n"));
+        PRINT_INT(ty_index);
+        PRINT(" [Ty:");
+        PRINT(ty_name->data);
+        PRINT("]\n");
 
         break;
       }
@@ -262,12 +258,11 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
       {
         int index = READ_BYTE();
         const char* name = getBuiltinFunctionName(vm, index);
-
         // Prints: %5d [Fn:%s]\n
-        ADD_INTEGER(vm, buff, index, INT_WIDTH);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN(" [Fn:"));
-        pkByteBufferAddString(buff, vm, STR_AND_LEN(name));
-        pkByteBufferAddString(buff, vm, STR_AND_LEN("]\n"));
+        PRINT_INT(index);
+        PRINT(" [Fn:");
+        PRINT(name);
+        PRINT("]\n");
         break;
       }
 
@@ -276,25 +271,24 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
       {
         int index = READ_SHORT();
         String* name = func->owner->names.data[index];
-
         // Prints: %5d '%s'\n
-        ADD_INTEGER(vm, buff, index, INT_WIDTH);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN(" '"));
-        pkByteBufferAddString(buff, vm, name->data, name->length);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN("'\n"));
+        PRINT_INT(index);
+        PRINT(" '");
+        PRINT(name->data);
+        PRINT("'\n");
         break;
       }
 
       case OP_CALL:
         // Prints: %5d (argc)\n
-        ADD_INTEGER(vm, buff, READ_BYTE(), INT_WIDTH);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN(" (argc)\n"));
+        PRINT_INT(READ_BYTE());
+        PRINT(" (argc)\n");
         break;
 
       case OP_TAIL_CALL:
         // Prints: %5d (argc)\n
-        ADD_INTEGER(vm, buff, READ_BYTE(), INT_WIDTH);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN(" (argc)\n"));
+        PRINT_INT(READ_BYTE());
+        PRINT(" (argc)\n");
         break;
 
       case OP_ITER_TEST: NO_ARGS(); break;
@@ -307,24 +301,22 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
       case OP_AND:
       {
         int offset = READ_SHORT();
-
         // Prints: %5d (ip:%d)\n
-        ADD_INTEGER(vm, buff, offset, INT_WIDTH);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN(" (ip:"));
-        ADD_INTEGER(vm, buff, i + offset, 0);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN(")\n"));
+        PRINT_INT(offset);
+        PRINT(" (ip:");
+        _PRINT_INT(i + offset, 0);
+        PRINT(")\n");
         break;
       }
 
       case OP_LOOP:
       {
         int offset = READ_SHORT();
-
         // Prints: %5d (ip:%d)\n
-        ADD_INTEGER(vm, buff, -offset, INT_WIDTH);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN(" (ip:"));
-        ADD_INTEGER(vm, buff, i - offset, 0);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN(")\n"));
+        PRINT_INT(-offset);
+        PRINT(" (ip:");
+        _PRINT_INT(i - offset, 0);
+        PRINT(")\n");
         break;
       }
 
@@ -336,12 +328,11 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
       {
         int index = READ_SHORT();
         String* name = func->owner->names.data[index];
-
         // Prints: %5d '%s'\n
-        ADD_INTEGER(vm, buff, index, INT_WIDTH);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN(" '"));
-        pkByteBufferAddString(buff, vm, name->data, name->length);
-        pkByteBufferAddString(buff, vm, STR_AND_LEN("'\n"));
+        PRINT_INT(index);
+        PRINT(" '");
+        PRINT(name->data);
+        PRINT("'\n");
       } break;
 
       case OP_GET_SUBSCRIPT:
@@ -382,34 +373,18 @@ void dumpFunctionCode(PKVM* vm, Function* func, pkByteBuffer* buff) {
     }
   }
 
-  ADD_CHAR(vm, buff, '\0');
+  NEWLINE();
 
 // Undefin everything defined for this function.
-#undef INDENTATION
-#undef ADD_CHAR
-#undef STR_AND_LEN
+#undef PRINT
+#undef NEWLINE
+#undef _INT_WIDTH
+#undef _INDENTATION
 #undef READ_BYTE
 #undef READ_SHORT
 #undef BYTE_ARG
 #undef SHORT_ARG
-
 }
-
-//void dumpValue(PKVM* vm, Var value) {
-//  pkByteBuffer buff;
-//  pkByteBufferInit(&buff);
-//  _dumpValueInternal(vm, value, &buff);
-//  pkByteBufferWrite(&buff, vm, '\0');
-//  printf("%s", (const char*)buff.data);
-//}
-//
-//void dumpFunctionCode(PKVM* vm, Function* func) {
-//  pkByteBuffer buff;
-//  pkByteBufferInit(&buff);
-//  _dumpFunctionCodeInternal(vm, func, &buff);
-//  pkByteBufferWrite(&buff, vm, '\0');
-//  printf("%s", (const char*)buff.data);
-//}
 
 void dumpGlobalValues(PKVM* vm) {
   Fiber* fiber = vm->fiber;
@@ -422,15 +397,7 @@ void dumpGlobalValues(PKVM* vm) {
     String* name = scr->names.data[scr->global_names.data[i]];
     Var value = scr->globals.data[i];
     printf("%10s = ", name->data);
-
-    // Dump value. TODO: refactor.
-    pkByteBuffer buff;
-    pkByteBufferInit(&buff);
-    dumpValue(vm, value, &buff);
-    pkByteBufferWrite(&buff, vm, '\0');
-    printf("%s", (const char*)buff.data);
-    pkByteBufferClear(&buff, vm);
-
+    dumpValue(vm, value);
     printf("\n");
   }
 }
@@ -447,15 +414,8 @@ void dumpStackFrame(PKVM* vm) {
     printf("       ");
 
     // Dump value. TODO: refactor.
-    pkByteBuffer buff;
-    pkByteBufferInit(&buff);
-    dumpValue(vm, *sp, &buff);
-    pkByteBufferWrite(&buff, vm, '\0');
-    printf("%s", (const char*)buff.data);
-    pkByteBufferClear(&buff, vm);
-
+    dumpValue(vm, *sp);
     printf("\n");
   }
 }
 
-#undef _STR_AND_LEN
