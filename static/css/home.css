@@ -15,6 +15,14 @@
   --fs-footer: 13px;
 }
 
+html {
+  scroll-padding-top: var(--navbar-height);
+}
+
+pre:first-line {
+  line-height: 0;
+}
+
 body {
   background-color: #F6F8F8;
 }
@@ -24,10 +32,6 @@ p {
   font-size: 16px;
   line-height: 28px;
   letter-spacing: .6px;
-}
-
-html {
-  scroll-padding-top: var(--navbar-height);
 }
 
 /*****************************************************************************/

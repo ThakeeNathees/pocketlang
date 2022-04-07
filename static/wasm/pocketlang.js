@@ -1863,12 +1863,12 @@ var ASM_CONSTS = {
       var out = document.getElementById("code-output");
       // To Indicate error (should be removed before each run request).
       out.classList.add("has-error");
-      out.innerText += err_text + '\n';
+      out.innerHTML += `<span class="error-line">${err_text}</span>\n`;
     }
 
   function _js_writeFunction(message) {
       var out = document.getElementById("code-output");
-      out.innerText += AsciiToString(message)
+      out.innerText += AsciiToString(message);
     }
 
   function _setTempRet0($i) {
