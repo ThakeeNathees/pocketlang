@@ -43,10 +43,10 @@
 /*****************************************************************************/
 
 // Set this to dump compiled opcodes of each functions.
-#define DEBUG_DUMP_COMPILED_CODE 0
+#define DUMP_BYTECODE 0
 
-// Set this to dump stack frame before executing the next instruction.
-#define DEBUG_DUMP_CALL_STACK 0
+// Dump the stack values and the globals.
+#define DUMP_STACK 0
 
 // Nan-Tagging could be disable for debugging/portability purposes. See "var.h"
 // header for more information on Nan-tagging.

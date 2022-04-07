@@ -658,31 +658,26 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
   #error "OPCODE" should not be deifined here.
 #endif
 
-#if  DEBUG_DUMP_CALL_STACK
-  #define DEBUG_CALL_STACK()        \
-    do {                            \
-      system("cls"); /* FIXME */    \
-      dumpGlobalValues(vm);         \
-      dumpStackFrame(vm);           \
-    } while (false)
-#else
-  #define DEBUG_CALL_STACK() NO_OP
-#endif
-
 #define SWITCH() Opcode instruction; switch (instruction = (Opcode)READ_BYTE())
 #define OPCODE(code) case OP_##code
 #define DISPATCH()   goto L_vm_main_loop
 
-  // Trigger a break point here, if we're trying to debug the call stack.
-#if DEBUG_DUMP_CALL_STACK
-  DEBUG_BREAK();
-#endif
-
   // Load the fiber's top call frame to the vm's execution variables.
   LOAD_FRAME();
 
-  L_vm_main_loop:
-  DEBUG_CALL_STACK();
+L_vm_main_loop:
+
+#if DUMP_STACK
+  system("cls"); // FIXME:
+  dumpGlobalValues(vm);
+  dumpStackFrame(vm);
+  DEBUG_BREAK();
+#else
+  // This NO_OP is required since Labels can only be followed by statements
+  // and, declarations are not statements (here: Opcode instruction;)
+  NO_OP;
+#endif
+
   SWITCH() {
 
     OPCODE(PUSH_CONSTANT):

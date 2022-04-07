@@ -885,13 +885,7 @@ DEF(stdLangDisas,
   if (!validateCond(vm, !fn->is_native,
                     "Cannot disassemble native functions.")) return;
 
-  pkByteBuffer buff;
-  pkByteBufferInit(&buff);
-  dumpFunctionCode(vm, fn, &buff);
-  String* dump = newString(vm, (const char*)buff.data);
-  pkByteBufferClear(&buff, vm);
-
-  RET(VAR_OBJ(dump));
+  dumpFunctionCode(vm, fn);
 }
 
 #ifdef DEBUG
