@@ -28,7 +28,7 @@ def to_rel_path(path):
 ## corresponding cstring in the CASE_ATTRIB(name, hash) macro calls.
 HASH_CHECK_LIST = [
   "../src/pk_core.c",
-  "../src/pk_var.c",
+  "../src/pk_value.c",
 ]
 
 ## A list of extension to perform static checks, of all the files in the

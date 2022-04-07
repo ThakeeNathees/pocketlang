@@ -30,6 +30,14 @@
 #define __STDC_LIMIT_MACROS
 #include <stdint.h>
 
+#if defined(__GNUC__)
+  #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
+  #pragma GCC diagnostic ignored "-Wunused-parameter"
+#elif defined(__clang__)
+  #pragma clang diagnostic ignored "-Wint-to-pointer-cast"
+  #pragma clang diagnostic ignored "-Wunused-parameter"
+#endif
+
 /*****************************************************************************/
 /* INTERNAL CONFIGURATIONS                                                   */
 /*****************************************************************************/
@@ -57,6 +65,20 @@
 
 // The size of the error message buffer, used ar vsnprintf (since c99) buffer.
 #define ERROR_MESSAGE_SIZE 512
+
+// Functions, methods, classes and  other names which are intrenal / special to
+// pocketlang are starts with the following character (ex: @main, @literalFn).
+// When importing all (*) from a module, if the name of an entry starts with
+// this character it'll be skipped.
+#define SPECIAL_NAME_CHAR '@'
+
+// Name of the implicit function for a module. When a module is parsed all of
+// it's statements are wrapped around an implicit function with this name.
+#define IMPLICIT_MAIN_NAME "@main"
+
+// Name of a literal function. All literal function will have the same name but
+// they're uniquely identified by their index in the script's function buffer.
+#define LITERAL_FN_NAME "@literalFn"
 
 /*****************************************************************************/
 /* ALLOCATION MACROS                                                         */

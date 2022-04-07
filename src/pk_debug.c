@@ -8,7 +8,7 @@
 
 #include <stdio.h>
 #include "pk_core.h"
-#include "pk_var.h"
+#include "pk_value.h"
 #include "pk_vm.h"
 
 // Opcode names array.

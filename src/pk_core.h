@@ -4,11 +4,11 @@
  *  Distributed Under The MIT License
  */
 
-#ifndef CORE_H
-#define CORE_H
+#ifndef PK_CORE_H
+#define PK_CORE_H
 
 #include "pk_internal.h"
-#include "pk_var.h"
+#include "pk_value.h"
 
 // Initialize core language, builtin function and core libs.
 void initializeCore(PKVM* vm);
@@ -63,4 +63,4 @@ Var varGetSubscript(PKVM* vm, Var on, Var key);
 // Set subscript [value] with the [key] (ie. on[key] = value).
 void varsetSubscript(PKVM* vm, Var on, Var key, Var value);
 
-#endif // CORE_H
+#endif // PK_CORE_H

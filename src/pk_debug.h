@@ -4,11 +4,11 @@
  *  Distributed Under The MIT License
  */
 
-#ifndef DEBUG_H
-#define DEBUG_H
+#ifndef PK_DEBUG_H
+#define PK_DEBUG_H
 
 #include "pk_internal.h"
-#include "pk_var.h"
+#include "pk_value.h"
 
 // Dump the value of the [value] without a new line at the end to the buffer
 // [buff]. Note that this will not write a null byte at of the buffer
@@ -24,4 +24,4 @@ void dumpGlobalValues(PKVM* vm);
 // Dump the current (top most) stack call frame.
 void dumpStackFrame(PKVM* vm);
 
-#endif // DEBUG_H
+#endif // PK_DEBUG_H

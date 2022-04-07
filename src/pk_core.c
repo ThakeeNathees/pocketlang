@@ -13,7 +13,6 @@
 
 #include "pk_debug.h"
 #include "pk_utils.h"
-#include "pk_var.h"
 #include "pk_vm.h"
 
 // M_PI is non standard. The macro _USE_MATH_DEFINES defining before importing
@@ -92,6 +91,10 @@ PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
   }
 
   return NULL;
+}
+
+PkHandle* pkGetMainFunction(PKVM* vm, PkHandle* module) {
+  return pkGetFunction(vm, module, IMPLICIT_MAIN_NAME);
 }
 
 // A convenient macro to get the nth (1 based) argument of the current

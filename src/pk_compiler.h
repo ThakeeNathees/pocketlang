@@ -4,11 +4,11 @@
  *  Distributed Under The MIT License
  */
 
-#ifndef COMPILER_H
-#define COMPILER_H
+#ifndef PK_COMPILER_H
+#define PK_COMPILER_H
 
 #include "pk_internal.h"
-#include "pk_var.h"
+#include "pk_value.h"
 
 typedef enum {
   #define OPCODE(name, _, __) OP_##name,
@@ -38,4 +38,4 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
 // called at the marking phase of vmCollectGarbage().
 void compilerMarkObjects(PKVM* vm, Compiler* compiler);
 
-#endif // COMPILER_H
+#endif // PK_COMPILER_H

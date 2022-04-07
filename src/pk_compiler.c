@@ -50,9 +50,6 @@
 // Max number of break statement in a loop statement to patch.
 #define MAX_BREAK_PATCH 256
 
-// The name of a literal function.
-#define LITERAL_FN_NAME "$(LiteralFn)"
-
 /*****************************************************************************/
 /* TOKENS                                                                    */
 /*****************************************************************************/
@@ -2482,9 +2479,9 @@ static int compilerImportName(Compiler* compiler, int line,
 static void compilerImportSingleEntry(Compiler* compiler,
                                       const char* name, uint32_t length) {
 
-  // Special names are begins with '$' like function body (only for now).
-  // Skip them.
-  if (name[0] == '$') return;
+  // Special names are begins with '@' (implicit main function, literal
+  // functions etc) skip them.
+  if (name[0] == SPECIAL_NAME_CHAR) return;
 
   // Line number of the variables which will be bind to the imported symbol.
   int line = compiler->previous.line;

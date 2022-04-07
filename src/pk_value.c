@@ -4,7 +4,7 @@
  *  Distributed Under The MIT License
  */
 
-#include "pk_var.h"
+#include "pk_value.h"
 
 #include <math.h>
 #include <ctype.h>
@@ -1157,7 +1157,7 @@ uint32_t scriptAddGlobal(PKVM* vm, Script* script,
 void scriptAddMain(PKVM* vm, Script* script) {
   ASSERT(script->body == NULL, OOPS);
 
-  const char* fn_name = PK_IMPLICIT_MAIN_NAME;
+  const char* fn_name = IMPLICIT_MAIN_NAME;
   script->body = newFunction(vm, fn_name, (int)strlen(fn_name),
                              script, false, NULL/*TODO*/);
   script->body->arity = 0;

@@ -4,8 +4,8 @@
  *  Distributed Under The MIT License
  */
 
-#ifndef UTILS_H
-#define UTILS_H
+#ifndef PK_UTILS_H
+#define PK_UTILS_H
 
 #include "pk_internal.h"
 
@@ -34,7 +34,7 @@ uint32_t utilHashNumber(double num);
 // Generate a has code for [string].
 uint32_t utilHashString(const char* string);
 
-#endif // UTILS_H
+#endif // PK_UTILS_H
 
 /****************************************************************************
  * UTF8                                                                     *

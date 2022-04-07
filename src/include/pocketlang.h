@@ -55,10 +55,6 @@ extern "C" {
   #define PK_PUBLIC
 #endif
 
-// Name of the implicit function for a module. When a module is parsed all of
-// it's statements are wrapped around an implicit function with this name.
-#define PK_IMPLICIT_MAIN_NAME "$(SourceBody)"
-
 /*****************************************************************************/
 /* POCKETLANG TYPES                                                          */
 /*****************************************************************************/
@@ -256,6 +252,10 @@ PK_PUBLIC void pkModuleAddFunction(PKVM* vm, PkHandle* module,
 // return NULL.
 PK_PUBLIC PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
                                   const char* name);
+
+// Returns the main function of the [module]. When a module is compiled all of
+// it's statements are wrapped around an implicit main function.
+PK_PUBLIC PkHandle* pkGetMainFunction(PKVM* vm, PkHandle* module);
 
 // Compile the [module] with the provided [source]. Set the compiler options
 // with the the [options] argument or set to NULL for default options.

@@ -27,6 +27,7 @@ TEST_SUITE = {
 
   "Random Scripts" : (
     "random/lisp_eval.pk",
+    "random/string_algo.pk",
   ),
 
   "Examples": (

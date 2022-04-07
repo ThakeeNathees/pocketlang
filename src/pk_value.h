@@ -4,8 +4,8 @@
  *  Distributed Under The MIT License
  */
 
-#ifndef VAR_H
-#define VAR_H
+#ifndef PK_VALUE_H
+#define PK_VALUE_H
 
 #include "pk_buffers.h"
 #include "pk_internal.h"
@@ -23,18 +23,6 @@
  * smart pointers(C++17) to object with custom destructors, which makes the
  * programme inefficient for small types such null, bool, int and float.
  */
-
-// To use dynamic variably-sized struct with a tail array add an array at the
-// end of the struct with size DYNAMIC_TAIL_ARRAY. This method was a legacy
-// standard called "struct hack".
-#if defined(_MSC_VER) || __STDC_VERSION__ >= 199901L // std >= c99
-  #define DYNAMIC_TAIL_ARRAY
-#else
-  #define DYNAMIC_TAIL_ARRAY 0
-#endif
-
-// Number of maximum import statements in a script.
-#define MAX_IMPORT_SCRIPTS 16
 
 // There are 2 main implemenation of Var's internal representation. First one
 // is NaN-tagging, and the second one is union-tagging. (read below for more).
@@ -656,4 +644,4 @@ String * toRepr(PKVM * vm, const Var value);
 // Returns the truthy value of the var.
 bool toBool(Var v);
 
-#endif // VAR_H
+#endif // PK_VAR_H

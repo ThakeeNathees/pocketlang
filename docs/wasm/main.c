@@ -34,7 +34,7 @@ int runSource(const char* source) {
   PKVM* vm = pkNewVM(&config);
 
   PkStringPtr src = { source, NULL, NULL };
-  PkStringPtr module = { "$(TRY)", NULL, NULL };
+  PkStringPtr module = { "@(TRY)", NULL, NULL };
   PkResult result = pkInterpretSource(vm, src, module, NULL);
 
   pkFreeVM(vm);
