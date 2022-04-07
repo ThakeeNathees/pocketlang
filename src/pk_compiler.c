@@ -328,13 +328,20 @@ typedef struct sFunc {
 // A convenient macro to get the current function.
 #define _FN (compiler->func->ptr->fn)
 
-struct Compiler {
+// The context of the parsing phase for the compiler.
+typedef struct sParser {
 
+  // Parser need a reference of the PKVM to allocate strings (for string
+  // literals in the source) and to report error if there is any.
   PKVM* vm;
-  Compiler* next_compiler;
 
-  // Variables related to parsing.
-  const char* source;       //< Currently compiled source (Weak pointer).
+  // The [source] and the [file_path] are pointers to an allocated string.
+  // The parser doesn't keep references to that objects (to prevent them
+  // from garbage collected). It's the compiler's responsibility to keep the
+  // strings alive alive as long as the parser is alive.
+
+  const char* source;       //< Currently compiled source.
+  const char* file_path;    //< Path of the module (for reporting errors).
   const char* token_start;  //< Start of the currently parsed token.
   const char* current_char; //< Current char position in the source.
   int current_line;         //< Line number of the current char.
@@ -375,10 +382,42 @@ struct Compiler {
   const char* si_name_end;
   char si_name_quote;
 
+  // An array of implicitly forward declared names, which will be resolved once
+// the script is completely compiled.
+  ForwardName forwards[MAX_FORWARD_NAMES];
+  int forwards_count;
+
+  bool repl_mode;       //< True if compiling for REPL.
   bool has_errors;      //< True if any syntex error occurred at.
   bool need_more_lines; //< True if we need more lines in REPL mode.
 
+} Parser;
+
+struct Compiler {
+
+  // The parser of the compiler which contains all the parsing context for the
+  // current compilation.
+  Parser parser;
+
+  // Each module (ie. script) will be compiled with it's own compiler and a
+  // module is imported, a new compiler is created for that module and it'll
+  // be added to the linked list of compilers at the begining. PKVM will use
+  // this compiler reference as a root object (objects which won't garbage
+  // collected) and the chain of compilers will be marked at the marking phase.
+  //
+  // Here is how the chain change when a new compiler (compiler_3) created.
+  //
+  //     PKVM -> compiler_2 -> compiler_1 -> NULL
+  //
+  //     PKVM -> compiler_3 -> compiler_2 -> compiler_1 -> NULL
+  //
+  Compiler* next_compiler;
+
   const PkCompileOptions* options; //< To configure the compilation.
+
+  Script* script;  //< Current script.
+  Loop* loop;      //< Current loop.
+  Func* func;      //< Current function.
 
   // Current depth the compiler in (-1 means top level) 0 means function
   // level and > 0 is inner scope.
@@ -388,15 +427,6 @@ struct Compiler {
   int local_count; //< Number of locals in [locals].
 
   int stack_size;  //< Current size including locals ind temps.
-
-  Script* script;  //< Current script (a weak pointer).
-  Loop* loop;      //< Current loop.
-  Func* func;      //< Current function.
-
-  // An array of implicitly forward declared names, which will be resolved once
-  // the script is completely compiled.
-  ForwardName forwards[MAX_FORWARD_NAMES];
-  int forwards_count;
 
   // True if the last statement is a new local variable assignment. Because
   // the assignment is different than regular assignment and use this boolean
@@ -438,30 +468,86 @@ static OpInfo opcode_info[] = {
 };
 
 /*****************************************************************************/
+/* INITALIZATION FUNCTIONS                                                   */
+/*****************************************************************************/
+
+// This should be called once the compiler initialized (to access it's fields).
+static void parserInit(Parser* parser, PKVM* vm, Compiler* compiler,
+                       const char* source, const char* path) {
+
+  parser->vm = vm;
+
+  parser->source = source;
+  parser->file_path = path;
+  parser->token_start = parser->source;
+  parser->current_char = parser->source;
+  parser->current_line = 1;
+
+  parser->next.type = TK_ERROR;
+  parser->next.start = NULL;
+  parser->next.length = 0;
+  parser->next.line = 1;
+  parser->next.value = VAR_UNDEFINED;
+
+  parser->si_depth = 0;
+  parser->si_name_end = NULL;
+  parser->si_name_quote = '\0';
+
+  parser->forwards_count = 0;
+
+  parser->repl_mode = !!(compiler->options && compiler->options->repl_mode);
+  parser->has_errors = false;
+  parser->need_more_lines = false;
+}
+
+static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
+                         Script* script, const PkCompileOptions* options) {
+
+  compiler->next_compiler = NULL;
+
+  compiler->script = script;
+  compiler->options = options;
+
+  compiler->scope_depth = DEPTH_GLOBAL;
+  compiler->local_count = 0;
+  compiler->stack_size = 0;
+
+  compiler->loop = NULL;
+  compiler->func = NULL;
+
+  compiler->new_local = false;
+  compiler->is_last_call = false;
+
+  parserInit(&compiler->parser, vm, compiler, source, script->path->data);
+
+  // Cache the required built functions.
+  compiler->bifn_list_join = findBuiltinFunction(vm, "list_join", 9);
+  ASSERT(compiler->bifn_list_join >= 0, OOPS);
+}
+
+/*****************************************************************************/
 /* ERROR HANDLERS                                                            */
 /*****************************************************************************/
 
-// Internal error report function of the parseError() function.
-static void reportError(Compiler* compiler, const char* file, int line,
+// Internal error report function for lexing and parsing.
+static void reportError(Parser* parser, const char* file, int line,
                         const char* fmt, va_list args) {
 
   // On REPL mode only the first error is reported.
-  if (compiler->options && compiler->options->repl_mode &&
-      compiler->has_errors) {
+  if (parser->repl_mode && parser->has_errors) {
     return;
   }
 
-  compiler->has_errors = true;
+  parser->has_errors = true;
 
   // If the source is incomplete we're not printing an error message,
   // instead return PK_RESULT_UNEXPECTED_EOF to the host.
-  if (compiler->need_more_lines) {
-    ASSERT(compiler->options && compiler->options->repl_mode, OOPS);
+  if (parser->need_more_lines) {
+    ASSERT(parser->repl_mode, OOPS);
     return;
   }
 
-  PKVM* vm = compiler->vm;
-  if (vm->config.error_fn == NULL) return;
+  if (parser->vm->config.error_fn == NULL) return;
 
   // TODO: fix the buffer size. A non terminated large string could cause this
   // crash.
@@ -469,31 +555,31 @@ static void reportError(Compiler* compiler, const char* file, int line,
   char message[ERROR_MESSAGE_SIZE];
   int length = vsnprintf(message, sizeof(message), fmt, args);
   __ASSERT(length >= 0, "Error message buffer failed at vsnprintf().");
-  vm->config.error_fn(vm, PK_ERROR_COMPILE, file, line, message);
+  parser->vm->config.error_fn(parser->vm, PK_ERROR_COMPILE,
+                              file, line, message);
 }
 
 // Error caused at the middle of lexing (and TK_ERROR will be lexed instead).
-static void lexError(Compiler* compiler, const char* fmt, ...) {
+static void lexError(Parser* parser, const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  const char* path = compiler->script->path->data;
-  reportError(compiler, path, compiler->current_line, fmt, args);
+  reportError(parser, parser->file_path, parser->current_line, fmt, args);
   va_end(args);
 }
 
 // Error caused when parsing. The associated token assumed to be last consumed
-// which is [compiler->previous].
+// which is [parser->previous].
 static void parseError(Compiler* compiler, const char* fmt, ...) {
 
-  Token* token = &compiler->previous;
+  Token* token = &(compiler->parser.previous);
 
   // Lex errors would reported earlier by lexError and lexed a TK_ERROR token.
   if (token->type == TK_ERROR) return;
 
   va_list args;
   va_start(args, fmt);
-  const char* path = compiler->script->path->data;
-  reportError(compiler, path, token->line, fmt, args);
+  reportError(&(compiler->parser), compiler->parser.file_path,
+              token->line, fmt, args);
   va_end(args);
 }
 
@@ -503,8 +589,9 @@ static void parseError(Compiler* compiler, const char* fmt, ...) {
 static void resolveError(Compiler* compiler, int line, const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  const char* path = compiler->script->path->data;
-  reportError(compiler, path, line, fmt, args);
+  reportError(&(compiler->parser),
+              compiler->parser.file_path,
+              line, fmt, args);
   va_end(args);
 }
 
@@ -514,15 +601,14 @@ static void resolveError(Compiler* compiler, int line, const char* fmt, ...) {
 
 // Forward declaration of lexer methods.
 
-static char peekChar(Compiler* compiler);
-static char peekNextChar(Compiler* compiler);
-static char eatChar(Compiler* compiler);
-static void setNextValueToken(Compiler* compiler, TokenType type, Var value);
-static void setNextToken(Compiler* compiler, TokenType type);
-static bool matchChar(Compiler* compiler, char c);
-static bool matchLine(Compiler* compiler);
+static char peekChar(Parser* parser);
+static char peekNextChar(Parser* parser);
+static char eatChar(Parser* parser);
+static void setNextValueToken(Parser* parser, TokenType type, Var value);
+static void setNextToken(Parser* parser, TokenType type);
+static bool matchChar(Parser* parser, char c);
 
-static void eatString(Compiler* compiler, bool single_quote) {
+static void eatString(Parser* parser, bool single_quote) {
   pkByteBuffer buff;
   pkByteBufferInit(&buff);
 
@@ -532,117 +618,117 @@ static void eatString(Compiler* compiler, bool single_quote) {
   TokenType tk_type = TK_STRING;
 
   while (true) {
-    char c = eatChar(compiler);
+    char c = eatChar(parser);
 
     if (c == quote) break;
 
     if (c == '\0') {
-      lexError(compiler, "Non terminated string.");
+      lexError(parser, "Non terminated string.");
 
       // Null byte is required by TK_EOF.
-      compiler->current_char--;
+      parser->current_char--;
       break;
     }
 
     if (c == '$') {
-      if (compiler->si_depth < MAX_STR_INTERP_DEPTH) {
+      if (parser->si_depth < MAX_STR_INTERP_DEPTH) {
         tk_type = TK_STRING_INTERP;
 
-        char c = peekChar(compiler);
+        char c = peekChar(parser);
         if (c == '{') { // Expression interpolation (ie. "${expr}").
-          eatChar(compiler);
-          compiler->si_depth++;
-          compiler->si_quote[compiler->si_depth - 1] = quote;
-          compiler->si_open_brace[compiler->si_depth - 1] = 0;
+          eatChar(parser);
+          parser->si_depth++;
+          parser->si_quote[parser->si_depth - 1] = quote;
+          parser->si_open_brace[parser->si_depth - 1] = 0;
 
         } else { // Name Interpolation.
           if (!utilIsName(c)) {
-            lexError(compiler, "Expected '{' or identifier after '$'.");
+            lexError(parser, "Expected '{' or identifier after '$'.");
 
           } else { // Name interpolation (ie. "Hello $name!").
 
             // The pointer [ptr] will points to the character at where the
             // interpolated string ends. (ie. the next character after name
             // ends).
-            const char* ptr = compiler->current_char;
+            const char* ptr = parser->current_char;
             while (utilIsName(*(ptr)) || utilIsDigit(*(ptr))) {
               ptr++;
             }
-            compiler->si_name_end = ptr;
-            compiler->si_name_quote = quote;
+            parser->si_name_end = ptr;
+            parser->si_name_quote = quote;
           }
         }
 
       } else {
-        lexError(compiler, "Maximum interpolation level reached (can only "
+        lexError(parser, "Maximum interpolation level reached (can only "
                  "interpolate upto depth %d).", MAX_STR_INTERP_DEPTH);
       }
       break;
     }
 
     if (c == '\\') {
-      switch (eatChar(compiler)) {
-        case '"':  pkByteBufferWrite(&buff, compiler->vm, '"'); break;
-        case '\'': pkByteBufferWrite(&buff, compiler->vm, '\''); break;
-        case '\\': pkByteBufferWrite(&buff, compiler->vm, '\\'); break;
-        case 'n':  pkByteBufferWrite(&buff, compiler->vm, '\n'); break;
-        case 'r':  pkByteBufferWrite(&buff, compiler->vm, '\r'); break;
-        case 't':  pkByteBufferWrite(&buff, compiler->vm, '\t'); break;
+      switch (eatChar(parser)) {
+        case '"':  pkByteBufferWrite(&buff, parser->vm, '"'); break;
+        case '\'': pkByteBufferWrite(&buff, parser->vm, '\''); break;
+        case '\\': pkByteBufferWrite(&buff, parser->vm, '\\'); break;
+        case 'n':  pkByteBufferWrite(&buff, parser->vm, '\n'); break;
+        case 'r':  pkByteBufferWrite(&buff, parser->vm, '\r'); break;
+        case 't':  pkByteBufferWrite(&buff, parser->vm, '\t'); break;
 
         // '$' In pocketlang string is used for interpolation.
-        case '$':  pkByteBufferWrite(&buff, compiler->vm, '$'); break;
+        case '$':  pkByteBufferWrite(&buff, parser->vm, '$'); break;
 
         default:
-          lexError(compiler, "Error: invalid escape character");
+          lexError(parser, "Error: invalid escape character");
           break;
       }
     } else {
-      pkByteBufferWrite(&buff, compiler->vm, c);
+      pkByteBufferWrite(&buff, parser->vm, c);
     }
   }
 
   // '\0' will be added by varNewSring();
-  Var string = VAR_OBJ(newStringLength(compiler->vm, (const char*)buff.data,
+  Var string = VAR_OBJ(newStringLength(parser->vm, (const char*)buff.data,
                        (uint32_t)buff.count));
 
-  pkByteBufferClear(&buff, compiler->vm);
+  pkByteBufferClear(&buff, parser->vm);
 
-  setNextValueToken(compiler, tk_type, string);
+  setNextValueToken(parser, tk_type, string);
 }
 
 // Returns the current char of the compiler on.
-static char peekChar(Compiler* compiler) {
-  return *compiler->current_char;
+static char peekChar(Parser* parser) {
+  return *parser->current_char;
 }
 
 // Returns the next char of the compiler on.
-static char peekNextChar(Compiler* compiler) {
-  if (peekChar(compiler) == '\0') return '\0';
-  return *(compiler->current_char + 1);
+static char peekNextChar(Parser* parser) {
+  if (peekChar(parser) == '\0') return '\0';
+  return *(parser->current_char + 1);
 }
 
 // Advance the compiler by 1 char.
-static char eatChar(Compiler* compiler) {
-  char c = peekChar(compiler);
-  compiler->current_char++;
-  if (c == '\n') compiler->current_line++;
+static char eatChar(Parser* parser) {
+  char c = peekChar(parser);
+  parser->current_char++;
+  if (c == '\n') parser->current_line++;
   return c;
 }
 
 // Complete lexing an identifier name.
-static void eatName(Compiler* compiler) {
+static void eatName(Parser* parser) {
 
-  char c = peekChar(compiler);
+  char c = peekChar(parser);
   while (utilIsName(c) || utilIsDigit(c)) {
-    eatChar(compiler);
-    c = peekChar(compiler);
+    eatChar(parser);
+    c = peekChar(parser);
   }
 
-  const char* name_start = compiler->token_start;
+  const char* name_start = parser->token_start;
 
   TokenType type = TK_NAME;
 
-  int length = (int)(compiler->current_char - name_start);
+  int length = (int)(parser->current_char - name_start);
   for (int i = 0; _keywords[i].identifier != NULL; i++) {
     if (_keywords[i].length == length &&
       strncmp(name_start, _keywords[i].identifier, length) == 0) {
@@ -651,11 +737,11 @@ static void eatName(Compiler* compiler) {
     }
   }
 
-  setNextToken(compiler, type);
+  setNextToken(parser, type);
 }
 
 // Complete lexing a number literal.
-static void eatNumber(Compiler* compiler) {
+static void eatNumber(Parser* parser) {
 
 #define IS_HEX_CHAR(c)            \
   (('0' <= (c) && (c) <= '9')  || \
@@ -664,28 +750,28 @@ static void eatNumber(Compiler* compiler) {
 #define IS_BIN_CHAR(c) (((c) == '0') || ((c) == '1'))
 
   Var value = VAR_NULL; // The number value.
-  char c = *compiler->token_start;
+  char c = *parser->token_start;
 
   // Binary literal.
-  if (c == '0' && peekChar(compiler) == 'b') {
-    eatChar(compiler); // Consume '0b'
+  if (c == '0' && peekChar(parser) == 'b') {
+    eatChar(parser); // Consume '0b'
 
     uint64_t bin = 0;
-    c = peekChar(compiler);
+    c = peekChar(parser);
     if (!IS_BIN_CHAR(c)) {
-      lexError(compiler, "Invalid binary literal.");
+      lexError(parser, "Invalid binary literal.");
 
     } else {
       do {
         // Consume the next digit.
-        c = peekChar(compiler);
+        c = peekChar(parser);
         if (!IS_BIN_CHAR(c)) break;
-        eatChar(compiler);
+        eatChar(parser);
 
         // Check the length of the binary literal.
-        int length = (int)(compiler->current_char - compiler->token_start);
+        int length = (int)(parser->current_char - parser->token_start);
         if (length > STR_BIN_BUFF_SIZE - 2) { // -2: '-\0' 0b is in both side.
-          lexError(compiler, "Binary literal is too long.");
+          lexError(parser, "Binary literal is too long.");
           break;
         }
 
@@ -696,27 +782,27 @@ static void eatNumber(Compiler* compiler) {
     }
     value = VAR_NUM((double)bin);
 
-  } else if (c == '0' && peekChar(compiler) == 'x') {
-    eatChar(compiler); // Consume '0x'
+  } else if (c == '0' && peekChar(parser) == 'x') {
+    eatChar(parser); // Consume '0x'
 
     uint64_t hex = 0;
-    c = peekChar(compiler);
+    c = peekChar(parser);
 
     // The first digit should be either hex digit.
     if (!IS_HEX_CHAR(c)) {
-      lexError(compiler, "Invalid hex literal.");
+      lexError(parser, "Invalid hex literal.");
 
     } else {
       do {
         // Consume the next digit.
-        c = peekChar(compiler);
+        c = peekChar(parser);
         if (!IS_HEX_CHAR(c)) break;
-        eatChar(compiler);
+        eatChar(parser);
 
         // Check the length of the binary literal.
-        int length = (int)(compiler->current_char - compiler->token_start);
+        int length = (int)(parser->current_char - parser->token_start);
         if (length > STR_HEX_BUFF_SIZE - 2) { // -2: '-\0' 0x is in both side.
-          lexError(compiler, "Hex literal is too long.");
+          lexError(parser, "Hex literal is too long.");
           break;
         }
 
@@ -732,100 +818,100 @@ static void eatNumber(Compiler* compiler) {
     }
 
   } else { // Regular number literal.
-    while (utilIsDigit(peekChar(compiler))) {
-      eatChar(compiler);
+    while (utilIsDigit(peekChar(parser))) {
+      eatChar(parser);
     }
 
-    if (peekChar(compiler) == '.' && utilIsDigit(peekNextChar(compiler))) {
-      matchChar(compiler, '.');
-      while (utilIsDigit(peekChar(compiler))) {
-        eatChar(compiler);
+    if (peekChar(parser) == '.' && utilIsDigit(peekNextChar(parser))) {
+      matchChar(parser, '.');
+      while (utilIsDigit(peekChar(parser))) {
+        eatChar(parser);
       }
     }
 
     // Parse if in scientific notation format (MeN == M * 10 ** N).
-    if (matchChar(compiler, 'e') || matchChar(compiler, 'E')) {
+    if (matchChar(parser, 'e') || matchChar(parser, 'E')) {
 
-      if (peekChar(compiler) == '+' || peekChar(compiler) == '-') {
-        eatChar(compiler);
+      if (peekChar(parser) == '+' || peekChar(parser) == '-') {
+        eatChar(parser);
       }
 
-      if (!utilIsDigit(peekChar(compiler))) {
-        lexError(compiler, "Invalid number literal.");
+      if (!utilIsDigit(peekChar(parser))) {
+        lexError(parser, "Invalid number literal.");
 
       } else { // Eat the exponent.
-        while (utilIsDigit(peekChar(compiler))) eatChar(compiler);
+        while (utilIsDigit(peekChar(parser))) eatChar(parser);
       }
     }
 
     errno = 0;
-    value = VAR_NUM(atof(compiler->token_start));
+    value = VAR_NUM(atof(parser->token_start));
     if (errno == ERANGE) {
-      const char* start = compiler->token_start;
-      int len = (int)(compiler->current_char - start);
-      lexError(compiler, "Number literal is too large (%.*s).", len, start);
+      const char* start = parser->token_start;
+      int len = (int)(parser->current_char - start);
+      lexError(parser, "Number literal is too large (%.*s).", len, start);
       value = VAR_NUM(0);
     }
   }
 
-  setNextValueToken(compiler, TK_NUMBER, value);
+  setNextValueToken(parser, TK_NUMBER, value);
 #undef IS_BIN_CHAR
 #undef IS_HEX_CHAR
 }
 
 // Read and ignore chars till it reach new line or EOF.
-static void skipLineComment(Compiler* compiler) {
+static void skipLineComment(Parser* parser) {
   char c;
-  while ((c = peekChar(compiler)) != '\0') {
+  while ((c = peekChar(parser)) != '\0') {
     // Don't eat new line it's not part of the comment.
     if (c == '\n') return;
-    eatChar(compiler);
+    eatChar(parser);
   }
 }
 
 // If the current char is [c] consume it and advance char by 1 and returns
 // true otherwise returns false.
-static bool matchChar(Compiler* compiler, char c) {
-  if (peekChar(compiler) != c) return false;
-  eatChar(compiler);
+static bool matchChar(Parser* parser, char c) {
+  if (peekChar(parser) != c) return false;
+  eatChar(parser);
   return true;
 }
 
 // If the current char is [c] eat the char and add token two otherwise eat
 // append token one.
-static void setNextTwoCharToken(Compiler* compiler, char c, TokenType one,
+static void setNextTwoCharToken(Parser* parser, char c, TokenType one,
   TokenType two) {
-  if (matchChar(compiler, c)) {
-    setNextToken(compiler, two);
+  if (matchChar(parser, c)) {
+    setNextToken(parser, two);
   } else {
-    setNextToken(compiler, one);
+    setNextToken(parser, one);
   }
 }
 
 // Initialize the next token as the type.
-static void setNextToken(Compiler* compiler, TokenType type) {
-  Token* next = &compiler->next;
+static void setNextToken(Parser* parser, TokenType type) {
+  Token* next = &parser->next;
   next->type = type;
-  next->start = compiler->token_start;
-  next->length = (int)(compiler->current_char - compiler->token_start);
-  next->line = compiler->current_line - ((type == TK_LINE) ? 1 : 0);
+  next->start = parser->token_start;
+  next->length = (int)(parser->current_char - parser->token_start);
+  next->line = parser->current_line - ((type == TK_LINE) ? 1 : 0);
 }
 
 // Initialize the next token as the type and assign the value.
-static void setNextValueToken(Compiler* compiler, TokenType type, Var value) {
-  setNextToken(compiler, type);
-  compiler->next.value = value;
+static void setNextValueToken(Parser* parser, TokenType type, Var value) {
+  setNextToken(parser, type);
+  parser->next.value = value;
 }
 
 // Lex the next token and set it as the next token.
-static void lexToken(Compiler* compiler) {
-  compiler->previous = compiler->current;
-  compiler->current = compiler->next;
+static void lexToken(Parser* parser) {
+  parser->previous = parser->current;
+  parser->current = parser->next;
 
-  if (compiler->current.type == TK_EOF) return;
+  if (parser->current.type == TK_EOF) return;
 
-  while (peekChar(compiler) != '\0') {
-    compiler->token_start = compiler->current_char;
+  while (peekChar(parser) != '\0') {
+    parser->token_start = parser->current_char;
 
     // If we're parsing a name interpolation and the current character is where
     // the name end, continue parsing the string.
@@ -833,182 +919,182 @@ static void lexToken(Compiler* compiler) {
     //        "Hello $name!"
     //                    ^-- si_name_end
     //
-    if (compiler->si_name_end != NULL) {
-      if (compiler->current_char == compiler->si_name_end) {
-        compiler->si_name_end = NULL;
-        eatString(compiler, compiler->si_name_quote == '\'');
+    if (parser->si_name_end != NULL) {
+      if (parser->current_char == parser->si_name_end) {
+        parser->si_name_end = NULL;
+        eatString(parser, parser->si_name_quote == '\'');
         return;
       } else {
-        ASSERT(compiler->current_char < compiler->si_name_end, OOPS);
+        ASSERT(parser->current_char < parser->si_name_end, OOPS);
       }
     }
 
-    char c = eatChar(compiler);
+    char c = eatChar(parser);
     switch (c) {
 
       case '{': {
 
         // If we're inside an interpolation, increase the open brace count
         // of the current depth.
-        if (compiler->si_depth > 0) {
-          compiler->si_open_brace[compiler->si_depth - 1]++;
+        if (parser->si_depth > 0) {
+          parser->si_open_brace[parser->si_depth - 1]++;
         }
-        setNextToken(compiler, TK_LBRACE);
+        setNextToken(parser, TK_LBRACE);
         return;
       }
 
       case '}': {
         // If we're inside of an interpolated string.
-        if (compiler->si_depth > 0) {
+        if (parser->si_depth > 0) {
 
           // No open braces, then end the expression and complete the string.
-          if (compiler->si_open_brace[compiler->si_depth - 1] == 0) {
+          if (parser->si_open_brace[parser->si_depth - 1] == 0) {
 
-            char quote = compiler->si_quote[compiler->si_depth - 1];
-            compiler->si_depth--; //< Exit the depth.
-            eatString(compiler, quote == '\'');
+            char quote = parser->si_quote[parser->si_depth - 1];
+            parser->si_depth--; //< Exit the depth.
+            eatString(parser, quote == '\'');
             return;
 
           } else { // Decrease the open brace at the current depth.
-            compiler->si_open_brace[compiler->si_depth - 1]--;
+            parser->si_open_brace[parser->si_depth - 1]--;
           }
         }
 
-        setNextToken(compiler, TK_RBRACE);
+        setNextToken(parser, TK_RBRACE);
         return;
       }
 
-      case ',': setNextToken(compiler, TK_COMMA); return;
-      case ':': setNextToken(compiler, TK_COLLON); return;
-      case ';': setNextToken(compiler, TK_SEMICOLLON); return;
-      case '#': skipLineComment(compiler); break;
-      case '(': setNextToken(compiler, TK_LPARAN); return;
-      case ')': setNextToken(compiler, TK_RPARAN); return;
-      case '[': setNextToken(compiler, TK_LBRACKET); return;
-      case ']': setNextToken(compiler, TK_RBRACKET); return;
+      case ',': setNextToken(parser, TK_COMMA); return;
+      case ':': setNextToken(parser, TK_COLLON); return;
+      case ';': setNextToken(parser, TK_SEMICOLLON); return;
+      case '#': skipLineComment(parser); break;
+      case '(': setNextToken(parser, TK_LPARAN); return;
+      case ')': setNextToken(parser, TK_RPARAN); return;
+      case '[': setNextToken(parser, TK_LBRACKET); return;
+      case ']': setNextToken(parser, TK_RBRACKET); return;
       case '%':
-        setNextTwoCharToken(compiler, '=', TK_PERCENT, TK_MODEQ);
+        setNextTwoCharToken(parser, '=', TK_PERCENT, TK_MODEQ);
         return;
 
-      case '~': setNextToken(compiler, TK_TILD); return;
+      case '~': setNextToken(parser, TK_TILD); return;
 
       case '&':
-        setNextTwoCharToken(compiler, '=', TK_AMP, TK_ANDEQ);
+        setNextTwoCharToken(parser, '=', TK_AMP, TK_ANDEQ);
         return;
 
       case '|':
-        setNextTwoCharToken(compiler, '=', TK_PIPE, TK_OREQ);
+        setNextTwoCharToken(parser, '=', TK_PIPE, TK_OREQ);
         return;
 
       case '^':
-        setNextTwoCharToken(compiler, '=', TK_CARET, TK_XOREQ);
+        setNextTwoCharToken(parser, '=', TK_CARET, TK_XOREQ);
         return;
 
-      case '\n': setNextToken(compiler, TK_LINE); return;
+      case '\n': setNextToken(parser, TK_LINE); return;
 
       case ' ':
       case '\t':
       case '\r': {
-        c = peekChar(compiler);
+        c = peekChar(parser);
         while (c == ' ' || c == '\t' || c == '\r') {
-          eatChar(compiler);
-          c = peekChar(compiler);
+          eatChar(parser);
+          c = peekChar(parser);
         }
         break;
       }
 
       case '.':
-        if (matchChar(compiler, '.')) {
-          setNextToken(compiler, TK_DOTDOT); // '..'
-        } else if (utilIsDigit(peekChar(compiler))) {
-          eatChar(compiler);   // Consume the decimal point.
-          eatNumber(compiler); // Consume the rest of the number
+        if (matchChar(parser, '.')) {
+          setNextToken(parser, TK_DOTDOT); // '..'
+        } else if (utilIsDigit(peekChar(parser))) {
+          eatChar(parser);   // Consume the decimal point.
+          eatNumber(parser); // Consume the rest of the number
         } else {
-          setNextToken(compiler, TK_DOT);    // '.'
+          setNextToken(parser, TK_DOT);    // '.'
         }
         return;
 
       case '=':
-        setNextTwoCharToken(compiler, '=', TK_EQ, TK_EQEQ);
+        setNextTwoCharToken(parser, '=', TK_EQ, TK_EQEQ);
         return;
 
       case '!':
-        setNextTwoCharToken(compiler, '=', TK_NOT, TK_NOTEQ);
+        setNextTwoCharToken(parser, '=', TK_NOT, TK_NOTEQ);
         return;
 
       case '>':
-        if (matchChar(compiler, '>')) {
-          if (matchChar(compiler, '=')) {
-            setNextToken(compiler, TK_SRIGHTEQ);
+        if (matchChar(parser, '>')) {
+          if (matchChar(parser, '=')) {
+            setNextToken(parser, TK_SRIGHTEQ);
           } else {
-            setNextToken(compiler, TK_SRIGHT);
+            setNextToken(parser, TK_SRIGHT);
           }
         } else {
-          setNextTwoCharToken(compiler, '=', TK_GT, TK_GTEQ);
+          setNextTwoCharToken(parser, '=', TK_GT, TK_GTEQ);
         }
         return;
 
       case '<':
-        if (matchChar(compiler, '<')) {
-          if (matchChar(compiler, '=')) {
-            setNextToken(compiler, TK_SLEFTEQ);
+        if (matchChar(parser, '<')) {
+          if (matchChar(parser, '=')) {
+            setNextToken(parser, TK_SLEFTEQ);
           } else {
-            setNextToken(compiler, TK_SLEFT);
+            setNextToken(parser, TK_SLEFT);
           }
         } else {
-          setNextTwoCharToken(compiler, '=', TK_LT, TK_LTEQ);
+          setNextTwoCharToken(parser, '=', TK_LT, TK_LTEQ);
         }
         return;
 
       case '+':
-        setNextTwoCharToken(compiler, '=', TK_PLUS, TK_PLUSEQ);
+        setNextTwoCharToken(parser, '=', TK_PLUS, TK_PLUSEQ);
         return;
 
       case '-':
-        if (matchChar(compiler, '=')) {
-          setNextToken(compiler, TK_MINUSEQ);  // '-='
-        } else if (matchChar(compiler, '>')) {
-          setNextToken(compiler, TK_ARROW);    // '->'
+        if (matchChar(parser, '=')) {
+          setNextToken(parser, TK_MINUSEQ);  // '-='
+        } else if (matchChar(parser, '>')) {
+          setNextToken(parser, TK_ARROW);    // '->'
         } else {
-          setNextToken(compiler, TK_MINUS);    // '-'
+          setNextToken(parser, TK_MINUS);    // '-'
         }
         return;
 
       case '*':
-        setNextTwoCharToken(compiler, '=', TK_STAR, TK_STAREQ);
+        setNextTwoCharToken(parser, '=', TK_STAR, TK_STAREQ);
         return;
 
       case '/':
-        setNextTwoCharToken(compiler, '=', TK_FSLASH, TK_DIVEQ);
+        setNextTwoCharToken(parser, '=', TK_FSLASH, TK_DIVEQ);
         return;
 
-      case '"': eatString(compiler, false); return;
+      case '"': eatString(parser, false); return;
 
-      case '\'': eatString(compiler, true); return;
+      case '\'': eatString(parser, true); return;
 
       default: {
 
         if (utilIsDigit(c)) {
-          eatNumber(compiler);
+          eatNumber(parser);
 
         } else if (utilIsName(c)) {
-          eatName(compiler);
+          eatName(parser);
 
         } else {
           if (c >= 32 && c <= 126) {
-            lexError(compiler, "Invalid character '%c'", c);
+            lexError(parser, "Invalid character '%c'", c);
           } else {
-            lexError(compiler, "Invalid byte 0x%x", (uint8_t)c);
+            lexError(parser, "Invalid byte 0x%x", (uint8_t)c);
           }
-          setNextToken(compiler, TK_ERROR);
+          setNextToken(parser, TK_ERROR);
         }
         return;
       }
     }
   }
 
-  setNextToken(compiler, TK_EOF);
-  compiler->next.start = compiler->current_char;
+  setNextToken(parser, TK_EOF);
+  parser->next.start = parser->current_char;
 }
 
 /*****************************************************************************/
@@ -1016,30 +1102,31 @@ static void lexToken(Compiler* compiler) {
 /*****************************************************************************/
 
 // Returns current token type without lexing a new token.
-static TokenType peek(Compiler* self) {
-  return self->current.type;
+static TokenType peek(Compiler* compiler) {
+  return compiler->parser.current.type;
 }
 
 // Consume the current token if it's expected and lex for the next token
 // and return true otherwise return false.
-static bool match(Compiler* self, TokenType expected) {
-  if (peek(self) != expected) return false;
-  lexToken(self);
+static bool match(Compiler* compiler, TokenType expected) {
+  if (peek(compiler) != expected) return false;
+  lexToken(&(compiler->parser));
   return true;
 }
 
 // Consume the the current token and if it's not [expected] emits error log
 // and continue parsing for more error logs.
-static void consume(Compiler* self, TokenType expected, const char* err_msg) {
+static void consume(Compiler* compiler, TokenType expected,
+                    const char* err_msg) {
 
-  lexToken(self);
-  if (self->previous.type != expected) {
-    parseError(self, "%s", err_msg);
+  lexToken(&(compiler->parser));
+  if (compiler->parser.previous.type != expected) {
+    parseError(compiler, "%s", err_msg);
 
     // If the next token is expected discard the current to minimize
     // cascaded errors and continue parsing.
-    if (peek(self) == expected) {
-      lexToken(self);
+    if (peek(compiler) == expected) {
+      lexToken(&(compiler->parser));
     }
   }
 }
@@ -1051,16 +1138,15 @@ static bool matchLine(Compiler* compiler) {
 
   if (peek(compiler) == TK_LINE) {
     while (peek(compiler) == TK_LINE)
-      lexToken(compiler);
+      lexToken(&(compiler->parser));
     consumed = true;
   }
 
   // If we're running on REPL mode, at the EOF and compile time error occurred,
   // signal the host to get more lines and try re-compiling it.
-  if (compiler->options && compiler->options->repl_mode &&
-    !compiler->has_errors) {
+  if (compiler->parser.repl_mode && !compiler->parser.has_errors) {
     if (peek(compiler) == TK_EOF) {
-      compiler->need_more_lines = true;
+      compiler->parser.need_more_lines = true;
     }
   }
 
@@ -1137,7 +1223,7 @@ static bool matchAssignment(Compiler* compiler) {
 }
 
 /*****************************************************************************/
-/* NAME SEARCH                                                               */
+/* NAME SEARCH (AT COMPILATION PHASE)                                        */
 /*****************************************************************************/
 
 // Result type for an identifier definition.
@@ -1165,7 +1251,7 @@ typedef struct {
 
 // Will check if the name already defined.
 static NameSearchResult compilerSearchName(Compiler* compiler,
-  const char* name, uint32_t length) {
+                                           const char* name, uint32_t length) {
 
   NameSearchResult result;
   result.type = NAME_NOT_DEFINED;
@@ -1216,7 +1302,7 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
   }
 
   // Search through builtin functions.
-  index = findBuiltinFunction(compiler->vm, name, length);
+  index = findBuiltinFunction(compiler->parser.vm, name, length);
   if (index != -1) {
     result.type = NAME_BUILTIN;
     result.index = index;
@@ -1394,7 +1480,7 @@ static void emitPushVariable(Compiler* compiler, int index, bool global) {
 }
 
 static void exprLiteral(Compiler* compiler) {
-  Token* value = &compiler->previous;
+  Token* value = &compiler->parser.previous;
   int index = compilerAddConstant(compiler, value->value);
   emitOpcode(compiler, OP_PUSH_CONSTANT);
   emitShort(compiler, index);
@@ -1434,9 +1520,9 @@ static void exprInterpolation(Compiler* compiler) {
   // TK_STRING. Apped it.
   // Optimize case last string could be empty. Skip it.
   consume(compiler, TK_STRING, "Non terminated interpolated string.");
-  if (compiler->previous.type == TK_STRING /* != if syntax error. */) {
-    ASSERT(IS_OBJ_TYPE(compiler->previous.value, OBJ_STRING), OOPS);
-    String* str = (String*)AS_OBJ(compiler->previous.value);
+  if (compiler->parser.previous.type == TK_STRING /* != if syntax error. */) {
+    ASSERT(IS_OBJ_TYPE(compiler->parser.previous.value, OBJ_STRING), OOPS);
+    String* str = (String*)AS_OBJ(compiler->parser.previous.value);
     if (str->length != 0) {
       exprLiteral(compiler);
       emitOpcode(compiler, OP_LIST_APPEND);
@@ -1466,9 +1552,9 @@ static void exprFunc(Compiler* compiler) {
 // Local/global variables, script/native/builtin functions name.
 static void exprName(Compiler* compiler) {
 
-  const char* start = compiler->previous.start;
-  int length = compiler->previous.length;
-  int line = compiler->previous.line;
+  const char* start = compiler->parser.previous.start;
+  int length = compiler->parser.previous.length;
+  int line = compiler->parser.previous.line;
   NameSearchResult result = compilerSearchName(compiler, start, length);
 
   if (result.type == NAME_NOT_DEFINED) {
@@ -1491,8 +1577,8 @@ static void exprName(Compiler* compiler) {
 
         // Ensure the local variable's index is equals to the stack top index.
         // If the compiler has errors, we cannot and don't have to assert.
-        ASSERT(compiler->has_errors || (compiler->stack_size - 1) == index,
-               OOPS);
+        ASSERT(compiler->parser.has_errors ||
+               (compiler->stack_size - 1) == index, OOPS);
 
         // We don't need to call emitStoreVariable (which emit STORE_LOCAL)
         // because the local is already at it's location in the stack, we just
@@ -1520,7 +1606,7 @@ static void exprName(Compiler* compiler) {
         if (compiler->l_value && matchAssignment(compiler)) {
           skipNewLines(compiler);
 
-          TokenType assignment = compiler->previous.type;
+          TokenType assignment = compiler->parser.previous.type;
           if (assignment != TK_EQ) {
             emitPushVariable(compiler, result.index, is_global);
             compileExpression(compiler);
@@ -1593,7 +1679,7 @@ void exprAnd(Compiler* compiler) {
 }
 
 static void exprBinaryOp(Compiler* compiler) {
-  TokenType op = compiler->previous.type;
+  TokenType op = compiler->parser.previous.type;
   skipNewLines(compiler);
   parsePrecedence(compiler, (Precedence)(getRule(op)->precedence + 1));
 
@@ -1622,7 +1708,7 @@ static void exprBinaryOp(Compiler* compiler) {
 }
 
 static void exprUnaryOp(Compiler* compiler) {
-  TokenType op = compiler->previous.type;
+  TokenType op = compiler->parser.previous.type;
   skipNewLines(compiler);
   parsePrecedence(compiler, (Precedence)(PREC_UNARY + 1));
 
@@ -1709,16 +1795,17 @@ static void exprCall(Compiler* compiler) {
 
 static void exprAttrib(Compiler* compiler) {
   consume(compiler, TK_NAME, "Expected an attribute name after '.'.");
-  const char* name = compiler->previous.start;
-  int length = compiler->previous.length;
+  const char* name = compiler->parser.previous.start;
+  int length = compiler->parser.previous.length;
 
   // Store the name in script's names.
-  int index = scriptAddName(compiler->script, compiler->vm, name, length);
+  int index = scriptAddName(compiler->script, compiler->parser.vm,
+                            name, length);
 
   if (compiler->l_value && matchAssignment(compiler)) {
     skipNewLines(compiler);
 
-    TokenType assignment = compiler->previous.type;
+    TokenType assignment = compiler->parser.previous.type;
     if (assignment != TK_EQ) {
       emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
       emitShort(compiler, index);
@@ -1744,7 +1831,7 @@ static void exprSubscript(Compiler* compiler) {
   if (compiler->l_value && matchAssignment(compiler)) {
     skipNewLines(compiler);
 
-    TokenType assignment = compiler->previous.type;
+    TokenType assignment = compiler->parser.previous.type;
     if (assignment != TK_EQ) {
       emitOpcode(compiler, OP_GET_SUBSCRIPT_KEEP);
       compileExpression(compiler);
@@ -1762,7 +1849,7 @@ static void exprSubscript(Compiler* compiler) {
 }
 
 static void exprValue(Compiler* compiler) {
-  TokenType op = compiler->previous.type;
+  TokenType op = compiler->parser.previous.type;
   switch (op) {
     case TK_NULL:  emitOpcode(compiler, OP_PUSH_NULL);  break;
     case TK_TRUE:  emitOpcode(compiler, OP_PUSH_TRUE);  break;
@@ -1773,8 +1860,8 @@ static void exprValue(Compiler* compiler) {
 }
 
 static void parsePrecedence(Compiler* compiler, Precedence precedence) {
-  lexToken(compiler);
-  GrammarFn prefix = getRule(compiler->previous.type)->prefix;
+  lexToken(&(compiler->parser));
+  GrammarFn prefix = getRule(compiler->parser.previous.type)->prefix;
 
   if (prefix == NULL) {
     parseError(compiler, "Expected an expression.");
@@ -1790,10 +1877,10 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
   // once the call expression is parsed.
   compiler->is_last_call = false;
 
-  while (getRule(compiler->current.type)->precedence >= precedence) {
-    lexToken(compiler);
+  while (getRule(compiler->parser.current.type)->precedence >= precedence) {
+    lexToken(&(compiler->parser));
 
-    TokenType op = compiler->previous.type;
+    TokenType op = compiler->parser.previous.type;
     GrammarFn infix = getRule(op)->infix;
 
     infix(compiler);
@@ -1807,47 +1894,6 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
 /*****************************************************************************/
 /* COMPILING                                                                 */
 /*****************************************************************************/
-
-static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
-                         Script* script, const PkCompileOptions* options) {
-
-  compiler->vm = vm;
-  compiler->next_compiler = NULL;
-
-  compiler->source = source;
-  compiler->script = script;
-  compiler->token_start = source;
-  compiler->has_errors = false;
-  compiler->need_more_lines = false;
-  compiler->options = options;
-
-  compiler->current_char = source;
-  compiler->current_line = 1;
-  compiler->next.type = TK_ERROR;
-  compiler->next.start = NULL;
-  compiler->next.length = 0;
-  compiler->next.line = 1;
-  compiler->next.value = VAR_UNDEFINED;
-
-  compiler->si_depth = 0;
-  compiler->si_name_end = NULL;
-  compiler->si_name_quote = '\0';
-
-  compiler->scope_depth = DEPTH_GLOBAL;
-  compiler->local_count = 0;
-  compiler->stack_size = 0;
-
-  compiler->loop = NULL;
-  compiler->func = NULL;
-
-  compiler->forwards_count = 0;
-  compiler->new_local = false;
-  compiler->is_last_call = false;
-
-  // Cache the required built functions.
-  compiler->bifn_list_join = findBuiltinFunction(compiler->vm, "list_join", 9);
-  ASSERT(compiler->bifn_list_join >= 0, OOPS);
-}
 
 // Add a variable and return it's index to the context. Assumes that the
 // variable name is unique and not defined before in the current scope.
@@ -1879,7 +1925,7 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
   // Add the variable and return it's index.
 
   if (compiler->scope_depth == DEPTH_GLOBAL) {
-    return (int)scriptAddGlobal(compiler->vm, compiler->script,
+    return (int)scriptAddGlobal(compiler->parser.vm, compiler->script,
                                 name, length, VAR_NULL);
   } else {
     Local* local = &compiler->locals [compiler->local_count];
@@ -1895,13 +1941,14 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
 
 static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
                                const char* name, int length, int line) {
-  if (compiler->forwards_count == MAX_FORWARD_NAMES) {
+  if (compiler->parser.forwards_count == MAX_FORWARD_NAMES) {
     parseError(compiler, "A script should contain at most %d implicit forward "
                "function declarations.", MAX_FORWARD_NAMES);
     return;
   }
 
-  ForwardName* forward = &compiler->forwards[compiler->forwards_count++];
+  ForwardName* forward = &compiler->parser.forwards[
+                           compiler->parser.forwards_count++];
   forward->instruction = instruction;
   forward->func = fn;
   forward->name = name;
@@ -1921,7 +1968,7 @@ static int compilerAddConstant(Compiler* compiler, Var value) {
 
   // Add new constant to script.
   if (literals->count < MAX_CONSTANTS) {
-    pkVarBufferWrite(literals, compiler->vm, value);
+    pkVarBufferWrite(literals, compiler->parser.vm, value);
   } else {
     parseError(compiler, "A script should contain at most %d "
                "unique constants.", MAX_CONSTANTS);
@@ -1942,7 +1989,7 @@ static void compilerChangeStack(Compiler* compiler, int num) {
   // If the compiler has error (such as undefined name), that will not popped
   // because of the semantic error but it'll be popped once the expression
   // parsing is done. So it's possible for negative size in error.
-  if (!compiler->has_errors) ASSERT(compiler->stack_size >= 0, OOPS);
+  if (!compiler->parser.has_errors) ASSERT(compiler->stack_size >= 0, OOPS);
 
   if (compiler->stack_size > _FN->stack_size) {
     _FN->stack_size = compiler->stack_size;
@@ -2003,10 +2050,10 @@ static void compilerPopFunc(Compiler* compiler) {
 // Emit a single byte and return it's index.
 static int emitByte(Compiler* compiler, int byte) {
 
-  pkByteBufferWrite(&_FN->opcodes, compiler->vm,
+  pkByteBufferWrite(&_FN->opcodes, compiler->parser.vm,
                     (uint8_t)byte);
-  pkUintBufferWrite(&_FN->oplines, compiler->vm,
-                   compiler->previous.line);
+  pkUintBufferWrite(&_FN->oplines, compiler->parser.vm,
+                   compiler->parser.previous.line);
   return (int)_FN->opcodes.count - 1;
 }
 
@@ -2101,15 +2148,15 @@ static int compileClass(Compiler* compiler) {
 
   // Consume the name of the type.
   consume(compiler, TK_NAME, "Expected a type name.");
-  const char* name = compiler->previous.start;
-  int name_len = compiler->previous.length;
+  const char* name = compiler->parser.previous.start;
+  int name_len = compiler->parser.previous.length;
   NameSearchResult result = compilerSearchName(compiler, name, name_len);
   if (result.type != NAME_NOT_DEFINED) {
     parseError(compiler, "Name '%.*s' already exists.", name_len, name);
   }
 
   // Create a new class.
-  Class* cls = newClass(compiler->vm, compiler->script,
+  Class* cls = newClass(compiler->parser.vm, compiler->script,
                         name, (uint32_t)name_len);
   cls->ctor->arity = 0;
 
@@ -2142,10 +2189,10 @@ static int compileClass(Compiler* compiler) {
 
     // Compile field name.
     consume(compiler, TK_NAME, "Expected a type name.");
-    const char* f_name = compiler->previous.start;
-    int f_len = compiler->previous.length;
+    const char* f_name = compiler->parser.previous.start;
+    int f_len = compiler->parser.previous.length;
 
-    uint32_t f_index = scriptAddName(compiler->script, compiler->vm,
+    uint32_t f_index = scriptAddName(compiler->script, compiler->parser.vm,
                                      f_name, f_len);
 
     String* new_name = compiler->script->names.data[f_index];
@@ -2157,7 +2204,7 @@ static int compileClass(Compiler* compiler) {
       }
     }
 
-    pkUintBufferWrite(&cls->field_names, compiler->vm, f_index);
+    pkUintBufferWrite(&cls->field_names, compiler->parser.vm, f_index);
 
     // Consume the assignment expression.
     consume(compiler, TK_EQ, "Expected an assignment after field name.");
@@ -2195,8 +2242,8 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
 
   if (fn_type != FN_LITERAL) {
     consume(compiler, TK_NAME, "Expected a function name.");
-    name = compiler->previous.start;
-    name_length = compiler->previous.length;
+    name = compiler->parser.previous.start;
+    name_length = compiler->parser.previous.length;
     NameSearchResult result = compilerSearchName(compiler, name, name_length);
     if (result.type != NAME_NOT_DEFINED) {
       parseError(compiler, "Name '%.*s' already exists.", name_length, name);
@@ -2207,7 +2254,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
     name_length = (int)strlen(name);
   }
 
-  Function* func = newFunction(compiler->vm, name, name_length,
+  Function* func = newFunction(compiler->parser.vm, name, name_length,
                                compiler->script, fn_type == FN_NATIVE, NULL);
   int fn_index = (int)compiler->script->functions.count - 1;
   if (fn_index == MAX_FUNCTIONS) {
@@ -2229,8 +2276,8 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
       consume(compiler, TK_NAME, "Expected a parameter name.");
       argc++;
 
-      const char* param_name = compiler->previous.start;
-      uint32_t param_len = compiler->previous.length;
+      const char* param_name = compiler->parser.previous.start;
+      uint32_t param_len = compiler->parser.previous.length;
 
       // TODO: move this to a functions.
       bool predefined = false;
@@ -2248,7 +2295,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
       }
 
       compilerAddVariable(compiler, param_name, param_len,
-                          compiler->previous.line);
+                          compiler->parser.previous.line);
 
     } while (match(compiler, TK_COMMA));
 
@@ -2323,7 +2370,7 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
 static Script* importFile(Compiler* compiler, const char* path) {
   ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
-  PKVM* vm = compiler->vm;
+  PKVM* vm = compiler->parser.vm;
 
   // Resolve the path.
   PkStringPtr resolved = { path, NULL, NULL };
@@ -2338,7 +2385,7 @@ static Script* importFile(Compiler* compiler, const char* path) {
   }
 
   // Create new string for the resolved path. And free the resolved path.
-  int index = (int)scriptAddName(compiler->script, compiler->vm,
+  int index = (int)scriptAddName(compiler->script, compiler->parser.vm,
                            resolved.string, (uint32_t)strlen(resolved.string));
   String* path_name = compiler->script->names.data[index];
   if (resolved.on_done != NULL) resolved.on_done(vm, resolved);
@@ -2404,11 +2451,11 @@ static Script* importCoreLib(Compiler* compiler, const char* name_start,
 
   // Add the name to the script's name buffer, we need it as a key to the
   // vm's script cache.
-  int index = (int)scriptAddName(compiler->script, compiler->vm,
+  int index = (int)scriptAddName(compiler->script, compiler->parser.vm,
                                  name_start, name_length);
   String* module = compiler->script->names.data[index];
 
-  Var entry = mapGet(compiler->vm->core_libs, VAR_OBJ(module));
+  Var entry = mapGet(compiler->parser.vm->core_libs, VAR_OBJ(module));
   if (IS_UNDEF(entry)) {
     parseError(compiler, "No module named '%s' exists.", module->data);
     return NULL;
@@ -2430,11 +2477,11 @@ static inline Script* compilerImport(Compiler* compiler) {
   // Get the script (from core libs or vm's cache or compile new one).
   // And push it on the stack.
   if (match(compiler, TK_NAME)) { //< Core library.
-    return importCoreLib(compiler, compiler->previous.start,
-                         compiler->previous.length);
+    return importCoreLib(compiler, compiler->parser.previous.start,
+                         compiler->parser.previous.length);
 
   } else if (match(compiler, TK_STRING)) { //< Local library.
-    Var var_path = compiler->previous.value;
+    Var var_path = compiler->parser.previous.value;
     ASSERT(IS_OBJ_TYPE(var_path, OBJ_STRING), OOPS);
     String* path = (String*)AS_OBJ(var_path);
     return importFile(compiler, path->data);
@@ -2484,10 +2531,10 @@ static void compilerImportSingleEntry(Compiler* compiler,
   if (name[0] == SPECIAL_NAME_CHAR) return;
 
   // Line number of the variables which will be bind to the imported symbol.
-  int line = compiler->previous.line;
+  int line = compiler->parser.previous.line;
 
   // Add the name to the **current** script's name buffer.
-  int name_index = (int)scriptAddName(compiler->script, compiler->vm,
+  int name_index = (int)scriptAddName(compiler->script, compiler->parser.vm,
                                       name, length);
 
   // Get the function from the script.
@@ -2550,12 +2597,13 @@ static void compileFromImport(Compiler* compiler) {
     do {
       // Consume the symbol name to import from the script.
       consume(compiler, TK_NAME, "Expected symbol to import.");
-      const char* name = compiler->previous.start;
-      uint32_t length = (uint32_t)compiler->previous.length;
-      int line = compiler->previous.line;
+      const char* name = compiler->parser.previous.start;
+      uint32_t length = (uint32_t)compiler->parser.previous.length;
+      int line = compiler->parser.previous.line;
 
       // Add the name of the symbol to the names buffer.
-      int name_index = (int)scriptAddName(compiler->script, compiler->vm,
+      int name_index = (int)scriptAddName(compiler->script,
+                                          compiler->parser.vm,
                                           name, length);
 
       // Don't pop the lib since it'll be used for the next entry.
@@ -2571,9 +2619,9 @@ static void compileFromImport(Compiler* compiler) {
 
       // Set the imported symbol binding name, which wold be in the last token
       // consumed by the first one or after the as keyword.
-      name = compiler->previous.start;
-      length = (uint32_t)compiler->previous.length;
-      line = compiler->previous.line;
+      name = compiler->parser.previous.start;
+      length = (uint32_t)compiler->parser.previous.length;
+      line = compiler->parser.previous.line;
 
       // Get the variable to bind the imported symbol, if we already have a
       // variable with that name override it, otherwise use a new variable.
@@ -2612,8 +2660,9 @@ static void compileRegularImport(Compiler* compiler) {
 
       // Get the variable to bind the imported symbol, if we already have a
       // variable with that name override it, otherwise use a new variable.
-      const char* name = compiler->previous.start;
-      int length = compiler->previous.length, line = compiler->previous.line;
+      const char* name = compiler->parser.previous.start;
+      int length = compiler->parser.previous.length;
+      int line = compiler->parser.previous.line;
       var_index = compilerImportName(compiler, line, name, length);
 
     } else {
@@ -2626,7 +2675,7 @@ static void compileRegularImport(Compiler* compiler) {
         // variable with that name override it, otherwise use a new variable.
         const char* name = lib->module->data;
         uint32_t length = lib->module->length;
-        int line = compiler->previous.line;
+        int line = compiler->parser.previous.line;
         var_index = compilerImportName(compiler, line, name, length);
 
       } else {
@@ -2735,9 +2784,9 @@ static void compileForStatement(Compiler* compiler) {
   consume(compiler, TK_NAME, "Expected an iterator name.");
 
   // Unlike functions local variable could shadow a name.
-  const char* iter_name = compiler->previous.start;
-  int iter_len = compiler->previous.length;
-  int iter_line = compiler->previous.line;
+  const char* iter_name = compiler->parser.previous.start;
+  int iter_len = compiler->parser.previous.length;
+  int iter_line = compiler->parser.previous.line;
 
   consume(compiler, TK_IN, "Expected 'in' after iterator name.");
 
@@ -2891,7 +2940,7 @@ static void compileTopLevelStatement(Compiler* compiler) {
 
   // At the top level the stack size should be 0, before and after compiling
   // a top level statement, since there aren't any locals at the top level.
-  ASSERT(compiler->has_errors || compiler->stack_size == 0, OOPS);
+  ASSERT(compiler->parser.has_errors || compiler->stack_size == 0, OOPS);
 
   if (match(compiler, TK_CLASS)) {
     compileClass(compiler);
@@ -2918,7 +2967,7 @@ static void compileTopLevelStatement(Compiler* compiler) {
 
   // At the top level the stack size should be 0, before and after compiling
   // a top level statement, since there aren't any locals at the top level.
-  ASSERT(compiler->has_errors || compiler->stack_size == 0, OOPS);
+  ASSERT(compiler->parser.has_errors || compiler->stack_size == 0, OOPS);
 
 }
 
@@ -2961,8 +3010,8 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
   compiler->func = &curr_fn;
 
   // Lex initial tokens. current <-- next.
-  lexToken(compiler);
-  lexToken(compiler);
+  lexToken(&(compiler->parser));
+  lexToken(&(compiler->parser));
   skipNewLines(compiler);
 
   if (match(compiler, TK_MODULE)) {
@@ -2975,8 +3024,8 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
 
     } else {
       consume(compiler, TK_NAME, "Expected a name for the module.");
-      const char* name = compiler->previous.start;
-      uint32_t len = compiler->previous.length;
+      const char* name = compiler->parser.previous.start;
+      uint32_t len = compiler->parser.previous.length;
       script->module = newStringLength(vm, name, len);
       consumeEndStatement(compiler);
     }
@@ -2990,8 +3039,8 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
   emitFunctionEnd(compiler);
 
   // Resolve forward names (function names that are used before defined).
-  for (int i = 0; i < compiler->forwards_count; i++) {
-    ForwardName* forward = &compiler->forwards[i];
+  for (int i = 0; i < compiler->parser.forwards_count; i++) {
+    ForwardName* forward = &compiler->parser.forwards[i];
     const char* name = forward->name;
     int length = forward->length;
     int index = scriptGetFunc(script, name, (uint32_t)length);
@@ -3001,7 +3050,7 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
       // need_more_lines is only true for unexpected EOF errors. For syntax
       // errors it'll be false by now but. Here it's a semantic errors, so
       // we're overriding it to false.
-      compiler->need_more_lines = false;
+      compiler->parser.need_more_lines = false;
       resolveError(compiler, forward->line, "Name '%.*s' is not defined.",
                    length, name);
     }
@@ -3010,7 +3059,7 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
   vm->compiler = compiler->next_compiler;
 
   // If compilation failed, discard all the invalid functions and globals.
-  if (compiler->has_errors) {
+  if (compiler->parser.has_errors) {
     script->globals.count = script->global_names.count = globals_count;
     script->functions.count = functions_count;
     script->classes.count = types_count;
@@ -3025,9 +3074,8 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
 #endif
 
   // Return the compilation result.
-  if (compiler->has_errors) {
-    if (compiler->options && compiler->options->repl_mode &&
-        compiler->need_more_lines) {
+  if (compiler->parser.has_errors) {
+    if (compiler->parser.repl_mode && compiler->parser.need_more_lines) {
       return PK_RESULT_UNEXPECTED_EOF;
     }
     return PK_RESULT_COMPILE_ERROR;
@@ -3054,9 +3102,9 @@ void compilerMarkObjects(PKVM* vm, Compiler* compiler) {
 
   // Mark the string literals (they haven't added to the script's literal
   // buffer yet).
-  markValue(vm, compiler->current.value);
-  markValue(vm, compiler->previous.value);
-  markValue(vm, compiler->next.value);
+  markValue(vm, compiler->parser.current.value);
+  markValue(vm, compiler->parser.previous.value);
+  markValue(vm, compiler->parser.next.value);
 
   if (compiler->next_compiler != NULL) {
     compilerMarkObjects(vm, compiler->next_compiler);
