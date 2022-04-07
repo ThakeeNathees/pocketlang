@@ -15,14 +15,6 @@
   #define __has_builtin(x) 0
 #endif
 
-#if defined(__GNUC__)
-  #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
-  #pragma GCC diagnostic ignored "-Wunused-parameter"
-#elif defined(__clang__)
-  #pragma clang diagnostic ignored "-Wint-to-pointer-cast"
-  #pragma clang diagnostic ignored "-Wunused-parameter"
-#endif
-
 #include <stdio.h> //< Only needed here for ASSERT() macro and for release mode
                    //< TODO; macro use this to print a crash report.
 
@@ -104,6 +96,15 @@
   #define forceinline __forceinline
 #else
   #define forceinline __attribute__((always_inline))
+#endif
+
+// To use dynamic variably-sized struct with a tail array add an array at the
+// end of the struct with size DYNAMIC_TAIL_ARRAY. This method was a legacy
+// standard called "struct hack".
+#if defined(_MSC_VER) || __STDC_VERSION__ >= 199901L // stdc >= c99
+  #define DYNAMIC_TAIL_ARRAY
+#else
+  #define DYNAMIC_TAIL_ARRAY 0
 #endif
 
 // Using __ASSERT() for make it crash in release binary too.

@@ -64,7 +64,7 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
   user_data->repl_mode = true;
 
   // The main module that'll be used to compile and execute the input source.
-  PkHandle* module = pkNewModule(vm, "$(REPL)");
+  PkHandle* module = pkNewModule(vm, "@(REPL)");
 
   // A buffer to store lines read from stdin.
   ByteBuffer lines;
@@ -124,7 +124,7 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
     if (result != PK_RESULT_SUCCESS) continue;
 
     // Compiled source would be the "main" function of the module. Run it.
-    PkHandle* _main = pkGetFunction(vm, module, PK_IMPLICIT_MAIN_NAME);
+    PkHandle* _main = pkGetMainFunction(vm, module);
     PkHandle* fiber = pkNewFiber(vm, _main);
     result = pkRunFiber(vm, fiber, 0, NULL);
     pkReleaseHandle(vm, _main);

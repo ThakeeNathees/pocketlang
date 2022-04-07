@@ -4,8 +4,8 @@
  *  Distributed Under The MIT License
  */
 
-#ifndef BUFFERS_TEMPLATE_H
-#define BUFFERS_TEMPLATE_H
+#ifndef PK_BUFFERS_TEMPLATE_H
+#define PK_BUFFERS_TEMPLATE_H
 
 #include "pk_internal.h"
 
@@ -100,4 +100,4 @@
     self->count += other->count;                                              \
   }
 
-#endif // BUFFERS_TEMPLATE_H
+#endif // PK_BUFFERS_TEMPLATE_H

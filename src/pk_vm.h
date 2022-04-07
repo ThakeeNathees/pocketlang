@@ -4,12 +4,12 @@
  *  Distributed Under The MIT License
  */
 
-#ifndef VM_H
-#define VM_H
+#ifndef PK_VM_H
+#define PK_VM_H
 
 #include "pk_compiler.h"
 #include "pk_internal.h"
-#include "pk_var.h"
+#include "pk_value.h"
 
 // The maximum number of temporary object reference to protect them from being
 // garbage collected.
@@ -213,4 +213,4 @@ bool vmSwitchFiber(PKVM* vm, Fiber* fiber, Var* value);
 // yield value.
 void vmYieldFiber(PKVM* vm, Var* value);
 
-#endif // VM_H
+#endif // PK_VM_H
