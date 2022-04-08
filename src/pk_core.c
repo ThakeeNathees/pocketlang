@@ -418,6 +418,8 @@ static inline bool validateCond(PKVM* vm, bool condition, const char* err) {
  VALIDATE_ARG_OBJ(List, OBJ_LIST, "list")
  VALIDATE_ARG_OBJ(Map, OBJ_MAP, "map")
  VALIDATE_ARG_OBJ(Function, OBJ_FUNC, "function")
+ VALIDATE_ARG_OBJ(Closure, OBJ_CLOSURE, "closure")
+ VALIDATE_ARG_OBJ(Upvalue, OBJ_UPVALUE, "upvalue")
  VALIDATE_ARG_OBJ(Fiber, OBJ_FIBER, "fiber")
  VALIDATE_ARG_OBJ(Class, OBJ_CLASS, "class")
 
@@ -1391,6 +1393,8 @@ Var varAdd(PKVM* vm, Var v1, Var v2) {
       case OBJ_RANGE:
       case OBJ_SCRIPT:
       case OBJ_FUNC:
+      case OBJ_CLOSURE:
+      case OBJ_UPVALUE:
       case OBJ_FIBER:
       case OBJ_CLASS:
       case OBJ_INST:
@@ -1602,6 +1606,8 @@ bool varContains(PKVM* vm, Var elem, Var container) {
     case OBJ_RANGE:
     case OBJ_SCRIPT:
     case OBJ_FUNC:
+    case OBJ_CLOSURE:
+    case OBJ_UPVALUE:
     case OBJ_FIBER:
     case OBJ_CLASS:
     case OBJ_INST:
@@ -1753,6 +1759,11 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
       UNREACHABLE();
     }
 
+    case OBJ_CLOSURE:
+    case OBJ_UPVALUE:
+      TODO;
+      UNREACHABLE();
+
     case OBJ_FIBER:
       {
         Fiber* fb = (Fiber*)obj;
@@ -1878,6 +1889,12 @@ do {                                                                          \
       ERR_NO_ATTRIB(vm, on, attrib);
       return;
 
+    case OBJ_CLOSURE:
+    case OBJ_UPVALUE:
+      TODO;
+      ERR_NO_ATTRIB(vm, on, attrib);
+      return;
+
     case OBJ_FIBER:
       ERR_NO_ATTRIB(vm, on, attrib);
       return;
@@ -1967,6 +1984,8 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
     case OBJ_RANGE:
     case OBJ_SCRIPT:
     case OBJ_FUNC:
+    case OBJ_CLOSURE:
+    case OBJ_UPVALUE:
     case OBJ_FIBER:
     case OBJ_CLASS:
     case OBJ_INST:
@@ -2017,6 +2036,8 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
     case OBJ_RANGE:
     case OBJ_SCRIPT:
     case OBJ_FUNC:
+    case OBJ_CLOSURE:
+    case OBJ_UPVALUE:
     case OBJ_FIBER:
     case OBJ_CLASS:
     case OBJ_INST:

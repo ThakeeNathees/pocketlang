@@ -1005,6 +1005,7 @@ L_vm_main_loop:
       DISPATCH();
     }
 
+    // TODO: move this to a function in pk_core.c.
     OPCODE(ITER):
     {
       Var* value    = (vm->fiber->sp - 1);
@@ -1082,6 +1083,8 @@ L_vm_main_loop:
 
         case OBJ_SCRIPT:
         case OBJ_FUNC:
+        case OBJ_CLOSURE:
+        case OBJ_UPVALUE:
         case OBJ_FIBER:
         case OBJ_CLASS:
         case OBJ_INST:
