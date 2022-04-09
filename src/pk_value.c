@@ -248,6 +248,32 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       }
     } break;
 
+    case OBJ_CLOSURE:
+    {
+      Closure* closure = (Closure*)obj;
+      markObject(vm, &closure->fn->_super);
+      for (int i = 0; i < closure->fn->upvalue_count; i++) {
+        markObject(vm, &(closure->upvalues[i]->_super));
+      }
+
+      vm->bytes_allocated += sizeof(Closure);
+      vm->bytes_allocated += sizeof(Upvalue*) * closure->fn->upvalue_count;
+
+    } break;
+
+    case OBJ_UPVALUE:
+    {
+      Upvalue* upvalue = (Upvalue*)obj;
+
+      // We don't have to mark upvalue->ptr since the [ptr] points to a local
+      // in the stack, however we need to mark upvalue->closed incase if it's
+      // closed.
+      markValue(vm, upvalue->closed);
+
+      vm->bytes_allocated += sizeof(Upvalue);
+
+    } break;
+
     case OBJ_FIBER:
     {
       Fiber* fiber = (Fiber*)obj;
@@ -421,7 +447,6 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
     ASSERT(is_native, OOPS);
     func->name = name;
     func->owner = NULL;
-    func->is_native = is_native;
 
   } else {
     pkFunctionBufferWrite(&owner->functions, vm, func);
@@ -430,8 +455,10 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
     func->name = owner->names.data[name_index]->data;
     func->owner = owner;
     func->arity = -2; // -1 means variadic args.
-    func->is_native = is_native;
   }
+
+  func->is_native = is_native;
+  func->upvalue_count = 0;
 
   if (is_native) {
     func->native = NULL;
@@ -451,9 +478,35 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
   return func;
 }
 
+Closure* newClosure(PKVM* vm, Function* fn) {
+  Closure* closure = ALLOCATE_DYNAMIC(vm, Closure,
+                                      fn->upvalue_count, Upvalue*);
+  varInitObject(&closure->_super, vm, OBJ_CLOSURE);
+
+  closure->fn = fn;
+
+  for (int i = 0; i < fn->upvalue_count; i++) {
+    closure->upvalues[i] = NULL;
+  }
+
+  return closure;
+}
+
+Upvalue* newUpvalue(PKVM* vm, Var* value) {
+  Upvalue* upvalue = ALLOCATE(vm, Upvalue);
+  varInitObject(&upvalue->_super, vm, OBJ_UPVALUE);
+
+  upvalue->ptr = value;
+  upvalue->closed = VAR_NULL;
+  upvalue->next = NULL;
+}
+
 Fiber* newFiber(PKVM* vm, Function* fn) {
   Fiber* fiber = ALLOCATE(vm, Fiber);
+
+  // Not sure why this memset is needed here. If it doesn't then remove it.
   memset(fiber, 0, sizeof(Fiber));
+
   varInitObject(&fiber->_super, vm, OBJ_FIBER);
 
   fiber->state = FIBER_NEW;
@@ -1045,6 +1098,10 @@ void freeObject(PKVM* vm, Object* self) {
       }
     } break;
 
+    case OBJ_CLOSURE:
+    case OBJ_UPVALUE:
+    break;
+
     case OBJ_FIBER: {
       Fiber* fiber = (Fiber*)self;
       DEALLOCATE(vm, fiber->stack);
@@ -1302,7 +1359,11 @@ const char* getPkVarTypeName(PkVarType type) {
     case PK_MAP:      return "Map";
     case PK_RANGE:    return "Range";
     case PK_SCRIPT:   return "Script";
+
+    // TODO: since functions are not first class citizens anymore, remove it
+    // and add closure (maybe with the same name PK_FUNCTION).
     case PK_FUNCTION: return "Function";
+
     case PK_FIBER:    return "Fiber";
     case PK_CLASS:    return "Class";
     case PK_INST:     return "Inst";
@@ -1319,6 +1380,8 @@ const char* getObjectTypeName(ObjectType type) {
     case OBJ_RANGE:   return "Range";
     case OBJ_SCRIPT:  return "Script";
     case OBJ_FUNC:    return "Func";
+    case OBJ_CLOSURE: return "Closure";
+    case OBJ_UPVALUE: return "Upvalue";
     case OBJ_FIBER:   return "Fiber";
     case OBJ_CLASS:   return "Class";
     case OBJ_INST:    return "Inst";
@@ -1594,12 +1657,27 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
         return;
       }
 
+      case OBJ_CLOSURE: {
+        const Closure* closure = (const Closure*)obj;
+        pkByteBufferAddString(buff, vm, "[Closure:", 9);
+        pkByteBufferAddString(buff, vm, closure->fn->name,
+                                        (uint32_t)strlen(closure->fn->name));
+        pkByteBufferWrite(buff, vm, ']');
+        return;
+      }
+
       case OBJ_FIBER: {
         const Fiber* fb = (const Fiber*)obj;
         pkByteBufferAddString(buff, vm, "[Fiber:", 7);
         pkByteBufferAddString(buff, vm, fb->func->name,
                             (uint32_t)strlen(fb->func->name));
         pkByteBufferWrite(buff, vm, ']');
+        return;
+      }
+
+      case OBJ_UPVALUE: {
+        const Upvalue* upvalue = (const Upvalue*)obj;
+        pkByteBufferAddString(buff, vm, "[Upvalue]", 9);
         return;
       }
 

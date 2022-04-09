@@ -190,6 +190,8 @@ typedef struct Map Map;
 typedef struct Range Range;
 typedef struct Script Script;
 typedef struct Function Function;
+typedef struct Closure Closure;
+typedef struct Upvalue Upvalue;
 typedef struct Fiber Fiber;
 typedef struct Class Class;
 typedef struct Instance Instance;
@@ -216,6 +218,8 @@ typedef enum {
   OBJ_RANGE,
   OBJ_SCRIPT,
   OBJ_FUNC,
+  OBJ_CLOSURE,
+  OBJ_UPVALUE,
   OBJ_FIBER,
   OBJ_CLASS,
   OBJ_INST,
@@ -308,6 +312,10 @@ struct Function {
   Script* owner;    //< Owner script of the function.
   int arity;        //< Number of argument the function expects.
 
+  // Number of upvalues it uses, we're defining it here (and not in object Fn)
+  // is prevent checking is_native everytime (which might be a bit faster).
+  int upvalue_count;
+
   // Docstring of the function, currently it's just the C string literal
   // pointer, refactor this into String* so that we can support public
   // native functions to provide a docstring.
@@ -318,6 +326,73 @@ struct Function {
     pkNativeFn native;   //< Native function pointer.
     Fn* fn;              //< Script function pointer.
   };
+};
+
+// Closure are the first class citizen callables which wraps around a function
+// [fn] which will be invoked each time the closure is called. In contrary to
+// functions, closures have lexical scoping support via Upvalues. Consider the
+// following function 'foo'
+//
+//     def foo()
+//       bar = "bar"
+//       return func()  ##< We'll be using the name 'baz' to identify this.
+//         print(bar)
+//       end
+//     end
+//
+// The inner literal function 'baz' need variable named 'bar', It's only exists
+// as long as the function 'foo' is active. Once the function 'foo' is returned
+// all of it's local variables (including 'bar') will be popped and 'baz' will
+// becom in-accessible.
+//
+// This is where closure and upvalues comes into picture. A closure will use
+// upvalues to hold a reference of the variable ('bar') and when the variable
+// ran out of it's scope / popped from stack, the upvalue will make it's own
+// copy of that variable to make sure that a closure referenceing the variable
+// via this upvalue has still access to the variable.
+struct Closure {
+  Object _super;
+
+  Function* fn;
+  Upvalue* upvalues[DYNAMIC_TAIL_ARRAY];
+
+};
+
+// In addition to locals (which lives on the stack), a closure has upvalues.
+// When a closure is created, an array of upvalues will be created for every
+// closures, They works as a bridge between a closure and it's non-local
+// variable. When the variable is still on the stack, upvalue has a state of
+// 'open' and will points to the variable on the stack. When the variable is
+// popped from the stack, the upvalue will be changed to the state 'closed'
+// it'll make a copy of that variable inside of it and the pointer will points
+// to the copyied (closed) variable.
+//
+//       |       |   .----------------v
+//       |       |   | .-------------------.
+//       |       |   '-| u1 closed | (qux) |
+//       |       |     '-------------------'
+//       |       | <- stack top
+//       |  baz  |     .------------------.
+//       |  bar  | <---| u2 open   | null |
+//       |  foo  |     '------------------'
+//       '-------'
+//         stack
+//
+struct Upvalue {
+  Object _super;
+
+  // The pointer which points to the non-local variable, once the variable is
+  // out of scope the [ptr] will points to the below value [closed].
+  Var* ptr;
+
+  // The copyied value of the non-local.
+  Var closed;
+
+  // To prevent multiple upvalues created for a single variable we keep track
+  // of all the open upvalues on a linked list. Once we need an upvalue and if
+  // it's already exists on the chain we re-use it, otherwise a new upvalue
+  // instance will be created (here [next] is the next upvalue on the chain).
+  Upvalue* next;
 };
 
 typedef struct {
@@ -448,6 +523,12 @@ Script* newScript(PKVM* vm, String* name, bool is_core);
 // That'll printed when running help(fn).
 Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
                       bool is_native, const char* docstring);
+
+// Allocate a new closure object and return it.
+Closure* newClosure(PKVM* vm, Function* fn);
+
+// Allocate a new upvalue object for the [value] and return it.
+Upvalue* newUpvalue(PKVM* vm, Var* value);
 
 // Allocate new Fiber object around the function [fn] and return Fiber*.
 Fiber* newFiber(PKVM* vm, Function* fn);
