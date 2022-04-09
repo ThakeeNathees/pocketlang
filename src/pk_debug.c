@@ -107,8 +107,8 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_PUSH_CONSTANT:
       {
         int index = READ_SHORT();
-        ASSERT_INDEX((uint32_t)index, func->owner->literals.count);
-        Var value = func->owner->literals.data[index];
+        ASSERT_INDEX((uint32_t)index, func->owner->constants.count);
+        Var value = func->owner->constants.data[index];
 
         // Prints: %5d [val]\n
         PRINT_INT(index);

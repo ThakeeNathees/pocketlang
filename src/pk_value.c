@@ -209,7 +209,7 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       vm->bytes_allocated += sizeof(Script);
 
       markObject(vm, &scr->path->_super);
-      markObject(vm, &scr->module->_super);
+      markObject(vm, &scr->name->_super);
 
       markVarBuffer(vm, &scr->globals);
       vm->bytes_allocated += sizeof(Var) * scr->globals.capacity;
@@ -217,8 +217,8 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       // Integer buffer has no gray call.
       vm->bytes_allocated += sizeof(uint32_t) * scr->global_names.capacity;
 
-      markVarBuffer(vm, &scr->literals);
-      vm->bytes_allocated += sizeof(Var) * scr->literals.capacity;
+      markVarBuffer(vm, &scr->constants);
+      vm->bytes_allocated += sizeof(Var) * scr->constants.capacity;
 
       markFunctionBuffer(vm, &scr->functions);
       vm->bytes_allocated += sizeof(Function*) * scr->functions.capacity;
@@ -401,16 +401,16 @@ Script* newScript(PKVM* vm, String* name, bool is_core) {
   ASSERT(name != NULL && name->length > 0, OOPS);
 
   script->path = name;
-  script->module = NULL;
+  script->name = NULL;
   script->initialized = is_core;
   script->body = NULL;
 
   // Core modules has its name as the module name.
-  if (is_core) script->module = name;
+  if (is_core) script->name = name;
 
   pkVarBufferInit(&script->globals);
   pkUintBufferInit(&script->global_names);
-  pkVarBufferInit(&script->literals);
+  pkVarBufferInit(&script->constants);
   pkFunctionBufferInit(&script->functions);
   pkClassBufferInit(&script->classes);
   pkStringBufferInit(&script->names);
@@ -454,7 +454,7 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
 
     func->name = owner->names.data[name_index]->data;
     func->owner = owner;
-    func->arity = -2; // -1 means variadic args.
+    func->arity = -2; // -2 means un-initialized (TODO: make it as a macro).
   }
 
   func->is_native = is_native;
@@ -499,6 +499,8 @@ Upvalue* newUpvalue(PKVM* vm, Var* value) {
   upvalue->ptr = value;
   upvalue->closed = VAR_NULL;
   upvalue->next = NULL;
+
+  return upvalue;
 }
 
 Fiber* newFiber(PKVM* vm, Function* fn) {
@@ -550,52 +552,51 @@ Fiber* newFiber(PKVM* vm, Function* fn) {
 }
 
 Class* newClass(PKVM* vm, Script* scr, const char* name, uint32_t length) {
-  Class* type = ALLOCATE(vm, Class);
-  varInitObject(&type->_super, vm, OBJ_CLASS);
 
-  vmPushTempRef(vm, &type->_super); // type.
+  Class* cls = ALLOCATE(vm, Class);
+  varInitObject(&cls->_super, vm, OBJ_CLASS);
 
-  pkClassBufferWrite(&scr->classes, vm, type);
-  type->owner = scr;
-  type->name = scriptAddName(scr, vm, name, length);
-  pkUintBufferInit(&type->field_names);
+  vmPushTempRef(vm, &cls->_super); // type.
 
-  // Can't use '$' in string format, since it has a special meaning.
-  // TODO: escape the character.
-  String* ty_name = scr->names.data[type->name];
-  String* dollar = newStringLength(vm, "$", 1);
-  vmPushTempRef(vm, &dollar->_super); // dollar
-  String* ctor_name = stringFormat(vm, "@(Ctor:@)", dollar, ty_name);
-  vmPopTempRef(vm); // dollar
+  pkClassBufferWrite(&scr->classes, vm, cls);
+  pkUintBufferInit(&cls->field_names);
+  cls->owner = scr;
+  cls->name = scriptAddName(scr, vm, name, length);
+
+  // FIXME:
+  // Make it possible to escape '@' and '$' character in formated string and
+  // replace below '%' with excaped '\@' (SPECIAL_NAME_CHAR) character.
+  String* ty_name = scr->names.data[cls->name];
+  String* ctor_name = stringFormat(vm, "%(Ctor:@)", ty_name);
 
   // Constructor.
   vmPushTempRef(vm, &ctor_name->_super); // ctor_name
-  type->ctor = newFunction(vm, ctor_name->data, ctor_name->length,
+  cls->ctor = newFunction(vm, ctor_name->data, ctor_name->length,
                            scr, false, NULL);
   vmPopTempRef(vm); // ctor_name
 
   vmPopTempRef(vm); // type.
-  return type;
+  return cls;
 }
 
-Instance* newInstance(PKVM* vm, Class* ty, bool initialize) {
+Instance* newInstance(PKVM* vm, Class* cls, bool initialize) {
 
   Instance* inst = ALLOCATE(vm, Instance);
   varInitObject(&inst->_super, vm, OBJ_INST);
 
   vmPushTempRef(vm, &inst->_super); // inst.
 
-  ASSERT(ty->name < ty->owner->names.count, OOPS);
-  inst->ty_name = ty->owner->names.data[ty->name]->data;
+  ASSERT(cls->name < cls->owner->names.count, OOPS);
+  inst->ty_name = cls->owner->names.data[cls->name]->data;
   inst->is_native = false;
 
   Inst* ins = ALLOCATE(vm, Inst);
   inst->ins = ins;
-  ins->type = ty;
+  ins->type = cls;
   pkVarBufferInit(&ins->fields);
 
-  if (initialize && ty->field_names.count != 0) {
-    pkVarBufferFill(&ins->fields, vm, VAR_NULL, ty->field_names.count);
+  if (initialize && cls->field_names.count != 0) {
+    pkVarBufferFill(&ins->fields, vm, VAR_NULL, cls->field_names.count);
   }
 
   vmPopTempRef(vm); // inst.
@@ -1083,7 +1084,7 @@ void freeObject(PKVM* vm, Object* self) {
       Script* scr = (Script*)self;
       pkVarBufferClear(&scr->globals, vm);
       pkUintBufferClear(&scr->global_names, vm);
-      pkVarBufferClear(&scr->literals, vm);
+      pkVarBufferClear(&scr->constants, vm);
       pkFunctionBufferClear(&scr->functions, vm);
       pkClassBufferClear(&scr->classes, vm);
       pkStringBufferClear(&scr->names, vm);
@@ -1109,8 +1110,8 @@ void freeObject(PKVM* vm, Object* self) {
     } break;
 
     case OBJ_CLASS: {
-      Class* type = (Class*)self;
-      pkUintBufferClear(&type->field_names, vm);
+      Class* cls = (Class*)self;
+      pkUintBufferClear(&cls->field_names, vm);
     } break;
 
     case OBJ_INST:
@@ -1271,11 +1272,11 @@ bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value) {
   } else {
 
     // TODO: Optimize this with binary search.
-    Class* ty = inst->ins->type;
-    for (uint32_t i = 0; i < ty->field_names.count; i++) {
-      ASSERT_INDEX(i, ty->field_names.count);
-      ASSERT_INDEX(ty->field_names.data[i], ty->owner->names.count);
-      String* f_name = ty->owner->names.data[ty->field_names.data[i]];
+    Class* cls = inst->ins->type;
+    for (uint32_t i = 0; i < cls->field_names.count; i++) {
+      ASSERT_INDEX(i, cls->field_names.count);
+      ASSERT_INDEX(cls->field_names.data[i], cls->owner->names.count);
+      String* f_name = cls->owner->names.data[cls->field_names.data[i]];
       if (IS_STR_EQ(f_name, attrib)) {
         *value = inst->ins->fields.data[i];
         return true;
@@ -1325,11 +1326,11 @@ bool instSetAttrib(PKVM* vm, Instance* inst, String* attrib, Var value) {
   } else {
 
     // TODO: Optimize this with binary search.
-    Class* ty = inst->ins->type;
-    for (uint32_t i = 0; i < ty->field_names.count; i++) {
-      ASSERT_INDEX(i, ty->field_names.count);
-      ASSERT_INDEX(ty->field_names.data[i], ty->owner->names.count);
-      String* f_name = ty->owner->names.data[ty->field_names.data[i]];
+    Class* cls = inst->ins->type;
+    for (uint32_t i = 0; i < cls->field_names.count; i++) {
+      ASSERT_INDEX(i, cls->field_names.count);
+      ASSERT_INDEX(cls->field_names.data[i], cls->owner->names.count);
+      String* f_name = cls->owner->names.data[cls->field_names.data[i]];
       if (f_name->hash == attrib->hash &&
         f_name->length == attrib->length &&
         memcmp(f_name->data, attrib->data, attrib->length) == 0) {
@@ -1637,9 +1638,9 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
       case OBJ_SCRIPT: {
         const Script* scr = (const Script*)obj;
         pkByteBufferAddString(buff, vm, "[Module:", 8);
-        if (scr->module != NULL) {
-          pkByteBufferAddString(buff, vm, scr->module->data,
-                              scr->module->length);
+        if (scr->name != NULL) {
+          pkByteBufferAddString(buff, vm, scr->name->data,
+                              scr->name->length);
         } else {
           pkByteBufferWrite(buff, vm, '"');
           pkByteBufferAddString(buff, vm, scr->path->data, scr->path->length);
@@ -1682,9 +1683,9 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
       }
 
       case OBJ_CLASS: {
-        const Class* ty = (const Class*)obj;
+        const Class* cls = (const Class*)obj;
         pkByteBufferAddString(buff, vm, "[Class:", 7);
-        String* ty_name = ty->owner->names.data[ty->name];
+        String* ty_name = cls->owner->names.data[cls->name];
         pkByteBufferAddString(buff, vm, ty_name->data, ty_name->length);
         pkByteBufferWrite(buff, vm, ']');
         return;
@@ -1699,15 +1700,15 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
         pkByteBufferWrite(buff, vm, ':');
 
         if (!inst->is_native) {
-          const Class* ty = inst->ins->type;
+          const Class* cls = inst->ins->type;
           const Inst* ins = inst->ins;
-          ASSERT(ins->fields.count == ty->field_names.count, OOPS);
+          ASSERT(ins->fields.count == cls->field_names.count, OOPS);
 
-          for (uint32_t i = 0; i < ty->field_names.count; i++) {
+          for (uint32_t i = 0; i < cls->field_names.count; i++) {
             if (i != 0) pkByteBufferWrite(buff, vm, ',');
 
             pkByteBufferWrite(buff, vm, ' ');
-            String* f_name = ty->owner->names.data[ty->field_names.data[i]];
+            String* f_name = cls->owner->names.data[cls->field_names.data[i]];
             pkByteBufferAddString(buff, vm, f_name->data, f_name->length);
             pkByteBufferWrite(buff, vm, '=');
             _toStringInternal(vm, ins->fields.data[i], buff, outer, repr);
