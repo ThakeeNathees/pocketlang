@@ -276,19 +276,35 @@ struct Range {
 struct Script {
   Object _super;
 
-  // For core libraries the module and the path are same and points to the
+  // For core libraries the name and the path are same and points to the
   // same String objects.
-  String* module; //< Module name of the script.
+  String* name; //< Module name of the script.
   String* path;   //< Path of the script.
 
-  pkVarBuffer globals;         //< Script level global variables.
-  pkUintBuffer global_names;   //< Name map to index in globals.
+  // The constant pool of the module, which contains literal values like
+  // numbers, strings, and functions which are considered constants to
+  // a moduel as well as classes.
+  pkVarBuffer constants;
+
+  // All the variable names, globals name, attribute name etc, are stored in
+  // the [names] buffer. They can be stored in the constants but to make it
+  // more clear different between string literal and names they're stored in
+  // a different location.
+  pkStringBuffer names;
+
+  // TODO:
+  // Consider merging names and constants. Java's class file doesn't have
+  // a seperation between string literals and names in it's constant pool.
+
+  // Globals is an array of global variables of the module. All the names
+  // (including global variables) are stored in the names buffer of the script
+  // (defined bellow). The (i)th global variables names is located at index (j)
+  // in the names buffer where j = global_names[i].
+  pkVarBuffer globals;
+  pkUintBuffer global_names;
 
   pkFunctionBuffer functions;  //< Functions of the script.
   pkClassBuffer classes;       //< Classes of the script.
-
-  pkStringBuffer names;        //< Name literals, attribute names, etc.
-  pkVarBuffer literals;        //< Script literal constant values.
 
   Function* body;              //< Script body is an anonymous function.
 
@@ -310,7 +326,12 @@ struct Function {
 
   const char* name; //< Name in the script [owner] or C literal.
   Script* owner;    //< Owner script of the function.
-  int arity;        //< Number of argument the function expects.
+
+  // Number of argument the function expects. If the arity is -1 that means
+  // the function has a variadic number of parameters. When a function is
+  // constructed the value for arity is set to -2 to indicate that it hasn't
+  // initialized.
+  int arity;
 
   // Number of upvalues it uses, we're defining it here (and not in object Fn)
   // is prevent checking is_native everytime (which might be a bit faster).
@@ -539,7 +560,7 @@ Class* newClass(PKVM* vm, Script* scr, const char* name, uint32_t length);
 // Allocate new instance with of the base [type]. Note that if [initialize] is
 // false, the field value buffer of the instance would be un initialized (ie.
 // the buffer count = 0). Otherwise they'll be set to VAR_NULL.
-Instance* newInstance(PKVM* vm, Class* ty, bool initialize);
+Instance* newInstance(PKVM* vm, Class* cls, bool initialize);
 
 // Allocate new native instance and with [data] as the native type handle and
 // return Instance*. The [id] is the unique id of the instance, this would be

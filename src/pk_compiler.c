@@ -1958,22 +1958,22 @@ static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
 
 // Add a literal constant to scripts literals and return it's index.
 static int compilerAddConstant(Compiler* compiler, Var value) {
-  pkVarBuffer* literals = &compiler->script->literals;
+  pkVarBuffer* constants = &compiler->script->constants;
 
-  for (uint32_t i = 0; i < literals->count; i++) {
-    if (isValuesSame(literals->data[i], value)) {
+  for (uint32_t i = 0; i < constants->count; i++) {
+    if (isValuesSame(constants->data[i], value)) {
       return i;
     }
   }
 
   // Add new constant to script.
-  if (literals->count < MAX_CONSTANTS) {
-    pkVarBufferWrite(literals, compiler->parser.vm, value);
+  if (constants->count < MAX_CONSTANTS) {
+    pkVarBufferWrite(constants, compiler->parser.vm, value);
   } else {
     parseError(compiler, "A script should contain at most %d "
                "unique constants.", MAX_CONSTANTS);
   }
-  return (int)literals->count - 1;
+  return (int)constants->count - 1;
 }
 
 // Enters inside a block.
@@ -2665,12 +2665,12 @@ static void compileRegularImport(Compiler* compiler) {
       // If it has a module name use it as binding variable.
       // Core libs names are it's module name but for local libs it's optional
       // to define a module name for a script.
-      if (lib && lib->module != NULL) {
+      if (lib && lib->name != NULL) {
 
         // Get the variable to bind the imported symbol, if we already have a
         // variable with that name override it, otherwise use a new variable.
-        const char* name = lib->module->data;
-        uint32_t length = lib->module->length;
+        const char* name = lib->name->data;
+        uint32_t length = lib->name->length;
         int line = compiler->parser.previous.line;
         var_index = compilerImportName(compiler, line, name, length);
 
@@ -3015,14 +3015,14 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
     // If the script running a REPL or compiled multiple times by hosting
     // application module attribute might already set. In that case make it
     // Compile error.
-    if (script->module != NULL) {
+    if (script->name != NULL) {
       parseError(compiler, "Module name already defined.");
 
     } else {
       consume(compiler, TK_NAME, "Expected a name for the module.");
       const char* name = compiler->parser.previous.start;
       uint32_t len = compiler->parser.previous.length;
-      script->module = newStringLength(vm, name, len);
+      script->name = newStringLength(vm, name, len);
       consumeEndStatement(compiler);
     }
   }

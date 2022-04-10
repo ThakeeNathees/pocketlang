@@ -820,13 +820,13 @@ static inline void assertModuleNameDef(PKVM* vm, Script* script,
   // Check if function with the same name already exists.
   if (scriptGetFunc(script, name, (uint32_t)strlen(name)) != -1) {
     __ASSERT(false, stringFormat(vm, "A function named '$' already esists "
-      "on module '@'", name, script->module)->data);
+      "on module '@'", name, script->name)->data);
   }
 
   // Check if a global variable with the same name already exists.
   if (scriptGetGlobals(script, name, (uint32_t)strlen(name)) != -1) {
     __ASSERT(false, stringFormat(vm, "A global variable named '$' already "
-      "esists on module '@'", name, script->module)->data);
+      "esists on module '@'", name, script->name)->data);
   }
 }
 
