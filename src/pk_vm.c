@@ -683,8 +683,8 @@ L_vm_main_loop:
     OPCODE(PUSH_CONSTANT):
     {
       uint16_t index = READ_SHORT();
-      ASSERT_INDEX(index, script->literals.count);
-      PUSH(script->literals.data[index]);
+      ASSERT_INDEX(index, script->constants.count);
+      PUSH(script->constants.data[index]);
       DISPATCH();
     }
 
