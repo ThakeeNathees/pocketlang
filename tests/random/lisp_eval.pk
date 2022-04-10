@@ -13,13 +13,14 @@ tests = {
   "-(*(+2(*1(-54)))3)(+1(/88))" : 7
 }
 
-for expr in tests
-  r = eval(expr, 0); assert(r[1] != -1)
-  val = r[0]
-  assert(val == tests[expr])
+def main()
+  for expr in tests
+    r = eval(expr, 0); assert(r[1] != -1)
+    val = r[0]
+    assert(val == tests[expr])
+  end
+  print("ALL TESTS PASSED")
 end
-
-print("ALL TESTS PASSED")
 
 ## -------------------------------------------------
 
@@ -96,4 +97,9 @@ def isnum(c)
   ## TODO: k in 0..10
   return (0 <= k and k < 10)
 end
+
+## -------------------------------------------------
+
+## if __name__ == '__main__' ;)
+  main()
 

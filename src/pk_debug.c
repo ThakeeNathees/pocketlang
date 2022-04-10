@@ -129,16 +129,18 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_PUSH_LIST:     SHORT_ARG(); break;
       case OP_PUSH_INSTANCE:
       {
-        int ty_index = READ_BYTE();
-        ASSERT_INDEX((uint32_t)ty_index, func->owner->classes.count);
-        uint32_t name_ind = func->owner->classes.data[ty_index]->name;
+        int cls_index = READ_SHORT();
+        ASSERT_INDEX((uint32_t)cls_index, func->owner->constants.count);
+        Var constant = func->owner->constants.data[cls_index];
+        ASSERT(IS_OBJ_TYPE(constant, OBJ_CLASS), OOPS);
+        uint32_t name_ind = ((Class*)(AS_OBJ(constant)))->name;
         ASSERT_INDEX(name_ind, func->owner->names.count);
-        String* ty_name = func->owner->names.data[name_ind];
+        String* cls_name = func->owner->names.data[name_ind];
 
-        // Prints: %5d [Ty:%s]\n
-        PRINT_INT(ty_index);
-        PRINT(" [Ty:");
-        PRINT(ty_name->data);
+        // Prints: %5d [Class:%s]\n
+        PRINT_INT(cls_index);
+        PRINT(" [Class:");
+        PRINT(cls_name->data);
         PRINT("]\n");
         break;
       }
@@ -223,34 +225,6 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         PRINT(" '");
         PRINT(name->data);
         PRINT("'\n");
-        break;
-      }
-
-      case OP_PUSH_FN:
-      {
-        int fn_index = READ_BYTE();
-        const char* name = func->owner->functions.data[fn_index]->name;
-        // Prints: %5d [Fn:%s]\n
-        PRINT_INT(fn_index);
-        PRINT(" [Fn:");
-        PRINT(name);
-        PRINT("]\n");
-        break;
-      }
-
-      case OP_PUSH_TYPE:
-      {
-        int ty_index = READ_BYTE();
-        ASSERT_INDEX((uint32_t)ty_index, func->owner->classes.count);
-        uint32_t name_ind = func->owner->classes.data[ty_index]->name;
-        ASSERT_INDEX(name_ind, func->owner->names.count);
-        String* ty_name = func->owner->names.data[name_ind];
-        // Prints: %5d [Ty:%s]\n
-        PRINT_INT(ty_index);
-        PRINT(" [Ty:");
-        PRINT(ty_name->data);
-        PRINT("]\n");
-
         break;
       }
 

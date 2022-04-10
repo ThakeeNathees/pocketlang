@@ -666,16 +666,16 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
   LOAD_FRAME();
 
 L_vm_main_loop:
+  // This NO_OP is required since Labels can only be followed by statements
+  // and, declarations are not statements, If the macro DUMP_STACK isn't
+  // defined, the next line become a declaration (Opcode instruction;).
+  NO_OP;
 
 #if DUMP_STACK
   system("cls"); // FIXME:
   dumpGlobalValues(vm);
   dumpStackFrame(vm);
   DEBUG_BREAK();
-#else
-  // This NO_OP is required since Labels can only be followed by statements
-  // and, declarations are not statements (here: Opcode instruction;)
-  NO_OP;
 #endif
 
   SWITCH() {
@@ -728,9 +728,11 @@ L_vm_main_loop:
 
     OPCODE(PUSH_INSTANCE):
     {
-      uint8_t index = READ_BYTE();
-      ASSERT_INDEX(index, script->classes.count);
-      Instance* inst = newInstance(vm, script->classes.data[index], false);
+      uint8_t index = READ_SHORT();
+      ASSERT_INDEX(index, script->constants.count);
+      ASSERT(IS_OBJ_TYPE(script->constants.data[index], OBJ_CLASS), OOPS);
+      Instance* inst = newInstance(vm,
+                       (Class*)AS_OBJ(script->constants.data[index]), false);
       PUSH(VAR_OBJ(inst));
       DISPATCH();
     }
@@ -835,24 +837,6 @@ L_vm_main_loop:
       uint8_t index = READ_BYTE();
       ASSERT_INDEX(index, script->globals.count);
       script->globals.data[index] = PEEK(-1);
-      DISPATCH();
-    }
-
-    OPCODE(PUSH_FN):
-    {
-      uint8_t index = READ_BYTE();
-      ASSERT_INDEX(index, script->functions.count);
-      Function* fn = script->functions.data[index];
-      PUSH(VAR_OBJ(fn));
-      DISPATCH();
-    }
-
-    OPCODE(PUSH_TYPE):
-    {
-      uint8_t index = READ_BYTE();
-      ASSERT_INDEX(index, script->classes.count);
-      Class* ty = script->classes.data[index];
-      PUSH(VAR_OBJ(ty));
       DISPATCH();
     }
 

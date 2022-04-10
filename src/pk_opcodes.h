@@ -93,15 +93,6 @@ OPCODE(PUSH_GLOBAL, 1, 1)
 // params: 1 byte index.
 OPCODE(STORE_GLOBAL, 1, 0)
 
-// Push the script's function on the stack. It could later be called. But a
-// function can't be stored i.e. can't assign a function with something else.
-// params: 1 byte index.
-OPCODE(PUSH_FN, 1, 1)
-
-// Push the script's type on the stack.
-// params: 1 byte index
-OPCODE(PUSH_TYPE, 1, 1)
-
 // Push a built in function.
 // params: 1 bytes index.
 OPCODE(PUSH_BUILTIN_FN, 1, 1)

@@ -248,11 +248,6 @@ PK_PUBLIC void pkModuleAddFunction(PKVM* vm, PkHandle* module,
                                    const char* name,
                                    pkNativeFn fptr, int arity);
 
-// Returns the function from the [module] as a handle, if not found it'll
-// return NULL.
-PK_PUBLIC PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
-                                  const char* name);
-
 // Returns the main function of the [module]. When a module is compiled all of
 // it's statements are wrapped around an implicit main function.
 PK_PUBLIC PkHandle* pkGetMainFunction(PKVM* vm, PkHandle* module);

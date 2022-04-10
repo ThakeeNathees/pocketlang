@@ -111,8 +111,6 @@ DEFINE_BUFFER(Uint, uint32_t)
 DEFINE_BUFFER(Byte, uint8_t)
 DEFINE_BUFFER(Var, Var)
 DEFINE_BUFFER(String, String*)
-DEFINE_BUFFER(Function, Function*)
-DEFINE_BUFFER(Class, Class*)
 
 void pkByteBufferAddString(pkByteBuffer* self, PKVM* vm, const char* str,
                            uint32_t length) {
@@ -158,19 +156,12 @@ void markVarBuffer(PKVM* vm, pkVarBuffer* self) {
   }
 }
 
-#define MARK_OBJ_BUFFER(m_name)                                   \
-  void mark##m_name##Buffer(PKVM* vm, pk##m_name##Buffer* self) { \
-    if (self == NULL) return;                                     \
-    for (uint32_t i = 0; i < self->count; i++) {                  \
-      markObject(vm, &self->data[i]->_super);                     \
-    }                                                             \
+void markStringBuffer(PKVM* vm, pkStringBuffer* self) {
+  if (self == NULL) return;
+  for (uint32_t i = 0; i < self->count; i++) {
+    markObject(vm, &self->data[i]->_super);
   }
-
-MARK_OBJ_BUFFER(String)
-MARK_OBJ_BUFFER(Function)
-MARK_OBJ_BUFFER(Class)
-
-#undef MARK_OBJ_BUFFER
+}
 
 static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
   // TODO: trace here.
@@ -219,12 +210,6 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
 
       markVarBuffer(vm, &scr->constants);
       vm->bytes_allocated += sizeof(Var) * scr->constants.capacity;
-
-      markFunctionBuffer(vm, &scr->functions);
-      vm->bytes_allocated += sizeof(Function*) * scr->functions.capacity;
-
-      markClassBuffer(vm, &scr->classes);
-      vm->bytes_allocated += sizeof(Class*) * scr->classes.count;
 
       markStringBuffer(vm, &scr->names);
       vm->bytes_allocated += sizeof(String*) * scr->names.capacity;
@@ -411,8 +396,6 @@ Script* newScript(PKVM* vm, String* name, bool is_core) {
   pkVarBufferInit(&script->globals);
   pkUintBufferInit(&script->global_names);
   pkVarBufferInit(&script->constants);
-  pkFunctionBufferInit(&script->functions);
-  pkClassBufferInit(&script->classes);
   pkStringBufferInit(&script->names);
 
   // Add a implicit main function and the '__file__' global to the module, only
@@ -422,8 +405,8 @@ Script* newScript(PKVM* vm, String* name, bool is_core) {
     scriptAddMain(vm, script);
 
     // Add '__file__' variable with it's path as value. If the path starts with
-    // '$' It's a special file ($(REPL) or $(TRY)) and don't define __file__.
-    if (script->path->data[0] != '$') {
+    // '@' It's a special file (@(REPL) or @(TRY)) and don't define __file__.
+    if (script->path->data[0] != SPECIAL_NAME_CHAR) {
       scriptAddGlobal(vm, script, "__file__", 8, VAR_OBJ(script->path));
     }
 
@@ -436,7 +419,8 @@ Script* newScript(PKVM* vm, String* name, bool is_core) {
 }
 
 Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
-                      bool is_native, const char* docstring) {
+                      bool is_native, const char* docstring,
+                      int* fn_index) {
 
   Function* func = ALLOCATE(vm, Function);
   varInitObject(&func->_super, vm, OBJ_FUNC);
@@ -449,7 +433,9 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
     func->owner = NULL;
 
   } else {
-    pkFunctionBufferWrite(&owner->functions, vm, func);
+    uint32_t _fn_index = scriptAddConstant(vm, owner, VAR_OBJ(func));
+    if (fn_index) *fn_index = _fn_index;
+
     uint32_t name_index = scriptAddName(owner, vm, name, length);
 
     func->name = owner->names.data[name_index]->data;
@@ -550,14 +536,17 @@ Fiber* newFiber(PKVM* vm, Function* fn) {
   return fiber;
 }
 
-Class* newClass(PKVM* vm, Script* scr, const char* name, uint32_t length) {
+Class* newClass(PKVM* vm, Script* scr, const char* name, uint32_t length,
+                int* cls_index, int* ctor_index) {
 
   Class* cls = ALLOCATE(vm, Class);
   varInitObject(&cls->_super, vm, OBJ_CLASS);
 
   vmPushTempRef(vm, &cls->_super); // type.
 
-  pkClassBufferWrite(&scr->classes, vm, cls);
+  uint32_t _cls_index = scriptAddConstant(vm, scr, VAR_OBJ(cls));
+  if (cls_index) *cls_index = (int)_cls_index;
+
   pkUintBufferInit(&cls->field_names);
   cls->owner = scr;
   cls->name = scriptAddName(scr, vm, name, length);
@@ -571,7 +560,7 @@ Class* newClass(PKVM* vm, Script* scr, const char* name, uint32_t length) {
   // Constructor.
   vmPushTempRef(vm, &ctor_name->_super); // ctor_name
   cls->ctor = newFunction(vm, ctor_name->data, ctor_name->length,
-                           scr, false, NULL);
+                           scr, false, NULL, ctor_index);
   vmPopTempRef(vm); // ctor_name
 
   vmPopTempRef(vm); // type.
@@ -1084,8 +1073,6 @@ void freeObject(PKVM* vm, Object* self) {
       pkVarBufferClear(&scr->globals, vm);
       pkUintBufferClear(&scr->global_names, vm);
       pkVarBufferClear(&scr->constants, vm);
-      pkFunctionBufferClear(&scr->functions, vm);
-      pkClassBufferClear(&scr->classes, vm);
       pkStringBufferClear(&scr->names, vm);
     } break;
 
@@ -1136,6 +1123,16 @@ void freeObject(PKVM* vm, Object* self) {
   DEALLOCATE(vm, self);
 }
 
+uint32_t scriptAddConstant(PKVM* vm, Script* script, Var value) {
+  for (uint32_t i = 0; i < script->constants.count; i++) {
+    if (isValuesSame(script->constants.data[i], value)) {
+      return i;
+    }
+  }
+  pkVarBufferWrite(&script->constants, vm, value);
+  return (int)script->constants.count - 1;
+}
+
 uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
                        uint32_t length) {
 
@@ -1156,51 +1153,16 @@ uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
   return self->names.count - 1;
 }
 
-int scriptGetClass(Script* script, const char* name, uint32_t length) {
-  for (uint32_t i = 0; i < script->classes.count; i++) {
-    uint32_t name_ind = script->classes.data[i]->name;
-    ASSERT(name_ind < script->names.count, OOPS);
-    String* ty_name = script->names.data[name_ind];
-    if (ty_name->length == length &&
-        strncmp(ty_name->data, name, length) == 0) {
-      return (int)i;
-    }
-  }
-  return -1;
-}
-
-int scriptGetFunc(Script* script, const char* name, uint32_t length) {
-  for (uint32_t i = 0; i < script->functions.count; i++) {
-    const char* fn_name = script->functions.data[i]->name;
-    uint32_t fn_length = (uint32_t)strlen(fn_name);
-    if (fn_length == length && strncmp(fn_name, name, length) == 0) {
-      return (int)i;
-    }
-  }
-  return -1;
-}
-
-int scriptGetGlobals(Script* script, const char* name, uint32_t length) {
-  for (uint32_t i = 0; i < script->global_names.count; i++) {
-    uint32_t name_index = script->global_names.data[i];
-    String* g_name = script->names.data[name_index];
-    if (g_name->length == length && strncmp(g_name->data, name, length) == 0) {
-      return (int)i;
-    }
-  }
-  return -1;
-}
-
 uint32_t scriptAddGlobal(PKVM* vm, Script* script,
-                    const char* name, uint32_t length,
-                    Var value) {
+                         const char* name, uint32_t length,
+                         Var value) {
 
   // If already exists update the value.
-  int var_ind = scriptGetGlobals(script, name, length);
-  if (var_ind != -1) {
-    ASSERT(var_ind < (int)script->globals.count, OOPS);
-    script->globals.data[var_ind] = value;
-    return var_ind;
+  int g_index = scriptGetGlobalIndex(script, name, length);
+  if (g_index != -1) {
+    ASSERT(g_index < (int)script->globals.count, OOPS);
+    script->globals.data[g_index] = value;
+    return g_index;
   }
 
   // If we're reached here that means we don't already have a variable with
@@ -1211,14 +1173,34 @@ uint32_t scriptAddGlobal(PKVM* vm, Script* script,
   return script->globals.count - 1;
 }
 
+int scriptGetGlobalIndex(Script* script, const char* name, uint32_t length) {
+  for (uint32_t i = 0; i < script->global_names.count; i++) {
+    uint32_t name_index = script->global_names.data[i];
+    String* g_name = script->names.data[name_index];
+    if (g_name->length == length && strncmp(g_name->data, name, length) == 0) {
+      return (int)i;
+    }
+  }
+  return -1;
+}
+
+void scriptSetGlobal(Script* script, int index, Var value) {
+  ASSERT_INDEX(index, script->globals.count);
+  script->globals.data[index] = value;
+}
+
 void scriptAddMain(PKVM* vm, Script* script) {
   ASSERT(script->body == NULL, OOPS);
 
   const char* fn_name = IMPLICIT_MAIN_NAME;
   script->body = newFunction(vm, fn_name, (int)strlen(fn_name),
-                             script, false, NULL/*TODO*/);
+                             script, false, NULL/*TODO*/, NULL);
   script->body->arity = 0;
   script->initialized = false;
+
+  scriptAddGlobal(vm, script,
+                  IMPLICIT_MAIN_NAME, (uint32_t)strlen(IMPLICIT_MAIN_NAME),
+                  VAR_OBJ(script->body));
 }
 
 bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value) {

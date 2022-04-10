@@ -40,11 +40,8 @@
 // internal. Which will be wrapped by pkNewModule to return a pkHandle*.
 static Script* newModuleInternal(PKVM* vm, const char* name);
 
-// The internal function to add global value to a module.
-static void moduleAddGlobalInternal(PKVM* vm, Script* script,
-                                    const char* name, Var value);
-
-// The internal function to add functions to a module.
+// Adds a function to the script with the give properties and add the function
+// to the module's globals variables.
 static void moduleAddFunctionInternal(PKVM* vm, Script* script,
                                       const char* name, pkNativeFn fptr,
                                       int arity, const char* docstring);
@@ -63,7 +60,8 @@ PK_PUBLIC void pkModuleAddGlobal(PKVM* vm, PkHandle* module,
   Var scr = module->value;
   __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
 
-  moduleAddGlobalInternal(vm, (Script*)AS_OBJ(scr), name, value->value);
+  scriptAddGlobal(vm, (Script*)AS_OBJ(scr), name, (uint32_t)strlen(name),
+                  value->value);
 }
 
 // pkModuleAddFunction implementation (see pocketlang.h for description).
@@ -76,25 +74,17 @@ void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
                             NULL /*TODO: Public API for function docstring.*/);
 }
 
-PkHandle* pkGetFunction(PKVM* vm, PkHandle* module,
-                                  const char* name) {
+PkHandle* pkGetMainFunction(PKVM* vm, PkHandle* module) {
   __ASSERT(module != NULL, "Argument module was NULL.");
   Var scr = module->value;
   __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
   Script* script = (Script*)AS_OBJ(scr);
 
-  for (uint32_t i = 0; i < script->functions.count; i++) {
-    const char* fn_name = script->functions.data[i]->name;
-    if (strcmp(name, fn_name) == 0) {
-      return vmNewHandle(vm, VAR_OBJ(script->functions.data[i]));
-    }
-  }
-
-  return NULL;
-}
-
-PkHandle* pkGetMainFunction(PKVM* vm, PkHandle* module) {
-  return pkGetFunction(vm, module, IMPLICIT_MAIN_NAME);
+  int main_index = scriptGetGlobalIndex(script, IMPLICIT_MAIN_NAME,
+                                        (uint32_t)strlen(IMPLICIT_MAIN_NAME));
+  if (main_index == -1) return NULL;
+  ASSERT_INDEX(main_index, (int)script->constants.count);
+  return vmNewHandle(vm, script->constants.data[main_index]);
 }
 
 // A convenient macro to get the nth (1 based) argument of the current
@@ -813,46 +803,16 @@ static Script* newModuleInternal(PKVM* vm, const char* name) {
   return scr;
 }
 
-// This will fail an assertion if a function or a global with the [name]
-// already exists in the module.
-static inline void assertModuleNameDef(PKVM* vm, Script* script,
-                                       const char* name) {
-  // Check if function with the same name already exists.
-  if (scriptGetFunc(script, name, (uint32_t)strlen(name)) != -1) {
-    __ASSERT(false, stringFormat(vm, "A function named '$' already esists "
-      "on module '@'", name, script->name)->data);
-  }
-
-  // Check if a global variable with the same name already exists.
-  if (scriptGetGlobals(script, name, (uint32_t)strlen(name)) != -1) {
-    __ASSERT(false, stringFormat(vm, "A global variable named '$' already "
-      "esists on module '@'", name, script->name)->data);
-  }
-}
-
-// The internal function to add global value to a module.
-static void moduleAddGlobalInternal(PKVM* vm, Script* script,
-                                    const char* name, Var value) {
-
-  // Ensure the name isn't defined already.
-  assertModuleNameDef(vm, script, name);
-
-  // Add the value to the globals buffer.
-  scriptAddGlobal(vm, script, name, (uint32_t)strlen(name), value);
-}
-
 // An internal function to add a function to the given [script].
 static void moduleAddFunctionInternal(PKVM* vm, Script* script,
                                       const char* name, pkNativeFn fptr,
                                       int arity, const char* docstring) {
 
-  // Ensure the name isn't predefined.
-  assertModuleNameDef(vm, script, name);
-
   Function* fn = newFunction(vm, name, (int)strlen(name),
-                             script, true, docstring);
+                             script, true, docstring, NULL);
   fn->native = fptr;
   fn->arity = arity;
+  scriptAddGlobal(vm, script, name, (uint32_t)strlen(name), VAR_OBJ(fn));
 }
 
 // 'lang' library methods.
@@ -1255,7 +1215,7 @@ static void initializeBuiltinFN(PKVM* vm, BuiltinFn* bfn, const char* name,
   bfn->name = name;
   bfn->length = length;
 
-  bfn->fn = newFunction(vm, name, length, NULL, true, docstring);
+  bfn->fn = newFunction(vm, name, length, NULL, true, docstring, NULL);
   bfn->fn->arity = arity;
   bfn->fn->native = ptr;
 }
@@ -1340,9 +1300,7 @@ void initializeCore(PKVM* vm) {
   // Note that currently it's mutable (since it's a global variable, not
   // constant and pocketlang doesn't support constant) so the user shouldn't
   // modify the PI, like in python.
-  // TODO: at varSetAttrib() we can detect if the user try to change an
-  // attribute of a core module and we can throw an error.
-  moduleAddGlobalInternal(vm, math, "PI", VAR_NUM(M_PI));
+  scriptAddGlobal(vm, math, "PI", 2, VAR_NUM(M_PI));
 
   Script* fiber = newModuleInternal(vm, "Fiber");
   MODULE_ADD_FN(fiber, "new",      stdFiberNew,     1);
@@ -1716,22 +1674,8 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     {
       Script* scr = (Script*)obj;
 
-      // Search in classes.
-      int index = scriptGetClass(scr, attrib->data, attrib->length);
-      if (index != -1) {
-        ASSERT_INDEX((uint32_t)index, scr->classes.count);
-        return VAR_OBJ(scr->classes.data[index]);
-      }
-
-      // Search in functions.
-      index = scriptGetFunc(scr, attrib->data, attrib->length);
-      if (index != -1) {
-        ASSERT_INDEX((uint32_t)index, scr->functions.count);
-        return VAR_OBJ(scr->functions.data[index]);
-      }
-
       // Search in globals.
-      index = scriptGetGlobals(scr, attrib->data, attrib->length);
+      int index = scriptGetGlobalIndex(scr, attrib->data, attrib->length);
       if (index != -1) {
         ASSERT_INDEX((uint32_t)index, scr->globals.count);
         return scr->globals.data[index];
@@ -1855,27 +1799,10 @@ do {                                                                          \
       Script* scr = (Script*)obj;
 
       // Check globals.
-      int index = scriptGetGlobals(scr, attrib->data, attrib->length);
+      int index = scriptGetGlobalIndex(scr, attrib->data, attrib->length);
       if (index != -1) {
         ASSERT_INDEX((uint32_t)index, scr->globals.count);
         scr->globals.data[index] = value;
-        return;
-      }
-
-      // Check function (Functions are immutable).
-      index = scriptGetFunc(scr, attrib->data, attrib->length);
-      if (index != -1) {
-        ASSERT_INDEX((uint32_t)index, scr->functions.count);
-        ATTRIB_IMMUTABLE(scr->functions.data[index]->name);
-        return;
-      }
-
-      index = scriptGetClass(scr, attrib->data, attrib->length);
-      if (index != -1) {
-        ASSERT_INDEX((uint32_t)index, scr->classes.count);
-        ASSERT_INDEX(scr->classes.data[index]->name, scr->names.count);
-        String* name = scr->names.data[scr->classes.data[index]->name];
-        ATTRIB_IMMUTABLE(name->data);
         return;
       }
 

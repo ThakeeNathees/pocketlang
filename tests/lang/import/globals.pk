@@ -1,9 +1,10 @@
 
 module g_import
 
-g_var_1 = 1 + 2
-g_var_2 = get_a_value()
-
 def get_a_value()
   return "foobar"
 end
+
+g_var_1 = 1 + 2
+g_var_2 = get_a_value()
+

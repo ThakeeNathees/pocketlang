@@ -126,6 +126,8 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
     // Compiled source would be the "main" function of the module. Run it.
     PkHandle* _main = pkGetMainFunction(vm, module);
     PkHandle* fiber = pkNewFiber(vm, _main);
+    ASSERT((_main != NULL) && (fiber != NULL), OOPS);
+
     result = pkRunFiber(vm, fiber, 0, NULL);
     pkReleaseHandle(vm, _main);
     pkReleaseHandle(vm, fiber);
