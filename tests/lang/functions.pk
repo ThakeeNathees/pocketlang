@@ -6,13 +6,6 @@ def f2() return 'f2' end assert(f2() == 'f2')
 def f3(a, b, c, d) return c end
 assert(f3('a', 'b', 'c', 'd') == 'c')
 
-## Forward call.
-val = before_defn()
-def before_defn()
-	return 'defined after the call'
-end
-assert(val == 'defined after the call')
-
 ## Chain call tests. (concatenative programming)
 ## Chain call no more supported (unnecessary feature).
 #def fn1(data) return '[fn1:' + data + ']' end

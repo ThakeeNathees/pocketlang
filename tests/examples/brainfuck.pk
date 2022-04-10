@@ -27,9 +27,11 @@ fibonacci = ">++++++++++>+>+[[+++++[>++++++++<-]>.<++++++[>--------<-]+<<<]>.
              >>[[-]<[>+<-]>>[<<+>+>-]<[>+<-[>+<-[>+<-[>+<-[>+<-[>+<-[>+<-[>+
              <-[>+<-[>[-]>+>+<<<-[>+<-]]]]]]]]]]]+>>>]<<<]"
 
-execute(hello_world)
-execute(triangle)
-##execute(fibonacci) This will run endlessly (cannot run test).
+def main()
+  execute(hello_world)
+  execute(triangle)
+  ##execute(fibonacci) This will run endlessly (cannot run test).
+end
 
 ###############################################################################
 ##                                  INTERNAL                                 ##
@@ -111,3 +113,8 @@ def execute(expr)
 
 end
 
+###############################################################################
+##                                  MAIN                                     ##
+###############################################################################
+
+main()

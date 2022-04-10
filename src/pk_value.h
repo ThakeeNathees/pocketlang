@@ -201,8 +201,6 @@ DECLARE_BUFFER(Uint, uint32_t)
 DECLARE_BUFFER(Byte, uint8_t)
 DECLARE_BUFFER(Var, Var)
 DECLARE_BUFFER(String, String*)
-DECLARE_BUFFER(Function, Function*)
-DECLARE_BUFFER(Class, Class*)
 
 // Add all the characters to the buffer, byte buffer can also be used as a
 // buffer to write string (like a string stream). Note that this will not
@@ -279,7 +277,7 @@ struct Script {
   // For core libraries the name and the path are same and points to the
   // same String objects.
   String* name; //< Module name of the script.
-  String* path;   //< Path of the script.
+  String* path; //< Path of the script.
 
   // The constant pool of the module, which contains literal values like
   // numbers, strings, and functions which are considered constants to
@@ -302,9 +300,6 @@ struct Script {
   // in the names buffer where j = global_names[i].
   pkVarBuffer globals;
   pkUintBuffer global_names;
-
-  pkFunctionBuffer functions;  //< Functions of the script.
-  pkClassBuffer classes;       //< Classes of the script.
 
   Function* body;              //< Script body is an anonymous function.
 
@@ -536,14 +531,17 @@ Range* newRange(PKVM* vm, double from, double to);
 // allocated for the module.
 Script* newScript(PKVM* vm, String* name, bool is_core);
 
-// Allocate new Function object and return Function*. Parameter [name] should
-// be the name in the Script's nametable. If the [owner] is NULL the function
-// would be builtin function. For builtin function arity and the native
-// function pointer would be initialized after calling this function.
-// The argument [docstring] is an optional documentation text (could be NULL)
-// That'll printed when running help(fn).
+// FIXME:
+// This bellow function will only to be used for module functions and the
+// parameter native is used for builtin functions which will be it's own
+// closures (closures should have their own native function pointers, rather
+// than having a function that has native pointer which is in-efficient).
+//
+// TODO:
+// Document the bellow function once after the native function move to closure.
 Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
-                      bool is_native, const char* docstring);
+                      bool is_native, const char* docstring,
+                      int* fn_index);
 
 // Allocate a new closure object and return it.
 Closure* newClosure(PKVM* vm, Function* fn);
@@ -554,8 +552,12 @@ Upvalue* newUpvalue(PKVM* vm, Var* value);
 // Allocate new Fiber object around the function [fn] and return Fiber*.
 Fiber* newFiber(PKVM* vm, Function* fn);
 
+// FIXME:
+// Same fix has to applied as newFunction() (see above).
+//
 // Allocate new Class object and return Class* with name [name].
-Class* newClass(PKVM* vm, Script* scr, const char* name, uint32_t length);
+Class* newClass(PKVM* vm, Script* scr, const char* name, uint32_t length,
+                 int* cls_index, int* ctor_index);
 
 // Allocate new instance with of the base [type]. Note that if [initialize] is
 // false, the field value buffer of the instance would be un initialized (ie.
@@ -587,10 +589,6 @@ void markVarBuffer(PKVM* vm, pkVarBuffer* self);
 // Mark the elements of the buffer as reachable at the mark-and-sweep phase of
 // the garbage collection.
 void markStringBuffer(PKVM* vm, pkStringBuffer* self);
-
-// Mark the elements of the buffer as reachable at the mark-and-sweep phase of
-// the garbage collection.
-void markFunctionBuffer(PKVM* vm, pkFunctionBuffer* self);
 
 // Pop the marked objects from the working set of the VM and add it's
 // referenced objects to the working set, continue traversing and mark
@@ -664,27 +662,26 @@ Var mapRemoveKey(PKVM* vm, Map* self, Var key);
 // resumed anymore.
 bool fiberHasError(Fiber* fiber);
 
+// Add a constant [value] to the [script] if it doesn't already present in the
+// constant buffer and return it's index.
+uint32_t scriptAddConstant(PKVM* vm, Script* script, Var value);
+
 // Add the name (string literal) to the string buffer if not already exists and
 // return it's index in the buffer.
 uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
                        uint32_t length);
 
-// Search for the type name in the script and return it's index in it's
-// [classes] buffer. If not found returns -1.
-int scriptGetClass(Script* script, const char* name, uint32_t length);
-
-// Search for the function name in the script and return it's index in it's
-// [functions] buffer. If not found returns -1.
-int scriptGetFunc(Script* script, const char* name, uint32_t length);
-
-// Search for the global variable name in the script and return it's index in
-// it's [globals] buffer. If not found returns -1.
-int scriptGetGlobals(Script* script, const char* name, uint32_t length);
-
 // Add a global [value] to the [scrpt] and return its index.
 uint32_t scriptAddGlobal(PKVM* vm, Script* script,
                          const char* name, uint32_t length,
                          Var value);
+
+// Search for the [name] in the script's globals and return it's index.
+// If not found it'll return -1.
+int scriptGetGlobalIndex(Script* script, const char* name, uint32_t length);
+
+// Set the global value at [index] in the global buffer with the [value].
+void scriptSetGlobal(Script* script, int index, Var value);
 
 // This will allocate a new implicit main function for the script and assign to
 // the script's body attribute. And the attribute initialized will be set to

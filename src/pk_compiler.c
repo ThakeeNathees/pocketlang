@@ -17,13 +17,9 @@
 // which is using a single byte value to identify the local.
 #define MAX_VARIABLES 256
 
-// The maximum number of functions a script could contain. Also it's limited by
-// it's opcode which is using a single byte value to identify.
-#define MAX_FUNCTIONS 256
-
-// The maximum number of classes a script could contain. Also it's limited by
-// it's opcode which is using a single byte value to identify.
-#define MAX_CLASSES 255
+// The maximum number of constant literal a script can contain. Also it's
+// limited by it's opcode which is using a short value to identify.
+#define MAX_CONSTANTS (1 << 16)
 
 // The maximum number of names that were used before defined. Its just the size
 // of the Forward buffer of the compiler. Feel free to increase it if it
@@ -39,10 +35,6 @@
 // the depth of 'd' is 2 and so on. The maximum depth an expression can go is
 // defined as MAX_STR_INTERP_DEPTH below.
 #define MAX_STR_INTERP_DEPTH 8
-
-// The maximum number of constant literal a script can contain. Also it's
-// limited by it's opcode which is using a short value to identify.
-#define MAX_CONSTANTS (1 << 16)
 
 // The maximum address possible to jump. Similar limitation as above.
 #define MAX_JUMP (1 << 16)
@@ -287,8 +279,10 @@ typedef struct sLoop {
 
 } Loop;
 
-// To keep track of names used but not defined yet. This is only used for
-// functions, because variables can't be accessed before it ever defined.
+// ForwardName is used for globals that are accessed before defined inside
+// a local scope.
+// TODO: Since function and class global variables are initialized at the
+//       compile time we can allow access to them at the global scope.
 typedef struct sForwardName {
 
   // Index of the short instruction that has the value of the name (in the
@@ -1231,8 +1225,6 @@ typedef enum {
   NAME_NOT_DEFINED,
   NAME_LOCAL_VAR,  //< Including parameter.
   NAME_GLOBAL_VAR,
-  NAME_FUNCTION,
-  NAME_CLASS,
   NAME_BUILTIN,    //< Native builtin function.
 } NameDefnType;
 
@@ -1278,25 +1270,9 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
   int index; // For storing the search result below.
 
   // Search through globals.
-  index = scriptGetGlobals(compiler->script, name, length);
+  index = scriptGetGlobalIndex(compiler->script, name, length);
   if (index != -1) {
     result.type = NAME_GLOBAL_VAR;
-    result.index = index;
-    return result;
-  }
-
-  // Search through classes.
-  index = scriptGetClass(compiler->script, name, length);
-  if (index != -1) {
-    result.type = NAME_CLASS;
-    result.index = index;
-    return result;
-  }
-
-  // Search through functions.
-  index = scriptGetFunc(compiler->script, name, length);
-  if (index != -1) {
-    result.type = NAME_FUNCTION;
     result.index = index;
     return result;
   }
@@ -1545,8 +1521,8 @@ static void exprInterpolation(Compiler* compiler) {
 
 static void exprFunc(Compiler* compiler) {
   int fn_index = compileFunction(compiler, FN_LITERAL);
-  emitOpcode(compiler, OP_PUSH_FN);
-  emitByte(compiler, fn_index);
+  emitOpcode(compiler, OP_PUSH_CONSTANT);
+  emitShort(compiler, fn_index);
 }
 
 // Local/global variables, script/native/builtin functions name.
@@ -1586,13 +1562,16 @@ static void exprName(Compiler* compiler) {
       }
     } else {
 
-      // The name could be a function which hasn't been defined at this point.
-      if (peek(compiler) == TK_LPARAN) {
-        emitOpcode(compiler, OP_PUSH_FN);
+      // The name could be a global value which hasn't been defined at this
+      // point. We add an implicit forward declaration and once this expression
+      // executed the value could be initialized only if the expression is at
+      // a local depth.
+      if (compiler->scope_depth == DEPTH_GLOBAL) {
+        parseError(compiler, "Name '%.*s' is not defined.", length, start);
+      } else {
+        emitOpcode(compiler, OP_PUSH_GLOBAL);
         int index = emitByte(compiler, 0xff);
         compilerAddForward(compiler, index, _FN, start, length, line);
-      } else {
-        parseError(compiler, "Name '%.*s' is not defined.", length, start);
       }
     }
 
@@ -1623,16 +1602,6 @@ static void exprName(Compiler* compiler) {
         }
         break;
       }
-
-      case NAME_FUNCTION:
-        emitOpcode(compiler, OP_PUSH_FN);
-        emitByte(compiler, result.index);
-        break;
-
-      case NAME_CLASS:
-        emitOpcode(compiler, OP_PUSH_TYPE);
-        emitByte(compiler, result.index);
-        break;
 
       case NAME_BUILTIN:
         emitOpcode(compiler, OP_PUSH_BUILTIN_FN);
@@ -1960,20 +1929,13 @@ static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
 static int compilerAddConstant(Compiler* compiler, Var value) {
   pkVarBuffer* constants = &compiler->script->constants;
 
-  for (uint32_t i = 0; i < constants->count; i++) {
-    if (isValuesSame(constants->data[i], value)) {
-      return i;
-    }
-  }
-
-  // Add new constant to script.
-  if (constants->count < MAX_CONSTANTS) {
-    pkVarBufferWrite(constants, compiler->parser.vm, value);
-  } else {
+  uint32_t index = scriptAddConstant(compiler->parser.vm,
+                                     compiler->script, value);
+  if (index >= MAX_CONSTANTS) {
     parseError(compiler, "A script should contain at most %d "
                "unique constants.", MAX_CONSTANTS);
   }
-  return (int)constants->count - 1;
+  return (int)index;
 }
 
 // Enters inside a block.
@@ -2150,38 +2112,37 @@ static int compileClass(Compiler* compiler) {
   consume(compiler, TK_NAME, "Expected a type name.");
   const char* name = compiler->parser.previous.start;
   int name_len = compiler->parser.previous.length;
-  NameSearchResult result = compilerSearchName(compiler, name, name_len);
-  if (result.type != NAME_NOT_DEFINED) {
-    parseError(compiler, "Name '%.*s' already exists.", name_len, name);
-  }
 
   // Create a new class.
+  int cls_index, ctor_index;
   Class* cls = newClass(compiler->parser.vm, compiler->script,
-                        name, (uint32_t)name_len);
+                        name, (uint32_t)name_len, &cls_index, &ctor_index);
   cls->ctor->arity = 0;
 
-  // Check count exceeded.
-  int fn_index = (int)compiler->script->functions.count - 1;
-  if (fn_index == MAX_FUNCTIONS) {
-    parseError(compiler, "A script should contain at most %d functions.",
-               MAX_FUNCTIONS);
-  }
+  // FIXME:
+  // Temproary patch for moving functions and classes to constant buffer.
+  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
+  int index = compilerAddVariable(compiler,
+                                  compiler->parser.previous.start,
+                                  compiler->parser.previous.length,
+                                  compiler->parser.previous.line);
+  scriptSetGlobal(compiler->script, index, VAR_OBJ(cls));
 
-  int cls_index = (int)(compiler->script->classes.count - 1);
-  if (cls_index == MAX_CLASSES) {
-    parseError(compiler, "A script should contain at most %d types.",
-               MAX_CLASSES);
+  // Check count exceeded.
+  if (cls_index >= MAX_CONSTANTS || ctor_index >= MAX_CONSTANTS) {
+    parseError(compiler, "A script should contain at most %d "
+               "unique constants.", MAX_CONSTANTS);
   }
 
   // Compile the constructor function.
   ASSERT(compiler->func->ptr == compiler->script->body, OOPS);
   Func curr_fn;
-  compilerPushFunc(compiler, &curr_fn, cls->ctor, fn_index);
+  compilerPushFunc(compiler, &curr_fn, cls->ctor, ctor_index);
   compilerEnterBlock(compiler);
 
   // Push an instance on the stack.
   emitOpcode(compiler, OP_PUSH_INSTANCE);
-  emitByte(compiler, cls_index);
+  emitShort(compiler, cls_index);
 
   skipNewLines(compiler);
   TokenType next = peek(compiler);
@@ -2228,7 +2189,6 @@ static int compileClass(Compiler* compiler) {
 
   compilerExitBlock(compiler);
   emitFunctionEnd(compiler);
-
   compilerPopFunc(compiler);
 
   return -1; // TODO;
@@ -2244,22 +2204,28 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
     consume(compiler, TK_NAME, "Expected a function name.");
     name = compiler->parser.previous.start;
     name_length = compiler->parser.previous.length;
-    NameSearchResult result = compilerSearchName(compiler, name, name_length);
-    if (result.type != NAME_NOT_DEFINED) {
-      parseError(compiler, "Name '%.*s' already exists.", name_length, name);
-    }
 
   } else {
     name = LITERAL_FN_NAME;
     name_length = (int)strlen(name);
   }
 
+  int fn_index;
   Function* func = newFunction(compiler->parser.vm, name, name_length,
-                               compiler->script, fn_type == FN_NATIVE, NULL);
-  int fn_index = (int)compiler->script->functions.count - 1;
-  if (fn_index == MAX_FUNCTIONS) {
-    parseError(compiler, "A script should contain at most %d functions.",
-               MAX_FUNCTIONS);
+                               compiler->script, fn_type == FN_NATIVE, NULL,
+                               &fn_index);
+  if (fn_index >= MAX_CONSTANTS) {
+    parseError(compiler, "A script should contain at most %d "
+               "unique constants.", MAX_CONSTANTS);
+  }
+
+  if (fn_type != FN_LITERAL) {
+    // FIXME: remove native keyword for functions.
+    ASSERT(fn_type != FN_NATIVE, OOPS);
+    ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
+    int name_line = compiler->parser.previous.line;
+    int g_index = compilerAddVariable(compiler, name, name_length, name_line);
+    scriptSetGlobal(compiler->script, g_index, VAR_OBJ(func));
   }
 
   Func curr_fn;
@@ -2317,7 +2283,10 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   }
 
 #if DUMP_BYTECODE
-  dumpFunctionCode(compiler->parser.vm, compiler->func->ptr);
+  // FIXME:
+  // Forward patch are pending so we can't dump constant value that
+  // needs to be patched.
+  //dumpFunctionCode(compiler->parser.vm, compiler->func->ptr);
 #endif
 
   compilerPopFunc(compiler);
@@ -2507,8 +2476,10 @@ static int compilerImportName(Compiler* compiler, int line,
     case NAME_GLOBAL_VAR:
       return result.index;
 
-    case NAME_FUNCTION:
-    case NAME_CLASS:
+    // TODO:
+    // Make it possible to override any name (ie. the syntax `print = 1`
+    // should pass) and allow imported entries to have the same name of
+    // builtin functions.
     case NAME_BUILTIN:
       parseError(compiler, "Name '%.*s' already exists.", length, name);
       return -1;
@@ -2549,23 +2520,9 @@ static void compilerImportAll(Compiler* compiler, Script* script) {
   ASSERT(script != NULL, OOPS);
   ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
-  // Import all classes.
-  for (uint32_t i = 0; i < script->classes.count; i++) {
-    uint32_t name_ind = script->classes.data[i]->name;
-    String* name = script->names.data[name_ind];
-    compilerImportSingleEntry(compiler, name->data, name->length);
-  }
-
-  // Import all functions.
-  for (uint32_t i = 0; i < script->functions.count; i++) {
-    const char* name = script->functions.data[i]->name;
-    uint32_t length = (uint32_t)strlen(name);
-    compilerImportSingleEntry(compiler, name, length);
-  }
-
   // Import all globals.
+  ASSERT(script->global_names.count == script->globals.count, OOPS);
   for (uint32_t i = 0; i < script->globals.count; i++) {
-    ASSERT(i < script->global_names.count, OOPS);
     ASSERT(script->global_names.data[i] < script->names.count, OOPS);
     const String* name = script->names.data[script->global_names.data[i]];
 
@@ -2678,6 +2635,7 @@ static void compileRegularImport(Compiler* compiler) {
         // -- Nothing to do here --
         // Importing from path which doesn't have a module name. Import
         // everything of it. and bind to a variables.
+        NO_OP;
       }
     }
 
@@ -2993,11 +2951,11 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
   // just use the globals and functions of the script and use a new body func.
   pkByteBufferClear(&script->body->fn->opcodes, vm);
 
-  // Remember the count of the globals, functions and types, If the compilation
-  // failed discard all the globals and functions added by the compilation.
+  // Remember the count of constants, names, and globals, If the compilation
+  // failed discard all of them and roll back.
+  uint32_t constants_count = script->constants.count;
+  uint32_t names_count = script->names.count;
   uint32_t globals_count = script->globals.count;
-  uint32_t functions_count = script->functions.count;
-  uint32_t types_count = script->classes.count;
 
   Func curr_fn;
   curr_fn.depth = DEPTH_SCRIPT;
@@ -3039,7 +2997,7 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
     ForwardName* forward = &compiler->parser.forwards[i];
     const char* name = forward->name;
     int length = forward->length;
-    int index = scriptGetFunc(script, name, (uint32_t)length);
+    int index = scriptGetGlobalIndex(compiler->script, name, (uint32_t)length);
     if (index != -1) {
       patchForward(compiler, forward->func, forward->instruction, index);
     } else {
@@ -3056,9 +3014,9 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
 
   // If compilation failed, discard all the invalid functions and globals.
   if (compiler->parser.has_errors) {
+    script->constants.count = constants_count;
+    script->names.count = names_count;
     script->globals.count = script->global_names.count = globals_count;
-    script->functions.count = functions_count;
-    script->classes.count = types_count;
   }
 
 #if DUMP_BYTECODE
