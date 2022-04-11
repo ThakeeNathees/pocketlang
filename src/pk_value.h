@@ -188,7 +188,7 @@ typedef struct String String;
 typedef struct List List;
 typedef struct Map Map;
 typedef struct Range Range;
-typedef struct Script Script;
+typedef struct Module Module;
 typedef struct Function Function;
 typedef struct Closure Closure;
 typedef struct Upvalue Upvalue;
@@ -214,7 +214,7 @@ typedef enum {
   OBJ_LIST,
   OBJ_MAP,
   OBJ_RANGE,
-  OBJ_SCRIPT,
+  OBJ_MODULE,
   OBJ_FUNC,
   OBJ_CLOSURE,
   OBJ_UPVALUE,
@@ -269,15 +269,20 @@ struct Range {
   double to;   //< End of the range exclusive.
 };
 
-// In pocketlang, the terms Script and Module are interchangable. (Consider
-// renaming it to Module to be consistance with the terms).
-struct Script {
+// Module in pocketlang is a collection of globals, functions, classes and top
+// level statements, they can be imported in other modules generally a
+// pocketlang script will compiled to a module.
+struct Module {
   Object _super;
 
-  // For core libraries the name and the path are same and points to the
-  // same String objects.
-  String* name; //< Module name of the script.
-  String* path; //< Path of the script.
+  // The [name] is the module name defined with either 'module' statement
+  // in the script or the provided name for native modules when creating.
+  // For core modules the name and the path are same and will points to the
+  // same String objects. For modules compiled from a script the path will
+  // be it's resolved path (could be absolute path but thats depend on the
+  // path resolver).
+  String* name;
+  String* path;
 
   // The constant pool of the module, which contains literal values like
   // numbers, strings, and functions which are considered constants to
@@ -295,21 +300,24 @@ struct Script {
   // a seperation between string literals and names in it's constant pool.
 
   // Globals is an array of global variables of the module. All the names
-  // (including global variables) are stored in the names buffer of the script
+  // (including global variables) are stored in the names buffer of the module
   // (defined bellow). The (i)th global variables names is located at index (j)
   // in the names buffer where j = global_names[i].
   pkVarBuffer globals;
   pkUintBuffer global_names;
 
-  Function* body;              //< Script body is an anonymous function.
+  // Top level statements of a module are compiled to an implicit function
+  // body whic will be executed if it's imported for the first time.
+  Function* body;
 
-  // When a script has globals, it's body need to be executed to initialize the
-  // global values, this will be false if the module isn't initialized yet and
-  // we need to execute the script's body whe we're importing it.
+  // If the [initialized] boolean is false, the body function of the module
+  // will be executed when it's first imported and the 'initialized' boolean
+  // will be set to true. If a module doesn't have globals, We can safely set
+  // it to true to prevent from running the above body function, if it has one.
   bool initialized;
 };
 
-// Script function pointer.
+// A struct contain opcodes and other information of a compiled function.
 typedef struct {
   pkByteBuffer opcodes;  //< Buffer of opcodes.
   pkUintBuffer oplines;  //< Line number of opcodes for debug (1 based).
@@ -319,8 +327,23 @@ typedef struct {
 struct Function {
   Object _super;
 
-  const char* name; //< Name in the script [owner] or C literal.
-  Script* owner;    //< Owner script of the function.
+  // The module that owns this function. Since built in functions doesn't
+  // belongs to a module it'll be NULL for them.
+  Module* owner;
+
+  // FIXME:
+  // Because of the builtin function cannot have modules, we cannot reference
+  // the name of a function with a index which points to the name entry in the
+  // owner module's names buffer.
+  //
+  // The [name] is the name of the function which the function won't have a
+  // reference to that (to prevent it from garbage collected), it's either
+  // a C literal string or a name entry in the owner modules names buffer.
+  // Either way it's guranteed to be alive till the function is alive.
+  //
+  // For embedding pocketlang the user must ensure the name exists till the
+  // function is alive, and it's recomented to use literal C string for that.
+  const char* name;
 
   // Number of argument the function expects. If the arity is -1 that means
   // the function has a variadic number of parameters. When a function is
@@ -337,10 +360,12 @@ struct Function {
   // native functions to provide a docstring.
   const char* docstring;
 
-  bool is_native;        //< True if Native function.
+  // Function can be either native C function pointers or compiled pocket
+  // functions.
+  bool is_native;
   union {
-    pkNativeFn native;   //< Native function pointer.
-    Fn* fn;              //< Script function pointer.
+    pkNativeFn native; //< Native function pointer.
+    Fn* fn;            //< Pocket function pointer.
   };
 };
 
@@ -429,8 +454,7 @@ struct Fiber {
 
   FiberState state;
 
-  // The root function of the fiber. (For script it'll be the script's implicit
-  // body function).
+  // The root function of the fiber.
   Function* func;
 
   // The stack of the execution holding locals and temps. A heap will be
@@ -462,8 +486,12 @@ struct Fiber {
 struct Class {
   Object _super;
 
-  Script* owner; //< The script it belongs to.
-  uint32_t name; //< Index of the type's name in the script's name buffer.
+  // The module that owns this class.
+  Module* owner;
+
+  // The index of the name of this class in the owner module's names
+  // buffer.
+  uint32_t name;
 
   Function* ctor; //< The constructor function.
   pkUintBuffer field_names; //< Buffer of field names.
@@ -524,22 +552,13 @@ Map* newMap(PKVM* vm);
 // Allocate new Range object and return Range*.
 Range* newRange(PKVM* vm, double from, double to);
 
-// Allocate new Script object and return Script*, if the argument [is_core] is
-// true the script will be used as a core module and the body of the script
-// would be NULL and the [name] will be used as the module name. Otherwise the
-// [name] will be used as the path of the module and a main function will be
-// allocated for the module.
-Script* newScript(PKVM* vm, String* name, bool is_core);
+// FIXME:
+// We may need 2 different constructor for native and script modules.
+Module* newModule(PKVM* vm, String* name, bool is_core);
 
 // FIXME:
-// This bellow function will only to be used for module functions and the
-// parameter native is used for builtin functions which will be it's own
-// closures (closures should have their own native function pointers, rather
-// than having a function that has native pointer which is in-efficient).
-//
-// TODO:
-// Document the bellow function once after the native function move to closure.
-Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
+// We may need 2 different constuctor for native and script functions.
+Function* newFunction(PKVM* vm, const char* name, int length, Module* owner,
                       bool is_native, const char* docstring,
                       int* fn_index);
 
@@ -556,7 +575,7 @@ Fiber* newFiber(PKVM* vm, Function* fn);
 // Same fix has to applied as newFunction() (see above).
 //
 // Allocate new Class object and return Class* with name [name].
-Class* newClass(PKVM* vm, Script* scr, const char* name, uint32_t length,
+Class* newClass(PKVM* vm, Module* scr, const char* name, uint32_t length,
                  int* cls_index, int* ctor_index);
 
 // Allocate new instance with of the base [type]. Note that if [initialize] is
@@ -662,32 +681,32 @@ Var mapRemoveKey(PKVM* vm, Map* self, Var key);
 // resumed anymore.
 bool fiberHasError(Fiber* fiber);
 
-// Add a constant [value] to the [script] if it doesn't already present in the
+// Add a constant [value] to the [module] if it doesn't already present in the
 // constant buffer and return it's index.
-uint32_t scriptAddConstant(PKVM* vm, Script* script, Var value);
+uint32_t moduleAddConstant(PKVM* vm, Module* module, Var value);
 
 // Add the name (string literal) to the string buffer if not already exists and
 // return it's index in the buffer.
-uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
+uint32_t moduleAddName(Module* module, PKVM* vm, const char* name,
                        uint32_t length);
 
-// Add a global [value] to the [scrpt] and return its index.
-uint32_t scriptAddGlobal(PKVM* vm, Script* script,
+// Add a global [value] to the [module] and return its index.
+uint32_t moduleAddGlobal(PKVM* vm, Module* module,
                          const char* name, uint32_t length,
                          Var value);
 
-// Search for the [name] in the script's globals and return it's index.
+// Search for the [name] in the module's globals and return it's index.
 // If not found it'll return -1.
-int scriptGetGlobalIndex(Script* script, const char* name, uint32_t length);
+int moduleGetGlobalIndex(Module* module, const char* name, uint32_t length);
 
 // Set the global value at [index] in the global buffer with the [value].
-void scriptSetGlobal(Script* script, int index, Var value);
+void moduleSetGlobal(Module* module, int index, Var value);
 
-// This will allocate a new implicit main function for the script and assign to
-// the script's body attribute. And the attribute initialized will be set to
-// false for the new function. Note that the body of the script should be NULL
-// before calling this function.
-void scriptAddMain(PKVM* vm, Script* script);
+// This will allocate a new implicit main function for the module and assign to
+// the module's body attribute. And the attribute initialized will be set to
+// false. Note that the body of the module should be NULL before calling this
+// function.
+void moduleAddMain(PKVM* vm, Module* module);
 
 // Get the attribut from the instance and set it [value]. On success return
 // true, if the attribute not exists it'll return false but won't set an error.

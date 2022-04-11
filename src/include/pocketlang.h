@@ -84,7 +84,7 @@ typedef enum {
   PK_LIST,
   PK_MAP,
   PK_RANGE,
-  PK_SCRIPT,
+  PK_MODULE,
   PK_FUNCTION,
   PK_FIBER,
   PK_CLASS,

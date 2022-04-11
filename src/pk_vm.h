@@ -46,9 +46,8 @@
     (vm->fiber->error = err);        \
   } while (false)
 
-// Builtin functions are stored in an array in the VM (unlike script functions
-// they're member of function buffer of the script) and this struct is a single
-// entry of the array.
+// Builtin functions are stored in an array in the VM unlike other functions
+// builtin function's doesn't belongs to any module.
 typedef struct {
   const char* name; //< Name of the function.
   uint32_t length;  //< Length of the name.
@@ -111,14 +110,14 @@ struct PKVM {
   // Current compiler reference to mark it's heap allocated objects. Note that
   // The compiler isn't heap allocated. It'll be a link list of all the
   // compiler we have so far. A new compiler will be created and appended when
-  // a new script is being imported and compiled at compiletime.
+  // a new module is being imported and compiled at compiletime.
   Compiler* compiler;
 
-  // A cache of the compiled scripts with their path as key and the Scrpit
+  // A cache of the compiled modules with their path as key and the Scrpit
   // object as the value.
-  Map* scripts;
+  Map* modules;
 
-  // A map of core libraries with their name as the key and the Script object
+  // A map of core libraries with their name as the key and the Module object
   // as the value.
   Map* core_libs;
 
@@ -192,9 +191,9 @@ void vmPushTempRef(PKVM* vm, Object* obj);
 // Pop the top most object from temporary reference stack.
 void vmPopTempRef(PKVM* vm);
 
-// Returns the scrpt with the resolved [path] (also the key) in the vm's script
-// cache. If not found itll return NULL.
-Script* vmGetScript(PKVM* vm, String* path);
+// Returns the module with the resolved [path] (also the key) in the VM's
+// modules cache. If not found itll return NULL.
+Module* vmGetModule(PKVM* vm, String* path);
 
 // ((Context switching - start))
 // Prepare a new fiber for execution with the given arguments. That can be used

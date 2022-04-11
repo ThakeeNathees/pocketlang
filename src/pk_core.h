@@ -25,7 +25,7 @@ const char* getBuiltinFunctionName(const PKVM* vm, int index);
 
 // Return the core library with the [name] if exists in the core libs,
 // otherwise returns NULL.
-Script* getCoreLib(const PKVM* vm, String* name);
+Module* getCoreLib(const PKVM* vm, String* name);
 
 /*****************************************************************************/
 /* OPERATORS                                                                 */

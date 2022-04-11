@@ -32,7 +32,7 @@ PkVarType pkGetValueType(const PkVar value) {
     case OBJ_LIST:   return PK_LIST;
     case OBJ_MAP:    return PK_MAP;
     case OBJ_RANGE:  return PK_RANGE;
-    case OBJ_SCRIPT: return PK_SCRIPT;
+    case OBJ_MODULE: return PK_MODULE;
     case OBJ_FUNC:   return PK_FUNCTION;
     case OBJ_FIBER:  return PK_FIBER;
     case OBJ_CLASS:  return PK_CLASS;
@@ -194,27 +194,27 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       vm->bytes_allocated += sizeof(Range);
     } break;
 
-    case OBJ_SCRIPT:
+    case OBJ_MODULE:
     {
-      Script* scr = (Script*)obj;
-      vm->bytes_allocated += sizeof(Script);
+      Module* module = (Module*)obj;
+      vm->bytes_allocated += sizeof(Module);
 
-      markObject(vm, &scr->path->_super);
-      markObject(vm, &scr->name->_super);
+      markObject(vm, &module->path->_super);
+      markObject(vm, &module->name->_super);
 
-      markVarBuffer(vm, &scr->globals);
-      vm->bytes_allocated += sizeof(Var) * scr->globals.capacity;
+      markVarBuffer(vm, &module->globals);
+      vm->bytes_allocated += sizeof(Var) * module->globals.capacity;
 
       // Integer buffer has no gray call.
-      vm->bytes_allocated += sizeof(uint32_t) * scr->global_names.capacity;
+      vm->bytes_allocated += sizeof(uint32_t) * module->global_names.capacity;
 
-      markVarBuffer(vm, &scr->constants);
-      vm->bytes_allocated += sizeof(Var) * scr->constants.capacity;
+      markVarBuffer(vm, &module->constants);
+      vm->bytes_allocated += sizeof(Var) * module->constants.capacity;
 
-      markStringBuffer(vm, &scr->names);
-      vm->bytes_allocated += sizeof(String*) * scr->names.capacity;
+      markStringBuffer(vm, &module->names);
+      vm->bytes_allocated += sizeof(String*) * module->names.capacity;
 
-      markObject(vm, &scr->body->_super);
+      markObject(vm, &module->body->_super);
     } break;
 
     case OBJ_FUNC:
@@ -379,46 +379,47 @@ Range* newRange(PKVM* vm, double from, double to) {
   return range;
 }
 
-Script* newScript(PKVM* vm, String* name, bool is_core) {
-  Script* script = ALLOCATE(vm, Script);
-  varInitObject(&script->_super, vm, OBJ_SCRIPT);
+Module* newModule(PKVM* vm, String* name, bool is_core) {
+  Module* module = ALLOCATE(vm, Module);
+  varInitObject(&module->_super, vm, OBJ_MODULE);
 
   ASSERT(name != NULL && name->length > 0, OOPS);
 
-  script->path = name;
-  script->name = NULL;
-  script->initialized = is_core;
-  script->body = NULL;
+  module->path = name;
+  module->name = NULL;
+  module->initialized = is_core;
+  module->body = NULL;
 
   // Core modules has its name as the module name.
-  if (is_core) script->name = name;
+  if (is_core) module->name = name;
 
-  pkVarBufferInit(&script->globals);
-  pkUintBufferInit(&script->global_names);
-  pkVarBufferInit(&script->constants);
-  pkStringBufferInit(&script->names);
+  pkVarBufferInit(&module->globals);
+  pkUintBufferInit(&module->global_names);
+  pkVarBufferInit(&module->constants);
+  pkStringBufferInit(&module->names);
 
   // Add a implicit main function and the '__file__' global to the module, only
   // if it's not a core module.
   if (!is_core) {
-    vmPushTempRef(vm, &script->_super);
-    scriptAddMain(vm, script);
+    vmPushTempRef(vm, &module->_super); // module.
+
+    moduleAddMain(vm, module);
 
     // Add '__file__' variable with it's path as value. If the path starts with
     // '@' It's a special file (@(REPL) or @(TRY)) and don't define __file__.
-    if (script->path->data[0] != SPECIAL_NAME_CHAR) {
-      scriptAddGlobal(vm, script, "__file__", 8, VAR_OBJ(script->path));
+    if (module->path->data[0] != SPECIAL_NAME_CHAR) {
+      moduleAddGlobal(vm, module, "__file__", 8, VAR_OBJ(module->path));
     }
 
     // TODO: Add ARGV as a global.
 
-    vmPopTempRef(vm); // script.
+    vmPopTempRef(vm); // module.
   }
 
-  return script;
+  return module;
 }
 
-Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
+Function* newFunction(PKVM* vm, const char* name, int length, Module* owner,
                       bool is_native, const char* docstring,
                       int* fn_index) {
 
@@ -433,10 +434,10 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
     func->owner = NULL;
 
   } else {
-    uint32_t _fn_index = scriptAddConstant(vm, owner, VAR_OBJ(func));
+    uint32_t _fn_index = moduleAddConstant(vm, owner, VAR_OBJ(func));
     if (fn_index) *fn_index = _fn_index;
 
-    uint32_t name_index = scriptAddName(owner, vm, name, length);
+    uint32_t name_index = moduleAddName(owner, vm, name, length);
 
     func->name = owner->names.data[name_index]->data;
     func->owner = owner;
@@ -457,7 +458,6 @@ Function* newFunction(PKVM* vm, const char* name, int length, Script* owner,
     func->fn = fn;
   }
 
-  // Both native and script (TODO:) functions support docstring.
   func->docstring = docstring;
 
   vmPopTempRef(vm); // func
@@ -536,34 +536,35 @@ Fiber* newFiber(PKVM* vm, Function* fn) {
   return fiber;
 }
 
-Class* newClass(PKVM* vm, Script* scr, const char* name, uint32_t length,
+Class* newClass(PKVM* vm, Module* module, const char* name, uint32_t length,
                 int* cls_index, int* ctor_index) {
 
   Class* cls = ALLOCATE(vm, Class);
   varInitObject(&cls->_super, vm, OBJ_CLASS);
 
-  vmPushTempRef(vm, &cls->_super); // type.
+  vmPushTempRef(vm, &cls->_super); // class.
 
-  uint32_t _cls_index = scriptAddConstant(vm, scr, VAR_OBJ(cls));
+  uint32_t _cls_index = moduleAddConstant(vm, module, VAR_OBJ(cls));
   if (cls_index) *cls_index = (int)_cls_index;
 
   pkUintBufferInit(&cls->field_names);
-  cls->owner = scr;
-  cls->name = scriptAddName(scr, vm, name, length);
+  cls->owner = module;
+  cls->name = moduleAddName(module, vm, name, length);
 
-  // FIXME:
-  // Make it possible to escape '@' and '$' character in formated string and
-  // replace below '%' with excaped '\@' (SPECIAL_NAME_CHAR) character.
-  String* ty_name = scr->names.data[cls->name];
-  String* ctor_name = stringFormat(vm, "%(Ctor:@)", ty_name);
+  // Since characters '@' and '$' are special in stringFormat, and they
+  // currently cannot be escaped (TODO), a string (char array) created
+  // for that character and passed as C string format.
+  char special[2] = { SPECIAL_NAME_CHAR, '\0' };
+  String* cls_name = module->names.data[cls->name];
+  String* ctor_name = stringFormat(vm, "$(Ctor:@)", special, cls_name);
 
   // Constructor.
   vmPushTempRef(vm, &ctor_name->_super); // ctor_name
   cls->ctor = newFunction(vm, ctor_name->data, ctor_name->length,
-                           scr, false, NULL, ctor_index);
+                           module, false, NULL, ctor_index);
   vmPopTempRef(vm); // ctor_name
 
-  vmPopTempRef(vm); // type.
+  vmPopTempRef(vm); // class.
   return cls;
 }
 
@@ -849,7 +850,7 @@ static uint32_t _hashObject(Object* obj) {
       return utilHashNumber(range->from) ^ utilHashNumber(range->to);
     }
 
-    case OBJ_SCRIPT:
+    case OBJ_MODULE:
     case OBJ_FUNC:
     case OBJ_FIBER:
     case OBJ_CLASS:
@@ -1068,12 +1069,12 @@ void freeObject(PKVM* vm, Object* self) {
     case OBJ_RANGE:
       break;
 
-    case OBJ_SCRIPT: {
-      Script* scr = (Script*)self;
-      pkVarBufferClear(&scr->globals, vm);
-      pkUintBufferClear(&scr->global_names, vm);
-      pkVarBufferClear(&scr->constants, vm);
-      pkStringBufferClear(&scr->names, vm);
+    case OBJ_MODULE: {
+      Module* module = (Module*)self;
+      pkVarBufferClear(&module->globals, vm);
+      pkUintBufferClear(&module->global_names, vm);
+      pkVarBufferClear(&module->constants, vm);
+      pkStringBufferClear(&module->names, vm);
     } break;
 
     case OBJ_FUNC: {
@@ -1123,21 +1124,21 @@ void freeObject(PKVM* vm, Object* self) {
   DEALLOCATE(vm, self);
 }
 
-uint32_t scriptAddConstant(PKVM* vm, Script* script, Var value) {
-  for (uint32_t i = 0; i < script->constants.count; i++) {
-    if (isValuesSame(script->constants.data[i], value)) {
+uint32_t moduleAddConstant(PKVM* vm, Module* module, Var value) {
+  for (uint32_t i = 0; i < module->constants.count; i++) {
+    if (isValuesSame(module->constants.data[i], value)) {
       return i;
     }
   }
-  pkVarBufferWrite(&script->constants, vm, value);
-  return (int)script->constants.count - 1;
+  pkVarBufferWrite(&module->constants, vm, value);
+  return (int)module->constants.count - 1;
 }
 
-uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
+uint32_t moduleAddName(Module* module, PKVM* vm, const char* name,
                        uint32_t length) {
 
-  for (uint32_t i = 0; i < self->names.count; i++) {
-    String* _name = self->names.data[i];
+  for (uint32_t i = 0; i < module->names.count; i++) {
+    String* _name = module->names.data[i];
     if (_name->length == length && strncmp(_name->data, name, length) == 0) {
       // Name already exists in the buffer.
       return i;
@@ -1148,35 +1149,35 @@ uint32_t scriptAddName(Script* self, PKVM* vm, const char* name,
   // return the index.
   String* new_name = newStringLength(vm, name, length);
   vmPushTempRef(vm, &new_name->_super);
-  pkStringBufferWrite(&self->names, vm, new_name);
+  pkStringBufferWrite(&module->names, vm, new_name);
   vmPopTempRef(vm);
-  return self->names.count - 1;
+  return module->names.count - 1;
 }
 
-uint32_t scriptAddGlobal(PKVM* vm, Script* script,
+uint32_t moduleAddGlobal(PKVM* vm, Module* module,
                          const char* name, uint32_t length,
                          Var value) {
 
   // If already exists update the value.
-  int g_index = scriptGetGlobalIndex(script, name, length);
+  int g_index = moduleGetGlobalIndex(module, name, length);
   if (g_index != -1) {
-    ASSERT(g_index < (int)script->globals.count, OOPS);
-    script->globals.data[g_index] = value;
+    ASSERT(g_index < (int)module->globals.count, OOPS);
+    module->globals.data[g_index] = value;
     return g_index;
   }
 
   // If we're reached here that means we don't already have a variable with
   // that name, create new one and set the value.
-  uint32_t name_ind = scriptAddName(script, vm, name, length);
-  pkUintBufferWrite(&script->global_names, vm, name_ind);
-  pkVarBufferWrite(&script->globals, vm, value);
-  return script->globals.count - 1;
+  uint32_t name_ind = moduleAddName(module, vm, name, length);
+  pkUintBufferWrite(&module->global_names, vm, name_ind);
+  pkVarBufferWrite(&module->globals, vm, value);
+  return module->globals.count - 1;
 }
 
-int scriptGetGlobalIndex(Script* script, const char* name, uint32_t length) {
-  for (uint32_t i = 0; i < script->global_names.count; i++) {
-    uint32_t name_index = script->global_names.data[i];
-    String* g_name = script->names.data[name_index];
+int moduleGetGlobalIndex(Module* module, const char* name, uint32_t length) {
+  for (uint32_t i = 0; i < module->global_names.count; i++) {
+    uint32_t name_index = module->global_names.data[i];
+    String* g_name = module->names.data[name_index];
     if (g_name->length == length && strncmp(g_name->data, name, length) == 0) {
       return (int)i;
     }
@@ -1184,23 +1185,23 @@ int scriptGetGlobalIndex(Script* script, const char* name, uint32_t length) {
   return -1;
 }
 
-void scriptSetGlobal(Script* script, int index, Var value) {
-  ASSERT_INDEX(index, script->globals.count);
-  script->globals.data[index] = value;
+void moduleSetGlobal(Module* module, int index, Var value) {
+  ASSERT_INDEX(index, (int)module->globals.count);
+  module->globals.data[index] = value;
 }
 
-void scriptAddMain(PKVM* vm, Script* script) {
-  ASSERT(script->body == NULL, OOPS);
+void moduleAddMain(PKVM* vm, Module* module) {
+  ASSERT(module->body == NULL, OOPS);
 
   const char* fn_name = IMPLICIT_MAIN_NAME;
-  script->body = newFunction(vm, fn_name, (int)strlen(fn_name),
-                             script, false, NULL/*TODO*/, NULL);
-  script->body->arity = 0;
-  script->initialized = false;
+  module->body = newFunction(vm, fn_name, (int)strlen(fn_name),
+                             module, false, NULL/*TODO*/, NULL);
+  module->body->arity = 0;
+  module->initialized = false;
 
-  scriptAddGlobal(vm, script,
+  moduleAddGlobal(vm, module,
                   IMPLICIT_MAIN_NAME, (uint32_t)strlen(IMPLICIT_MAIN_NAME),
-                  VAR_OBJ(script->body));
+                  VAR_OBJ(module->body));
 }
 
 bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value) {
@@ -1340,7 +1341,7 @@ const char* getPkVarTypeName(PkVarType type) {
     case PK_LIST:     return "List";
     case PK_MAP:      return "Map";
     case PK_RANGE:    return "Range";
-    case PK_SCRIPT:   return "Script";
+    case PK_MODULE:   return "Module";
 
     // TODO: since functions are not first class citizens anymore, remove it
     // and add closure (maybe with the same name PK_FUNCTION).
@@ -1360,7 +1361,7 @@ const char* getObjectTypeName(ObjectType type) {
     case OBJ_LIST:    return "List";
     case OBJ_MAP:     return "Map";
     case OBJ_RANGE:   return "Range";
-    case OBJ_SCRIPT:  return "Script";
+    case OBJ_MODULE:  return "Module";
     case OBJ_FUNC:    return "Func";
     case OBJ_CLOSURE: return "Closure";
     case OBJ_UPVALUE: return "Upvalue";
@@ -1616,15 +1617,16 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
         return;
       }
 
-      case OBJ_SCRIPT: {
-        const Script* scr = (const Script*)obj;
+      case OBJ_MODULE: {
+        const Module* module = (const Module*)obj;
         pkByteBufferAddString(buff, vm, "[Module:", 8);
-        if (scr->name != NULL) {
-          pkByteBufferAddString(buff, vm, scr->name->data,
-                              scr->name->length);
+        if (module->name != NULL) {
+          pkByteBufferAddString(buff, vm, module->name->data,
+                              module->name->length);
         } else {
           pkByteBufferWrite(buff, vm, '"');
-          pkByteBufferAddString(buff, vm, scr->path->data, scr->path->length);
+          pkByteBufferAddString(buff, vm, module->path->data,
+                                module->path->length);
           pkByteBufferWrite(buff, vm, '"');
         }
         pkByteBufferWrite(buff, vm, ']');
@@ -1751,7 +1753,7 @@ bool toBool(Var v) {
     case OBJ_LIST:   return ((List*)o)->elements.count != 0;
     case OBJ_MAP:    return ((Map*)o)->count != 0;
     case OBJ_RANGE: // [[FALLTHROUGH]]
-    case OBJ_SCRIPT:
+    case OBJ_MODULE:
     case OBJ_FUNC:
     case OBJ_FIBER:
     case OBJ_CLASS:

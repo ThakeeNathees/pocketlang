@@ -365,11 +365,11 @@ void dumpGlobalValues(PKVM* vm) {
   int frame_ind = fiber->frame_count - 1;
   ASSERT(frame_ind >= 0, OOPS);
   CallFrame* frame = &fiber->frames[frame_ind];
-  Script* scr = frame->fn->owner;
+  Module* module = frame->fn->owner;
 
-  for (uint32_t i = 0; i < scr->global_names.count; i++) {
-    String* name = scr->names.data[scr->global_names.data[i]];
-    Var value = scr->globals.data[i];
+  for (uint32_t i = 0; i < module->global_names.count; i++) {
+    String* name = module->names.data[module->global_names.data[i]];
+    Var value = module->globals.data[i];
     printf("%10s = ", name->data);
     dumpValue(vm, value);
     printf("\n");

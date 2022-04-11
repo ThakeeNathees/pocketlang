@@ -68,7 +68,7 @@ PKVM* pkNewVM(PkConfiguration* config) {
   vm->min_heap_size = MIN_HEAP_SIZE;
   vm->heap_fill_percent = HEAP_FILL_PERCENT;
 
-  vm->scripts = newMap(vm);
+  vm->modules = newMap(vm);
   vm->core_libs = newMap(vm);
   vm->builtins_count = 0;
 
@@ -136,28 +136,28 @@ PkResult pkInterpretSource(PKVM* vm, PkStringPtr source, PkStringPtr path,
   if (path.on_done) path.on_done(vm, path);
   vmPushTempRef(vm, &path_name->_super); // path_name.
 
-  // TODO: Should I clean the script if it already exists before compiling it?
+  // TODO: Should I clean the module if it already exists before compiling it?
 
-  // Load a new script to the vm's scripts cache.
-  Script* scr = vmGetScript(vm, path_name);
-  if (scr == NULL) {
-    scr = newScript(vm, path_name, false);
-    vmPushTempRef(vm, &scr->_super); // scr.
-    mapSet(vm, vm->scripts, VAR_OBJ(path_name), VAR_OBJ(scr));
-    vmPopTempRef(vm); // scr.
+  // Load a new module to the vm's modules cache.
+  Module* module = vmGetModule(vm, path_name);
+  if (module == NULL) {
+    module = newModule(vm, path_name, false);
+    vmPushTempRef(vm, &module->_super); // module.
+    mapSet(vm, vm->modules, VAR_OBJ(path_name), VAR_OBJ(module));
+    vmPopTempRef(vm); // module.
   }
   vmPopTempRef(vm); // path_name.
 
   // Compile the source.
-  PkResult result = compile(vm, scr, source.string, options);
+  PkResult result = compile(vm, module, source.string, options);
   if (source.on_done) source.on_done(vm, source);
   if (result != PK_RESULT_SUCCESS) return result;
 
-  // Set script initialized to true before the execution ends to prevent cyclic
+  // Set module initialized to true before the execution ends to prevent cyclic
   // inclusion cause a crash.
-  scr->initialized = true;
+  module->initialized = true;
 
-  return runFiber(vm, newFiber(vm, scr->body));
+  return runFiber(vm, newFiber(vm, module->body));
 }
 
 PkResult pkRunFiber(PKVM* vm, PkHandle* fiber,
@@ -241,11 +241,11 @@ void vmPopTempRef(PKVM* vm) {
   vm->temp_reference_count--;
 }
 
-Script* vmGetScript(PKVM* vm, String* path) {
-  Var scr = mapGet(vm->scripts, VAR_OBJ(path));
-  if (IS_UNDEF(scr)) return NULL;
-  ASSERT(AS_OBJ(scr)->type == OBJ_SCRIPT, OOPS);
-  return (Script*)AS_OBJ(scr);
+Module* vmGetModule(PKVM* vm, String* path) {
+  Var module = mapGet(vm->modules, VAR_OBJ(path));
+  if (IS_UNDEF(module)) return NULL;
+  ASSERT(AS_OBJ(module)->type == OBJ_MODULE, OOPS);
+  return (Module*)AS_OBJ(module);
 }
 
 void vmCollectGarbage(PKVM* vm) {
@@ -260,8 +260,8 @@ void vmCollectGarbage(PKVM* vm) {
     markObject(vm, &vm->builtins[i].fn->_super);
   }
 
-  // Mark the scripts cache.
-  markObject(vm, &vm->scripts->_super);
+  // Mark the modules cache.
+  markObject(vm, &vm->modules->_super);
 
   // Mark temp references.
   for (int i = 0; i < vm->temp_reference_count; i++) {
@@ -436,23 +436,33 @@ static void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
   return realloc(memory, new_size);
 }
 
-// Import and return Script object as Var. If the script is imported and
-// compiled here it'll set [is_new_script] to true otherwise (using the cached
-// script) set to false.
-static inline Var importScript(PKVM* vm, String* path_name) {
+// FIXME:
+// We're assuming that the module should be available at the VM's modules cache
+// which is added by the compilation pahse, but we cannot rely on the
+// compilation phase here as it could be a seperate system from the runtime and
+// should throw a runtime error if the module is not present in the modules
+// cache (or try to load).
+// Example: If we may support to store the compiled script as a separate file
+// (like python's ".pyc" or java's ".class" the runtime cannot ensure that the
+// module it import is already cached.
+//
+// Import and return the Module object with the [name] (if it's a scirpt
+// doesn't have a module name, the name would be it's resolved path).
+static inline Var importModule(PKVM* vm, String* name) {
 
   // Check in the core libs.
-  Script* scr = getCoreLib(vm, path_name);
-  if (scr != NULL) return VAR_OBJ(scr);
+  Module* module = getCoreLib(vm, name);
+  if (module != NULL) return VAR_OBJ(module);
 
-  // Check in the scripts cache.
-  Var entry = mapGet(vm->scripts, VAR_OBJ(path_name));
+  // Check in the modules cache.
+  Var entry = mapGet(vm->modules, VAR_OBJ(name));
   if (!IS_UNDEF(entry)) {
-    ASSERT(AS_OBJ(entry)->type == OBJ_SCRIPT, OOPS);
+    ASSERT(AS_OBJ(entry)->type == OBJ_MODULE, OOPS);
     return entry;
   }
 
-  // Imported scripts were resolved at compile time.
+  // FIXME: Should be a runtime error.
+  // Imported modules were resolved at compile time.
   UNREACHABLE();
 
   return VAR_NULL;
@@ -590,7 +600,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
 
   register Var* rbp;         //< Stack base pointer register.
   register CallFrame* frame; //< Current call frame.
-  register Script* script;   //< Currently executing script.
+  register Module* module;   //< Currently executing module.
 
 #if DEBUG
   #define PUSH(value)                                                        \
@@ -648,7 +658,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     frame = &vm->fiber->frames[vm->fiber->frame_count-1];  \
     ip = frame->ip;                                        \
     rbp = frame->rbp;                                      \
-    script = frame->fn->owner;                             \
+    module = frame->fn->owner;                             \
   } while (false)
 
 // Update the frame's execution variables before pushing another call frame.
@@ -683,8 +693,8 @@ L_vm_main_loop:
     OPCODE(PUSH_CONSTANT):
     {
       uint16_t index = READ_SHORT();
-      ASSERT_INDEX(index, script->constants.count);
-      PUSH(script->constants.data[index]);
+      ASSERT_INDEX(index, module->constants.count);
+      PUSH(module->constants.data[index]);
       DISPATCH();
     }
 
@@ -729,10 +739,10 @@ L_vm_main_loop:
     OPCODE(PUSH_INSTANCE):
     {
       uint8_t index = READ_SHORT();
-      ASSERT_INDEX(index, script->constants.count);
-      ASSERT(IS_OBJ_TYPE(script->constants.data[index], OBJ_CLASS), OOPS);
+      ASSERT_INDEX(index, module->constants.count);
+      ASSERT(IS_OBJ_TYPE(module->constants.data[index], OBJ_CLASS), OOPS);
       Instance* inst = newInstance(vm,
-                       (Class*)AS_OBJ(script->constants.data[index]), false);
+                       (Class*)AS_OBJ(module->constants.data[index]), false);
       PUSH(VAR_OBJ(inst));
       DISPATCH();
     }
@@ -827,16 +837,16 @@ L_vm_main_loop:
     OPCODE(PUSH_GLOBAL):
     {
       uint8_t index = READ_BYTE();
-      ASSERT_INDEX(index, script->globals.count);
-      PUSH(script->globals.data[index]);
+      ASSERT_INDEX(index, module->globals.count);
+      PUSH(module->globals.data[index]);
       DISPATCH();
     }
 
     OPCODE(STORE_GLOBAL):
     {
       uint8_t index = READ_BYTE();
-      ASSERT_INDEX(index, script->globals.count);
-      script->globals.data[index] = PEEK(-1);
+      ASSERT_INDEX(index, module->globals.count);
+      module->globals.data[index] = PEEK(-1);
       DISPATCH();
     }
 
@@ -855,32 +865,32 @@ L_vm_main_loop:
 
     OPCODE(IMPORT):
     {
-      String* name = script->names.data[READ_SHORT()];
-      Var scr = importScript(vm, name);
+      String* name = module->names.data[READ_SHORT()];
 
-      ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), OOPS);
-      Script* module = (Script*)AS_OBJ(scr);
-      PUSH(scr);
+      Var _imported = importModule(vm, name);
+      ASSERT(IS_OBJ_TYPE(_imported, OBJ_MODULE), OOPS);
+      PUSH(_imported);
 
       // TODO: If the body doesn't have any statements (just the functions).
       // This initialization call is un-necessary.
 
-      if (!module->initialized) {
-        module->initialized = true;
+      Module* imported = (Module*)AS_OBJ(_imported);
+      if (!imported->initialized) {
+        imported->initialized = true;
 
-        ASSERT(module->body != NULL, OOPS);
+        ASSERT(imported->body != NULL, OOPS);
 
         // Note that we're setting the main function's return address to the
         // module itself (for every other function we'll push a null at the rbp
         // before calling them and it'll be returned without modified if the
         // function doesn't returned anything). Also We can't return from the
-        // body of the script, so the main function will return what's at the
+        // body of the module, so the main function will return what's at the
         // rbp without modifying it. So at the end of the main function the
         // stack top would be the module itself.
         Var* module_ret = vm->fiber->sp - 1;
 
         UPDATE_FRAME(); //< Update the current frame's ip.
-        pushCallFrame(vm, module->body, module_ret);
+        pushCallFrame(vm, imported->body, module_ret);
         LOAD_FRAME();  //< Load the top frame to vm's execution variables.
       }
 
@@ -1065,7 +1075,7 @@ L_vm_main_loop:
 
         } DISPATCH();
 
-        case OBJ_SCRIPT:
+        case OBJ_MODULE:
         case OBJ_FUNC:
         case OBJ_CLOSURE:
         case OBJ_UPVALUE:
@@ -1174,7 +1184,7 @@ L_vm_main_loop:
     OPCODE(GET_ATTRIB):
     {
       Var on = PEEK(-1); // Don't pop yet, we need the reference for gc.
-      String* name = script->names.data[READ_SHORT()];
+      String* name = module->names.data[READ_SHORT()];
       Var value = varGetAttrib(vm, on, name);
       DROP(); // on
       PUSH(value);
@@ -1186,7 +1196,7 @@ L_vm_main_loop:
     OPCODE(GET_ATTRIB_KEEP):
     {
       Var on = PEEK(-1);
-      String* name = script->names.data[READ_SHORT()];
+      String* name = module->names.data[READ_SHORT()];
       PUSH(varGetAttrib(vm, on, name));
       CHECK_ERROR();
       DISPATCH();
@@ -1196,7 +1206,7 @@ L_vm_main_loop:
     {
       Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
       Var on = PEEK(-2);    // Don't pop yet, we need the reference for gc.
-      String* name = script->names.data[READ_SHORT()];
+      String* name = module->names.data[READ_SHORT()];
       varSetAttrib(vm, on, name, value);
 
       DROP(); // value

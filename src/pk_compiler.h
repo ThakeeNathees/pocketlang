@@ -25,11 +25,11 @@ typedef enum {
 typedef struct Compiler Compiler;
 
 // This will take source code as a cstring, compiles it to pocketlang bytecodes
-// and append them to the script's implicit main function ("$(SourceBody)").
-// On a successfull compilation it'll return PK_RESULT_SUCCESS, otherwise it'll
-// return PK_RESULT_COMPILE_ERROR but if repl_mode set in the [options],  and
-// we've reached and unexpected EOF it'll return PK_RESULT_UNEXPECTED_EOF.
-PkResult compile(PKVM* vm, Script* script, const char* source,
+// and append them to the module's implicit main function. On a successfull
+// compilation it'll return PK_RESULT_SUCCESS, otherwise it'll return
+// PK_RESULT_COMPILE_ERROR but if repl_mode set in the [options],  and we've
+// reached and unexpected EOF it'll return PK_RESULT_UNEXPECTED_EOF.
+PkResult compile(PKVM* vm, Module* module, const char* source,
                  const PkCompileOptions* options);
 
 // Mark the heap allocated objects of the compiler at the garbage collection

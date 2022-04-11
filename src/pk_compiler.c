@@ -12,12 +12,12 @@
 #include "pk_vm.h"
 #include "pk_debug.h"
 
-// The maximum number of variables (or global if compiling top level script)
+// The maximum number of locals or global (if compiling top level module)
 // to lookup from the compiling context. Also it's limited by it's opcode
 // which is using a single byte value to identify the local.
 #define MAX_VARIABLES 256
 
-// The maximum number of constant literal a script can contain. Also it's
+// The maximum number of constant literal a module can contain. Also it's
 // limited by it's opcode which is using a short value to identify.
 #define MAX_CONSTANTS (1 << 16)
 
@@ -237,14 +237,14 @@ typedef struct {
 } GrammarRule;
 
 typedef enum {
-  DEPTH_SCRIPT = -2, //< Only used for script body function's depth.
+  DEPTH_MODULE = -2, //< Only used for module body function's depth.
   DEPTH_GLOBAL = -1, //< Global variables.
   DEPTH_LOCAL,       //< Local scope. Increase with inner scope.
 } Depth;
 
 typedef enum {
   FN_NATIVE,    //< Native C function.
-  FN_SCRIPT,    //< Script level functions defined with 'def'.
+  FN_SCRIPT,    //< Script functions defined with 'def'.
   FN_LITERAL,   //< Literal functions defined with 'function(){...}'
 } FuncType;
 
@@ -285,8 +285,8 @@ typedef struct sLoop {
 //       compile time we can allow access to them at the global scope.
 typedef struct sForwardName {
 
-  // Index of the short instruction that has the value of the name (in the
-  // names buffer of the script).
+  // Index of the short instruction that has the value of the global's name
+  // (in the names buffer of the module).
   int instruction;
 
   // The function where the name is used, and the instruction is belongs to.
@@ -303,8 +303,8 @@ typedef struct sForwardName {
 
 typedef struct sFunc {
 
-  // Scope of the function. -2 for script body, -1 for top level function and
-  // literal functions will have the scope where it declared.
+  // Scope of the function. -2 for module body function, -1 for top level
+  // function and literal functions will have the scope where it declared.
   int depth;
 
   // The actual function pointer which is being compiled.
@@ -313,8 +313,8 @@ typedef struct sFunc {
   // The index of the function in its module.
   int index;
 
-  // If outer function of a literal or the script body function of a script
-  // function. Null for script body function.
+  // If outer function of this function, for top level function the outer
+  // function will be the module's body function.
   struct sFunc* outer_func;
 
 } Func;
@@ -377,7 +377,7 @@ typedef struct sParser {
   char si_name_quote;
 
   // An array of implicitly forward declared names, which will be resolved once
-// the script is completely compiled.
+  // the module is completely compiled.
   ForwardName forwards[MAX_FORWARD_NAMES];
   int forwards_count;
 
@@ -393,11 +393,11 @@ struct Compiler {
   // current compilation.
   Parser parser;
 
-  // Each module (ie. script) will be compiled with it's own compiler and a
-  // module is imported, a new compiler is created for that module and it'll
-  // be added to the linked list of compilers at the begining. PKVM will use
-  // this compiler reference as a root object (objects which won't garbage
-  // collected) and the chain of compilers will be marked at the marking phase.
+  // Each module will be compiled with it's own compiler and a module is
+  // imported, a new compiler is created for that module and it'll be added to
+  // the linked list of compilers at the begining. PKVM will use this compiler
+  // reference as a root object (objects which won't garbage collected) and
+  // the chain of compilers will be marked at the marking phase.
   //
   // Here is how the chain change when a new compiler (compiler_3) created.
   //
@@ -409,9 +409,9 @@ struct Compiler {
 
   const PkCompileOptions* options; //< To configure the compilation.
 
-  Script* script;  //< Current script.
-  Loop* loop;      //< Current loop.
-  Func* func;      //< Current function.
+  Module* module;  //< Current module that's being compiled.
+  Loop* loop;      //< Current loop the we're parsing.
+  Func* func;      //< Current function we're parsing.
 
   // Current depth the compiler in (-1 means top level) 0 means function
   // level and > 0 is inner scope.
@@ -495,11 +495,11 @@ static void parserInit(Parser* parser, PKVM* vm, Compiler* compiler,
 }
 
 static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
-                         Script* script, const PkCompileOptions* options) {
+                         Module* module, const PkCompileOptions* options) {
 
   compiler->next_compiler = NULL;
 
-  compiler->script = script;
+  compiler->module = module;
   compiler->options = options;
 
   compiler->scope_depth = DEPTH_GLOBAL;
@@ -512,7 +512,7 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
   compiler->new_local = false;
   compiler->is_last_call = false;
 
-  parserInit(&compiler->parser, vm, compiler, source, script->path->data);
+  parserInit(&compiler->parser, vm, compiler, source, module->path->data);
 
   // Cache the required built functions.
   compiler->bifn_list_join = findBuiltinFunction(vm, "list_join", 9);
@@ -578,7 +578,7 @@ static void parseError(Compiler* compiler, const char* fmt, ...) {
 }
 
 // Error caused when trying to resolve forward names (maybe more in the
-// future), Which will be called once after compiling the script and thus we
+// future), Which will be called once after compiling the module and thus we
 // need to pass the line number the error originated from.
 static void resolveError(Compiler* compiler, int line, const char* fmt, ...) {
   va_list args;
@@ -1270,7 +1270,7 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
   int index; // For storing the search result below.
 
   // Search through globals.
-  index = scriptGetGlobalIndex(compiler->script, name, length);
+  index = moduleGetGlobalIndex(compiler->module, name, length);
   if (index != -1) {
     result.type = NAME_GLOBAL_VAR;
     result.index = index;
@@ -1525,7 +1525,6 @@ static void exprFunc(Compiler* compiler) {
   emitShort(compiler, fn_index);
 }
 
-// Local/global variables, script/native/builtin functions name.
 static void exprName(Compiler* compiler) {
 
   const char* start = compiler->parser.previous.start;
@@ -1767,8 +1766,8 @@ static void exprAttrib(Compiler* compiler) {
   const char* name = compiler->parser.previous.start;
   int length = compiler->parser.previous.length;
 
-  // Store the name in script's names.
-  int index = scriptAddName(compiler->script, compiler->parser.vm,
+  // Store the name in module's names buffer.
+  int index = moduleAddName(compiler->module, compiler->parser.vm,
                             name, length);
 
   if (compiler->l_value && matchAssignment(compiler)) {
@@ -1875,7 +1874,7 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
   bool max_vars_reached = false;
   const char* var_type = ""; // For max variables reached error message.
   if (compiler->scope_depth == DEPTH_GLOBAL) {
-    if (compiler->script->globals.count >= MAX_VARIABLES) {
+    if (compiler->module->globals.count >= MAX_VARIABLES) {
       max_vars_reached = true;
       var_type = "globals";
     }
@@ -1886,7 +1885,7 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
     }
   }
   if (max_vars_reached) {
-    parseError(compiler, "A script should contain at most %d %s.",
+    parseError(compiler, "A module should contain at most %d %s.",
                MAX_VARIABLES, var_type);
     return -1;
   }
@@ -1894,7 +1893,7 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
   // Add the variable and return it's index.
 
   if (compiler->scope_depth == DEPTH_GLOBAL) {
-    return (int)scriptAddGlobal(compiler->parser.vm, compiler->script,
+    return (int)moduleAddGlobal(compiler->parser.vm, compiler->module,
                                 name, length, VAR_NULL);
   } else {
     Local* local = &compiler->locals [compiler->local_count];
@@ -1911,7 +1910,7 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
 static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
                                const char* name, int length, int line) {
   if (compiler->parser.forwards_count == MAX_FORWARD_NAMES) {
-    parseError(compiler, "A script should contain at most %d implicit forward "
+    parseError(compiler, "A module should contain at most %d implicit forward "
                "function declarations.", MAX_FORWARD_NAMES);
     return;
   }
@@ -1925,14 +1924,14 @@ static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
   forward->line = line;
 }
 
-// Add a literal constant to scripts literals and return it's index.
+// Add a literal constant to module literals and return it's index.
 static int compilerAddConstant(Compiler* compiler, Var value) {
-  pkVarBuffer* constants = &compiler->script->constants;
+  pkVarBuffer* constants = &compiler->module->constants;
 
-  uint32_t index = scriptAddConstant(compiler->parser.vm,
-                                     compiler->script, value);
+  uint32_t index = moduleAddConstant(compiler->parser.vm,
+                                     compiler->module, value);
   if (index >= MAX_CONSTANTS) {
-    parseError(compiler, "A script should contain at most %d "
+    parseError(compiler, "A module should contain at most %d "
                "unique constants.", MAX_CONSTANTS);
   }
   return (int)index;
@@ -2105,7 +2104,7 @@ typedef enum {
 static void compileStatement(Compiler* compiler);
 static void compileBlockBody(Compiler* compiler, BlockType type);
 
-// Compile a class and return it's index in the script's types buffer.
+// Compile a class and return it's index in the module's types buffer.
 static int compileClass(Compiler* compiler) {
 
   // Consume the name of the type.
@@ -2115,7 +2114,7 @@ static int compileClass(Compiler* compiler) {
 
   // Create a new class.
   int cls_index, ctor_index;
-  Class* cls = newClass(compiler->parser.vm, compiler->script,
+  Class* cls = newClass(compiler->parser.vm, compiler->module,
                         name, (uint32_t)name_len, &cls_index, &ctor_index);
   cls->ctor->arity = 0;
 
@@ -2126,16 +2125,16 @@ static int compileClass(Compiler* compiler) {
                                   compiler->parser.previous.start,
                                   compiler->parser.previous.length,
                                   compiler->parser.previous.line);
-  scriptSetGlobal(compiler->script, index, VAR_OBJ(cls));
+  moduleSetGlobal(compiler->module, index, VAR_OBJ(cls));
 
   // Check count exceeded.
   if (cls_index >= MAX_CONSTANTS || ctor_index >= MAX_CONSTANTS) {
-    parseError(compiler, "A script should contain at most %d "
+    parseError(compiler, "A module should contain at most %d "
                "unique constants.", MAX_CONSTANTS);
   }
 
   // Compile the constructor function.
-  ASSERT(compiler->func->ptr == compiler->script->body, OOPS);
+  ASSERT(compiler->func->ptr == compiler->module->body, OOPS);
   Func curr_fn;
   compilerPushFunc(compiler, &curr_fn, cls->ctor, ctor_index);
   compilerEnterBlock(compiler);
@@ -2153,12 +2152,12 @@ static int compileClass(Compiler* compiler) {
     const char* f_name = compiler->parser.previous.start;
     int f_len = compiler->parser.previous.length;
 
-    uint32_t f_index = scriptAddName(compiler->script, compiler->parser.vm,
+    uint32_t f_index = moduleAddName(compiler->module, compiler->parser.vm,
                                      f_name, f_len);
 
-    String* new_name = compiler->script->names.data[f_index];
+    String* new_name = compiler->module->names.data[f_index];
     for (uint32_t i = 0; i < cls->field_names.count; i++) {
-      String* prev = compiler->script->names.data[cls->field_names.data[i]];
+      String* prev = compiler->module->names.data[cls->field_names.data[i]];
       if (IS_STR_EQ(new_name, prev)) {
         parseError(compiler, "Class field with name '%s' already exists.",
                    new_name->data);
@@ -2194,7 +2193,7 @@ static int compileClass(Compiler* compiler) {
   return -1; // TODO;
 }
 
-// Compile a function and return it's index in the script's function buffer.
+// Compile a function and return it's index in the module's function buffer.
 static int compileFunction(Compiler* compiler, FuncType fn_type) {
 
   const char* name;
@@ -2212,10 +2211,10 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
 
   int fn_index;
   Function* func = newFunction(compiler->parser.vm, name, name_length,
-                               compiler->script, fn_type == FN_NATIVE, NULL,
+                               compiler->module, fn_type == FN_NATIVE, NULL,
                                &fn_index);
   if (fn_index >= MAX_CONSTANTS) {
-    parseError(compiler, "A script should contain at most %d "
+    parseError(compiler, "A module should contain at most %d "
                "unique constants.", MAX_CONSTANTS);
   }
 
@@ -2225,7 +2224,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
     ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
     int name_line = compiler->parser.previous.line;
     int g_index = compilerAddVariable(compiler, name, name_length, name_line);
-    scriptSetGlobal(compiler->script, g_index, VAR_OBJ(func));
+    moduleSetGlobal(compiler->module, g_index, VAR_OBJ(func));
   }
 
   Func curr_fn;
@@ -2330,9 +2329,9 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
 }
 
 // Import a file at the given path (first it'll be resolved from the current
-// path) and return it as a script pointer. And it'll emit opcodes to push
-// that script to the stack.
-static Script* importFile(Compiler* compiler, const char* path) {
+// path) and return it as a module pointer. And it'll emit opcodes to push
+// that module to the stack.
+static Module* importFile(Compiler* compiler, const char* path) {
   ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
   PKVM* vm = compiler->parser.vm;
@@ -2340,33 +2339,34 @@ static Script* importFile(Compiler* compiler, const char* path) {
   // Resolve the path.
   PkStringPtr resolved = { path, NULL, NULL };
   if (vm->config.resolve_path_fn != NULL) {
-    resolved = vm->config.resolve_path_fn(vm, compiler->script->path->data,
+    resolved = vm->config.resolve_path_fn(vm, compiler->module->path->data,
                                           path);
   }
 
   if (resolved.string == NULL) {
     parseError(compiler, "Cannot resolve path '%s' from '%s'", path,
-               compiler->script->path->data);
+               compiler->module->path->data);
   }
 
   // Create new string for the resolved path. And free the resolved path.
-  int index = (int)scriptAddName(compiler->script, compiler->parser.vm,
+  int index = (int)moduleAddName(compiler->module, compiler->parser.vm,
                            resolved.string, (uint32_t)strlen(resolved.string));
-  String* path_name = compiler->script->names.data[index];
+  String* path_name = compiler->module->names.data[index];
   if (resolved.on_done != NULL) resolved.on_done(vm, resolved);
 
-  // Check if the script already exists.
-  Var entry = mapGet(vm->scripts, VAR_OBJ(path_name));
+  // Check if the script already compiled and cached in the PKVM.
+  Var entry = mapGet(vm->modules, VAR_OBJ(path_name));
   if (!IS_UNDEF(entry)) {
-    ASSERT(IS_OBJ_TYPE(entry, OBJ_SCRIPT), OOPS);
+    ASSERT(IS_OBJ_TYPE(entry, OBJ_MODULE), OOPS);
 
-    // Push the script on the stack.
+    // Push the compiled script on the stack.
     emitOpcode(compiler, OP_IMPORT);
     emitShort(compiler, index);
-    return (Script*)AS_OBJ(entry);
+    return (Module*)AS_OBJ(entry);
   }
 
-  // The script not exists, make sure we have the script loading api function.
+  // The script not exists in the VM, make sure we have the script loading
+  // api function.
   if (vm->config.load_script_fn == NULL) {
     parseError(compiler, "Cannot import. The hosting application haven't "
                "registered the script loading API");
@@ -2380,24 +2380,24 @@ static Script* importFile(Compiler* compiler, const char* path) {
     return NULL;
   }
 
-  // Make a new script and to compile it.
-  Script* scr = newScript(vm, path_name, false);
-  vmPushTempRef(vm, &scr->_super); // scr.
-  mapSet(vm, vm->scripts, VAR_OBJ(path_name), VAR_OBJ(scr));
+  // Make a new module and to compile it.
+  Module* module = newModule(vm, path_name, false);
+  vmPushTempRef(vm, &module->_super); // scr.
+  mapSet(vm, vm->modules, VAR_OBJ(path_name), VAR_OBJ(module));
   vmPopTempRef(vm); // scr.
 
-  // Push the script on the stack.
+  // Push the compiled script on the stack.
   emitOpcode(compiler, OP_IMPORT);
   emitShort(compiler, index);
 
-  // Option for the compilation, even if we're running on repl mode the
-  // imported script cannot run on repl mode.
+  // Even if we're running on repl mode the imported module cannot run on
+  // repl mode.
   PkCompileOptions options = pkNewCompilerOptions();
   if (compiler->options) options = *compiler->options;
   options.repl_mode = false;
 
-  // Compile the source to the script and clean the source.
-  PkResult result = compile(vm, scr, source.string, &options);
+  // Compile the source to the module and clean the source.
+  PkResult result = compile(vm, module, source.string, &options);
   if (source.on_done != NULL) source.on_done(vm, source);
 
   if (result != PK_RESULT_SUCCESS) {
@@ -2405,41 +2405,41 @@ static Script* importFile(Compiler* compiler, const char* path) {
                path_name->data);
   }
 
-  return scr;
+  return module;
 }
 
-// Import the core library from the vm's core_libs and it'll emit opcodes to
-// push that script to the stack.
-static Script* importCoreLib(Compiler* compiler, const char* name_start,
+// Import the native module from the PKVM's core_libs and it'll emit opcodes
+// to push that module to the stack.
+static Module* importCoreLib(Compiler* compiler, const char* name_start,
                              int name_length) {
   ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
-  // Add the name to the script's name buffer, we need it as a key to the
-  // vm's script cache.
-  int index = (int)scriptAddName(compiler->script, compiler->parser.vm,
+  // Add the name to the module's name buffer, we need it as a key to the
+  // PKVM's module cache.
+  int index = (int)moduleAddName(compiler->module, compiler->parser.vm,
                                  name_start, name_length);
-  String* module = compiler->script->names.data[index];
+  String* module_name = compiler->module->names.data[index];
 
-  Var entry = mapGet(compiler->parser.vm->core_libs, VAR_OBJ(module));
+  Var entry = mapGet(compiler->parser.vm->core_libs, VAR_OBJ(module_name));
   if (IS_UNDEF(entry)) {
-    parseError(compiler, "No module named '%s' exists.", module->data);
+    parseError(compiler, "No module named '%s' exists.", module_name->data);
     return NULL;
   }
 
-  // Push the script on the stack.
+  // Push the module on the stack.
   emitOpcode(compiler, OP_IMPORT);
   emitShort(compiler, index);
 
-  ASSERT(IS_OBJ_TYPE(entry, OBJ_SCRIPT), OOPS);
-  return (Script*)AS_OBJ(entry);
+  ASSERT(IS_OBJ_TYPE(entry, OBJ_MODULE), OOPS);
+  return (Module*)AS_OBJ(entry);
 }
 
-// Push the imported script on the stack and return the pointer. It could be
+// Push the imported module on the stack and return the pointer. It could be
 // either core library or a local import.
-static inline Script* compilerImport(Compiler* compiler) {
+static inline Module* compilerImport(Compiler* compiler) {
   ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
-  // Get the script (from core libs or vm's cache or compile new one).
+  // Get the module (from native libs or VM's cache or compile new one).
   // And push it on the stack.
   if (match(compiler, TK_NAME)) { //< Core library.
     return importCoreLib(compiler, compiler->parser.previous.start,
@@ -2489,7 +2489,7 @@ static int compilerImportName(Compiler* compiler, int line,
 }
 
 // This will called by the compilerImportAll() function to import a single
-// entry from the imported script. (could be a function or global variable).
+// entry from the imported module. (could be a function or global variable).
 static void compilerImportSingleEntry(Compiler* compiler,
                                       const char* name, uint32_t length) {
 
@@ -2500,11 +2500,11 @@ static void compilerImportSingleEntry(Compiler* compiler,
   // Line number of the variables which will be bind to the imported symbol.
   int line = compiler->parser.previous.line;
 
-  // Add the name to the **current** script's name buffer.
-  int name_index = (int)scriptAddName(compiler->script, compiler->parser.vm,
+  // Add the name to the **current** module's name buffer.
+  int name_index = (int)moduleAddName(compiler->module, compiler->parser.vm,
                                       name, length);
 
-  // Get the function from the script.
+  // Get the global/function/class from the module.
   emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
   emitShort(compiler, name_index);
 
@@ -2513,18 +2513,18 @@ static void compilerImportSingleEntry(Compiler* compiler,
   emitOpcode(compiler, OP_POP);
 }
 
-// Import all from the script, which is also would be at the top of the stack
+// Import all from the module, which is also would be at the top of the stack
 // before executing the below instructions.
-static void compilerImportAll(Compiler* compiler, Script* script) {
+static void compilerImportAll(Compiler* compiler, Module* module) {
 
-  ASSERT(script != NULL, OOPS);
+  ASSERT(module != NULL, OOPS);
   ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
   // Import all globals.
-  ASSERT(script->global_names.count == script->globals.count, OOPS);
-  for (uint32_t i = 0; i < script->globals.count; i++) {
-    ASSERT(script->global_names.data[i] < script->names.count, OOPS);
-    const String* name = script->names.data[script->global_names.data[i]];
+  ASSERT(module->global_names.count == module->globals.count, OOPS);
+  for (uint32_t i = 0; i < module->globals.count; i++) {
+    ASSERT(module->global_names.data[i] < module->names.count, OOPS);
+    const String* name = module->names.data[module->global_names.data[i]];
 
     compilerImportSingleEntry(compiler, name->data, name->length);
   }
@@ -2536,9 +2536,9 @@ static void compileFromImport(Compiler* compiler) {
 
   // Import the library and push it on the stack. If the import failed
   // lib_from would be NULL.
-  Script* lib_from = compilerImport(compiler);
+  Module* lib_from = compilerImport(compiler);
 
-  // At this point the script would be on the stack before executing the next
+  // At this point the module would be on the stack before executing the next
   // instruction.
   consume(compiler, TK_IMPORT, "Expected keyword 'import'.");
 
@@ -2548,14 +2548,14 @@ static void compileFromImport(Compiler* compiler) {
 
   } else {
     do {
-      // Consume the symbol name to import from the script.
+      // Consume the symbol name to import from the module.
       consume(compiler, TK_NAME, "Expected symbol to import.");
       const char* name = compiler->parser.previous.start;
       uint32_t length = (uint32_t)compiler->parser.previous.length;
       int line = compiler->parser.previous.line;
 
       // Add the name of the symbol to the names buffer.
-      int name_index = (int)scriptAddName(compiler->script,
+      int name_index = (int)moduleAddName(compiler->module,
                                           compiler->parser.vm,
                                           name, length);
 
@@ -2600,9 +2600,9 @@ static void compileRegularImport(Compiler* compiler) {
     // Import the library and push it on the stack. If it cannot import,
     // the lib would be null, but we're not terminating here, just continue
     // parsing for cascaded errors.
-    Script* lib = compilerImport(compiler);
+    Module* lib = compilerImport(compiler);
 
-    // variable to bind the imported script.
+    // variable to bind the imported module.
     int var_index = -1;
 
     // Check if it has an alias, if so bind the variable with that name.
@@ -2621,7 +2621,7 @@ static void compileRegularImport(Compiler* compiler) {
     } else {
       // If it has a module name use it as binding variable.
       // Core libs names are it's module name but for local libs it's optional
-      // to define a module name for a script.
+      // to define a module name for a module.
       if (lib && lib->name != NULL) {
 
         // Get the variable to bind the imported symbol, if we already have a
@@ -2879,7 +2879,7 @@ static void compileStatement(Compiler* compiler) {
 
   // If running REPL mode, print the expression's evaluated value.
   if (compiler->options && compiler->options->repl_mode &&
-      compiler->func->ptr == compiler->script->body &&
+      compiler->func->ptr == compiler->module->body &&
       is_expression /*&& compiler->scope_depth == DEPTH_GLOBAL*/) {
     emitOpcode(compiler, OP_REPL_PRINT);
   }
@@ -2887,7 +2887,7 @@ static void compileStatement(Compiler* compiler) {
   if (is_temporary) emitOpcode(compiler, OP_POP);
 }
 
-// Compile statements that are only valid at the top level of the script. Such
+// Compile statements that are only valid at the top level of the module. Such
 // as import statement, function define, and if we're running REPL mode top
 // level expression's evaluated value will be printed.
 static void compileTopLevelStatement(Compiler* compiler) {
@@ -2925,7 +2925,7 @@ static void compileTopLevelStatement(Compiler* compiler) {
 
 }
 
-PkResult compile(PKVM* vm, Script* script, const char* source,
+PkResult compile(PKVM* vm, Module* module, const char* source,
                  const PkCompileOptions* options) {
 
   // Skip utf8 BOM if there is any.
@@ -2933,33 +2933,33 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
 
   Compiler _compiler;
   Compiler* compiler = &_compiler; //< Compiler pointer for quick access.
-  compilerInit(compiler, vm, source, script, options);
+  compilerInit(compiler, vm, source, module, options);
 
-  // If compiling for an imported script the vm->compiler would be the compiler
-  // of the script that imported this script. Add the all the compilers into a
+  // If compiling for an imported module the vm->compiler would be the compiler
+  // of the module that imported this module. Add the all the compilers into a
   // link list.
   compiler->next_compiler = vm->compiler;
   vm->compiler = compiler;
 
-  // If the script doesn't has a body by default, it's probably was created by
+  // If the module doesn't has a body by default, it's probably was created by
   // the native api function (pkNewModule() that'll return a module without a
   // main function) so just create and add the function here.
-  if (script->body == NULL) scriptAddMain(vm, script);
+  if (module->body == NULL) moduleAddMain(vm, module);
 
-  // If we're compiling for a script that was already compiled (when running
+  // If we're compiling for a module that was already compiled (when running
   // REPL or evaluating an expression) we don't need the old main anymore.
-  // just use the globals and functions of the script and use a new body func.
-  pkByteBufferClear(&script->body->fn->opcodes, vm);
+  // just use the globals and functions of the module and use a new body func.
+  pkByteBufferClear(&module->body->fn->opcodes, vm);
 
   // Remember the count of constants, names, and globals, If the compilation
   // failed discard all of them and roll back.
-  uint32_t constants_count = script->constants.count;
-  uint32_t names_count = script->names.count;
-  uint32_t globals_count = script->globals.count;
+  uint32_t constants_count = module->constants.count;
+  uint32_t names_count = module->names.count;
+  uint32_t globals_count = module->globals.count;
 
   Func curr_fn;
-  curr_fn.depth = DEPTH_SCRIPT;
-  curr_fn.ptr = script->body;
+  curr_fn.depth = DEPTH_MODULE;
+  curr_fn.ptr = module->body;
   curr_fn.outer_func = NULL;
   compiler->func = &curr_fn;
 
@@ -2970,17 +2970,17 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
 
   if (match(compiler, TK_MODULE)) {
 
-    // If the script running a REPL or compiled multiple times by hosting
+    // If the module running a REPL or compiled multiple times by hosting
     // application module attribute might already set. In that case make it
     // Compile error.
-    if (script->name != NULL) {
+    if (module->name != NULL) {
       parseError(compiler, "Module name already defined.");
 
     } else {
       consume(compiler, TK_NAME, "Expected a name for the module.");
       const char* name = compiler->parser.previous.start;
       uint32_t len = compiler->parser.previous.length;
-      script->name = newStringLength(vm, name, len);
+      module->name = newStringLength(vm, name, len);
       consumeEndStatement(compiler);
     }
   }
@@ -2997,7 +2997,7 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
     ForwardName* forward = &compiler->parser.forwards[i];
     const char* name = forward->name;
     int length = forward->length;
-    int index = scriptGetGlobalIndex(compiler->script, name, (uint32_t)length);
+    int index = moduleGetGlobalIndex(compiler->module, name, (uint32_t)length);
     if (index != -1) {
       patchForward(compiler, forward->func, forward->instruction, index);
     } else {
@@ -3014,13 +3014,13 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
 
   // If compilation failed, discard all the invalid functions and globals.
   if (compiler->parser.has_errors) {
-    script->constants.count = constants_count;
-    script->names.count = names_count;
-    script->globals.count = script->global_names.count = globals_count;
+    module->constants.count = constants_count;
+    module->names.count = names_count;
+    module->globals.count = module->global_names.count = globals_count;
   }
 
 #if DUMP_BYTECODE
-  dumpFunctionCode(compiler->parser.vm, script->body);
+  dumpFunctionCode(compiler->parser.vm, module->body);
 #endif
 
   // Return the compilation result.
@@ -3033,24 +3033,24 @@ PkResult compile(PKVM* vm, Script* script, const char* source,
   return PK_RESULT_SUCCESS;
 }
 
-PkResult pkCompileModule(PKVM* vm, PkHandle* module, PkStringPtr source,
+PkResult pkCompileModule(PKVM* vm, PkHandle* module_handle, PkStringPtr source,
                          const PkCompileOptions* options) {
-  __ASSERT(module != NULL, "Argument module was NULL.");
-  Var scr = module->value;
-  __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
-  Script* script = (Script*)AS_OBJ(scr);
+  __ASSERT(module_handle != NULL, "Argument module was NULL.");
+  __ASSERT(IS_OBJ_TYPE(module_handle->value, OBJ_MODULE),
+           "Given handle is not a module.");
+  Module* module = (Module*)AS_OBJ(module_handle->value);
 
-  PkResult result = compile(vm, script, source.string, options);
+  PkResult result = compile(vm, module, source.string, options);
   if (source.on_done) source.on_done(vm, source);
   return result;
 }
 
 void compilerMarkObjects(PKVM* vm, Compiler* compiler) {
 
-  // Mark the script which is currently being compiled.
-  markObject(vm, &compiler->script->_super);
+  // Mark the module which is currently being compiled.
+  markObject(vm, &compiler->module->_super);
 
-  // Mark the string literals (they haven't added to the script's literal
+  // Mark the string literals (they haven't added to the module's literal
   // buffer yet).
   markValue(vm, compiler->parser.current.value);
   markValue(vm, compiler->parser.previous.value);
