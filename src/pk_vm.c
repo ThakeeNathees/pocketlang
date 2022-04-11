@@ -256,8 +256,8 @@ void vmCollectGarbage(PKVM* vm) {
 
   // Mark the core libs and builtin functions.
   markObject(vm, &vm->core_libs->_super);
-  for (uint32_t i = 0; i < vm->builtins_count; i++) {
-    markObject(vm, &vm->builtins[i].fn->_super);
+  for (int i = 0; i < vm->builtins_count; i++) {
+    markObject(vm, &vm->builtins[i]->_super);
   }
 
   // Mark the modules cache.
@@ -323,10 +323,12 @@ void vmCollectGarbage(PKVM* vm) {
   } while (false)
 
 bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var** argv) {
-  ASSERT(fiber->func->arity >= -1, OOPS " (Forget to initialize arity.)");
+  ASSERT(fiber->closure->fn->arity >= -1,
+         OOPS " (Forget to initialize arity.)");
 
-  if (argc != fiber->func->arity) {
-    char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", fiber->func->arity);
+  if (argc != fiber->closure->fn->arity) {
+    char buff[STR_INT_BUFF_SIZE];
+    sprintf(buff, "%d", fiber->closure->fn->arity);
     _ERR_FAIL(stringFormat(vm, "Expected exactly $ argument(s).", buff));
   }
 
@@ -513,8 +515,8 @@ static inline void growStack(PKVM* vm, int size) {
   }
 }
 
-static inline void pushCallFrame(PKVM* vm, const Function* fn, Var* rbp) {
-  ASSERT(!fn->is_native, "Native function shouldn't use call frames.");
+static inline void pushCallFrame(PKVM* vm, const Closure* closure, Var* rbp) {
+  ASSERT(!closure->fn->is_native, OOPS);
 
   // Grow the stack frame if needed.
   if (vm->fiber->frame_count + 1 > vm->fiber->frame_capacity) {
@@ -526,31 +528,32 @@ static inline void pushCallFrame(PKVM* vm, const Function* fn, Var* rbp) {
   }
 
   // Grow the stack if needed.
-  int needed = fn->fn->stack_size + (int)(vm->fiber->sp - vm->fiber->stack);
+  int needed = (closure->fn->fn->stack_size +
+                (int)(vm->fiber->sp - vm->fiber->stack));
   if (vm->fiber->stack_size <= needed) growStack(vm, needed);
 
   CallFrame* frame = vm->fiber->frames + vm->fiber->frame_count++;
   frame->rbp = rbp;
-  frame->fn = fn;
-  frame->ip = fn->fn->opcodes.data;
+  frame->closure = closure;
+  frame->ip = closure->fn->fn->opcodes.data;
 }
 
-static inline void reuseCallFrame(PKVM* vm, const Function* fn) {
+static inline void reuseCallFrame(PKVM* vm, const Closure* closure) {
 
-  ASSERT(!fn->is_native, "Native function shouldn't use call frames.");
-  ASSERT(fn->arity >= 0, OOPS);
+  ASSERT(!closure->fn->is_native, OOPS);
+  ASSERT(closure->fn->arity >= 0, OOPS);
   ASSERT(vm->fiber->frame_count > 0, OOPS);
 
   Fiber* fb = vm->fiber;
 
   CallFrame* frame = fb->frames + fb->frame_count - 1;
-  frame->fn = fn;
-  frame->ip = fn->fn->opcodes.data;
+  frame->closure = closure;
+  frame->ip = closure->fn->fn->opcodes.data;
 
   ASSERT(*frame->rbp == VAR_NULL, OOPS);
 
   // Move all the argument(s) to the base of the current frame.
-  Var* arg = fb->sp - fn->arity;
+  Var* arg = fb->sp - closure->fn->arity;
   Var* target = frame->rbp + 1;
   for (; arg < fb->sp; arg++, target++) {
     *target = *arg;
@@ -560,7 +563,8 @@ static inline void reuseCallFrame(PKVM* vm, const Function* fn) {
   fb->sp = target;
 
   // Grow the stack if needed (least probably).
-  int needed = fn->fn->stack_size + (int)(vm->fiber->sp - vm->fiber->stack);
+  int needed = (closure->fn->fn->stack_size +
+                (int)(vm->fiber->sp - vm->fiber->stack));
   if (vm->fiber->stack_size <= needed) growStack(vm, needed);
 }
 
@@ -574,7 +578,7 @@ static void reportError(PKVM* vm) {
   vm->config.error_fn(vm, PK_ERROR_RUNTIME, NULL, -1, fiber->error->data);
   for (int i = fiber->frame_count - 1; i >= 0; i--) {
     CallFrame* frame = &fiber->frames[i];
-    const Function* fn = frame->fn;
+    const Function* fn = frame->closure->fn;
     ASSERT(!fn->is_native, OOPS);
     int line = fn->fn->oplines.data[frame->ip - fn->fn->opcodes.data - 1];
     vm->config.error_fn(vm, PK_ERROR_STACKTRACE, fn->owner->path->data, line,
@@ -658,7 +662,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
     frame = &vm->fiber->frames[vm->fiber->frame_count-1];  \
     ip = frame->ip;                                        \
     rbp = frame->rbp;                                      \
-    module = frame->fn->owner;                             \
+    module = frame->closure->fn->owner;                    \
   } while (false)
 
 // Update the frame's execution variables before pushing another call frame.
@@ -854,8 +858,18 @@ L_vm_main_loop:
     {
       uint8_t index = READ_BYTE();
       ASSERT_INDEX(index, vm->builtins_count);
-      Function* fn = vm->builtins[index].fn;
-      PUSH(VAR_OBJ(fn));
+      Closure* closure = vm->builtins[index];
+      PUSH(VAR_OBJ(closure));
+      DISPATCH();
+    }
+
+    OPCODE(PUSH_CLOSURE):
+    {
+      uint16_t index = READ_SHORT();
+      ASSERT_INDEX(index, module->constants.count);
+      ASSERT(IS_OBJ_TYPE(module->constants.data[index], OBJ_FUNC), OOPS);
+      Function* fn = (Function*)AS_OBJ(module->constants.data[index]);
+      PUSH(VAR_OBJ(newClosure(vm, fn)));
       DISPATCH();
     }
 
@@ -907,13 +921,17 @@ L_vm_main_loop:
       Fiber* call_fiber = vm->fiber;
       Var* callable = call_fiber->sp - argc - 1;
 
-      const Function* fn = NULL;
+      const Closure* closure = NULL;
 
-      if (IS_OBJ_TYPE(*callable, OBJ_FUNC)) {
-        fn = (const Function*)AS_OBJ(*callable);
+      // Raw functions cannot be on the stack, since they're not first class
+      // citizens.
+      ASSERT(!IS_OBJ_TYPE(*callable, OBJ_FUNC), OOPS);
+
+      if (IS_OBJ_TYPE(*callable, OBJ_CLOSURE)) {
+        closure = (const Closure*)AS_OBJ(*callable);
 
       } else if (IS_OBJ_TYPE(*callable, OBJ_CLASS)) {
-        fn = (const Function*)((Class*)AS_OBJ(*callable))->ctor;
+        closure = (const Closure*)((Class*)AS_OBJ(*callable))->ctor;
 
       } else {
         RUNTIME_ERROR(stringFormat(vm, "$ $(@).", "Expected a callable to "
@@ -925,8 +943,8 @@ L_vm_main_loop:
       // If we reached here it's a valid callable.
 
       // -1 argument means multiple number of args.
-      if (fn->arity != -1 && fn->arity != argc) {
-        char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", fn->arity);
+      if (closure->fn->arity != -1 && closure->fn->arity != argc) {
+        char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", closure->fn->arity);
         String* msg = stringFormat(vm, "Expected exactly $ argument(s).",
                                    buff);
         RUNTIME_ERROR(msg);
@@ -936,17 +954,17 @@ L_vm_main_loop:
       call_fiber->ret = callable;
       *(call_fiber->ret) = VAR_NULL; //< Set the return value to null.
 
-      if (fn->is_native) {
+      if (closure->fn->is_native) {
 
-        if (fn->native == NULL) {
+        if (closure->fn->native == NULL) {
           RUNTIME_ERROR(stringFormat(vm,
-            "Native function pointer of $ was NULL.", fn->name));
+            "Native function pointer of $ was NULL.", closure->fn->name));
         }
 
         // Update the current frame's ip.
         UPDATE_FRAME();
 
-        fn->native(vm); //< Call the native function.
+        closure->fn->native(vm); //< Call the native function.
 
         // Calling yield() will change vm->fiber to it's caller fiber, which
         // would be null if we're not running the function with a fiber.
@@ -965,13 +983,13 @@ L_vm_main_loop:
 
         if (instruction == OP_CALL) {
           UPDATE_FRAME(); //< Update the current frame's ip.
-          pushCallFrame(vm, fn, callable);
+          pushCallFrame(vm, closure, callable);
           LOAD_FRAME();  //< Load the top frame to vm's execution variables.
 
         } else {
           ASSERT(instruction == OP_TAIL_CALL, OOPS);
 
-          reuseCallFrame(vm, fn);
+          reuseCallFrame(vm, closure);
           LOAD_FRAME();  //< Re-load the frame to vm's execution variables.
         }
       }

@@ -328,9 +328,7 @@ struct PkCompileOptions {
   bool debug;
 
   // Set to true if compiling in REPL mode, This will print repr version of
-  // each evaluated non-null values. Note that if [repl_mode] is true the
-  // [expression] should also be true otherwise it's incompatible, (will fail
-  // an assertion).
+  // each evaluated non-null values.
   bool repl_mode;
 
 };

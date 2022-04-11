@@ -307,8 +307,8 @@ struct Module {
   pkUintBuffer global_names;
 
   // Top level statements of a module are compiled to an implicit function
-  // body whic will be executed if it's imported for the first time.
-  Function* body;
+  // body which will be executed if it's imported for the first time.
+  Closure* body;
 
   // If the [initialized] boolean is false, the body function of the module
   // will be executed when it's first imported and the 'initialized' boolean
@@ -437,9 +437,9 @@ struct Upvalue {
 };
 
 typedef struct {
-  const uint8_t* ip;  //< Pointer to the next instruction byte code.
-  const Function* fn; //< Function of the frame.
-  Var* rbp;           //< Stack base pointer. (%rbp)
+  const uint8_t* ip;      //< Pointer to the next instruction byte code.
+  const Closure* closure; //< Closure of the frame.
+  Var* rbp;               //< Stack base pointer. (%rbp)
 } CallFrame;
 
 typedef enum {
@@ -454,8 +454,8 @@ struct Fiber {
 
   FiberState state;
 
-  // The root function of the fiber.
-  Function* func;
+  // The root closure of the fiber.
+  Closure* closure;
 
   // The stack of the execution holding locals and temps. A heap will be
   // allocated and grow as needed.
@@ -493,7 +493,7 @@ struct Class {
   // buffer.
   uint32_t name;
 
-  Function* ctor; //< The constructor function.
+  Closure* ctor; //< The constructor function.
   pkUintBuffer field_names; //< Buffer of field names.
   // TODO: ordered names buffer for binary search.
 };
@@ -554,7 +554,7 @@ Range* newRange(PKVM* vm, double from, double to);
 
 // FIXME:
 // We may need 2 different constructor for native and script modules.
-Module* newModule(PKVM* vm, String* name, bool is_core);
+Module* newModule(PKVM* vm, String* name, bool is_native);
 
 // FIXME:
 // We may need 2 different constuctor for native and script functions.
@@ -568,8 +568,8 @@ Closure* newClosure(PKVM* vm, Function* fn);
 // Allocate a new upvalue object for the [value] and return it.
 Upvalue* newUpvalue(PKVM* vm, Var* value);
 
-// Allocate new Fiber object around the function [fn] and return Fiber*.
-Fiber* newFiber(PKVM* vm, Function* fn);
+// Allocate new Fiber object for the [closure] and return Fiber*.
+Fiber* newFiber(PKVM* vm, Closure* closure);
 
 // FIXME:
 // Same fix has to applied as newFunction() (see above).

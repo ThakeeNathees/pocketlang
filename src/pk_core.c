@@ -81,8 +81,10 @@ PkHandle* pkGetMainFunction(PKVM* vm, PkHandle* module) {
   int main_index = moduleGetGlobalIndex(_module, IMPLICIT_MAIN_NAME,
                                         (uint32_t)strlen(IMPLICIT_MAIN_NAME));
   if (main_index == -1) return NULL;
-  ASSERT_INDEX(main_index, (int)_module->constants.count);
-  return vmNewHandle(vm, _module->constants.data[main_index]);
+  ASSERT_INDEX(main_index, _module->globals.count);
+  Var main_fn = _module->globals.data[main_index];
+  ASSERT(IS_OBJ_TYPE(main_fn, OBJ_CLOSURE), OOPS);
+  return vmNewHandle(vm, main_fn);
 }
 
 // A convenient macro to get the nth (1 based) argument of the current
@@ -389,35 +391,13 @@ static inline bool validateCond(PKVM* vm, bool condition, const char* err) {
  VALIDATE_ARG_OBJ(String, OBJ_STRING, "string")
  VALIDATE_ARG_OBJ(List, OBJ_LIST, "list")
  VALIDATE_ARG_OBJ(Map, OBJ_MAP, "map")
- VALIDATE_ARG_OBJ(Function, OBJ_FUNC, "function")
  VALIDATE_ARG_OBJ(Closure, OBJ_CLOSURE, "closure")
- VALIDATE_ARG_OBJ(Upvalue, OBJ_UPVALUE, "upvalue")
  VALIDATE_ARG_OBJ(Fiber, OBJ_FIBER, "fiber")
  VALIDATE_ARG_OBJ(Class, OBJ_CLASS, "class")
 
 /*****************************************************************************/
 /* SHARED FUNCTIONS                                                          */
 /*****************************************************************************/
-
-int findBuiltinFunction(const PKVM* vm, const char* name, uint32_t length) {
-   for (uint32_t i = 0; i < vm->builtins_count; i++) {
-     if (length == vm->builtins[i].length &&
-       strncmp(name, vm->builtins[i].name, length) == 0) {
-       return i;
-     }
-   }
-   return -1;
- }
-
-Function* getBuiltinFunction(const PKVM* vm, int index) {
-  ASSERT_INDEX((uint32_t)index, vm->builtins_count);
-  return vm->builtins[index].fn;
-}
-
-const char* getBuiltinFunctionName(const PKVM* vm, int index) {
-  ASSERT_INDEX((uint32_t)index, vm->builtins_count);
-  return vm->builtins[index].name;
-}
 
 Module* getCoreLib(const PKVM* vm, String* name) {
   Var lib = mapGet(vm->core_libs, VAR_OBJ(name));
@@ -438,7 +418,7 @@ DEF(coreTypeName,
 }
 
 DEF(coreHelp,
-  "help([fn]) -> null\n"
+  "help([fn:Closure]) -> null\n"
   "This will write an error message to stdout and return null.") {
 
   int argc = ARGC;
@@ -456,18 +436,18 @@ DEF(coreHelp,
     // TODO: Extend help() to work with modules and classes.
     //       Add docstring (like python) to support it in pocketlang.
 
-    Function* fn;
-    if (!validateArgFunction(vm, 1, &fn)) return;
+    Closure* closure;
+    if (!validateArgClosure(vm, 1, &closure)) return;
 
     // If there ins't an io function callback, we're done.
     if (vm->config.write_fn == NULL) RET(VAR_NULL);
 
-    if (fn->docstring != NULL) {
-      vm->config.write_fn(vm, fn->docstring);
+    if (closure->fn->docstring != NULL) {
+      vm->config.write_fn(vm, closure->fn->docstring);
       vm->config.write_fn(vm, "\n\n");
     } else {
       vm->config.write_fn(vm, "function '");
-      vm->config.write_fn(vm, fn->name);
+      vm->config.write_fn(vm, closure->fn->name);
       vm->config.write_fn(vm, "()' doesn't have a docstring.\n");
     }
   }
@@ -788,7 +768,11 @@ static void moduleAddFunctionInternal(PKVM* vm, Module* module,
                              module, true, docstring, NULL);
   fn->native = fptr;
   fn->arity = arity;
-  moduleAddGlobal(vm, module, name, (uint32_t)strlen(name), VAR_OBJ(fn));
+
+  vmPushTempRef(vm, &fn->_super); // fn.
+  Closure* closure = newClosure(vm, fn);
+  moduleAddGlobal(vm, module, name, (uint32_t)strlen(name), VAR_OBJ(closure));
+  vmPopTempRef(vm); // fn.
 }
 
 // 'lang' library methods.
@@ -812,18 +796,18 @@ DEF(stdLangGC,
 }
 
 DEF(stdLangDisas,
-  "disas(fn:Function) -> String\n"
+  "disas(fn:Closure) -> String\n"
   "Returns the disassembled opcode of the function [fn].") {
 
   // TODO: support dissasemble class constructors and module main body.
 
-  Function* fn;
-  if (!validateArgFunction(vm, 1, &fn)) return;
+  Closure* closure;
+  if (!validateArgClosure(vm, 1, &closure)) return;
 
-  if (!validateCond(vm, !fn->is_native,
+  if (!validateCond(vm, !closure->fn->is_native,
                     "Cannot disassemble native functions.")) return;
 
-  dumpFunctionCode(vm, fn);
+  dumpFunctionCode(vm, closure->fn);
 }
 
 #ifdef DEBUG
@@ -1123,12 +1107,12 @@ DEF(stdMathErfc,
 // -----------------------
 
 DEF(stdFiberNew,
-  "new(fn:Function) -> fiber\n"
+  "new(fn:Closure) -> fiber\n"
   "Create and return a new fiber from the given function [fn].") {
 
-  Function* fn;
-  if (!validateArgFunction(vm, 1, &fn)) return;
-  RET(VAR_OBJ(newFiber(vm, fn)));
+  Closure* closure;
+  if (!validateArgClosure(vm, 1, &closure)) return;
+  RET(VAR_OBJ(newFiber(vm, closure)));
 }
 
 DEF(stdFiberRun,
@@ -1185,15 +1169,17 @@ DEF(stdFiberResume,
 /* CORE INITIALIZATION                                                       */
 /*****************************************************************************/
 
-static void initializeBuiltinFN(PKVM* vm, BuiltinFn* bfn, const char* name,
+static void initializeBuiltinFN(PKVM* vm, Closure** bfn, const char* name,
                                 int length, int arity, pkNativeFn ptr,
                                 const char* docstring) {
-  bfn->name = name;
-  bfn->length = length;
 
-  bfn->fn = newFunction(vm, name, length, NULL, true, docstring, NULL);
-  bfn->fn->arity = arity;
-  bfn->fn->native = ptr;
+  Function* fn = newFunction(vm, name, length, NULL, true, docstring, NULL);
+  fn->arity = arity;
+  fn->native = ptr;
+
+  vmPushTempRef(vm, &fn->_super); // fn.
+  *bfn = newClosure(vm, fn);
+  vmPopTempRef(vm); // fn.
 }
 
 void initializeCore(PKVM* vm) {
@@ -1663,25 +1649,29 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
     case OBJ_FUNC:
     {
-      Function* fn = (Function*)obj;
+      // Functions aren't first class objects.
+      UNREACHABLE();
+    }
+
+    case OBJ_CLOSURE:
+    {
+      Closure* closure = (Closure*)obj;
       switch (attrib->hash) {
 
         case CHECK_HASH("arity", 0x3e96bd7a):
-          return VAR_NUM((double)(fn->arity));
+          return VAR_NUM((double)(closure->fn->arity));
 
         case CHECK_HASH("name", 0x8d39bde6):
-          return VAR_OBJ(newString(vm, fn->name));
+          return VAR_OBJ(newString(vm, closure->fn->name));
 
         default:
           ERR_NO_ATTRIB(vm, on, attrib);
           return VAR_NULL;
       }
-      UNREACHABLE();
     }
 
-    case OBJ_CLOSURE:
     case OBJ_UPVALUE:
-      TODO;
+      // Upvalues aren't first class objects.
       UNREACHABLE();
 
     case OBJ_FIBER:
@@ -1693,7 +1683,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
             return VAR_BOOL(fb->state == FIBER_DONE);
 
           case CHECK_HASH("function", 0x9ed64249):
-            return VAR_OBJ(fb->func);
+            return VAR_OBJ(fb->closure);
 
           default:
             ERR_NO_ATTRIB(vm, on, attrib);
@@ -1787,15 +1777,19 @@ do {                                                                          \
     }
 
     case OBJ_FUNC:
+      // Functions aren't first class objects.
+      UNREACHABLE();
+      return;
+
+    case OBJ_CLOSURE:
       ATTRIB_IMMUTABLE("arity");
       ATTRIB_IMMUTABLE("name");
       ERR_NO_ATTRIB(vm, on, attrib);
       return;
 
-    case OBJ_CLOSURE:
     case OBJ_UPVALUE:
-      TODO;
-      ERR_NO_ATTRIB(vm, on, attrib);
+      // Upvalues aren't first class objects.
+      UNREACHABLE();
       return;
 
     case OBJ_FIBER:

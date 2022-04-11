@@ -97,6 +97,11 @@ OPCODE(STORE_GLOBAL, 1, 0)
 // params: 1 bytes index.
 OPCODE(PUSH_BUILTIN_FN, 1, 1)
 
+// Push a closure for the function at the constant pool with index of the
+// first 2 bytes arguments.
+// params: 2 byte index.
+OPCODE(PUSH_CLOSURE, 2, 1)
+
 // Pop the stack top.
 OPCODE(POP, 0, -1)
 

@@ -242,12 +242,6 @@ typedef enum {
   DEPTH_LOCAL,       //< Local scope. Increase with inner scope.
 } Depth;
 
-typedef enum {
-  FN_NATIVE,    //< Native C function.
-  FN_SCRIPT,    //< Script functions defined with 'def'.
-  FN_LITERAL,   //< Literal functions defined with 'function(){...}'
-} FuncType;
-
 typedef struct {
   const char* name; //< Directly points into the source string.
   uint32_t length;  //< Length of the name.
@@ -464,6 +458,13 @@ static OpInfo opcode_info[] = {
 /*****************************************************************************/
 /* INITALIZATION FUNCTIONS                                                   */
 /*****************************************************************************/
+
+// FIXME:
+// This forward declaration can be removed once the interpolated string's
+// "list_join" function replaced with BUILD_STRING opcode. (The declaration
+// needed at compiler initialization function to find the "list_join" function.
+static int findBuiltinFunction(const PKVM* vm,
+                               const char* name, uint32_t length);
 
 // This should be called once the compiler initialized (to access it's fields).
 static void parserInit(Parser* parser, PKVM* vm, Compiler* compiler,
@@ -1220,6 +1221,22 @@ static bool matchAssignment(Compiler* compiler) {
 /* NAME SEARCH (AT COMPILATION PHASE)                                        */
 /*****************************************************************************/
 
+// Find the builtin function name and returns it's index in the builtins array
+// if not found returns -1.
+static int findBuiltinFunction(const PKVM* vm,
+                               const char* name, uint32_t length) {
+
+  for (int i = 0; i < vm->builtins_count; i++) {
+
+    uint32_t bfn_length = (uint32_t)strlen(vm->builtins[i]->fn->name);
+    if (bfn_length != length) continue;
+    if (strncmp(name, vm->builtins[i]->fn->name, length) == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 // Result type for an identifier definition.
 typedef enum {
   NAME_NOT_DEFINED,
@@ -1314,7 +1331,7 @@ static void compilerChangeStack(Compiler* compiler, int num);
 
 // Forward declaration of grammar functions.
 static void parsePrecedence(Compiler* compiler, Precedence precedence);
-static int compileFunction(Compiler* compiler, FuncType fn_type);
+static int compileFunction(Compiler* compiler, bool is_literal);
 static void compileExpression(Compiler* compiler);
 
 static void exprLiteral(Compiler* compiler);
@@ -1520,8 +1537,8 @@ static void exprInterpolation(Compiler* compiler) {
 }
 
 static void exprFunc(Compiler* compiler) {
-  int fn_index = compileFunction(compiler, FN_LITERAL);
-  emitOpcode(compiler, OP_PUSH_CONSTANT);
+  int fn_index = compileFunction(compiler, true);
+  emitOpcode(compiler, OP_PUSH_CLOSURE);
   emitShort(compiler, fn_index);
 }
 
@@ -2116,7 +2133,7 @@ static int compileClass(Compiler* compiler) {
   int cls_index, ctor_index;
   Class* cls = newClass(compiler->parser.vm, compiler->module,
                         name, (uint32_t)name_len, &cls_index, &ctor_index);
-  cls->ctor->arity = 0;
+  cls->ctor->fn->arity = 0;
 
   // FIXME:
   // Temproary patch for moving functions and classes to constant buffer.
@@ -2134,9 +2151,9 @@ static int compileClass(Compiler* compiler) {
   }
 
   // Compile the constructor function.
-  ASSERT(compiler->func->ptr == compiler->module->body, OOPS);
+  ASSERT(compiler->func->ptr == compiler->module->body->fn, OOPS);
   Func curr_fn;
-  compilerPushFunc(compiler, &curr_fn, cls->ctor, ctor_index);
+  compilerPushFunc(compiler, &curr_fn, cls->ctor->fn, ctor_index);
   compilerEnterBlock(compiler);
 
   // Push an instance on the stack.
@@ -2194,12 +2211,12 @@ static int compileClass(Compiler* compiler) {
 }
 
 // Compile a function and return it's index in the module's function buffer.
-static int compileFunction(Compiler* compiler, FuncType fn_type) {
+static int compileFunction(Compiler* compiler, bool is_literal) {
 
   const char* name;
   int name_length;
 
-  if (fn_type != FN_LITERAL) {
+  if (!is_literal) {
     consume(compiler, TK_NAME, "Expected a function name.");
     name = compiler->parser.previous.start;
     name_length = compiler->parser.previous.length;
@@ -2211,20 +2228,21 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
 
   int fn_index;
   Function* func = newFunction(compiler->parser.vm, name, name_length,
-                               compiler->module, fn_type == FN_NATIVE, NULL,
-                               &fn_index);
+                               compiler->module, false, NULL, &fn_index);
   if (fn_index >= MAX_CONSTANTS) {
     parseError(compiler, "A module should contain at most %d "
                "unique constants.", MAX_CONSTANTS);
   }
 
-  if (fn_type != FN_LITERAL) {
-    // FIXME: remove native keyword for functions.
-    ASSERT(fn_type != FN_NATIVE, OOPS);
+  if (!is_literal) {
     ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
     int name_line = compiler->parser.previous.line;
     int g_index = compilerAddVariable(compiler, name, name_length, name_line);
-    moduleSetGlobal(compiler->module, g_index, VAR_OBJ(func));
+
+    vmPushTempRef(compiler->parser.vm, &func->_super); // func.
+    Closure* closure = newClosure(compiler->parser.vm, func);
+    moduleSetGlobal(compiler->module, g_index, VAR_OBJ(closure));
+    vmPopTempRef(compiler->parser.vm); // func.
   }
 
   Func curr_fn;
@@ -2270,16 +2288,11 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   func->arity = argc;
   compilerChangeStack(compiler, argc);
 
-  if (fn_type != FN_NATIVE) {
-    compileBlockBody(compiler, BLOCK_FUNC);
+  compileBlockBody(compiler, BLOCK_FUNC);
 
-    consume(compiler, TK_END, "Expected 'end' after function definition end.");
-    compilerExitBlock(compiler); // Parameter depth.
-    emitFunctionEnd(compiler);
-
-  } else {
-    compilerExitBlock(compiler); // Parameter depth.
-  }
+  consume(compiler, TK_END, "Expected 'end' after function definition end.");
+  compilerExitBlock(compiler); // Parameter depth.
+  emitFunctionEnd(compiler);
 
 #if DUMP_BYTECODE
   // FIXME:
@@ -2879,7 +2892,7 @@ static void compileStatement(Compiler* compiler) {
 
   // If running REPL mode, print the expression's evaluated value.
   if (compiler->options && compiler->options->repl_mode &&
-      compiler->func->ptr == compiler->module->body &&
+      compiler->func->ptr == compiler->module->body->fn &&
       is_expression /*&& compiler->scope_depth == DEPTH_GLOBAL*/) {
     emitOpcode(compiler, OP_REPL_PRINT);
   }
@@ -2899,11 +2912,8 @@ static void compileTopLevelStatement(Compiler* compiler) {
   if (match(compiler, TK_CLASS)) {
     compileClass(compiler);
 
-  } else if (match(compiler, TK_NATIVE)) {
-    compileFunction(compiler, FN_NATIVE);
-
   } else if (match(compiler, TK_DEF)) {
-    compileFunction(compiler, FN_SCRIPT);
+    compileFunction(compiler, false);
 
   } else if (match(compiler, TK_FROM)) {
     compileFromImport(compiler);
@@ -2949,7 +2959,7 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
   // If we're compiling for a module that was already compiled (when running
   // REPL or evaluating an expression) we don't need the old main anymore.
   // just use the globals and functions of the module and use a new body func.
-  pkByteBufferClear(&module->body->fn->opcodes, vm);
+  pkByteBufferClear(&module->body->fn->fn->opcodes, vm);
 
   // Remember the count of constants, names, and globals, If the compilation
   // failed discard all of them and roll back.
@@ -2959,7 +2969,7 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
 
   Func curr_fn;
   curr_fn.depth = DEPTH_MODULE;
-  curr_fn.ptr = module->body;
+  curr_fn.ptr = module->body->fn;
   curr_fn.outer_func = NULL;
   compiler->func = &curr_fn;
 

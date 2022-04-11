@@ -13,16 +13,6 @@
 // Initialize core language, builtin function and core libs.
 void initializeCore(PKVM* vm);
 
-// Find the builtin function name and returns it's index in the builtins array
-// if not found returns -1.
-int findBuiltinFunction(const PKVM* vm, const char* name, uint32_t length);
-
-// Returns the builtin function at index [index].
-Function* getBuiltinFunction(const PKVM* vm, int index);
-
-// Returns the builtin function's name at index [index].
-const char* getBuiltinFunctionName(const PKVM* vm, int index);
-
 // Return the core library with the [name] if exists in the core libs,
 // otherwise returns NULL.
 Module* getCoreLib(const PKVM* vm, String* name);
