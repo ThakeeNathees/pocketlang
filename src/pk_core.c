@@ -36,55 +36,53 @@
 /* CORE PUBLIC API                                                           */
 /*****************************************************************************/
 
-// Create a new module with the given [name] and returns as a Script* for
+// Create a new module with the given [name] and returns as a Module* for
 // internal. Which will be wrapped by pkNewModule to return a pkHandle*.
-static Script* newModuleInternal(PKVM* vm, const char* name);
+static Module* newModuleInternal(PKVM* vm, const char* name);
 
-// Adds a function to the script with the give properties and add the function
+// Adds a function to the module with the give properties and add the function
 // to the module's globals variables.
-static void moduleAddFunctionInternal(PKVM* vm, Script* script,
+static void moduleAddFunctionInternal(PKVM* vm, Module* module,
                                       const char* name, pkNativeFn fptr,
                                       int arity, const char* docstring);
 
-// pkNewModule implementation (see pocketlang.h for description).
 PkHandle* pkNewModule(PKVM* vm, const char* name) {
-  Script* module = newModuleInternal(vm, name);
+  Module* module = newModuleInternal(vm, name);
   return vmNewHandle(vm, VAR_OBJ(module));
 }
 
-// pkModuleAddGlobal implementation (see pocketlang.h for description).
 PK_PUBLIC void pkModuleAddGlobal(PKVM* vm, PkHandle* module,
                                  const char* name, PkHandle* value) {
   __ASSERT(module != NULL, "Argument module was NULL.");
   __ASSERT(value != NULL, "Argument value was NULL.");
-  Var scr = module->value;
-  __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
+  __ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
+           "Given handle is not a module.");
 
-  scriptAddGlobal(vm, (Script*)AS_OBJ(scr), name, (uint32_t)strlen(name),
-                  value->value);
+  moduleAddGlobal(vm, (Module*)AS_OBJ(module->value),
+                  name, (uint32_t)strlen(name), value->value);
 }
 
-// pkModuleAddFunction implementation (see pocketlang.h for description).
 void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
                          pkNativeFn fptr, int arity) {
   __ASSERT(module != NULL, "Argument module was NULL.");
-  Var scr = module->value;
-  __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
-  moduleAddFunctionInternal(vm, (Script*)AS_OBJ(scr), name, fptr, arity,
+  __ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
+           "Given handle is not a module.");
+  moduleAddFunctionInternal(vm, (Module*)AS_OBJ(module->value),
+                            name, fptr, arity,
                             NULL /*TODO: Public API for function docstring.*/);
 }
 
 PkHandle* pkGetMainFunction(PKVM* vm, PkHandle* module) {
   __ASSERT(module != NULL, "Argument module was NULL.");
-  Var scr = module->value;
-  __ASSERT(IS_OBJ_TYPE(scr, OBJ_SCRIPT), "Given handle is not a module");
-  Script* script = (Script*)AS_OBJ(scr);
+  __ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
+           "Given handle is not a module.");
+  Module* _module = (Module*)AS_OBJ(module->value);
 
-  int main_index = scriptGetGlobalIndex(script, IMPLICIT_MAIN_NAME,
+  int main_index = moduleGetGlobalIndex(_module, IMPLICIT_MAIN_NAME,
                                         (uint32_t)strlen(IMPLICIT_MAIN_NAME));
   if (main_index == -1) return NULL;
-  ASSERT_INDEX(main_index, (int)script->constants.count);
-  return vmNewHandle(vm, script->constants.data[main_index]);
+  ASSERT_INDEX(main_index, (int)_module->constants.count);
+  return vmNewHandle(vm, _module->constants.data[main_index]);
 }
 
 // A convenient macro to get the nth (1 based) argument of the current
@@ -131,13 +129,11 @@ do {                                                                        \
   }                                                                         \
 } while (false)
 
-// pkGetArgc implementation (see pocketlang.h for description).
 int pkGetArgc(const PKVM* vm) {
   __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
   return ARGC;
 }
 
-// pkCheckArgcRange implementation (see pocketlang.h for description).
 bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max) {
   ASSERT(min <= max, "invalid argc range (min > max).");
 
@@ -157,7 +153,6 @@ bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max) {
   return true;
 }
 
-// pkGetArg implementation (see pocketlang.h for description).
 PkVar pkGetArg(const PKVM* vm, int arg) {
   __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
   __ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index.");
@@ -165,7 +160,6 @@ PkVar pkGetArg(const PKVM* vm, int arg) {
   return &(ARG(arg));
 }
 
-// pkGetArgBool implementation (see pocketlang.h for description).
 bool pkGetArgBool(PKVM* vm, int arg, bool* value) {
   CHECK_GET_ARG_API_ERRORS();
 
@@ -174,7 +168,6 @@ bool pkGetArgBool(PKVM* vm, int arg, bool* value) {
   return true;
 }
 
-// pkGetArgNumber implementation (see pocketlang.h for description).
 bool pkGetArgNumber(PKVM* vm, int arg, double* value) {
   CHECK_GET_ARG_API_ERRORS();
 
@@ -193,7 +186,6 @@ bool pkGetArgNumber(PKVM* vm, int arg, double* value) {
   return true;
 }
 
-// pkGetArgString implementation (see pocketlang.h for description).
 bool pkGetArgString(PKVM* vm, int arg, const char** value, uint32_t* length) {
   CHECK_GET_ARG_API_ERRORS();
 
@@ -211,7 +203,6 @@ bool pkGetArgString(PKVM* vm, int arg, const char** value, uint32_t* length) {
   return true;
 }
 
-// pkGetArgInstance implementation (see pocketlang.h for description).
 bool pkGetArgInst(PKVM* vm, int arg, uint32_t id, void** value) {
   CHECK_GET_ARG_API_ERRORS();
 
@@ -239,7 +230,6 @@ bool pkGetArgInst(PKVM* vm, int arg, uint32_t id, void** value) {
   return true;
 }
 
-// pkGetArgValue implementation (see pocketlang.h for description).
 bool pkGetArgValue(PKVM* vm, int arg, PkVarType type, PkVar* value) {
   CHECK_GET_ARG_API_ERRORS();
 
@@ -255,42 +245,34 @@ bool pkGetArgValue(PKVM* vm, int arg, PkVarType type, PkVar* value) {
   return true;
 }
 
-// pkReturnNull implementation (see pocketlang.h for description).
 void pkReturnNull(PKVM* vm) {
   RET(VAR_NULL);
 }
 
-// pkReturnBool implementation (see pocketlang.h for description).
 void pkReturnBool(PKVM* vm, bool value) {
   RET(VAR_BOOL(value));
 }
 
-// pkReturnNumber implementation (see pocketlang.h for description).
 void pkReturnNumber(PKVM* vm, double value) {
   RET(VAR_NUM(value));
 }
 
-// pkReturnString implementation (see pocketlang.h for description).
 void pkReturnString(PKVM* vm, const char* value) {
   RET(VAR_OBJ(newString(vm, value)));
 }
 
-// pkReturnStringLength implementation (see pocketlang.h for description).
 void pkReturnStringLength(PKVM* vm, const char* value, size_t length) {
   RET(VAR_OBJ(newStringLength(vm, value, (uint32_t)length)));
 }
 
-// pkReturnValue implementation (see pocketlang.h for description).
 void pkReturnValue(PKVM* vm, PkVar value) {
   RET(*(Var*)value);
 }
 
-// pkReturnHandle implementation (see pocketlang.h for description).
 void pkReturnHandle(PKVM* vm, PkHandle* handle) {
   RET(handle->value);
 }
 
-// pkReturnInstNative implementation (see pocketlang.h for description).
 void pkReturnInstNative(PKVM* vm, void* data, uint32_t id) {
   RET(VAR_OBJ(newInstanceNative(vm, data, id)));
 }
@@ -417,7 +399,6 @@ static inline bool validateCond(PKVM* vm, bool condition, const char* err) {
 /* SHARED FUNCTIONS                                                          */
 /*****************************************************************************/
 
-// findBuiltinFunction implementation (see core.h for description).
 int findBuiltinFunction(const PKVM* vm, const char* name, uint32_t length) {
    for (uint32_t i = 0; i < vm->builtins_count; i++) {
      if (length == vm->builtins[i].length &&
@@ -428,24 +409,21 @@ int findBuiltinFunction(const PKVM* vm, const char* name, uint32_t length) {
    return -1;
  }
 
-// getBuiltinFunction implementation (see core.h for description).
 Function* getBuiltinFunction(const PKVM* vm, int index) {
   ASSERT_INDEX((uint32_t)index, vm->builtins_count);
   return vm->builtins[index].fn;
 }
 
-// getBuiltinFunctionName implementation (see core.h for description).
 const char* getBuiltinFunctionName(const PKVM* vm, int index) {
   ASSERT_INDEX((uint32_t)index, vm->builtins_count);
   return vm->builtins[index].name;
 }
 
-// getCoreLib implementation (see core.h for description).
-Script* getCoreLib(const PKVM* vm, String* name) {
+Module* getCoreLib(const PKVM* vm, String* name) {
   Var lib = mapGet(vm->core_libs, VAR_OBJ(name));
   if (IS_UNDEF(lib)) return NULL;
-  ASSERT(IS_OBJ_TYPE(lib, OBJ_SCRIPT), OOPS);
-  return (Script*)AS_OBJ(lib);
+  ASSERT(IS_OBJ_TYPE(lib, OBJ_MODULE), OOPS);
+  return (Module*)AS_OBJ(lib);
 }
 
 /*****************************************************************************/
@@ -777,42 +755,40 @@ DEF(coreMapRemove,
 /* CORE MODULE METHODS                                                       */
 /*****************************************************************************/
 
-// Create a module and add it to the vm's core modules, returns the script.
-static Script* newModuleInternal(PKVM* vm, const char* name) {
+// Create a module and add it to the vm's core modules, returns the module.
+static Module* newModuleInternal(PKVM* vm, const char* name) {
 
-  // Create a new Script for the module.
   String* _name = newString(vm, name);
-  vmPushTempRef(vm, &_name->_super);
+  vmPushTempRef(vm, &_name->_super); // _name
 
   // Check if any module with the same name already exists and assert to the
   // hosting application.
   if (!IS_UNDEF(mapGet(vm->core_libs, VAR_OBJ(_name)))) {
-    vmPopTempRef(vm); // _name
     __ASSERT(false, stringFormat(vm,
              "A module named '$' already exists", name)->data);
   }
 
-  Script* scr = newScript(vm, _name, true);
+  Module* module = newModule(vm, _name, true);
   vmPopTempRef(vm); // _name
 
-  // Add the script to core_libs.
-  vmPushTempRef(vm, &scr->_super);
-  mapSet(vm, vm->core_libs, VAR_OBJ(_name), VAR_OBJ(scr));
-  vmPopTempRef(vm);
+  // Add the module to core_libs.
+  vmPushTempRef(vm, &module->_super); // module.
+  mapSet(vm, vm->core_libs, VAR_OBJ(_name), VAR_OBJ(module));
+  vmPopTempRef(vm); // module.
 
-  return scr;
+  return module;
 }
 
-// An internal function to add a function to the given [script].
-static void moduleAddFunctionInternal(PKVM* vm, Script* script,
+// An internal function to add a function to the given [module].
+static void moduleAddFunctionInternal(PKVM* vm, Module* module,
                                       const char* name, pkNativeFn fptr,
                                       int arity, const char* docstring) {
 
   Function* fn = newFunction(vm, name, (int)strlen(name),
-                             script, true, docstring, NULL);
+                             module, true, docstring, NULL);
   fn->native = fptr;
   fn->arity = arity;
-  scriptAddGlobal(vm, script, name, (uint32_t)strlen(name), VAR_OBJ(fn));
+  moduleAddGlobal(vm, module, name, (uint32_t)strlen(name), VAR_OBJ(fn));
 }
 
 // 'lang' library methods.
@@ -1261,7 +1237,7 @@ void initializeCore(PKVM* vm) {
 
   // Core Modules /////////////////////////////////////////////////////////////
 
-  Script* lang = newModuleInternal(vm, "lang");
+  Module* lang = newModuleInternal(vm, "lang");
   MODULE_ADD_FN(lang, "clock", stdLangClock,  0);
   MODULE_ADD_FN(lang, "gc",    stdLangGC,     0);
   MODULE_ADD_FN(lang, "disas", stdLangDisas,  1);
@@ -1270,7 +1246,7 @@ void initializeCore(PKVM* vm) {
   MODULE_ADD_FN(lang, "debug_break", stdLangDebugBreak, 0);
 #endif
 
-  Script* math = newModuleInternal(vm, "math");
+  Module* math = newModuleInternal(vm, "math");
   MODULE_ADD_FN(math, "floor", stdMathFloor,       1);
   MODULE_ADD_FN(math, "ceil",  stdMathCeil,        1);
   MODULE_ADD_FN(math, "pow",   stdMathPow,         2);
@@ -1300,9 +1276,9 @@ void initializeCore(PKVM* vm) {
   // Note that currently it's mutable (since it's a global variable, not
   // constant and pocketlang doesn't support constant) so the user shouldn't
   // modify the PI, like in python.
-  scriptAddGlobal(vm, math, "PI", 2, VAR_NUM(M_PI));
+  moduleAddGlobal(vm, math, "PI", 2, VAR_NUM(M_PI));
 
-  Script* fiber = newModuleInternal(vm, "Fiber");
+  Module* fiber = newModuleInternal(vm, "Fiber");
   MODULE_ADD_FN(fiber, "new",      stdFiberNew,     1);
   MODULE_ADD_FN(fiber, "run",      stdFiberRun,    -1);
   MODULE_ADD_FN(fiber, "resume",   stdFiberResume, -1);
@@ -1349,7 +1325,7 @@ Var varAdd(PKVM* vm, Var v1, Var v2) {
 
       case OBJ_MAP:
       case OBJ_RANGE:
-      case OBJ_SCRIPT:
+      case OBJ_MODULE:
       case OBJ_FUNC:
       case OBJ_CLOSURE:
       case OBJ_UPVALUE:
@@ -1562,7 +1538,7 @@ bool varContains(PKVM* vm, Var elem, Var container) {
     } break;
 
     case OBJ_RANGE:
-    case OBJ_SCRIPT:
+    case OBJ_MODULE:
     case OBJ_FUNC:
     case OBJ_CLOSURE:
     case OBJ_UPVALUE:
@@ -1670,15 +1646,15 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
       UNREACHABLE();
     }
 
-    case OBJ_SCRIPT:
+    case OBJ_MODULE:
     {
-      Script* scr = (Script*)obj;
+      Module* module = (Module*)obj;
 
       // Search in globals.
-      int index = scriptGetGlobalIndex(scr, attrib->data, attrib->length);
+      int index = moduleGetGlobalIndex(module, attrib->data, attrib->length);
       if (index != -1) {
-        ASSERT_INDEX((uint32_t)index, scr->globals.count);
-        return scr->globals.data[index];
+        ASSERT_INDEX((uint32_t)index, module->globals.count);
+        return module->globals.data[index];
       }
 
       ERR_NO_ATTRIB(vm, on, attrib);
@@ -1795,14 +1771,14 @@ do {                                                                          \
       ERR_NO_ATTRIB(vm, on, attrib);
       return;
 
-    case OBJ_SCRIPT: {
-      Script* scr = (Script*)obj;
+    case OBJ_MODULE: {
+      Module* module = (Module*)obj;
 
       // Check globals.
-      int index = scriptGetGlobalIndex(scr, attrib->data, attrib->length);
+      int index = moduleGetGlobalIndex(module, attrib->data, attrib->length);
       if (index != -1) {
-        ASSERT_INDEX((uint32_t)index, scr->globals.count);
-        scr->globals.data[index] = value;
+        ASSERT_INDEX((uint32_t)index, module->globals.count);
+        module->globals.data[index] = value;
         return;
       }
 
@@ -1909,7 +1885,7 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
     }
 
     case OBJ_RANGE:
-    case OBJ_SCRIPT:
+    case OBJ_MODULE:
     case OBJ_FUNC:
     case OBJ_CLOSURE:
     case OBJ_UPVALUE:
@@ -1961,7 +1937,7 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
     }
 
     case OBJ_RANGE:
-    case OBJ_SCRIPT:
+    case OBJ_MODULE:
     case OBJ_FUNC:
     case OBJ_CLOSURE:
     case OBJ_UPVALUE:
