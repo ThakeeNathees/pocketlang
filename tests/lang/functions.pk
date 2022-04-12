@@ -6,16 +6,16 @@ def f2() return 'f2' end assert(f2() == 'f2')
 def f3(a, b, c, d) return c end
 assert(f3('a', 'b', 'c', 'd') == 'c')
 
-## Chain call tests. (concatenative programming)
-## Chain call no more supported (unnecessary feature).
-#def fn1(data) return '[fn1:' + data + ']' end
-#def fn2(data, suffix) return '[fn2:' + data + '|' + suffix + ']' end
-#def fn3(data) return '[fn3:' + data + ']' end
-#result = 'data' -> fn1 -> fn2{'suff'} -> fn3
-#assert(result == '[fn3:[fn2:[fn1:data]|suff]]')
-# str_lower(s) function refactored to s.lower attribute.
-#result = ' tEST+InG ' -> str_strip -> str_lower
-#assert(result == 'test+ing')
+## Local variables of inner funcions.
+def f4
+  l1 = 3.14
+  f5 = func
+    l2 = 42
+    return l2
+  end
+  assert(f5() == 42)
+end
+f4()
 
 # If we got here, that means all test were passed.
 print('All TESTS PASSED')
