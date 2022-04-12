@@ -46,14 +46,6 @@
     (vm->fiber->error = err);        \
   } while (false)
 
-// Builtin functions are stored in an array in the VM unlike other functions
-// builtin function's doesn't belongs to any module.
-typedef struct {
-  const char* name; //< Name of the function.
-  uint32_t length;  //< Length of the name.
-  Function* fn;     //< Native function pointer.
-} BuiltinFn;
-
 // A doubly link list of vars that have reference in the host application.
 // Handles are wrapper around Var that lives on the host application.
 struct PkHandle {
@@ -122,8 +114,8 @@ struct PKVM {
   Map* core_libs;
 
   // Array of all builtin functions.
-  BuiltinFn builtins[BUILTIN_FN_CAPACITY];
-  uint32_t builtins_count;
+  Closure* builtins[BUILTIN_FN_CAPACITY];
+  int builtins_count;
 
   // Current fiber.
   Fiber* fiber;

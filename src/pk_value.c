@@ -75,9 +75,10 @@ PkHandle* pkNewMap(PKVM* vm) {
 }
 
 PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn) {
-  __ASSERT(IS_OBJ_TYPE(fn->value, OBJ_FUNC), "Fn should be of type function.");
+  __ASSERT(IS_OBJ_TYPE(fn->value, OBJ_CLOSURE),
+           "Handle should be of type function.");
 
-  Fiber* fiber = newFiber(vm, (Function*)AS_OBJ(fn->value));
+  Fiber* fiber = newFiber(vm, (Closure*)AS_OBJ(fn->value));
   vmPushTempRef(vm, &fiber->_super); // fiber
   PkHandle* handle = vmNewHandle(vm, VAR_OBJ(fiber));
   vmPopTempRef(vm); // fiber
@@ -264,18 +265,17 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       Fiber* fiber = (Fiber*)obj;
       vm->bytes_allocated += sizeof(Fiber);
 
-      markObject(vm, &fiber->func->_super);
+      markObject(vm, &fiber->closure->_super);
 
-      // Blacken the stack.
+      // Mark the stack.
       for (Var* local = fiber->stack; local < fiber->sp; local++) {
         markValue(vm, *local);
       }
       vm->bytes_allocated += sizeof(Var) * fiber->stack_size;
 
-      // Blacken call frames.
+      // Mark call frames.
       for (int i = 0; i < fiber->frame_count; i++) {
-        markObject(vm, (Object*)&fiber->frames[i].fn->_super);
-        markObject(vm, &fiber->frames[i].fn->owner->_super);
+        markObject(vm, (Object*)&fiber->frames[i].closure->_super);
       }
       vm->bytes_allocated += sizeof(CallFrame) * fiber->frame_capacity;
 
@@ -379,7 +379,7 @@ Range* newRange(PKVM* vm, double from, double to) {
   return range;
 }
 
-Module* newModule(PKVM* vm, String* name, bool is_core) {
+Module* newModule(PKVM* vm, String* name, bool is_native) {
   Module* module = ALLOCATE(vm, Module);
   varInitObject(&module->_super, vm, OBJ_MODULE);
 
@@ -387,11 +387,11 @@ Module* newModule(PKVM* vm, String* name, bool is_core) {
 
   module->path = name;
   module->name = NULL;
-  module->initialized = is_core;
+  module->initialized = is_native;
   module->body = NULL;
 
   // Core modules has its name as the module name.
-  if (is_core) module->name = name;
+  if (is_native) module->name = name;
 
   pkVarBufferInit(&module->globals);
   pkUintBufferInit(&module->global_names);
@@ -400,7 +400,7 @@ Module* newModule(PKVM* vm, String* name, bool is_core) {
 
   // Add a implicit main function and the '__file__' global to the module, only
   // if it's not a core module.
-  if (!is_core) {
+  if (!is_native) {
     vmPushTempRef(vm, &module->_super); // module.
 
     moduleAddMain(vm, module);
@@ -488,7 +488,7 @@ Upvalue* newUpvalue(PKVM* vm, Var* value) {
   return upvalue;
 }
 
-Fiber* newFiber(PKVM* vm, Function* fn) {
+Fiber* newFiber(PKVM* vm, Closure* closure) {
   Fiber* fiber = ALLOCATE(vm, Fiber);
 
   // Not sure why this memset is needed here. If it doesn't then remove it.
@@ -497,13 +497,13 @@ Fiber* newFiber(PKVM* vm, Function* fn) {
   varInitObject(&fiber->_super, vm, OBJ_FIBER);
 
   fiber->state = FIBER_NEW;
-  fiber->func = fn;
+  fiber->closure = closure;
 
-  if (fn->is_native) {
+  if (closure->fn->is_native) {
     // For native functions, we're only using stack for parameters,
     // there won't be any locals or temps (which are belongs to the
     // native "C" stack).
-    int stack_size = utilPowerOf2Ceil(fn->arity + 1);
+    int stack_size = utilPowerOf2Ceil(closure->fn->arity + 1);
     fiber->stack = ALLOCATE_ARRAY(vm, Var, stack_size);
     fiber->stack_size = stack_size;
     fiber->ret = fiber->stack;
@@ -511,7 +511,7 @@ Fiber* newFiber(PKVM* vm, Function* fn) {
 
   } else {
     // Allocate stack.
-    int stack_size = utilPowerOf2Ceil(fn->fn->stack_size + 1);
+    int stack_size = utilPowerOf2Ceil(closure->fn->fn->stack_size + 1);
     if (stack_size < MIN_STACK_SIZE) stack_size = MIN_STACK_SIZE;
     fiber->stack = ALLOCATE_ARRAY(vm, Var, stack_size);
     fiber->stack_size = stack_size;
@@ -524,8 +524,8 @@ Fiber* newFiber(PKVM* vm, Function* fn) {
     fiber->frame_count = 1;
 
     // Initialize the first frame.
-    fiber->frames[0].fn = fn;
-    fiber->frames[0].ip = fn->fn->opcodes.data;
+    fiber->frames[0].closure = closure;
+    fiber->frames[0].ip = closure->fn->fn->opcodes.data;
     fiber->frames[0].rbp = fiber->ret;
   }
 
@@ -559,10 +559,15 @@ Class* newClass(PKVM* vm, Module* module, const char* name, uint32_t length,
   String* ctor_name = stringFormat(vm, "$(Ctor:@)", special, cls_name);
 
   // Constructor.
-  vmPushTempRef(vm, &ctor_name->_super); // ctor_name
-  cls->ctor = newFunction(vm, ctor_name->data, ctor_name->length,
-                           module, false, NULL, ctor_index);
-  vmPopTempRef(vm); // ctor_name
+  vmPushTempRef(vm, &ctor_name->_super); // ctor_name.
+  {
+    Function* ctor_fn = newFunction(vm, ctor_name->data, ctor_name->length,
+                                    module, false, NULL, ctor_index);
+    vmPushTempRef(vm, &ctor_fn->_super); // ctor_fn.
+    cls->ctor = newClosure(vm, ctor_fn);
+    vmPopTempRef(vm); // ctor_fn.
+  }
+  vmPopTempRef(vm); // ctor_name.
 
   vmPopTempRef(vm); // class.
   return cls;
@@ -1193,11 +1198,16 @@ void moduleSetGlobal(Module* module, int index, Var value) {
 void moduleAddMain(PKVM* vm, Module* module) {
   ASSERT(module->body == NULL, OOPS);
 
-  const char* fn_name = IMPLICIT_MAIN_NAME;
-  module->body = newFunction(vm, fn_name, (int)strlen(fn_name),
-                             module, false, NULL/*TODO*/, NULL);
-  module->body->arity = 0;
   module->initialized = false;
+
+  const char* fn_name = IMPLICIT_MAIN_NAME;
+  Function* body_fn = newFunction(vm, fn_name, (int)strlen(fn_name),
+                                  module, false, NULL/*TODO*/, NULL);
+  body_fn->arity = 0;
+
+  vmPushTempRef(vm, &body_fn->_super); // body_fn.
+  module->body = newClosure(vm, body_fn);
+  vmPopTempRef(vm); // body_fn.
 
   moduleAddGlobal(vm, module,
                   IMPLICIT_MAIN_NAME, (uint32_t)strlen(IMPLICIT_MAIN_NAME),
@@ -1653,8 +1663,8 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
       case OBJ_FIBER: {
         const Fiber* fb = (const Fiber*)obj;
         pkByteBufferAddString(buff, vm, "[Fiber:", 7);
-        pkByteBufferAddString(buff, vm, fb->func->name,
-                            (uint32_t)strlen(fb->func->name));
+        pkByteBufferAddString(buff, vm, fb->closure->fn->name,
+                            (uint32_t)strlen(fb->closure->fn->name));
         pkByteBufferWrite(buff, vm, ']');
         return;
       }

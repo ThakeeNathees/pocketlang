@@ -231,12 +231,28 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_PUSH_BUILTIN_FN:
       {
         int index = READ_BYTE();
-        const char* name = getBuiltinFunctionName(vm, index);
+        ASSERT_INDEX(index, vm->builtins_count);
+        const char* name = vm->builtins[index]->fn->name;
         // Prints: %5d [Fn:%s]\n
         PRINT_INT(index);
         PRINT(" [Fn:");
         PRINT(name);
         PRINT("]\n");
+        break;
+      }
+
+      case OP_PUSH_CLOSURE:
+      {
+        int index = READ_SHORT();
+        ASSERT_INDEX((uint32_t)index, func->owner->constants.count);
+        Var value = func->owner->constants.data[index];
+        ASSERT(IS_OBJ_TYPE(value, OBJ_FUNC), OOPS);
+
+        // Prints: %5d [val]\n
+        PRINT_INT(index);
+        PRINT(" ");
+        dumpValue(vm, value);
+        NEWLINE();
         break;
       }
 
@@ -365,7 +381,7 @@ void dumpGlobalValues(PKVM* vm) {
   int frame_ind = fiber->frame_count - 1;
   ASSERT(frame_ind >= 0, OOPS);
   CallFrame* frame = &fiber->frames[frame_ind];
-  Module* module = frame->fn->owner;
+  Module* module = frame->closure->fn->owner;
 
   for (uint32_t i = 0; i < module->global_names.count; i++) {
     String* name = module->names.data[module->global_names.data[i]];
