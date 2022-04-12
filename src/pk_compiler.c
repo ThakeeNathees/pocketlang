@@ -301,11 +301,13 @@ typedef struct sFunc {
   // function and literal functions will have the scope where it declared.
   int depth;
 
+  Local locals[MAX_VARIABLES]; //< Variables in the current context.
+  int local_count; //< Number of locals in [locals].
+
+  int stack_size;  //< Current size including locals ind temps.
+
   // The actual function pointer which is being compiled.
   Function* ptr;
-
-  // The index of the function in its module.
-  int index;
 
   // If outer function of this function, for top level function the outer
   // function will be the module's body function.
@@ -411,11 +413,6 @@ struct Compiler {
   // level and > 0 is inner scope.
   int scope_depth;
 
-  Local locals[MAX_VARIABLES]; //< Variables in the current context.
-  int local_count; //< Number of locals in [locals].
-
-  int stack_size;  //< Current size including locals ind temps.
-
   // True if the last statement is a new local variable assignment. Because
   // the assignment is different than regular assignment and use this boolean
   // to tell the compiler that dont pop it's assigned value because the value
@@ -504,8 +501,6 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
   compiler->options = options;
 
   compiler->scope_depth = DEPTH_GLOBAL;
-  compiler->local_count = 0;
-  compiler->stack_size = 0;
 
   compiler->loop = NULL;
   compiler->func = NULL;
@@ -1237,6 +1232,18 @@ static int findBuiltinFunction(const PKVM* vm,
   return -1;
 }
 
+// Find the local with the [name] in the given function [func] and return
+// it's index, if not found returns -1.
+static int findLocal(Func* func, const char* name, uint32_t length) {
+  for (int i = 0; i < func->local_count; i++) {
+    if (func->locals[i].length != length) continue;
+    if (strncmp(func->locals[i].name, name, length) == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 // Result type for an identifier definition.
 typedef enum {
   NAME_NOT_DEFINED,
@@ -1265,26 +1272,15 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
   NameSearchResult result;
   result.type = NAME_NOT_DEFINED;
 
-  for (int i = compiler->local_count - 1; i >= 0; i--) {
-    Local* local = &compiler->locals[i];
-    ASSERT(local->depth != DEPTH_GLOBAL, OOPS);
-
-    // Literal functions are not closures and ignore it's outer function's
-    // local variables.
-    if (compiler->func->depth >= local->depth) {
-      continue;
-    }
-
-    if (length == local->length) {
-      if (strncmp(local->name, name, length) == 0) {
-        result.type = NAME_LOCAL_VAR;
-        result.index = i;
-        return result;
-      }
-    }
-  }
-
   int index; // For storing the search result below.
+
+  // Search through locals.
+  index = findLocal(compiler->func, name, length);
+  if (index != -1) {
+    result.type = NAME_LOCAL_VAR;
+    result.index = index;
+    return result;
+  }
 
   // Search through globals.
   index = moduleGetGlobalIndex(compiler->module, name, length);
@@ -1570,7 +1566,7 @@ static void exprName(Compiler* compiler) {
         // Ensure the local variable's index is equals to the stack top index.
         // If the compiler has errors, we cannot and don't have to assert.
         ASSERT(compiler->parser.has_errors ||
-               (compiler->stack_size - 1) == index, OOPS);
+               (compiler->func->stack_size - 1) == index, OOPS);
 
         // We don't need to call emitStoreVariable (which emit STORE_LOCAL)
         // because the local is already at it's location in the stack, we just
@@ -1896,7 +1892,7 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
       var_type = "globals";
     }
   } else {
-    if (compiler->local_count >= MAX_VARIABLES) {
+    if (compiler->func->local_count >= MAX_VARIABLES) {
       max_vars_reached = true;
       var_type = "locals";
     }
@@ -1913,12 +1909,12 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
     return (int)moduleAddGlobal(compiler->parser.vm, compiler->module,
                                 name, length, VAR_NULL);
   } else {
-    Local* local = &compiler->locals [compiler->local_count];
+    Local* local = &compiler->func->locals[compiler->func->local_count];
     local->name = name;
     local->length = length;
     local->depth = compiler->scope_depth;
     local->line = line;
-    return compiler->local_count++;
+    return compiler->func->local_count++;
   }
 
   UNREACHABLE();
@@ -1962,15 +1958,15 @@ static void compilerEnterBlock(Compiler* compiler) {
 // Change the stack size by the [num], if it's positive, the stack will
 // grow otherwise it'll shrink.
 static void compilerChangeStack(Compiler* compiler, int num) {
-  compiler->stack_size += num;
+  compiler->func->stack_size += num;
 
   // If the compiler has error (such as undefined name), that will not popped
   // because of the semantic error but it'll be popped once the expression
   // parsing is done. So it's possible for negative size in error.
-  if (!compiler->parser.has_errors) ASSERT(compiler->stack_size >= 0, OOPS);
+  ASSERT(compiler->parser.has_errors || compiler->func->stack_size >= 0, OOPS);
 
-  if (compiler->stack_size > _FN->stack_size) {
-    _FN->stack_size = compiler->stack_size;
+  if (compiler->func->stack_size > _FN->stack_size) {
+    _FN->stack_size = compiler->func->stack_size;
   }
 }
 
@@ -1982,8 +1978,8 @@ static void compilerChangeStack(Compiler* compiler, int num) {
 static int compilerPopLocals(Compiler* compiler, int depth) {
   ASSERT(depth > (int)DEPTH_GLOBAL, "Cannot pop global variables.");
 
-  int local = compiler->local_count - 1;
-  while (local >= 0 && compiler->locals[local].depth >= depth) {
+  int local = compiler->func->local_count - 1;
+  while (local >= 0 && compiler->func->locals[local].depth >= depth) {
 
     // Note: Do not use emitOpcode(compiler, OP_POP);
     // Because this function is called at the middle of a scope (break,
@@ -1994,7 +1990,7 @@ static int compilerPopLocals(Compiler* compiler, int depth) {
 
     local--;
   }
-  return (compiler->local_count - 1) - local;
+  return (compiler->func->local_count - 1) - local;
 }
 
 // Exits a block.
@@ -2003,17 +1999,18 @@ static void compilerExitBlock(Compiler* compiler) {
 
   // Discard all the locals at the current scope.
   int popped = compilerPopLocals(compiler, compiler->scope_depth);
-  compiler->local_count -= popped;
-  compiler->stack_size -= popped;
+  compiler->func->local_count -= popped;
+  compiler->func->stack_size -= popped;
   compiler->scope_depth--;
 }
 
 static void compilerPushFunc(Compiler* compiler, Func* fn,
-                             Function* func, int index) {
+                             Function* func) {
   fn->outer_func = compiler->func;
+  fn->local_count = 0;
+  fn->stack_size = 0;
   fn->ptr = func;
   fn->depth = compiler->scope_depth;
-  fn->index = index;
   compiler->func = fn;
 }
 
@@ -2153,7 +2150,7 @@ static int compileClass(Compiler* compiler) {
   // Compile the constructor function.
   ASSERT(compiler->func->ptr == compiler->module->body->fn, OOPS);
   Func curr_fn;
-  compilerPushFunc(compiler, &curr_fn, cls->ctor->fn, ctor_index);
+  compilerPushFunc(compiler, &curr_fn, cls->ctor->fn);
   compilerEnterBlock(compiler);
 
   // Push an instance on the stack.
@@ -2246,7 +2243,7 @@ static int compileFunction(Compiler* compiler, bool is_literal) {
   }
 
   Func curr_fn;
-  compilerPushFunc(compiler, &curr_fn, func, fn_index);
+  compilerPushFunc(compiler, &curr_fn, func);
 
   int argc = 0;
   compilerEnterBlock(compiler); // Parameter depth.
@@ -2264,9 +2261,8 @@ static int compileFunction(Compiler* compiler, bool is_literal) {
 
       // TODO: move this to a functions.
       bool predefined = false;
-      for (int i = compiler->local_count - 1; i >= 0; i--) {
-        Local* local = &compiler->locals[i];
-        if (compiler->scope_depth != local->depth) break;
+      for (int i = compiler->func->local_count - 1; i >= 0; i--) {
+        Local* local = &compiler->func->locals[i];
         if (local->length == param_len &&
             strncmp(local->name, param_name, param_len) == 0) {
           predefined = true;
@@ -2907,7 +2903,7 @@ static void compileTopLevelStatement(Compiler* compiler) {
 
   // At the top level the stack size should be 0, before and after compiling
   // a top level statement, since there aren't any locals at the top level.
-  ASSERT(compiler->parser.has_errors || compiler->stack_size == 0, OOPS);
+  ASSERT(compiler->parser.has_errors || compiler->func->stack_size == 0, OOPS);
 
   if (match(compiler, TK_CLASS)) {
     compileClass(compiler);
@@ -2931,7 +2927,7 @@ static void compileTopLevelStatement(Compiler* compiler) {
 
   // At the top level the stack size should be 0, before and after compiling
   // a top level statement, since there aren't any locals at the top level.
-  ASSERT(compiler->parser.has_errors || compiler->stack_size == 0, OOPS);
+  ASSERT(compiler->parser.has_errors || compiler->func->stack_size == 0, OOPS);
 
 }
 
@@ -2968,10 +2964,11 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
   uint32_t globals_count = module->globals.count;
 
   Func curr_fn;
+  compilerPushFunc(compiler, &curr_fn, module->body->fn);
+
+  // At the begining the compiler's scope will be DEPTH_GLOBAL and that'll be
+  // set to to the current functions depth. Override for the body function.
   curr_fn.depth = DEPTH_MODULE;
-  curr_fn.ptr = module->body->fn;
-  curr_fn.outer_func = NULL;
-  compiler->func = &curr_fn;
 
   // Lex initial tokens. current <-- next.
   lexToken(&(compiler->parser));
