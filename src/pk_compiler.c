@@ -202,8 +202,6 @@ static _Keyword _keywords[] = {
 /*****************************************************************************/
 
 // Precedence parsing references:
-// https://en.wikipedia.org/wiki/Shunting-yard_algorithm
-// http://mathcenter.oxford.emory.edu/site/cs171/shuntingYardAlgorithm/
 // http://journal.stuffwithstuff.com/2011/03/19/pratt-parsers-expression-parsing-made-easy/
 
 typedef enum {
@@ -1311,7 +1309,7 @@ static int emitByte(Compiler* compiler, int byte);
 static int emitShort(Compiler* compiler, int arg);
 
 static void emitLoopJump(Compiler* compiler);
-static void emitAssignment(Compiler* compiler, TokenType assignment);
+static void emitAssignedOp(Compiler* compiler, TokenType assignment);
 static void emitFunctionEnd(Compiler* compiler);
 
 static void patchJump(Compiler* compiler, int addr_index);
@@ -1437,34 +1435,62 @@ static GrammarRule* getRule(TokenType type) {
   return &(rules[(int)type]);
 }
 
-// Emit variable store.
-static void emitStoreVariable(Compiler* compiler, int index, bool global) {
-  if (global) {
-    emitOpcode(compiler, OP_STORE_GLOBAL);
-    emitByte(compiler, index);
+// FIXME:
+// This function is used by the import system, remove this function (and move
+// it to emitStoreName()) after import system refactored.
+//
+// Store the value at the stack top to the global at the [index].
+static void emitStoreGlobal(Compiler* compiler, int index) {
+  emitOpcode(compiler, OP_STORE_GLOBAL);
+  emitByte(compiler, index);
+}
 
-  } else {
-    if (index < 9) { //< 0..8 locals have single opcode.
-      emitOpcode(compiler, (Opcode)(OP_STORE_LOCAL_0 + index));
-    } else {
-      emitOpcode(compiler, OP_STORE_LOCAL_N);
+// Emit opcode to push the named value at the [index] in it's array.
+static void emitPushName(Compiler* compiler, NameDefnType type, int index) {
+  switch (type) {
+    case NAME_NOT_DEFINED:
+      UNREACHABLE();
+
+    case NAME_LOCAL_VAR:
+      ASSERT(index >= 0, OOPS);
+      if (index < 9) { //< 0..8 locals have single opcode.
+        emitOpcode(compiler, (Opcode)(OP_PUSH_LOCAL_0 + index));
+      } else {
+        emitOpcode(compiler, OP_PUSH_LOCAL_N);
+        emitByte(compiler, index);
+      }
+      return;
+    case NAME_GLOBAL_VAR:
+      emitOpcode(compiler, OP_PUSH_GLOBAL);
       emitByte(compiler, index);
-    }
+      return;
+    case NAME_BUILTIN:
+      emitOpcode(compiler, OP_PUSH_BUILTIN_FN);
+      emitByte(compiler, index);
+      return;
   }
 }
 
-static void emitPushVariable(Compiler* compiler, int index, bool global) {
-  if (global) {
-    emitOpcode(compiler, OP_PUSH_GLOBAL);
-    emitByte(compiler, index);
+// Emit opcode to store the stack top value to the named value at the [index]
+// in it's array.
+static void emitStoreName(Compiler* compiler, NameDefnType type, int index) {
+  switch (type) {
+    case NAME_NOT_DEFINED:
+    case NAME_BUILTIN:
+      UNREACHABLE();
 
-  } else {
-    if (index < 9) { //< 0..8 locals have single opcode.
-      emitOpcode(compiler, (Opcode)(OP_PUSH_LOCAL_0 + index));
-    } else {
-      emitOpcode(compiler, OP_PUSH_LOCAL_N);
-      emitByte(compiler, index);
-    }
+    case NAME_LOCAL_VAR:
+      ASSERT(index >= 0, OOPS);
+      if (index < 9) { //< 0..8 locals have single opcode.
+        emitOpcode(compiler, (Opcode)(OP_STORE_LOCAL_0 + index));
+      } else {
+        emitOpcode(compiler, OP_STORE_LOCAL_N);
+        emitByte(compiler, index);
+      }
+      return;
+    case NAME_GLOBAL_VAR:
+      emitStoreGlobal(compiler, index);
+      return;
   }
 }
 
@@ -1545,39 +1571,82 @@ static void exprName(Compiler* compiler) {
   int line = compiler->parser.previous.line;
   NameSearchResult result = compilerSearchName(compiler, start, length);
 
-  if (result.type == NAME_NOT_DEFINED) {
-    if (compiler->l_value && match(compiler, TK_EQ)) {
-      skipNewLines(compiler);
+  if (compiler->l_value && matchAssignment(compiler)) {
+    TokenType assignment = compiler->parser.previous.type;
+    skipNewLines(compiler);
 
-      int index = compilerAddVariable(compiler, start, length, line);
+    // Type of the name that's being assigned. Could only be local, global
+    // or an upvalue.
+    NameDefnType name_type = result.type;
+    int index = result.index; // Index of the name in it's array.
+
+    // Will be set to true if the name is a new local.
+    bool new_local = false;
+
+    if (assignment == TK_EQ) { // name = (expr);
+
+      // Assignment to builtin functions will override the name and it'll
+      // become a local or global variable. Note that if the names is a global
+      // which hasent defined yet we treat that as a local (no global keyword
+      // like python does) and it's recommented to define all the globals
+      // before entering a local scope.
+
+      if (result.type == NAME_NOT_DEFINED || result.type == NAME_BUILTIN) {
+        name_type = (compiler->scope_depth == DEPTH_GLOBAL)
+                    ? NAME_GLOBAL_VAR
+                    : NAME_LOCAL_VAR;
+        index = compilerAddVariable(compiler, start, length, line);
+
+        // We cannot set `compiler->new_local = true;` here since there is an
+        // expression after the assignment pending. We'll update it once the
+        // expression is compiled.
+        if (name_type == NAME_LOCAL_VAR) {
+          new_local = true;
+        }
+      }
 
       // Compile the assigned value.
       compileExpression(compiler);
 
-      // Store the value to the variable.
-      if (compiler->scope_depth == DEPTH_GLOBAL) {
-        emitStoreVariable(compiler, index, true);
-
-      } else {
-        // This will prevent the assignment from being popped out from the
-        // stack since the assigned value itself is the local and not a temp.
-        compiler->new_local = true;
-
-        // Ensure the local variable's index is equals to the stack top index.
-        // If the compiler has errors, we cannot and don't have to assert.
-        ASSERT(compiler->parser.has_errors ||
-               (compiler->func->stack_size - 1) == index, OOPS);
-
-        // We don't need to call emitStoreVariable (which emit STORE_LOCAL)
-        // because the local is already at it's location in the stack, we just
-        // don't pop it.
+    } else { // name += / -= / *= ... = (expr);
+      if (result.type == NAME_NOT_DEFINED) {
+        parseError(compiler, "Name '%.*s' is not defined.", length, start);
       }
-    } else {
 
-      // The name could be a global value which hasn't been defined at this
-      // point. We add an implicit forward declaration and once this expression
-      // executed the value could be initialized only if the expression is at
-      // a local depth.
+      // Push the named value.
+      emitPushName(compiler, name_type, index);
+
+      // Compile the RHS of the assigned operation.
+      compileExpression(compiler);
+
+      // Do the arithmatic operation of the assignment.
+      emitAssignedOp(compiler, assignment);
+    }
+
+    // If it's a new local we don't have to store it, it's already at it's
+    // stack slot.
+    if (new_local) {
+      // This will prevent the assignment from being popped out from the
+      // stack since the assigned value itself is the local and not a temp.
+      compiler->new_local = true;
+
+      // Ensure the local variable's index is equals to the stack top index.
+      // If the compiler has errors, we cannot and don't have to assert.
+      ASSERT(compiler->parser.has_errors ||
+             (compiler->func->stack_size - 1) == index, OOPS);
+    } else {
+      // The assigned value or the result of the operator will be at the top of
+      // the stack by now. Store it.
+      emitStoreName(compiler, name_type, index);
+    }
+
+  } else { // Just the name and no assignment followed by.
+
+    // The name could be a global value which hasn't been defined at this
+    // point. We add an implicit forward declaration and once this expression
+    // executed the value could be initialized only if the expression is at
+    // a local depth.
+    if (result.type == NAME_NOT_DEFINED) {
       if (compiler->scope_depth == DEPTH_GLOBAL) {
         parseError(compiler, "Name '%.*s' is not defined.", length, start);
       } else {
@@ -1585,45 +1654,11 @@ static void exprName(Compiler* compiler) {
         int index = emitByte(compiler, 0xff);
         compilerAddForward(compiler, index, _FN, start, length, line);
       }
-    }
-
-  } else {
-
-    switch (result.type) {
-      case NAME_LOCAL_VAR:
-      case NAME_GLOBAL_VAR: {
-        const bool is_global = result.type == NAME_GLOBAL_VAR;
-
-        if (compiler->l_value && matchAssignment(compiler)) {
-          skipNewLines(compiler);
-
-          TokenType assignment = compiler->parser.previous.type;
-          if (assignment != TK_EQ) {
-            emitPushVariable(compiler, result.index, is_global);
-            compileExpression(compiler);
-            emitAssignment(compiler, assignment);
-
-          } else {
-            compileExpression(compiler);
-          }
-
-          emitStoreVariable(compiler, result.index, is_global);
-
-        } else {
-          emitPushVariable(compiler, result.index, is_global);
-        }
-        break;
-      }
-
-      case NAME_BUILTIN:
-        emitOpcode(compiler, OP_PUSH_BUILTIN_FN);
-        emitByte(compiler, result.index);
-        break;
-
-      case NAME_NOT_DEFINED:
-        UNREACHABLE(); // Case already handled.
+    } else {
+      emitPushName(compiler, result.type, result.index);
     }
   }
+
 }
 
 // Compiling (expr a) or (expr b)
@@ -1784,14 +1819,14 @@ static void exprAttrib(Compiler* compiler) {
                             name, length);
 
   if (compiler->l_value && matchAssignment(compiler)) {
+    TokenType assignment = compiler->parser.previous.type;
     skipNewLines(compiler);
 
-    TokenType assignment = compiler->parser.previous.type;
     if (assignment != TK_EQ) {
       emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
       emitShort(compiler, index);
       compileExpression(compiler);
-      emitAssignment(compiler, assignment);
+      emitAssignedOp(compiler, assignment);
     } else {
       compileExpression(compiler);
     }
@@ -1810,13 +1845,13 @@ static void exprSubscript(Compiler* compiler) {
   consume(compiler, TK_RBRACKET, "Expected ']' after subscription ends.");
 
   if (compiler->l_value && matchAssignment(compiler)) {
+    TokenType assignment = compiler->parser.previous.type;
     skipNewLines(compiler);
 
-    TokenType assignment = compiler->parser.previous.type;
     if (assignment != TK_EQ) {
       emitOpcode(compiler, OP_GET_SUBSCRIPT_KEEP);
       compileExpression(compiler);
-      emitAssignment(compiler, assignment);
+      emitAssignedOp(compiler, assignment);
 
     } else {
       compileExpression(compiler);
@@ -2054,7 +2089,7 @@ static void emitLoopJump(Compiler* compiler) {
   emitShort(compiler, offset);
 }
 
-static void emitAssignment(Compiler* compiler, TokenType assignment) {
+static void emitAssignedOp(Compiler* compiler, TokenType assignment) {
   switch (assignment) {
     case TK_PLUSEQ:   emitOpcode(compiler, OP_ADD);        break;
     case TK_MINUSEQ:  emitOpcode(compiler, OP_SUBTRACT);   break;
@@ -2518,7 +2553,7 @@ static void compilerImportSingleEntry(Compiler* compiler,
   emitShort(compiler, name_index);
 
   int index = compilerImportName(compiler, line, name, length);
-  if (index != -1) emitStoreVariable(compiler, index, true);
+  if (index != -1) emitStoreGlobal(compiler, index);
   emitOpcode(compiler, OP_POP);
 }
 
@@ -2588,7 +2623,7 @@ static void compileFromImport(Compiler* compiler) {
       // Get the variable to bind the imported symbol, if we already have a
       // variable with that name override it, otherwise use a new variable.
       int var_index = compilerImportName(compiler, line, name, length);
-      if (var_index != -1) emitStoreVariable(compiler, var_index, true);
+      if (var_index != -1) emitStoreGlobal(compiler, var_index);
       emitOpcode(compiler, OP_POP);
 
     } while (match(compiler, TK_COMMA) && (skipNewLines(compiler), true));
@@ -2649,7 +2684,7 @@ static void compileRegularImport(Compiler* compiler) {
     }
 
     if (var_index != -1) {
-      emitStoreVariable(compiler, var_index, true);
+      emitStoreGlobal(compiler, var_index);
       emitOpcode(compiler, OP_POP);
 
     } else {
