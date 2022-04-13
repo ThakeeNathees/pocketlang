@@ -206,7 +206,7 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       markVarBuffer(vm, &module->globals);
       vm->bytes_allocated += sizeof(Var) * module->globals.capacity;
 
-      // Integer buffer has no gray call.
+      // Integer buffer has no mark call.
       vm->bytes_allocated += sizeof(uint32_t) * module->global_names.capacity;
 
       markVarBuffer(vm, &module->constants);

@@ -202,7 +202,7 @@ int main(int argc, const char** argv) {
   if (cmd != NULL) { // pocket -c "print('foo')"
 
     PkStringPtr source = { cmd, NULL, NULL, 0, 0 };
-    PkStringPtr path = { "$(Source)", NULL, NULL, 0, 0 };
+    PkStringPtr path = { "@(Source)", NULL, NULL, 0, 0 };
     PkResult result = pkInterpretSource(vm, source, path, NULL);
     exitcode = (int)result;
 

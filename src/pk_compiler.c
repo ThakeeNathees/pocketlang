@@ -21,6 +21,10 @@
 // limited by it's opcode which is using a short value to identify.
 #define MAX_CONSTANTS (1 << 16)
 
+// The maximum number of upvaues a literal function can capture from it's
+// enclosing function.
+#define MAX_UPVALUES 256
+
 // The maximum number of names that were used before defined. Its just the size
 // of the Forward buffer of the compiler. Feel free to increase it if it
 // require more.
@@ -244,6 +248,7 @@ typedef struct {
   const char* name; //< Directly points into the source string.
   uint32_t length;  //< Length of the name.
   int depth;        //< The depth the local is defined in.
+  bool is_upvalue;  //< Is this an upvalue for a nested function.
   int line;         //< The line variable declared for debugging.
 } Local;
 
@@ -293,6 +298,23 @@ typedef struct sForwardName {
 
 } ForwardName;
 
+// This struct is used to keep track about the information of the upvaues for
+// the current function to generate opcodes to capture them.
+typedef struct sUpvalueInfo {
+
+  // If it's true the extrenal local belongs to the immediate enclosing
+  // function and the bellow [index] refering at the locals of that function.
+  // If it's false the external local of the upvalue doesn't belongs to the
+  // immediate enclosing function and the [index] will refering to the upvalues
+  // array of the enclosing function.
+  bool is_immediate;
+
+  // Index of the upvalue's external local variable, in the local or upvalues
+  // array of the enclosing function.
+  int index;
+
+} UpvalueInfo;
+
 typedef struct sFunc {
 
   // Scope of the function. -2 for module body function, -1 for top level
@@ -301,6 +323,8 @@ typedef struct sFunc {
 
   Local locals[MAX_VARIABLES]; //< Variables in the current context.
   int local_count; //< Number of locals in [locals].
+
+  UpvalueInfo upvalues[MAX_UPVALUES]; //< Upvalues in the current context.
 
   int stack_size;  //< Current size including locals ind temps.
 
@@ -1218,9 +1242,7 @@ static bool matchAssignment(Compiler* compiler) {
 // if not found returns -1.
 static int findBuiltinFunction(const PKVM* vm,
                                const char* name, uint32_t length) {
-
   for (int i = 0; i < vm->builtins_count; i++) {
-
     uint32_t bfn_length = (uint32_t)strlen(vm->builtins[i]->fn->name);
     if (bfn_length != length) continue;
     if (strncmp(name, vm->builtins[i]->fn->name, length) == 0) {
@@ -1233,6 +1255,7 @@ static int findBuiltinFunction(const PKVM* vm,
 // Find the local with the [name] in the given function [func] and return
 // it's index, if not found returns -1.
 static int findLocal(Func* func, const char* name, uint32_t length) {
+  ASSERT(func != NULL, OOPS);
   for (int i = 0; i < func->local_count; i++) {
     if (func->locals[i].length != length) continue;
     if (strncmp(func->locals[i].name, name, length) == 0) {
@@ -1242,10 +1265,72 @@ static int findLocal(Func* func, const char* name, uint32_t length) {
   return -1;
 }
 
+// Add the upvalue to the given function and return it's index, if the upvalue
+// already present in the function's upvalue array it'll return it.
+static int addUpvalue(Compiler* compiler, Func* func,
+                      int index, bool is_immediate) {
+
+  // Search the upvalue in the existsing upvalues array.
+  for (int i = 0; i < func->ptr->upvalue_count; i++) {
+    UpvalueInfo info = func->upvalues[i];
+    if (info.index == index && info.is_immediate == is_immediate) {
+      return i;
+    }
+  }
+
+  if (func->ptr->upvalue_count == MAX_UPVALUES) {
+    parseError(compiler, "A function cannot capture more thatn %d upvalues.",
+               MAX_UPVALUES);
+    return -1;
+  }
+
+  func->upvalues[func->ptr->upvalue_count].index = index;
+  func->upvalues[func->ptr->upvalue_count].is_immediate = is_immediate;
+  return func->ptr->upvalue_count++;
+}
+
+// Search for an upvalue with the given [name] for the current function [func].
+// If an upvalue found, it'll add the upvalue info to the upvalue infor array
+// of the [func] and return the index of the upvalue in the current function's
+// upvalues array.
+static int findUpvalue(Compiler* compiler, Func* func, const char* name,
+                       uint32_t length) {
+  // TODO:
+  // check if the function is a method of a class and return -1 for them as
+  // well (once methods implemented).
+  //
+  // Toplevel functions cannot have upvalues.
+  if (func->depth <= DEPTH_GLOBAL) return -1;
+
+  // Search in the immediate enclosing function's locals.
+  int index = findLocal(func->outer_func, name, length);
+  if (index != -1) {
+
+    // Mark the locals as an upvalue to close it when it goes out of the scope.
+    func->outer_func->locals[index].is_upvalue = true;
+
+    // Add upvalue to the function and return it's index.
+    return addUpvalue(compiler, func, index, true);
+  }
+
+  // Recursively search for the upvalue in the outer function. If we found one
+  // all the outer function in the chain would have captured the upvalue for
+  // the local, we can add it to the current function as non-immediate upvalue.
+  index = findUpvalue(compiler, func->outer_func, name, length);
+
+  if (index != -1) {
+    return addUpvalue(compiler, func, index, false);
+  }
+
+  // If we reached here, the upvalue doesn't exists.
+  return -1;
+}
+
 // Result type for an identifier definition.
 typedef enum {
   NAME_NOT_DEFINED,
   NAME_LOCAL_VAR,  //< Including parameter.
+  NAME_UPVALUE,    //< Local to an enclosing function.
   NAME_GLOBAL_VAR,
   NAME_BUILTIN,    //< Native builtin function.
 } NameDefnType;
@@ -1276,6 +1361,14 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
   index = findLocal(compiler->func, name, length);
   if (index != -1) {
     result.type = NAME_LOCAL_VAR;
+    result.index = index;
+    return result;
+  }
+
+  // Search through upvalues.
+  index = findUpvalue(compiler, compiler->func, name, length);
+  if (index != -1) {
+    result.type = NAME_UPVALUE;
     result.index = index;
     return result;
   }
@@ -1948,6 +2041,7 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
     local->name = name;
     local->length = length;
     local->depth = compiler->scope_depth;
+    local->is_upvalue = false;
     local->line = line;
     return compiler->func->local_count++;
   }
