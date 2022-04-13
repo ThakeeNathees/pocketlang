@@ -78,7 +78,7 @@
 
 // Name of a literal function. All literal function will have the same name but
 // they're uniquely identified by their index in the script's function buffer.
-#define LITERAL_FN_NAME "@literalFn"
+#define LITERAL_FN_NAME "@func"
 
 /*****************************************************************************/
 /* ALLOCATION MACROS                                                         */

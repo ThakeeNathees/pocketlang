@@ -97,10 +97,23 @@ OPCODE(STORE_GLOBAL, 1, 0)
 // params: 1 bytes index.
 OPCODE(PUSH_BUILTIN_FN, 1, 1)
 
+// Push an upvalue of the current closure at the index which is the first one
+// byte argument.
+// params: 1 byte index.
+OPCODE(PUSH_UPVALUE, 1, 1)
+
+// Store the stack top value to the upvalues of the current function's upvalues
+// array and don't pop it, since it's the result of the assignment.
+// params: 1 byte index.
+OPCODE(STORE_UPVALUE, 1, 0)
+
 // Push a closure for the function at the constant pool with index of the
 // first 2 bytes arguments.
 // params: 2 byte index.
 OPCODE(PUSH_CLOSURE, 2, 1)
+
+// Close the upvalue for the local at the stack top and pop it.
+OPCODE(CLOSE_UPVALUE, 0, -1)
 
 // Pop the stack top.
 OPCODE(POP, 0, -1)

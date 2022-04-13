@@ -241,6 +241,15 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         break;
       }
 
+      case OP_PUSH_UPVALUE:
+      case OP_STORE_UPVALUE:
+      {
+        int index = READ_BYTE();
+        PRINT_INT(index);
+        NEWLINE();
+        break;
+      }
+
       case OP_PUSH_CLOSURE:
       {
         int index = READ_SHORT();
@@ -256,7 +265,11 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         break;
       }
 
-      case OP_POP:    NO_ARGS(); break;
+      case OP_CLOSE_UPVALUE:
+      case OP_POP:
+        NO_ARGS();
+        break;
+
       case OP_IMPORT:
       {
         int index = READ_SHORT();

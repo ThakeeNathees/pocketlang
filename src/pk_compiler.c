@@ -1332,7 +1332,7 @@ typedef enum {
   NAME_LOCAL_VAR,  //< Including parameter.
   NAME_UPVALUE,    //< Local to an enclosing function.
   NAME_GLOBAL_VAR,
-  NAME_BUILTIN,    //< Native builtin function.
+  NAME_BUILTIN_FN,    //< Native builtin function.
 } NameDefnType;
 
 // Identifier search result.
@@ -1384,7 +1384,7 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
   // Search through builtin functions.
   index = findBuiltinFunction(compiler->parser.vm, name, length);
   if (index != -1) {
-    result.type = NAME_BUILTIN;
+    result.type = NAME_BUILTIN_FN;
     result.index = index;
     return result;
   }
@@ -1418,7 +1418,7 @@ static void compilerChangeStack(Compiler* compiler, int num);
 
 // Forward declaration of grammar functions.
 static void parsePrecedence(Compiler* compiler, Precedence precedence);
-static int compileFunction(Compiler* compiler, bool is_literal);
+static void compileFunction(Compiler* compiler, bool is_literal);
 static void compileExpression(Compiler* compiler);
 
 static void exprLiteral(Compiler* compiler);
@@ -1540,12 +1540,13 @@ static void emitStoreGlobal(Compiler* compiler, int index) {
 
 // Emit opcode to push the named value at the [index] in it's array.
 static void emitPushName(Compiler* compiler, NameDefnType type, int index) {
+  ASSERT(index >= 0, OOPS);
+
   switch (type) {
     case NAME_NOT_DEFINED:
       UNREACHABLE();
 
     case NAME_LOCAL_VAR:
-      ASSERT(index >= 0, OOPS);
       if (index < 9) { //< 0..8 locals have single opcode.
         emitOpcode(compiler, (Opcode)(OP_PUSH_LOCAL_0 + index));
       } else {
@@ -1553,11 +1554,18 @@ static void emitPushName(Compiler* compiler, NameDefnType type, int index) {
         emitByte(compiler, index);
       }
       return;
+
+    case NAME_UPVALUE:
+      emitOpcode(compiler, OP_PUSH_UPVALUE);
+      emitByte(compiler, index);
+      return;
+
     case NAME_GLOBAL_VAR:
       emitOpcode(compiler, OP_PUSH_GLOBAL);
       emitByte(compiler, index);
       return;
-    case NAME_BUILTIN:
+
+    case NAME_BUILTIN_FN:
       emitOpcode(compiler, OP_PUSH_BUILTIN_FN);
       emitByte(compiler, index);
       return;
@@ -1567,13 +1575,14 @@ static void emitPushName(Compiler* compiler, NameDefnType type, int index) {
 // Emit opcode to store the stack top value to the named value at the [index]
 // in it's array.
 static void emitStoreName(Compiler* compiler, NameDefnType type, int index) {
+  ASSERT(index >= 0, OOPS);
+
   switch (type) {
     case NAME_NOT_DEFINED:
-    case NAME_BUILTIN:
+    case NAME_BUILTIN_FN:
       UNREACHABLE();
 
     case NAME_LOCAL_VAR:
-      ASSERT(index >= 0, OOPS);
       if (index < 9) { //< 0..8 locals have single opcode.
         emitOpcode(compiler, (Opcode)(OP_STORE_LOCAL_0 + index));
       } else {
@@ -1581,6 +1590,12 @@ static void emitStoreName(Compiler* compiler, NameDefnType type, int index) {
         emitByte(compiler, index);
       }
       return;
+
+    case NAME_UPVALUE:
+      emitOpcode(compiler, OP_STORE_UPVALUE);
+      emitByte(compiler, index);
+      return;
+
     case NAME_GLOBAL_VAR:
       emitStoreGlobal(compiler, index);
       return;
@@ -1652,9 +1667,7 @@ static void exprInterpolation(Compiler* compiler) {
 }
 
 static void exprFunc(Compiler* compiler) {
-  int fn_index = compileFunction(compiler, true);
-  emitOpcode(compiler, OP_PUSH_CLOSURE);
-  emitShort(compiler, fn_index);
+  compileFunction(compiler, true);
 }
 
 static void exprName(Compiler* compiler) {
@@ -1684,7 +1697,7 @@ static void exprName(Compiler* compiler) {
       // like python does) and it's recommented to define all the globals
       // before entering a local scope.
 
-      if (result.type == NAME_NOT_DEFINED || result.type == NAME_BUILTIN) {
+      if (result.type == NAME_NOT_DEFINED || result.type == NAME_BUILTIN_FN) {
         name_type = (compiler->scope_depth == DEPTH_GLOBAL)
                     ? NAME_GLOBAL_VAR
                     : NAME_LOCAL_VAR;
@@ -2115,7 +2128,12 @@ static int compilerPopLocals(Compiler* compiler, int depth) {
     // continue). So we need the pop instruction here but we still need the
     // locals to continue parsing the next statements in the scope. They'll be
     // popped once the scope is ended.
-    emitByte(compiler, OP_POP);
+
+    if (compiler->func->locals[local].is_upvalue) {
+      emitByte(compiler, OP_CLOSE_UPVALUE);
+    } else {
+      emitByte(compiler, OP_POP);
+    }
 
     local--;
   }
@@ -2248,7 +2266,7 @@ static void compileStatement(Compiler* compiler);
 static void compileBlockBody(Compiler* compiler, BlockType type);
 
 // Compile a class and return it's index in the module's types buffer.
-static int compileClass(Compiler* compiler) {
+static void compileClass(Compiler* compiler) {
 
   // Consume the name of the type.
   consume(compiler, TK_NAME, "Expected a type name.");
@@ -2332,12 +2350,10 @@ static int compileClass(Compiler* compiler) {
   compilerExitBlock(compiler);
   emitFunctionEnd(compiler);
   compilerPopFunc(compiler);
-
-  return -1; // TODO;
 }
 
 // Compile a function and return it's index in the module's function buffer.
-static int compileFunction(Compiler* compiler, bool is_literal) {
+static void compileFunction(Compiler* compiler, bool is_literal) {
 
   const char* name;
   int name_length;
@@ -2428,7 +2444,20 @@ static int compileFunction(Compiler* compiler, bool is_literal) {
 
   compilerPopFunc(compiler);
 
-  return fn_index;
+  // Note: After the above compilerPopFunc() call, now we're at the outer
+  // function of this function, and the bellow emit calls will write to the
+  // outer function. If it's a literal function, we need to push a closure
+  // of it on the stack.
+  if (is_literal) {
+    emitOpcode(compiler, OP_PUSH_CLOSURE);
+    emitShort(compiler, fn_index);
+
+    // Capture the upvalues when the closure is created.
+    for (int i = 0; i < curr_fn.ptr->upvalue_count; i++) {
+      emitByte(compiler, (curr_fn.upvalues[i].is_immediate) ? 1 : 0);
+      emitByte(compiler, curr_fn.upvalues[i].index);
+    }
+  }
 }
 
 // Finish a block body.
@@ -2618,7 +2647,7 @@ static int compilerImportName(Compiler* compiler, int line,
     // Make it possible to override any name (ie. the syntax `print = 1`
     // should pass) and allow imported entries to have the same name of
     // builtin functions.
-    case NAME_BUILTIN:
+    case NAME_BUILTIN_FN:
       parseError(compiler, "Name '%.*s' already exists.", length, name);
       return -1;
   }
