@@ -465,6 +465,11 @@ struct Fiber {
   // The stack pointer (%rsp) pointing to the stack top.
   Var* sp;
 
+  // All the open upvalues will form a linked list in the fiber and the
+  // upvalues are sorted in the same order their locals in the stack. The
+  // bellow pointer is the head of those upvalues near the stack top.
+  Upvalue* open_upvalues;
+
   // The stack base pointer of the current frame. It'll be updated before
   // calling a native function. (`fiber->ret` === `curr_call_frame->rbp`). And
   // also updated if the stack is reallocated (that's when it's about to get

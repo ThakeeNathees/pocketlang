@@ -1,0 +1,87 @@
+
+## Simple upvalue.
+def f1
+  local = "foo"
+  return func
+    return local
+  end
+end
+assert(f1()() == "foo")
+
+def add3(x)
+  return func(y)
+    return func(z)
+      return x + y + z
+    end
+  end
+end
+assert(add3(1)(2)(3) == 6);
+assert(add3(7)(6)(4) == 17);
+
+## Upvalue external to the inner function.
+def f2
+  local = "bar"
+  return func
+    fn = func
+      return local
+    end
+    return fn
+  end
+end
+assert(f2()()() == "bar")
+
+## Check if upvalues are shared between closures.
+def f3
+  local = "baz"
+  _fn1 = func(x)
+    local = x
+  end
+  _fn2 = func
+    return local
+  end
+  return [_fn1, _fn2]
+end
+fns = f3()
+fns[0]("qux")
+assert(fns[1]() == "qux")
+
+def f4
+  a = []
+  x = 10
+  for i in 0..2
+    j = i ## 'i' is shared, but 'j' doesn't
+    list_append(
+      a,
+      func
+        return x + j
+      end
+    )
+  end
+  x = 20
+  return a
+end
+a = f4()
+assert(a[0]() == 20)
+assert(a[1]() == 21)
+
+def f5
+  l1 = 12
+  return func ## c1
+    l2 = 34
+    return func ## c2
+      l3 = 56
+      return func ## c3
+        return func ## c4
+          return func ## c5
+            return l1 + l2 + l3
+          end
+        end
+      end
+    end
+  end
+end
+
+print(f5()()()()()() == 102)
+
+print('All TESTS PASSED')
+

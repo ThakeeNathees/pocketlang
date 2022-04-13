@@ -206,7 +206,7 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       markVarBuffer(vm, &module->globals);
       vm->bytes_allocated += sizeof(Var) * module->globals.capacity;
 
-      // Integer buffer has no gray call.
+      // Integer buffer has no mark call.
       vm->bytes_allocated += sizeof(uint32_t) * module->global_names.capacity;
 
       markVarBuffer(vm, &module->constants);
@@ -510,7 +510,7 @@ Fiber* newFiber(PKVM* vm, Closure* closure) {
     fiber->sp = fiber->stack + 1;
 
   } else {
-    // Allocate stack.
+    // Calculate the stack size.
     int stack_size = utilPowerOf2Ceil(closure->fn->fn->stack_size + 1);
     if (stack_size < MIN_STACK_SIZE) stack_size = MIN_STACK_SIZE;
     fiber->stack = ALLOCATE_ARRAY(vm, Var, stack_size);
@@ -528,6 +528,8 @@ Fiber* newFiber(PKVM* vm, Closure* closure) {
     fiber->frames[0].ip = closure->fn->fn->opcodes.data;
     fiber->frames[0].rbp = fiber->ret;
   }
+
+  fiber->open_upvalues = NULL;
 
   // Initialize the return value to null (doesn't really have to do that here
   // but if we're trying to debut it may crash when dumping the return value).

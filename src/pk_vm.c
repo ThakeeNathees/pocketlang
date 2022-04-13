@@ -568,6 +568,93 @@ static inline void reuseCallFrame(PKVM* vm, const Closure* closure) {
   if (vm->fiber->stack_size <= needed) growStack(vm, needed);
 }
 
+// Capture the [local] into an upvalue and return it. If the upvalue already
+// exists on the fiber, it'll return it.
+static Upvalue* captureUpvalue(PKVM* vm, Fiber* fiber, Var* local) {
+
+  // If the fiber doesn't have any upvalues yet, create new one and add it.
+  if (fiber->open_upvalues == NULL) {
+    Upvalue* upvalue = newUpvalue(vm, local);
+    fiber->open_upvalues = upvalue;
+    return upvalue;
+  }
+
+  // In the bellow diagram 'u0' is the head of the open upvalues of the fiber.
+  // We'll walk through the upvalues to see if any of it's value is similar
+  // to the [local] we want to capture.
+  //
+  // This can be optimized with binary search since the upvalues are sorted
+  // but it's not a frequent task neither the number of upvalues would be very
+  // few and the local mostly located at the stack top.
+  //
+  // 1. If say 'l3' is what we want to capture, that local already has an
+  //    upavlue 'u1' return it.
+  // 2. If say 'l4' is what we want to capture, It doesn't have an upvalue yet.
+  //    Create a new upvalue and insert to the link list (ie. u1.next = u3,
+  //    u3.next = u2) and return it.
+  //
+  //           |      |
+  //           |  l1  | <-- u0 (u1.value = l3)
+  //           |  l2  |     |
+  //           |  l3  | <-- u1 (u1.value = l3)
+  //           |  l4  |     |
+  //           |  l5  | <-- u2 (u2.value = l5)
+  //           '------'     |
+  //            stack       NULL
+
+  // Edge case: if the local is located higher than all the open upvalues, we
+  // cannot walk the chain, it's going to be the new head of the open upvalues.
+  if (fiber->open_upvalues->ptr < local) {
+    Upvalue* head = newUpvalue(vm, local);
+    head->next = fiber->open_upvalues;
+    fiber->open_upvalues = head;
+    return head;
+  }
+
+  // Now we walk the chain of open upvalues and if we find an upvalue for the
+  // local return it, otherwise insert it in the chain.
+  Upvalue* last = NULL;
+  Upvalue* current = fiber->open_upvalues;
+
+  while (current->ptr > local) {
+    last = current;
+    current = current->next;
+
+    // If the current is NULL, we've walked all the way to the end of the open
+    // upvalues, and there isn't one upvalue for the local.
+    if (current == NULL) {
+      last->next = newUpvalue(vm, local);
+      return last->next;
+    }
+  }
+
+  // If [current] is the upvalue that captured [local] then return it.
+  if (current->ptr == local) return current;
+
+  ASSERT(last != NULL, OOPS);
+
+  // If we've reached here, the upvalue isn't found, create a new one and
+  // insert it to the chain.
+  Upvalue* upvalue = newUpvalue(vm, local);
+  last->next = upvalue;
+  upvalue->next = current;
+  return upvalue;
+}
+
+// Close all the upvalues for the locals including [top] and higher in the
+// stack.
+static void closeUpvalues(Fiber* fiber, Var* top) {
+
+  while (fiber->open_upvalues != NULL && fiber->open_upvalues->ptr >= top) {
+    Upvalue* upvalue = fiber->open_upvalues;
+    upvalue->closed = *upvalue->ptr;
+    upvalue->ptr = &upvalue->closed;
+
+    fiber->open_upvalues = upvalue->next;
+  }
+
+}
+
 static void reportError(PKVM* vm) {
   ASSERT(VM_HAS_ERROR(vm), "runtimeError() should be called after an error.");
   // TODO: pass the error to the caller of the fiber.
@@ -863,13 +950,51 @@ L_vm_main_loop:
       DISPATCH();
     }
 
+    OPCODE(PUSH_UPVALUE):
+    {
+      uint8_t index = READ_BYTE();
+      PUSH(*(frame->closure->upvalues[index]->ptr));
+      DISPATCH();
+    }
+
+    OPCODE(STORE_UPVALUE):
+    {
+      uint8_t index = READ_BYTE();
+      *(frame->closure->upvalues[index]->ptr) = PEEK(-1);
+      DISPATCH();
+    }
+
     OPCODE(PUSH_CLOSURE):
     {
       uint16_t index = READ_SHORT();
       ASSERT_INDEX(index, module->constants.count);
       ASSERT(IS_OBJ_TYPE(module->constants.data[index], OBJ_FUNC), OOPS);
       Function* fn = (Function*)AS_OBJ(module->constants.data[index]);
-      PUSH(VAR_OBJ(newClosure(vm, fn)));
+      Closure* closure = newClosure(vm, fn);
+
+      // Capture the vaupes.
+      for (int i = 0; i < fn->upvalue_count; i++) {
+        uint8_t is_immediate = READ_BYTE();
+        uint8_t index = READ_BYTE();
+
+        if (is_immediate) {
+          // rbp[0] is the return value, rbp + 1 is the first local and so on.
+          closure->upvalues[i] = captureUpvalue(vm, vm->fiber,
+                                                (rbp + 1 + index));
+        } else {
+          // The upvalue is already captured by the current function, reuse it.
+          closure->upvalues[i] = frame->closure->upvalues[index];
+        }
+      }
+
+      PUSH(VAR_OBJ(closure));
+      DISPATCH();
+    }
+
+    OPCODE(CLOSE_UPVALUE):
+    {
+      closeUpvalues(vm->fiber, vm->fiber->sp - 1);
+      DROP();
       DISPATCH();
     }
 
@@ -1168,6 +1293,9 @@ L_vm_main_loop:
 
     OPCODE(RETURN):
     {
+
+      // Close all the locals of the current frame.
+      closeUpvalues(vm->fiber, rbp + 1);
 
       // Set the return value.
       Var ret_value = POP();

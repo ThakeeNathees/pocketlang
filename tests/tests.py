@@ -18,6 +18,7 @@ TEST_SUITE = {
     "lang/basics.pk",
     "lang/builtin_fn.pk",
     "lang/class.pk",
+    "lang/closure.pk",
     "lang/core.pk",
     "lang/controlflow.pk",
     "lang/fibers.pk",
