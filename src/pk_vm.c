@@ -677,14 +677,14 @@ static void reportError(PKVM* vm) {
  * RUNTIME                                                                    *
  *****************************************************************************/
 
-static PkResult runFiber(PKVM* vm, Fiber* fiber) {
+static PkResult runFiber(PKVM* vm, Fiber* fiber_) {
 
   // Set the fiber as the vm's current fiber (another root object) to prevent
   // it from garbage collection and get the reference from native functions.
-  vm->fiber = fiber;
+  vm->fiber = fiber_;
 
-  ASSERT(fiber->state == FIBER_NEW || fiber->state == FIBER_YIELDED, OOPS);
-  fiber->state = FIBER_RUNNING;
+  ASSERT(fiber_->state == FIBER_NEW || fiber_->state == FIBER_YIELDED, OOPS);
+  fiber_->state = FIBER_RUNNING;
 
   // The instruction pointer.
   register const uint8_t* ip;
@@ -692,21 +692,22 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
   register Var* rbp;         //< Stack base pointer register.
   register CallFrame* frame; //< Current call frame.
   register Module* module;   //< Currently executing module.
+  register Fiber* fiber = fiber_;
 
 #if DEBUG
-  #define PUSH(value)                                                        \
-  do {                                                                       \
-    ASSERT(vm->fiber->sp < (vm->fiber->stack + (vm->fiber->stack_size - 1)), \
-           OOPS);                                                            \
-    (*vm->fiber->sp++ = (value));                                            \
+  #define PUSH(value)                                            \
+  do {                                                           \
+    ASSERT(fiber->sp < (fiber->stack + (fiber->stack_size - 1)), \
+           OOPS);                                                \
+    (*fiber->sp++ = (value));                                    \
   } while (false)
 #else
-  #define PUSH(value)  (*vm->fiber->sp++ = (value))
+  #define PUSH(value)  (*fiber->sp++ = (value))
 #endif
 
-#define POP()        (*(--vm->fiber->sp))
-#define DROP()       (--vm->fiber->sp)
-#define PEEK(off)    (*(vm->fiber->sp + (off)))
+#define POP()        (*(--fiber->sp))
+#define DROP()       (--fiber->sp)
+#define PEEK(off)    (*(fiber->sp + (off)))
 #define READ_BYTE()  (*ip++)
 #define READ_SHORT() (ip+=2, (uint16_t)((ip[-2] << 8) | ip[-1]))
 
@@ -714,11 +715,12 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
 // done with the fiber or aborting it for runtime errors.
 #define FIBER_SWITCH_BACK()                                         \
   do {                                                              \
-    Fiber* caller = vm->fiber->caller;                              \
+    Fiber* caller = fiber->caller;                                  \
     ASSERT(caller == NULL || caller->state == FIBER_RUNNING, OOPS); \
-    vm->fiber->state = FIBER_DONE;                                  \
-    vm->fiber->caller = NULL;                                       \
-    vm->fiber = caller;                                             \
+    fiber->state = FIBER_DONE;                                      \
+    fiber->caller = NULL;                                           \
+    fiber = caller;                                                 \
+    vm->fiber = fiber;                                              \
   } while (false)
 
 // Check if any runtime error exists and if so returns RESULT_RUNTIME_ERROR.
@@ -744,12 +746,12 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber) {
 
 // Load the last call frame to vm's execution variables to resume/run the
 // function.
-#define LOAD_FRAME()                                       \
-  do {                                                     \
-    frame = &vm->fiber->frames[vm->fiber->frame_count-1];  \
-    ip = frame->ip;                                        \
-    rbp = frame->rbp;                                      \
-    module = frame->closure->fn->owner;                    \
+#define LOAD_FRAME()                               \
+  do {                                             \
+    frame = &fiber->frames[fiber->frame_count-1];  \
+    ip = frame->ip;                                \
+    rbp = frame->rbp;                              \
+    module = frame->closure->fn->owner;            \
   } while (false)
 
 // Update the frame's execution variables before pushing another call frame.
@@ -807,9 +809,9 @@ L_vm_main_loop:
 
     OPCODE(SWAP):
     {
-      Var tmp = *(vm->fiber->sp - 1);
-      *(vm->fiber->sp - 1) = *(vm->fiber->sp - 2);
-      *(vm->fiber->sp - 2) = tmp;
+      Var tmp = *(fiber->sp - 1);
+      *(fiber->sp - 1) = *(fiber->sp - 2);
+      *(fiber->sp - 2) = tmp;
       DISPATCH();
     }
 
@@ -979,8 +981,7 @@ L_vm_main_loop:
 
         if (is_immediate) {
           // rbp[0] is the return value, rbp + 1 is the first local and so on.
-          closure->upvalues[i] = captureUpvalue(vm, vm->fiber,
-                                                (rbp + 1 + index));
+          closure->upvalues[i] = captureUpvalue(vm, fiber, (rbp + 1 + index));
         } else {
           // The upvalue is already captured by the current function, reuse it.
           closure->upvalues[i] = frame->closure->upvalues[index];
@@ -993,7 +994,7 @@ L_vm_main_loop:
 
     OPCODE(CLOSE_UPVALUE):
     {
-      closeUpvalues(vm->fiber, vm->fiber->sp - 1);
+      closeUpvalues(fiber, fiber->sp - 1);
       DROP();
       DISPATCH();
     }
@@ -1026,7 +1027,7 @@ L_vm_main_loop:
         // body of the module, so the main function will return what's at the
         // rbp without modifying it. So at the end of the main function the
         // stack top would be the module itself.
-        Var* module_ret = vm->fiber->sp - 1;
+        Var* module_ret = fiber->sp - 1;
 
         UPDATE_FRAME(); //< Update the current frame's ip.
         pushCallFrame(vm, imported->body, module_ret);
@@ -1040,11 +1041,7 @@ L_vm_main_loop:
     OPCODE(TAIL_CALL):
     {
       const uint8_t argc = READ_BYTE();
-
-      // The call might change the vm->fiber so we need the reference to the
-      // fiber that actually called the function.
-      Fiber* call_fiber = vm->fiber;
-      Var* callable = call_fiber->sp - argc - 1;
+      Var* callable = fiber->sp - argc - 1;
 
       const Closure* closure = NULL;
 
@@ -1076,8 +1073,8 @@ L_vm_main_loop:
       }
 
       // Next call frame starts here. (including return value).
-      call_fiber->ret = callable;
-      *(call_fiber->ret) = VAR_NULL; //< Set the return value to null.
+      fiber->ret = callable;
+      *(fiber->ret) = VAR_NULL; //< Set the return value to null.
 
       if (closure->fn->is_native) {
 
@@ -1095,13 +1092,18 @@ L_vm_main_loop:
         // would be null if we're not running the function with a fiber.
         if (vm->fiber == NULL) return PK_RESULT_SUCCESS;
 
-        // Load the top frame to vm's execution variables.
-        if (vm->fiber != call_fiber) LOAD_FRAME();
-
         // Pop function arguments except for the return value.
-        // Don't use 'vm->fiber' because calling fiber_new() and yield()
-        // would change the fiber.
-        call_fiber->sp = call_fiber->ret + 1;
+        // Note that calling fiber_new() and yield() would change the
+        // vm->fiber so we're using fiber.
+        fiber->sp = fiber->ret + 1;
+
+        // If the fiber has changed, Load the top frame to vm's execution
+        // variables.
+        if (vm->fiber != fiber) {
+          fiber = vm->fiber;
+          LOAD_FRAME();
+        }
+
         CHECK_ERROR();
 
       } else {
@@ -1145,8 +1147,8 @@ L_vm_main_loop:
     // TODO: move this to a function in pk_core.c.
     OPCODE(ITER):
     {
-      Var* value    = (vm->fiber->sp - 1);
-      Var* iterator = (vm->fiber->sp - 2);
+      Var* value    = (fiber->sp - 1);
+      Var* iterator = (fiber->sp - 2);
       Var seq       = PEEK(-3);
       uint16_t jump_offset = READ_SHORT();
 
@@ -1295,32 +1297,32 @@ L_vm_main_loop:
     {
 
       // Close all the locals of the current frame.
-      closeUpvalues(vm->fiber, rbp + 1);
+      closeUpvalues(fiber, rbp + 1);
 
       // Set the return value.
       Var ret_value = POP();
 
       // Pop the last frame, and if no more call frames, we're done with the
       // current fiber.
-      if (--vm->fiber->frame_count == 0) {
+      if (--fiber->frame_count == 0) {
         // TODO: if we're evaluating an expression we need to set it's
         // value on the stack.
-        //vm->fiber->sp = vm->fiber->stack; ??
+        //fiber->sp = fiber->stack; ??
 
         FIBER_SWITCH_BACK();
 
-        if (vm->fiber == NULL) {
+        if (fiber == NULL) {
           return PK_RESULT_SUCCESS;
 
         } else {
-          *vm->fiber->ret = ret_value;
+          *fiber->ret = ret_value;
         }
 
       } else {
         *rbp = ret_value;
         // Pop the params (locals should have popped at this point) and update
         // stack pointer.
-        vm->fiber->sp = rbp + 1; // +1: rbp is returned value.
+        fiber->sp = rbp + 1; // +1: rbp is returned value.
       }
 
       LOAD_FRAME();

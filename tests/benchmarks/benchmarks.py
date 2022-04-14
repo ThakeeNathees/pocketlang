@@ -1,21 +1,16 @@
 #!python
 ## Copyright (c) 2020-2021 Thakee Nathees
+## Copyright (c) 2021-2022 Pocketlang Contributors
 ## Distributed Under The MIT License
 
-import subprocess, re, os, sys, platform
-from os.path import join, abspath, dirname, relpath
+import re, os, sys
+import subprocess, platform
 from shutil import which
+from os.path import join, abspath, dirname, relpath, exists
 
 ## The absolute path of this file, when run as a script.
 ## This file is not intended to be included in other files at the moment.
 THIS_PATH = abspath(dirname(__file__))
-
-## Map from systems to the relative pocket binary path.
-SYSTEM_TO_BINARY_PATH = {
-  "Windows": "..\\..\\build\\release\\bin\\pocket.exe",
-  "Linux"  : "../../build/release/pocket",
-  "Darwin" : "../../build/release/pocket",
-}
 
 ## A list of benchmark directories, relative to THIS_PATH
 BENCHMARKS = (
@@ -26,140 +21,246 @@ BENCHMARKS = (
   "primes",
 )
 
-## Map from file extension to it's interpreter, Will be updated.
-INTERPRETERS = {}
+## Map the files extension with it's interpreter. (executable, extension).
+INTERPRETERS = {
+  'pocketlang' : ('pocket',  '.pk'),
+  'python'     : ('python3', '.py'),
+  'wren'       : ('wren',    '.wren'),
+  'ruby'       : ('ruby',    '.rb'),
+  'lua'        : ('lua',     '.lua'),
+  ## Javascript on Node is using V8 that compiles the function before calling it
+  ## which makes it way faster than every other language in this list, we're
+  ## only comparing byte-code interpreted VM languages. Node is the odd one out.
+  #'javascript' : ('node',    '.js'),
+}
+
+## Map from systems to the relative pocket binary path.
+SYSTEM_TO_POCKET_PATH = {
+  "current" : {
+    "Windows": "..\\..\\build\\release\\bin\\pocket.exe",
+    "Linux"  : "../../build/release/pocket",
+    "Darwin" : "../../build/release/pocket",
+  },
+
+  ## This maps the older version of pocket in the system path, to compare
+  ## pocketlang with it's older version.
+  "older" : {
+    "Windows": "..\\..\\build\\release\\bin\\pocket_older.exe",
+    "Linux"  : "../../build/release/pocket_older",
+    "Darwin" : "../../build/release/pocket_older",
+  }
+}
+
+## The html template to display the report.
+HTML_TEMPLATE = "template.html"
 
 def main():
+  results = dict()
+
   update_interpreters()
-  run_all_benchmarsk()
 
-## ----------------------------------------------------------------------------
-## RUN ALL BENCHMARKS
-## ----------------------------------------------------------------------------
-
-def run_all_benchmarsk():
   for benchmark in BENCHMARKS:
     print_title(benchmark.title())
-    dir = join(THIS_PATH, benchmark)
-    for file in _source_files(os.listdir(dir)):
-      file = abspath(join(dir, file))
-
-      ext = get_ext(file) ## File extension.
-      lang, interp, val = INTERPRETERS[ext]
-      if not interp: continue
-
+    for lang in INTERPRETERS:
+      interp, ext = INTERPRETERS[lang]
+      source = abspath(join(THIS_PATH, benchmark, benchmark + ext))
+      if not exists(source): continue
       print(" %-10s : "%lang, end=''); sys.stdout.flush()
-      result = _run_command([interp, file])
-      time = re.findall(r'elapsed:\s*([0-9\.]+)\s*s',
-                result.stdout.decode('utf8'),
-                re.MULTILINE)
+      result = subprocess.run([interp, source],
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE)
+      time = get_time(result.stdout.decode('utf8'))
+      print('%.6fs' % float(time))
 
-      if len(time) != 1:
-        print() # Skip the line.
-        error_exit(r'elapsed:\s*([0-9\.]+)\s*s --> no mach found.')
-      print('%.6fs'%float(time[0]))
-  pass
+      if benchmark not in results:
+        results[benchmark] = []
+      results[benchmark].append([lang, time])
 
-def _run_command(command):
-  return subprocess.run(command,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE)
+  display_results(results)
 
-## Returns a list of valid source files to run benchmarks.
-def _source_files(files):
-  global INTERPRETERS
-  ret = []
-  for file in files:
-    ext = get_ext(file)
-    if ext not in INTERPRETERS: continue
-    ret.append(file)
-
-  ret.sort(key=lambda f : INTERPRETERS[get_ext(f)][2])
-  return ret
-
-## ----------------------------------------------------------------------------
-## UPDATE INTERPRETERS
-## ----------------------------------------------------------------------------
-
+## Set the pocketlang path for the current system to the compiled output.
 def update_interpreters():
-  pocket = _get_pocket_binary()
-  python = 'python' if platform.system() == 'Windows' else 'python3'
-  print_title("CHECKING FOR INTERPRETERS")
-  global INTERPRETERS
-  order = 0
-  INTERPRETERS['.pk']   = _find_interp('pocketlang', pocket, order); order+=1
-  INTERPRETERS['.wren'] = _find_interp('wren',       'wren', order); order+=1
-  INTERPRETERS['.py']   = _find_interp('python',     python, order); order+=1
-  INTERPRETERS['.rb']   = _find_interp('ruby',       'ruby', order); order+=1
-  INTERPRETERS['.lua']  = _find_interp('lua',        'lua',  order); order+=1
-  INTERPRETERS['.js']   = _find_interp('javascript', 'node', order); order+=1
-
-## This will return the path of the pocket binary (on different platforms).
-## The debug version of it for enabling the assertions.
-def _get_pocket_binary():
   system = platform.system()
-  if system not in SYSTEM_TO_BINARY_PATH:
-    error_exit("Unsupported platform %s" % system)
+  if system not in SYSTEM_TO_POCKET_PATH['current']:
+    print("Unsupported platform %s" % system)
+    sys.exit(1)
 
-  pocket = abspath(join(THIS_PATH, SYSTEM_TO_BINARY_PATH[system]))
-  if not os.path.exists(pocket):
-    error_exit("Pocket interpreter not found at: '%s'" % pocket)
+  global INTERPRETERS
+  pocket = abspath(join(THIS_PATH, SYSTEM_TO_POCKET_PATH['current'][system]))
+  pocket_older = abspath(join(THIS_PATH, SYSTEM_TO_POCKET_PATH['older'][system]))
+  if not exists(pocket):
+    print(f"{colmsg('Error', COL_RED)}: " +
+          "Pocket interpreter not found at: '%s'" % pocket)
+    sys.exit(1)
+  INTERPRETERS['pocketlang'] = (pocket, '.pk')
 
-  return pocket
+  ## Add if older version of pocketlang if exists.
+  if exists(pocket_older):
+    INTERPRETERS['pk-older'] = (pocket_older, '.pk')
 
-## Find and return the interpreter from the path.
-## as (lang, interp, val) tuple, where the val is the additional.
-## data related to the interpreter.
-def _find_interp(lang, interpreter, val):
-  print('%-27s' % ('  Searching for %s ' % lang), end='')
-  sys.stdout.flush()
-  if which(interpreter):
-    print_success('-- found')
-    return (lang, interpreter, val)
-  print_warning('-- not found (skipped)')
-  return (lang, None, val)
+  if 'python' in INTERPRETERS and system == "Windows":
+    INTERPRETERS['python'] = ('python', '.py')
+  
+  missing = []
+  for lang in INTERPRETERS:
+    interpreter = INTERPRETERS[lang][0]
+    print('%-27s' % ('  Searching for %s ' % lang), end='')
+    if which(interpreter):
+      print(f"-- {colmsg('found', COL_GREEN)}")
+    else:
+      print(f"-- {colmsg('missing', COL_YELLOW)}")
+      missing.append(lang)
+  for miss in missing:
+    INTERPRETERS.pop(miss)
 
-## Return the extension from the file name.
-def get_ext(file_name):
-  period = file_name.rfind('.'); assert period > 0
-  return file_name[period:]
+## Match 'elapsed: <time>s' from the output of the process and return it.
+def get_time(result_string):
+  time = re.findall(r'elapsed:\s*([0-9\.]+)\s*s', result_string, re.MULTILINE)
+  if len(time) != 1:
+    print(f'\n\'elapsed: <time>s\' {colmsg("No match found", COL_RED)}.')
+    sys.exit(1)
+  return float(time[0])
+
+## Generate a report at 'report.html'.
+def display_results(results):
+
+  for benchmark in results:
+    results[benchmark].sort(key=lambda x : x[1])
+    max_time = 0
+    for lang, time in results[benchmark]:
+      max_time = max(max_time, time)
+
+    ## Add the width for the performance bar.
+    for entry in results[benchmark]:
+      time = entry[1]
+      entry.append(time/max_time * 100)
+
+  disp = ""
+  for benchmark in results:
+    disp += f'<h1 class="benchmark-title">{benchmark.title()}</h1>\n'
+    disp += '<table>\n'
+    disp += '<tbody>\n'
+    for lang, time, width in results[benchmark]:
+      class_ = "performance-bar"
+      if lang == 'pocketlang':
+        class_ += " pocket-bar"
+        lang = 'pocket' ## Shorten the name.
+
+      disp += '<tr>\n'
+      disp += f'  <th>{lang}</th>\n'
+      disp += f'  <td><div class="{class_}" style="width:{width}%">'
+      disp += f'{"%.2f"%time}s</div></td>\n'
+      disp += '</tr>\n'
+    disp += '</tbody>\n'
+    disp += '</table>\n'
+    disp += '\n'
+
+  global HTML
+  html = HTML.replace('{{ REPORT }}', disp)
+  report_path = abspath(join(THIS_PATH, 'report.html'))
+  with open(report_path, 'w') as out:
+    out.write(html)
+  print()
+  print(colmsg('Report Generated:', COL_GREEN), report_path)
+
+## ----------------------------------------------------------------------------
+## HTML REPORT
+## ----------------------------------------------------------------------------
+
+HTML = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+
+  <style>
+* {
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  font-family: sans-serif;
+}
+
+#main {
+  max-width: 600px;
+  margin: 50px auto;
+}
+
+.benchmark-title {
+  text-align: center;
+  margin: 40px auto 20px auto;
+}
+
+table {
+  width: 100%;
+}
+
+th {
+  font-weight: normal;
+  text-align: right;
+  width: 100px;
+}
+
+.performance-bar {
+  background-color: #1471c8;
+  margin: 1px 10px;
+  color:white;
+  padding: 2px;
+}
+
+.pocket-bar {
+  background-color: #02509B;
+}
+  </style>
+</head>
+
+<body>
+
+  <div id="main">
+
+    {{ REPORT }}
+
+  </div>
+  
+</body>
+</html>
+'''
 
 ## ----------------------------------------------------------------------------
 ## PRINT FUNCTIONS
 ## ----------------------------------------------------------------------------
 
+def _print_sep():
+  print("-------------------------------------")
+
 def print_title(title):
-  print("-----------------------------------")
+  _print_sep()
   print(" %s " % title)
-  print("-----------------------------------")
+  _print_sep()
 
-## ANSI color codes to print messages.
-COLORS = {
-  'GREEN'     : '\u001b[32m',
-  'YELLOW'    : '\033[93m',
-  'RED'       : '\u001b[31m',
-  'UNDERLINE' : '\033[4m' ,
-  'END'       : '\033[0m' ,
-}
+## Simple color logger --------------------------------------------------------
+## https://stackoverflow.com/a/70599663/10846399
 
-## Prints a warning message to stdout.
-def print_warning(msg):
-  os.system('') ## This will enable ANSI codes in windows terminal.
-  for line in msg.splitlines():
-    print(COLORS['YELLOW'] + line + COLORS['END'])
+def RGB(red=None, green=None, blue=None,bg=False):
+    if(bg==False and red!=None and green!=None and blue!=None):
+        return f'\u001b[38;2;{red};{green};{blue}m'
+    elif(bg==True and red!=None and green!=None and blue!=None):
+        return f'\u001b[48;2;{red};{green};{blue}m'
+    elif(red==None and green==None and blue==None):
+        return '\u001b[0m'
+COL_NONE = RGB()
+COL_RED = RGB(220, 100, 100)
+COL_GREEN = RGB(15, 160, 100)
+COL_BLUE = RGB(60, 140, 230)
+COL_YELLOW = RGB(220, 180, 20)
+COL_WHITE = RGB(255, 255, 255)
 
-## print success message to stdout.
-def print_success(msg):
-  os.system('') ## This will enable ANSI codes in windows terminal.
-  for line in msg.splitlines():
-    print(COLORS['GREEN'] + line + COLORS['END'])
+def colmsg(msg, color):
+  return f"{color}{msg}{COL_NONE}"
 
-## prints an error message to stderr and exit
-## immediately.
-def error_exit(msg):
-  os.system('') ## This will enable ANSI codes in windows terminal.
-  print(COLORS['RED'] + 'Error: ' + msg + COLORS['END'], end='')
-  sys.exit(1)
-
-if __name__ == '__main__':
+if __name__ == "__main__":
+  os.system('')
   main()

@@ -8,8 +8,9 @@ def reverse_list(list):
 		list[i], list[last_index] = list[last_index], list[i]
 	return list
 
-start = clock()
 N = 20000000
 l = list(range(N))
+
+start = clock()
 reverse_list(l)
 print('elapsed: ', clock() - start, 's')
