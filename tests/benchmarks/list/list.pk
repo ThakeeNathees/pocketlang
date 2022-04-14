@@ -12,9 +12,10 @@ def reverse_list(list)
 	return list
 end
 
-start = clock()
 N = 20000000
 l = (0..N).as_list
+
+start = clock()
 reverse_list(l)
 print('elapsed: ', clock() - start, 's')
 

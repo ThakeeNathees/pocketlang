@@ -4,7 +4,7 @@
 
 from lang import clock
 
-N = 50000
+N = 20000
 
 def woo(n, acc)
 	if n == 0 then return acc end

@@ -6,10 +6,9 @@ def reverse_list(list)
   end
 end
 
-start = Time.now
-
 N = 20000000
 list = (0...N).to_a
-reverse_list(list)
 
+start = Time.now
+reverse_list(list)
 puts "elapsed: " + (Time.now - start).to_s + ' s'
