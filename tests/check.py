@@ -1,5 +1,6 @@
 #!python
 ## Copyright (c) 2020-2021 Thakee Nathees
+## Copyright (c) 2021-2022 Pocketlang Contributors
 ## Distributed Under The MIT License
 
 ## This will run static checks on the source files, for line length,
@@ -7,8 +8,7 @@
 
 import os, sys, re
 from os import listdir
-from os.path import (
-  join, abspath, dirname, relpath)
+from os.path import join, abspath, dirname, relpath
 
 ## The absolute path of this file, when run as a script.
 ## This file is not intended to be included in other files at the moment.
@@ -49,21 +49,12 @@ SOURCE_DIRS = [
   "../docs/wasm/",
 ]
 
-## A list of common header that just copied in different projects.
-## These common header cannot be re-used because we're trying to achieve
-## minimalistic with the count of the sources in pocketlang.
-COMMON_HEADERS = [
-  "../src/pk_common.h",
-  "../cli/common.h",
-]
-
 ## This global variable will be set to true if any check failed.
 checks_failed = False
 
 def main():
   check_fnv1_hash(to_abs_paths(HASH_CHECK_LIST))
   check_static(to_abs_paths(SOURCE_DIRS))
-  check_common_header_match(to_abs_paths(COMMON_HEADERS))
   if checks_failed:
     sys.exit(1)
   print("Static checks were passed.")
@@ -140,26 +131,6 @@ def check_static(dirs):
           is_last_empty = True
         else:
           is_last_empty = False
-
-## TODO: Remove this check and resolve the cause.
-## Assert all the content of the headers list below are the same.
-## some header are re-used by copying, so changes must be reflect.
-def check_common_header_match(headers):
-  headers = list(headers)
-  assert len(headers) >= 1
-  
-  content = ''
-  with open(headers[0], 'r') as f:
-    content = f.read()
-  
-  for i in range(1, len(headers)):
-    with open(headers[i], 'r') as f:
-      if f.read() != content:
-        main_header = to_rel_path(headers[0])
-        curr_header = to_rel_path(headers[i])
-        report_error("File content mismatch: \"%s\" and \"%s\"\n"
-                     "    These files contants should be the same."
-                     %(main_header, curr_header))
 
 ## Returns a formated string of the error location.
 def location(file, line):

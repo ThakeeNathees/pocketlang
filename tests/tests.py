@@ -1,5 +1,6 @@
 #!python
 ## Copyright (c) 2020-2021 Thakee Nathees
+## Copyright (c) 2021-2022 Pocketlang Contributors
 ## Distributed Under The MIT License
 
 import os, sys, platform
