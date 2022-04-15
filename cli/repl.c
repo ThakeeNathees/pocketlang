@@ -35,12 +35,15 @@ const char* read_line(uint32_t* length) {
 
 // Read a line from stdin and returns it without the line ending.
 static void readLine(ByteBuffer* buff) {
+  char c;
+
   do {
-    char c = (char)fgetc(stdin);
-    if (c == EOF || c == '\n') break;
+    c = (char)fgetc(stdin);
+    if (c == '\n') break;
 
     byteBufferWrite(buff, (uint8_t)c);
-  } while (true);
+
+  } while (c != EOF);
 
   byteBufferWrite(buff, '\0');
 }
@@ -54,6 +57,17 @@ static inline bool is_str_empty(const char* line) {
     if (!isspace(*c)) return false;
   }
   return true;
+}
+
+// Returns true if the string contains EOF, used to stop REPL in case
+// input contains EOF.
+static inline bool contains_eof(const char* line) {
+  ASSERT(line != NULL, OOPS);
+
+  for (const char* c = line; *c != '\0'; c++) {
+    if (*c == EOF) return true;
+  }
+  return false;
 }
 
 // The main loop of the REPL. Will return the exit code.
@@ -91,6 +105,12 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
     // Read a line from stdin and add the line to the lines buffer.
     readLine(&line);
     bool is_empty = is_str_empty((const char*)line.data);
+
+    // If the line contains EOF, REPL should be stopped.
+    if (contains_eof((const char*)line.data)) {
+      fprintf(stdout, "\n");
+      break;
+    }
 
     // If the line is empty, we don't have to compile it.
     if (is_empty && !need_more_lines) {
