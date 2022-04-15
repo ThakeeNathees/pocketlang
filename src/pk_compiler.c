@@ -607,6 +607,16 @@ static void resolveError(Compiler* compiler, int line, const char* fmt, ...) {
   va_end(args);
 }
 
+// Check if the given [index] is greater than or equal to the maximum constants
+// that a module can contain and report an error.
+static void checkMaxConstantsReached(Compiler* compiler, int index) {
+  ASSERT(index >= 0, OOPS);
+  if (index >= MAX_CONSTANTS) {
+    parseError(compiler, "A module should contain at most %d "
+      "unique constants.", MAX_CONSTANTS);
+  }
+}
+
 /*****************************************************************************/
 /* LEXING                                                                    */
 /*****************************************************************************/
@@ -2085,10 +2095,7 @@ static int compilerAddConstant(Compiler* compiler, Var value) {
 
   uint32_t index = moduleAddConstant(compiler->parser.vm,
                                      compiler->module, value);
-  if (index >= MAX_CONSTANTS) {
-    parseError(compiler, "A module should contain at most %d "
-               "unique constants.", MAX_CONSTANTS);
-  }
+  checkMaxConstantsReached(compiler, index);
   return (int)index;
 }
 
@@ -2289,10 +2296,8 @@ static void compileClass(Compiler* compiler) {
   moduleSetGlobal(compiler->module, index, VAR_OBJ(cls));
 
   // Check count exceeded.
-  if (cls_index >= MAX_CONSTANTS || ctor_index >= MAX_CONSTANTS) {
-    parseError(compiler, "A module should contain at most %d "
-               "unique constants.", MAX_CONSTANTS);
-  }
+  checkMaxConstantsReached(compiler, cls_index);
+  checkMaxConstantsReached(compiler, ctor_index);
 
   // Compile the constructor function.
   ASSERT(compiler->func->ptr == compiler->module->body->fn, OOPS);
@@ -2371,10 +2376,7 @@ static void compileFunction(Compiler* compiler, bool is_literal) {
   int fn_index;
   Function* func = newFunction(compiler->parser.vm, name, name_length,
                                compiler->module, false, NULL, &fn_index);
-  if (fn_index >= MAX_CONSTANTS) {
-    parseError(compiler, "A module should contain at most %d "
-               "unique constants.", MAX_CONSTANTS);
-  }
+  checkMaxConstantsReached(compiler, fn_index);
 
   if (!is_literal) {
     ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);

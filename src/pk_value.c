@@ -1242,8 +1242,8 @@ bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value) {
       if (IS_UNDEF(val)) {
 
         // FIXME: add a list of attribute overrides.
-        if (IS_CSTR_EQ(attrib, "as_string", 9,
-          CHECK_HASH("as_string", 0xbdef4147))) {
+        if ((CHECK_HASH("as_string", 0xbdef4147) == attrib->hash) &&
+            IS_CSTR_EQ(attrib, "as_string", 9)) {
           *value = VAR_OBJ(toRepr(vm, VAR_OBJ(inst)));
           return true;
         }

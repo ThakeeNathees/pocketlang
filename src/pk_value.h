@@ -137,11 +137,10 @@
  ((s1)->length == (s2)->length) && \
  (memcmp((const void*)(s1)->data, (const void*)(s2)->data, (s1)->length) == 0))
 
-// Compare pocket string with c string.
-#define IS_CSTR_EQ(str, cstr, len, chash)  \
- (((str)->hash == chash) &&                \
- ((str)->length == len) &&                 \
- (memcmp((const void*)(str)->data, (const void*)(cstr), len) == 0))
+// Compare pocket string with C string.
+#define IS_CSTR_EQ(str, cstr, len)  \
+ (((str)->length == len) &&         \
+  (memcmp((const void*)(str)->data, (const void*)(cstr), len) == 0))
 
 // Decode types.
 #define AS_BOOL(value) ((value) == VAR_TRUE)

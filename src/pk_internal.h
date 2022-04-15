@@ -11,7 +11,7 @@
 
 #include "pk_common.h"
 
-// Commonly used c standard headers across the sources. Don't include any
+// Commonly used C standard headers across the sources. Don't include any
 // headers that are specific to a single source here, instead include them in
 // their source files explicitly (can not be implicitly included by another
 // header). And don't include any C standard headers in any of the pocketlang
@@ -124,5 +124,46 @@
 // TODO: port it to the CI/CD process at github actions.
 //
 #define CHECK_HASH(name, hash) hash
+
+// The formated string to convert double to string. It'll be with the minimum
+// length string representation of either a regular float or a scientific
+// notation (at most 15 decimal points).
+// Reference: https://www.cplusplus.com/reference/cstdio/printf/
+#define DOUBLE_FMT "%.16g"
+
+// Double number to string buffer size, used in sprintf with DOUBLE_FMT.
+//  A largest number : "-1.234567890123456e+308"
+// +  1 fot sign '+' or '-'
+// + 16 fot significant digits
+// +  1 for decimal point '.'
+// +  1 for exponent char 'e'
+// +  1 for sign of exponent
+// +  3 for the exponent digits
+// +  1 for null byte '\0'
+#define STR_DBL_BUFF_SIZE 24
+
+// Integer number to string buffer size, used in sprintf with format "%d".
+// The minimum 32 bit integer = -2147483648
+// +  1 for sign '-'
+// + 10 for digits
+// +  1 for null byte '\0'
+#define STR_INT_BUFF_SIZE 12
+
+// Integer number (double) to hex string buffer size.
+// The maximum value an unsigned 64 bit integer can get is
+// 0xffffffffffffffff which is 16 characters.
+// + 16 for hex digits
+// +  1 for sign '-'
+// +  2 for '0x' prefix
+// +  1 for null byte '\0'
+#define STR_HEX_BUFF_SIZE 20
+
+// Integer number (double) to bin string buffer size.
+// The maximum value an unsigned 64 bit integer can get is 0b11111... 64 1s.
+// + 64 for bin digits
+// +  1 for sign '-'
+// +  2 for '0b' prefix
+// +  1 for null byte '\0'
+#define STR_BIN_BUFF_SIZE 68
 
 #endif // PK_INTERNAL

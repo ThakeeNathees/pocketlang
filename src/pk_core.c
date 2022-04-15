@@ -32,10 +32,6 @@
   static const char* DOCSTRING(fn) = docstring; \
   static void fn(PKVM* vm)
 
-/*****************************************************************************/
-/* CORE PUBLIC API                                                           */
-/*****************************************************************************/
-
 // Create a new module with the given [name] and returns as a Module* for
 // internal. Which will be wrapped by pkNewModule to return a pkHandle*.
 static Module* newModuleInternal(PKVM* vm, const char* name);
@@ -46,42 +42,58 @@ static void moduleAddFunctionInternal(PKVM* vm, Module* module,
                                       const char* name, pkNativeFn fptr,
                                       int arity, const char* docstring);
 
+/*****************************************************************************/
+/* CORE PUBLIC API                                                           */
+/*****************************************************************************/
+
 PkHandle* pkNewModule(PKVM* vm, const char* name) {
   Module* module = newModuleInternal(vm, name);
   return vmNewHandle(vm, VAR_OBJ(module));
 }
 
-PK_PUBLIC void pkModuleAddGlobal(PKVM* vm, PkHandle* module,
+void pkModuleAddGlobal(PKVM* vm, PkHandle* module,
                                  const char* name, PkHandle* value) {
-  __ASSERT(module != NULL, "Argument module was NULL.");
-  __ASSERT(value != NULL, "Argument value was NULL.");
-  __ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
-           "Given handle is not a module.");
+  ASSERT(module != NULL, "Argument module was NULL.");
+  ASSERT(value != NULL, "Argument value was NULL.");
+  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
+         "Given handle is not a module.");
 
   moduleAddGlobal(vm, (Module*)AS_OBJ(module->value),
                   name, (uint32_t)strlen(name), value->value);
 }
 
+PkHandle* pkModuleGetGlobal(PKVM* vm, PkHandle* module, const char* name) {
+  ASSERT(module != NULL, "Argument module was NULL.");
+  ASSERT(name != NULL, "Argument name was NULL.");
+  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
+         "Given handle is not a module.");
+
+  Module* module_ = (Module*)AS_OBJ(module->value);
+  int index = moduleGetGlobalIndex(module_, name, (uint32_t)strlen(name));
+  if (index == -1) return NULL;
+  return vmNewHandle(vm, module_->globals.data[index]);
+}
+
 void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
                          pkNativeFn fptr, int arity) {
-  __ASSERT(module != NULL, "Argument module was NULL.");
-  __ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
-           "Given handle is not a module.");
+  ASSERT(module != NULL, "Argument module was NULL.");
+  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
+         "Given handle is not a module.");
   moduleAddFunctionInternal(vm, (Module*)AS_OBJ(module->value),
                             name, fptr, arity,
                             NULL /*TODO: Public API for function docstring.*/);
 }
 
 PkHandle* pkGetMainFunction(PKVM* vm, PkHandle* module) {
-  __ASSERT(module != NULL, "Argument module was NULL.");
-  __ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
-           "Given handle is not a module.");
+  ASSERT(module != NULL, "Argument module was NULL.");
+  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
+         "Given handle is not a module.");
   Module* _module = (Module*)AS_OBJ(module->value);
 
   int main_index = moduleGetGlobalIndex(_module, IMPLICIT_MAIN_NAME,
                                         (uint32_t)strlen(IMPLICIT_MAIN_NAME));
   if (main_index == -1) return NULL;
-  ASSERT_INDEX(main_index, _module->globals.count);
+  ASSERT_INDEX(main_index, (int)_module->globals.count);
   Var main_fn = _module->globals.data[main_index];
   ASSERT(IS_OBJ_TYPE(main_fn, OBJ_CLOSURE), OOPS);
   return vmNewHandle(vm, main_fn);
@@ -110,12 +122,12 @@ PkHandle* pkGetMainFunction(PKVM* vm, PkHandle* module) {
 // Check for errors in before calling the get arg public api function.
 #define CHECK_GET_ARG_API_ERRORS()                                          \
   do {                                                                      \
-    __ASSERT(vm->fiber != NULL,                                             \
+    ASSERT(vm->fiber != NULL,                                               \
              "This function can only be called at runtime.");               \
     if (arg != 0) {/* If Native setter, the value would be at fiber->ret */ \
-      __ASSERT(arg > 0 && arg <= ARGC, "Invalid argument index.");          \
+      ASSERT(arg > 0 && arg <= ARGC, "Invalid argument index.");            \
     }                                                                       \
-    __ASSERT(value != NULL, "Argument [value] was NULL.");                  \
+    ASSERT(value != NULL, "Argument [value] was NULL.");                    \
   } while (false)
 
 // Set error for incompatible type provided as an argument. (TODO: got type).
@@ -132,7 +144,7 @@ do {                                                                        \
 } while (false)
 
 int pkGetArgc(const PKVM* vm) {
-  __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
+  ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
   return ARGC;
 }
 
@@ -156,8 +168,8 @@ bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max) {
 }
 
 PkVar pkGetArg(const PKVM* vm, int arg) {
-  __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
-  __ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index.");
+  ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
+  ASSERT(arg > 0 || arg <= ARGC, "Invalid argument index.");
 
   return &(ARG(arg));
 }
@@ -281,22 +293,22 @@ void pkReturnInstNative(PKVM* vm, void* data, uint32_t id) {
 
 const char* pkStringGetData(const PkVar value) {
   const Var str = (*(const Var*)value);
-  __ASSERT(IS_OBJ_TYPE(str, OBJ_STRING), "Value should be of type string.");
+  ASSERT(IS_OBJ_TYPE(str, OBJ_STRING), "Value should be of type string.");
   return ((String*)AS_OBJ(str))->data;
 }
 
 PkVar pkFiberGetReturnValue(const PkHandle* fiber) {
-  __ASSERT(fiber != NULL, "Handle fiber was NULL.");
+  ASSERT(fiber != NULL, "Handle fiber was NULL.");
   Var fb = fiber->value;
-  __ASSERT(IS_OBJ_TYPE(fb, OBJ_FIBER), "Given handle is not a fiber");
+  ASSERT(IS_OBJ_TYPE(fb, OBJ_FIBER), "Given handle is not a fiber");
   Fiber* _fiber = (Fiber*)AS_OBJ(fb);
   return (PkVar)_fiber->ret;
 }
 
 bool pkFiberIsDone(const PkHandle* fiber) {
-  __ASSERT(fiber != NULL, "Handle fiber was NULL.");
+  ASSERT(fiber != NULL, "Handle fiber was NULL.");
   Var fb = fiber->value;
-  __ASSERT(IS_OBJ_TYPE(fb, OBJ_FIBER), "Given handle is not a fiber");
+  ASSERT(IS_OBJ_TYPE(fb, OBJ_FIBER), "Given handle is not a fiber");
   Fiber* _fiber = (Fiber*)AS_OBJ(fb);
   return _fiber->state == FIBER_DONE;
 }
@@ -398,6 +410,14 @@ static inline bool validateCond(PKVM* vm, bool condition, const char* err) {
 /*****************************************************************************/
 /* SHARED FUNCTIONS                                                          */
 /*****************************************************************************/
+
+static void initializeBuiltinFunctions(PKVM* vm);
+static void initializeCoreModules(PKVM* vm);
+
+void initializeCore(PKVM* vm) {
+  initializeBuiltinFunctions(vm);
+  initializeCoreModules(vm);
+}
 
 Module* getCoreLib(const PKVM* vm, String* name) {
   Var lib = mapGet(vm->core_libs, VAR_OBJ(name));
@@ -731,6 +751,48 @@ DEF(coreMapRemove,
   RET(mapRemoveKey(vm, map, key));
 }
 
+static void initializeBuiltinFN(PKVM* vm, Closure** bfn, const char* name,
+                                int length, int arity, pkNativeFn ptr,
+                                const char* docstring) {
+  Function* fn = newFunction(vm, name, length, NULL, true, docstring, NULL);
+  fn->arity = arity;
+  fn->native = ptr;
+  vmPushTempRef(vm, &fn->_super); // fn.
+  *bfn = newClosure(vm, fn);
+  vmPopTempRef(vm); // fn.
+}
+
+static void initializeBuiltinFunctions(PKVM* vm) {
+#define INITIALIZE_BUILTIN_FN(name, fn, argc)                        \
+  initializeBuiltinFN(vm, &vm->builtins[vm->builtins_count++], name, \
+                      (int)strlen(name), argc, fn, DOCSTRING(fn));
+  // General functions.
+  INITIALIZE_BUILTIN_FN("type_name", coreTypeName, 1);
+  INITIALIZE_BUILTIN_FN("help",      coreHelp,    -1);
+  INITIALIZE_BUILTIN_FN("assert",    coreAssert,  -1);
+  INITIALIZE_BUILTIN_FN("bin",       coreBin,      1);
+  INITIALIZE_BUILTIN_FN("hex",       coreHex,      1);
+  INITIALIZE_BUILTIN_FN("yield",     coreYield,   -1);
+  INITIALIZE_BUILTIN_FN("to_string", coreToString, 1);
+  INITIALIZE_BUILTIN_FN("print",     corePrint,   -1);
+  INITIALIZE_BUILTIN_FN("input",     coreInput,   -1);
+  INITIALIZE_BUILTIN_FN("exit",      coreExit,    -1);
+
+  // String functions.
+  INITIALIZE_BUILTIN_FN("str_sub", coreStrSub, 3);
+  INITIALIZE_BUILTIN_FN("str_chr", coreStrChr, 1);
+  INITIALIZE_BUILTIN_FN("str_ord", coreStrOrd, 1);
+
+  // List functions.
+  INITIALIZE_BUILTIN_FN("list_append", coreListAppend, 2);
+  INITIALIZE_BUILTIN_FN("list_join",   coreListJoin,   1);
+
+  // Map functions.
+  INITIALIZE_BUILTIN_FN("map_remove", coreMapRemove, 2);
+
+#undef INITIALIZE_BUILTIN_FN
+}
+
 /*****************************************************************************/
 /* CORE MODULE METHODS                                                       */
 /*****************************************************************************/
@@ -744,8 +806,8 @@ static Module* newModuleInternal(PKVM* vm, const char* name) {
   // Check if any module with the same name already exists and assert to the
   // hosting application.
   if (!IS_UNDEF(mapGet(vm->core_libs, VAR_OBJ(_name)))) {
-    __ASSERT(false, stringFormat(vm,
-             "A module named '$' already exists", name)->data);
+    ASSERT(false, stringFormat(vm,
+           "A module named '$' already exists", name)->data);
   }
 
   Module* module = newModule(vm, _name, true);
@@ -1165,63 +1227,9 @@ DEF(stdFiberResume,
   }
 }
 
-/*****************************************************************************/
-/* CORE INITIALIZATION                                                       */
-/*****************************************************************************/
-
-static void initializeBuiltinFN(PKVM* vm, Closure** bfn, const char* name,
-                                int length, int arity, pkNativeFn ptr,
-                                const char* docstring) {
-
-  Function* fn = newFunction(vm, name, length, NULL, true, docstring, NULL);
-  fn->arity = arity;
-  fn->native = ptr;
-
-  vmPushTempRef(vm, &fn->_super); // fn.
-  *bfn = newClosure(vm, fn);
-  vmPopTempRef(vm); // fn.
-}
-
-void initializeCore(PKVM* vm) {
-
-#define INITIALIZE_BUILTIN_FN(name, fn, argc)                        \
-  initializeBuiltinFN(vm, &vm->builtins[vm->builtins_count++], name, \
-                      (int)strlen(name), argc, fn, DOCSTRING(fn));
-
+static void initializeCoreModules(PKVM* vm) {
 #define MODULE_ADD_FN(module, name, fn, argc) \
   moduleAddFunctionInternal(vm, module, name, fn, argc, DOCSTRING(fn))
-
-  // Initialize builtin functions.
-  INITIALIZE_BUILTIN_FN("type_name",   coreTypeName,   1);
-
-  // TODO: Add 'is' keyword with modules for builtin types.
-  // ex: val is Num; val is null; val is List; val is Range
-  //     List.append(l, e) # List is implicitly imported core module.
-  //     String.lower(s)
-
-  INITIALIZE_BUILTIN_FN("help",        coreHelp,      -1);
-  INITIALIZE_BUILTIN_FN("assert",      coreAssert,    -1);
-  INITIALIZE_BUILTIN_FN("bin",         coreBin,        1);
-  INITIALIZE_BUILTIN_FN("hex",         coreHex,        1);
-  INITIALIZE_BUILTIN_FN("yield",       coreYield,     -1);
-  INITIALIZE_BUILTIN_FN("to_string",   coreToString,   1);
-  INITIALIZE_BUILTIN_FN("print",       corePrint,     -1);
-  INITIALIZE_BUILTIN_FN("input",       coreInput,     -1);
-  INITIALIZE_BUILTIN_FN("exit",        coreExit,      -1);
-
-  // String functions.
-  INITIALIZE_BUILTIN_FN("str_sub",     coreStrSub,     3);
-  INITIALIZE_BUILTIN_FN("str_chr",     coreStrChr,     1);
-  INITIALIZE_BUILTIN_FN("str_ord",     coreStrOrd,     1);
-
-  // List functions.
-  INITIALIZE_BUILTIN_FN("list_append", coreListAppend, 2);
-  INITIALIZE_BUILTIN_FN("list_join",   coreListJoin,   1);
-
-  // Map functions.
-  INITIALIZE_BUILTIN_FN("map_remove",  coreMapRemove,  2);
-
-  // Core Modules /////////////////////////////////////////////////////////////
 
   Module* lang = newModuleInternal(vm, "lang");
   MODULE_ADD_FN(lang, "clock", stdLangClock,  0);
@@ -1233,31 +1241,31 @@ void initializeCore(PKVM* vm) {
 #endif
 
   Module* math = newModuleInternal(vm, "math");
-  MODULE_ADD_FN(math, "floor", stdMathFloor,       1);
-  MODULE_ADD_FN(math, "ceil",  stdMathCeil,        1);
-  MODULE_ADD_FN(math, "pow",   stdMathPow,         2);
-  MODULE_ADD_FN(math, "sqrt",  stdMathSqrt,        1);
-  MODULE_ADD_FN(math, "abs",   stdMathAbs,         1);
-  MODULE_ADD_FN(math, "sign",  stdMathSign,        1);
-  MODULE_ADD_FN(math, "hash",  stdMathHash,        1);
-  MODULE_ADD_FN(math, "sin",   stdMathSine,        1);
-  MODULE_ADD_FN(math, "cos",   stdMathCosine,      1);
-  MODULE_ADD_FN(math, "tan",   stdMathTangent,     1);
-  MODULE_ADD_FN(math, "sinh",  stdMathSinh,        1);
-  MODULE_ADD_FN(math, "cosh",  stdMathCosh,        1);
-  MODULE_ADD_FN(math, "tanh",  stdMathTanh,        1);
-  MODULE_ADD_FN(math, "asin",  stdMathArcSine,     1);
-  MODULE_ADD_FN(math, "acos",  stdMathArcCosine,   1);
-  MODULE_ADD_FN(math, "atan",  stdMathArcTangent,  1);
-  MODULE_ADD_FN(math, "log10", stdMathLog10,       1);
-  MODULE_ADD_FN(math, "round", stdMathRound,       1);
-  MODULE_ADD_FN(math, "log2",  stdMathLog2,        1);
-  MODULE_ADD_FN(math, "hypot", stdMathHypot,       2);
-  MODULE_ADD_FN(math, "cbrt",  stdMathCbrt,        1);
-  MODULE_ADD_FN(math, "gamma", stdMathGamma,       1);
-  MODULE_ADD_FN(math, "lgamma",stdMathLgamma,      1);
-  MODULE_ADD_FN(math, "erf",   stdMathErf,         1);
-  MODULE_ADD_FN(math, "erfc",  stdMathErfc,        1);
+  MODULE_ADD_FN(math, "floor",  stdMathFloor,      1);
+  MODULE_ADD_FN(math, "ceil",   stdMathCeil,       1);
+  MODULE_ADD_FN(math, "pow",    stdMathPow,        2);
+  MODULE_ADD_FN(math, "sqrt",   stdMathSqrt,       1);
+  MODULE_ADD_FN(math, "abs",    stdMathAbs,        1);
+  MODULE_ADD_FN(math, "sign",   stdMathSign,       1);
+  MODULE_ADD_FN(math, "hash",   stdMathHash,       1);
+  MODULE_ADD_FN(math, "sin",    stdMathSine,       1);
+  MODULE_ADD_FN(math, "cos",    stdMathCosine,     1);
+  MODULE_ADD_FN(math, "tan",    stdMathTangent,    1);
+  MODULE_ADD_FN(math, "sinh",   stdMathSinh,       1);
+  MODULE_ADD_FN(math, "cosh",   stdMathCosh,       1);
+  MODULE_ADD_FN(math, "tanh",   stdMathTanh,       1);
+  MODULE_ADD_FN(math, "asin",   stdMathArcSine,    1);
+  MODULE_ADD_FN(math, "acos",   stdMathArcCosine,  1);
+  MODULE_ADD_FN(math, "atan",   stdMathArcTangent, 1);
+  MODULE_ADD_FN(math, "log10",  stdMathLog10,      1);
+  MODULE_ADD_FN(math, "round",  stdMathRound,      1);
+  MODULE_ADD_FN(math, "log2",   stdMathLog2,       1);
+  MODULE_ADD_FN(math, "hypot",  stdMathHypot,      2);
+  MODULE_ADD_FN(math, "cbrt",   stdMathCbrt,       1);
+  MODULE_ADD_FN(math, "gamma",  stdMathGamma,      1);
+  MODULE_ADD_FN(math, "lgamma", stdMathLgamma,     1);
+  MODULE_ADD_FN(math, "erf",    stdMathErf,        1);
+  MODULE_ADD_FN(math, "erfc",   stdMathErfc,       1);
 
   // Note that currently it's mutable (since it's a global variable, not
   // constant and pocketlang doesn't support constant) so the user shouldn't
@@ -1265,11 +1273,16 @@ void initializeCore(PKVM* vm) {
   moduleAddGlobal(vm, math, "PI", 2, VAR_NUM(M_PI));
 
   Module* fiber = newModuleInternal(vm, "Fiber");
-  MODULE_ADD_FN(fiber, "new",      stdFiberNew,     1);
-  MODULE_ADD_FN(fiber, "run",      stdFiberRun,    -1);
-  MODULE_ADD_FN(fiber, "resume",   stdFiberResume, -1);
+  MODULE_ADD_FN(fiber, "new",    stdFiberNew,     1);
+  MODULE_ADD_FN(fiber, "run",    stdFiberRun,    -1);
+  MODULE_ADD_FN(fiber, "resume", stdFiberResume, -1);
 
+#undef MODULE_ADD_FN
 }
+
+#undef IS_NUM_BYTE
+#undef DOCSTRING
+#undef DEF
 
 /*****************************************************************************/
 /* OPERATORS                                                                 */
@@ -1308,17 +1321,6 @@ Var varAdd(PKVM* vm, Var v1, Var v2) {
           return VAR_OBJ(listJoin(vm, (List*)o1, (List*)o2));
         }
       } break;
-
-      case OBJ_MAP:
-      case OBJ_RANGE:
-      case OBJ_MODULE:
-      case OBJ_FUNC:
-      case OBJ_CLOSURE:
-      case OBJ_UPVALUE:
-      case OBJ_FIBER:
-      case OBJ_CLASS:
-      case OBJ_INST:
-        break;
     }
   }
 
@@ -1522,31 +1524,18 @@ bool varContains(PKVM* vm, Var elem, Var container) {
       Map* map = (Map*)AS_OBJ(container);
       return !IS_UNDEF(mapGet(map, elem));
     } break;
-
-    case OBJ_RANGE:
-    case OBJ_MODULE:
-    case OBJ_FUNC:
-    case OBJ_CLOSURE:
-    case OBJ_UPVALUE:
-    case OBJ_FIBER:
-    case OBJ_CLASS:
-    case OBJ_INST:
-      TODO;
   }
-  UNREACHABLE();
+
+  VM_SET_ERROR(vm, stringFormat(vm, "Argument of type $ is not iterable.",
+               varTypeName(container)));
+  return VAR_NULL;
 }
 
-// TODO: The ERR_NO_ATTRIB() macro should splitted into 2 to for setter and
-// getter and for the setter, the error message should be "object has no
-// mutable attribute", to indicate that there might be an attribute with the
-// name might be exists (but not accessed in a setter).
+Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
-// Set error for accessing non-existed attribute.
 #define ERR_NO_ATTRIB(vm, on, attrib)                                        \
   VM_SET_ERROR(vm, stringFormat(vm, "'$' object has no attribute named '$'", \
                                 varTypeName(on), attrib->data))
-
-Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
   if (!IS_OBJ(on)) {
     VM_SET_ERROR(vm, stringFormat(vm, "$ type is not subscriptable.",
@@ -1556,8 +1545,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
   Object* obj = AS_OBJ(on);
   switch (obj->type) {
-    case OBJ_STRING:
-    {
+    case OBJ_STRING: {
       String* str = (String*)obj;
       switch (attrib->hash) {
 
@@ -1572,42 +1560,26 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
         case CHECK_HASH("strip", 0xfd1b18d1):
           return VAR_OBJ(stringStrip(vm, str));
-
-        default:
-          ERR_NO_ATTRIB(vm, on, attrib);
-          return VAR_NULL;
       }
+    } break;
 
-      UNREACHABLE();
-    }
-
-    case OBJ_LIST:
-    {
+    case OBJ_LIST: {
       List* list = (List*)obj;
       switch (attrib->hash) {
 
         case CHECK_HASH("length", 0x83d03615):
           return VAR_NUM((double)(list->elements.count));
-
-        default:
-          ERR_NO_ATTRIB(vm, on, attrib);
-          return VAR_NULL;
       }
+    } break;
 
-      UNREACHABLE();
-    }
-
-    case OBJ_MAP:
-    {
+    case OBJ_MAP: {
       // map = { "foo" : 42, "can't access" : 32 }
       // val = map.foo ## <-- This should be error
       // Only the map's attributes are accessed here.
       TODO;
-      UNREACHABLE();
-    }
+    } break;
 
-    case OBJ_RANGE:
-    {
+    case OBJ_RANGE: {
       Range* range = (Range*)obj;
       switch (attrib->hash) {
 
@@ -1623,17 +1595,10 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
         case CHECK_HASH("last", 0x63e1d819):
           return VAR_NUM(range->to);
-
-        default:
-          ERR_NO_ATTRIB(vm, on, attrib);
-          return VAR_NULL;
       }
+    } break;
 
-      UNREACHABLE();
-    }
-
-    case OBJ_MODULE:
-    {
+    case OBJ_MODULE: {
       Module* module = (Module*)obj;
 
       // Search in globals.
@@ -1642,19 +1607,12 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
         ASSERT_INDEX((uint32_t)index, module->globals.count);
         return module->globals.data[index];
       }
-
-      ERR_NO_ATTRIB(vm, on, attrib);
-      return VAR_NULL;
-    }
+    } break;
 
     case OBJ_FUNC:
-    {
-      // Functions aren't first class objects.
-      UNREACHABLE();
-    }
+      break;
 
-    case OBJ_CLOSURE:
-    {
+    case OBJ_CLOSURE: {
       Closure* closure = (Closure*)obj;
       switch (attrib->hash) {
 
@@ -1663,57 +1621,50 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
         case CHECK_HASH("name", 0x8d39bde6):
           return VAR_OBJ(newString(vm, closure->fn->name));
-
-        default:
-          ERR_NO_ATTRIB(vm, on, attrib);
-          return VAR_NULL;
       }
-    }
+    } break;
 
     case OBJ_UPVALUE:
-      // Upvalues aren't first class objects.
-      UNREACHABLE();
+      UNREACHABLE(); // Upvalues aren't first class objects.
+      break;
 
-    case OBJ_FIBER:
-      {
-        Fiber* fb = (Fiber*)obj;
-        switch (attrib->hash) {
+    case OBJ_FIBER: {
+      Fiber* fb = (Fiber*)obj;
+      switch (attrib->hash) {
 
-          case CHECK_HASH("is_done", 0x789c2706):
-            return VAR_BOOL(fb->state == FIBER_DONE);
+        case CHECK_HASH("is_done", 0x789c2706):
+          return VAR_BOOL(fb->state == FIBER_DONE);
 
-          case CHECK_HASH("function", 0x9ed64249):
-            return VAR_OBJ(fb->closure);
-
-          default:
-            ERR_NO_ATTRIB(vm, on, attrib);
-            return VAR_NULL;
-          }
-        UNREACHABLE();
+        case CHECK_HASH("function", 0x9ed64249):
+          return VAR_OBJ(fb->closure);
       }
+    } break;
 
     case OBJ_CLASS:
       TODO;
-      UNREACHABLE();
+      break;
 
-    case OBJ_INST:
-    {
+    case OBJ_INST: {
       Var value;
-      if (!instGetAttrib(vm, (Instance*)obj, attrib, &value)) {
-        ERR_NO_ATTRIB(vm, on, attrib);
-        return VAR_NULL;
+      if (instGetAttrib(vm, (Instance*)obj, attrib, &value)) {
+        return value;
       }
-      return value;
-    }
-
-    default:
-      UNREACHABLE();
+    } break;
   }
 
-  UNREACHABLE();
+  ERR_NO_ATTRIB(vm, on, attrib);
+  return VAR_NULL;
+
+#undef ERR_NO_ATTRIB
 }
 
 void varSetAttrib(PKVM* vm, Var on, String* attrib, Var value) {
+
+// Set error for accessing non-existed attribute.
+#define ERR_NO_ATTRIB(vm, on, attrib)                               \
+  VM_SET_ERROR(vm, stringFormat(vm,                                 \
+                   "'$' object has no mutable attribute named '$'", \
+                   varTypeName(on), attrib->data))
 
 #define ATTRIB_IMMUTABLE(name)                                                \
 do {                                                                          \
@@ -1745,12 +1696,7 @@ do {                                                                          \
       return;
 
     case OBJ_MAP:
-      // Not sure should I allow string values could be accessed with
-      // this way. ex:
-      // map = { "foo" : 42, "can't access" : 32 }
-      // map.foo = 'bar'
       TODO;
-
       ERR_NO_ATTRIB(vm, on, attrib);
       return;
 
@@ -1763,22 +1709,16 @@ do {                                                                          \
 
     case OBJ_MODULE: {
       Module* module = (Module*)obj;
-
-      // Check globals.
       int index = moduleGetGlobalIndex(module, attrib->data, attrib->length);
       if (index != -1) {
         ASSERT_INDEX((uint32_t)index, module->globals.count);
         module->globals.data[index] = value;
         return;
       }
-
-      ERR_NO_ATTRIB(vm, on, attrib);
-      return;
-    }
+    } break;
 
     case OBJ_FUNC:
-      // Functions aren't first class objects.
-      UNREACHABLE();
+      UNREACHABLE(); // Functions aren't first class objects.
       return;
 
     case OBJ_CLOSURE:
@@ -1788,8 +1728,7 @@ do {                                                                          \
       return;
 
     case OBJ_UPVALUE:
-      // Upvalues aren't first class objects.
-      UNREACHABLE();
+      UNREACHABLE(); // Upvalues aren't first class objects.
       return;
 
     case OBJ_FIBER:
@@ -1800,8 +1739,7 @@ do {                                                                          \
       ERR_NO_ATTRIB(vm, on, attrib);
       return;
 
-    case OBJ_INST:
-    {
+    case OBJ_INST: {
       if (!instSetAttrib(vm, (Instance*)obj, attrib, value)) {
         // If we has error by now, that means the set value type is
         // incompatible. No need for us to set an other error, just return.
@@ -1812,17 +1750,15 @@ do {                                                                          \
       // If we reached here, that means the attribute exists and we have
       // updated the value.
       return;
-    }
-
-    default:
-      UNREACHABLE();
+    } break;
   }
-  UNREACHABLE();
+
+  ERR_NO_ATTRIB(vm, on, attrib);
+  return;
 
 #undef ATTRIB_IMMUTABLE
-}
-
 #undef ERR_NO_ATTRIB
+}
 
 Var varGetSubscript(PKVM* vm, Var on, Var key) {
   if (!IS_OBJ(on)) {
@@ -1833,8 +1769,7 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
 
   Object* obj = AS_OBJ(on);
   switch (obj->type) {
-    case OBJ_STRING:
-    {
+    case OBJ_STRING: {
       int64_t index;
       String* str = ((String*)obj);
       if (!validateInteger(vm, key, &index, "List index")) {
@@ -1845,10 +1780,9 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
       }
       String* c = newStringLength(vm, str->data + index, 1);
       return VAR_OBJ(c);
-    }
+    } break;
 
-    case OBJ_LIST:
-    {
+    case OBJ_LIST: {
       int64_t index;
       pkVarBuffer* elems = &((List*)obj)->elements;
       if (!validateInteger(vm, key, &index, "List index")) {
@@ -1858,10 +1792,9 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
         return VAR_NULL;
       }
       return elems->data[index];
-    }
+    } break;
 
-    case OBJ_MAP:
-    {
+    case OBJ_MAP: {
       Var value = mapGet((Map*)obj, key);
       if (IS_UNDEF(value)) {
 
@@ -1876,24 +1809,16 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
         return VAR_NULL;
       }
       return value;
-    }
+    } break;
 
-    case OBJ_RANGE:
-    case OBJ_MODULE:
     case OBJ_FUNC:
-    case OBJ_CLOSURE:
     case OBJ_UPVALUE:
-    case OBJ_FIBER:
-    case OBJ_CLASS:
-    case OBJ_INST:
-      TODO;
-      UNREACHABLE();
-
-    default:
-      UNREACHABLE();
+      UNREACHABLE(); // Not first class objects.
   }
 
-  UNREACHABLE();
+  VM_SET_ERROR(vm, stringFormat(vm, "$ type is not subscriptable.",
+               varTypeName(on)));
+  return VAR_NULL;
 }
 
 void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
@@ -1905,22 +1830,16 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
 
   Object* obj = AS_OBJ(on);
   switch (obj->type) {
-    case OBJ_STRING:
-      VM_SET_ERROR(vm, newString(vm, "String objects are immutable."));
-      return;
-
-    case OBJ_LIST:
-    {
+    case OBJ_LIST: {
       int64_t index;
       pkVarBuffer* elems = &((List*)obj)->elements;
       if (!validateInteger(vm, key, &index, "List index")) return;
       if (!validateIndex(vm, index, elems->count, "List")) return;
       elems->data[index] = value;
       return;
-    }
+    } break;
 
-    case OBJ_MAP:
-    {
+    case OBJ_MAP: {
       if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
         VM_SET_ERROR(vm, stringFormat(vm, "$ type is not hashable.",
                                       varTypeName(key)));
@@ -1928,27 +1847,14 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
         mapSet(vm, (Map*)obj, key, value);
       }
       return;
-    }
+    } break;
 
-    case OBJ_RANGE:
-    case OBJ_MODULE:
     case OBJ_FUNC:
-    case OBJ_CLOSURE:
     case OBJ_UPVALUE:
-    case OBJ_FIBER:
-    case OBJ_CLASS:
-    case OBJ_INST:
-      TODO;
-      UNREACHABLE();
-
-    default:
       UNREACHABLE();
   }
 
-  UNREACHABLE();
+  VM_SET_ERROR(vm, stringFormat(vm, "$ type is not subscriptable.",
+               varTypeName(on)));
+  return;
 }
-
-#undef IS_NUM_BYTE
-
-#undef DOCSTRING
-#undef DEF

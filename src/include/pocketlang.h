@@ -242,8 +242,15 @@ PK_PUBLIC void pkReleaseHandle(PKVM* vm, PkHandle* handle);
 PK_PUBLIC void pkModuleAddGlobal(PKVM* vm, PkHandle* module,
                                  const char* name, PkHandle* value);
 
+// Returns the global value with the [name] in the given [module], if the name
+// not exists in the globals of the module, it'll return NULL.
+PK_PUBLIC PkHandle* pkModuleGetGlobal(PKVM* vm, PkHandle* module,
+                                      const char* name);
+
 // Add a native function to the given module. If [arity] is -1 that means
 // The function has variadic parameters and use pkGetArgc() to get the argc.
+// Note that the function will be added as a global variable of the module,
+// to retrieve the function use pkModuleGetGlobal().
 PK_PUBLIC void pkModuleAddFunction(PKVM* vm, PkHandle* module,
                                    const char* name,
                                    pkNativeFn fptr, int arity);
