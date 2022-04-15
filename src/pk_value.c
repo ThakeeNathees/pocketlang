@@ -40,6 +40,7 @@ PkVarType pkGetValueType(const PkVar value) {
   }
 
   UNREACHABLE();
+  return PK_NULL;
 }
 
 PkHandle* pkNewString(PKVM* vm, const char* value) {
@@ -872,6 +873,7 @@ static uint32_t _hashObject(Object* obj) {
   }
 
   UNREACHABLE();
+  return 0;
 }
 
 uint32_t varHashValue(Var v) {
@@ -1282,6 +1284,7 @@ bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value) {
   }
 
   UNREACHABLE();
+  return false;
 }
 
 bool instSetAttrib(PKVM* vm, Instance* inst, String* attrib, Var value) {
@@ -1338,6 +1341,7 @@ bool instSetAttrib(PKVM* vm, Instance* inst, String* attrib, Var value) {
   }
 
   UNREACHABLE();
+  return false;
 }
 
 /*****************************************************************************/
@@ -1365,6 +1369,7 @@ const char* getPkVarTypeName(PkVarType type) {
   }
 
   UNREACHABLE();
+  return NULL;
 }
 
 const char* getObjectTypeName(ObjectType type) {
@@ -1382,6 +1387,7 @@ const char* getObjectTypeName(ObjectType type) {
     case OBJ_INST:    return "Inst";
   }
   UNREACHABLE();
+  return NULL;
 }
 
 const char* varTypeName(Var v) {
@@ -1774,4 +1780,5 @@ bool toBool(Var v) {
   }
 
   UNREACHABLE();
+  return false;
 }

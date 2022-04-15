@@ -2070,6 +2070,7 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
   }
 
   UNREACHABLE();
+  return -1;
 }
 
 static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
@@ -2655,6 +2656,7 @@ static int compilerImportName(Compiler* compiler, int line,
   }
 
   UNREACHABLE();
+  return -1;
 }
 
 // This will called by the compilerImportAll() function to import a single

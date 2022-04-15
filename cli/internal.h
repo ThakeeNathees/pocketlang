@@ -16,14 +16,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-// Note that the cli itself is not a part of the pocketlang compiler, instead
-// it's a host application to run pocketlang from the command line. We're
-// embedding the pocketlang VM and we can only use its public APIs, not any
-// internals of it, including assertion macros. So that we've copyied the
-// "common.h" header. This can be moved to "src/include/common.h" and include
-// as optional header, which is something I don't like because it makes
-// pocketlang contain 2 headers (we'll always try to be minimal).
-#include "common.h"
+#include "modules/common.h"
 
 #define CLI_NOTICE                                                            \
   "PocketLang " PK_VERSION_STRING " (https://github.com/ThakeeNathees/pocketlang/)\n" \
