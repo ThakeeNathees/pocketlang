@@ -35,12 +35,15 @@ const char* read_line(uint32_t* length) {
 
 // Read a line from stdin and returns it without the line ending.
 static void readLine(ByteBuffer* buff) {
+  char c;
+
   do {
-    char c = (char)fgetc(stdin);
-    if (c == EOF || c == '\n') break;
+    c = (char)fgetc(stdin);
+    if (c == '\n') break;
 
     byteBufferWrite(buff, (uint8_t)c);
-  } while (true);
+
+  } while (c != EOF);
 
   byteBufferWrite(buff, '\0');
 }
@@ -91,6 +94,12 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
     // Read a line from stdin and add the line to the lines buffer.
     readLine(&line);
     bool is_empty = is_str_empty((const char*)line.data);
+
+    // If the line contains EOF, REPL should be stopped.
+    if (line.count >= 2 && *((char*)(line.data) + line.count -2) == EOF) {
+      fprintf(stdout, "\n");
+      break;
+    }
 
     // If the line is empty, we don't have to compile it.
     if (is_empty && !need_more_lines) {
