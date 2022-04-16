@@ -213,9 +213,6 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       markVarBuffer(vm, &module->constants);
       vm->bytes_allocated += sizeof(Var) * module->constants.capacity;
 
-      markStringBuffer(vm, &module->names);
-      vm->bytes_allocated += sizeof(String*) * module->names.capacity;
-
       markObject(vm, &module->body->_super);
     } break;
 
@@ -287,11 +284,12 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
 
     case OBJ_CLASS:
     {
-      Class* type = (Class*)obj;
+      Class* cls = (Class*)obj;
       vm->bytes_allocated += sizeof(Class);
-      markObject(vm, &type->owner->_super);
-      markObject(vm, &type->ctor->_super);
-      vm->bytes_allocated += sizeof(uint32_t) * type->field_names.capacity;
+      markObject(vm, &cls->owner->_super);
+      markObject(vm, &cls->ctor->_super);
+      markObject(vm, &cls->name->_super);
+      vm->bytes_allocated += sizeof(uint32_t) * cls->field_names.capacity;
     } break;
 
     case OBJ_INST:
@@ -380,47 +378,24 @@ Range* newRange(PKVM* vm, double from, double to) {
   return range;
 }
 
-Module* newModule(PKVM* vm, String* name, bool is_native) {
+Module* newModule(PKVM* vm) {
   Module* module = ALLOCATE(vm, Module);
   varInitObject(&module->_super, vm, OBJ_MODULE);
 
-  ASSERT(name != NULL && name->length > 0, OOPS);
-
-  module->path = name;
+  module->path = NULL;
   module->name = NULL;
-  module->initialized = is_native;
+  module->initialized = false;
   module->body = NULL;
-
-  // Core modules has its name as the module name.
-  if (is_native) module->name = name;
 
   pkVarBufferInit(&module->globals);
   pkUintBufferInit(&module->global_names);
   pkVarBufferInit(&module->constants);
-  pkStringBufferInit(&module->names);
-
-  // Add a implicit main function and the '__file__' global to the module, only
-  // if it's not a core module.
-  if (!is_native) {
-    vmPushTempRef(vm, &module->_super); // module.
-
-    moduleAddMain(vm, module);
-
-    // Add '__file__' variable with it's path as value. If the path starts with
-    // '@' It's a special file (@(REPL) or @(TRY)) and don't define __file__.
-    if (module->path->data[0] != SPECIAL_NAME_CHAR) {
-      moduleAddGlobal(vm, module, "__file__", 8, VAR_OBJ(module->path));
-    }
-
-    // TODO: Add ARGV as a global.
-
-    vmPopTempRef(vm); // module.
-  }
 
   return module;
 }
 
-Function* newFunction(PKVM* vm, const char* name, int length, Module* owner,
+Function* newFunction(PKVM* vm, const char* name, int length,
+                      Module* owner,
                       bool is_native, const char* docstring,
                       int* fn_index) {
 
@@ -429,37 +404,35 @@ Function* newFunction(PKVM* vm, const char* name, int length, Module* owner,
 
   vmPushTempRef(vm, &func->_super); // func
 
-  if (owner == NULL) {
-    ASSERT(is_native, OOPS);
+  func->owner = owner;
+  func->is_native = is_native;
+  func->upvalue_count = 0;
+  func->arity = -2; // -2 means un-initialized (TODO: make it as a macro).
+  func->docstring = docstring;
+
+  ASSERT(is_native || owner != NULL, OOPS);
+
+  // Only builtin function does't have an owner module.
+  if (is_native && owner == NULL) {
     func->name = name;
-    func->owner = NULL;
+    func->native = NULL;
 
   } else {
     uint32_t _fn_index = moduleAddConstant(vm, owner, VAR_OBJ(func));
     if (fn_index) *fn_index = _fn_index;
+    func->name = moduleAddString(owner, vm, name, length, NULL)->data;
 
-    uint32_t name_index = moduleAddName(owner, vm, name, length);
+    if (is_native) {
+      func->native = NULL;
 
-    func->name = owner->names.data[name_index]->data;
-    func->owner = owner;
-    func->arity = -2; // -2 means un-initialized (TODO: make it as a macro).
+    } else {
+      Fn* fn = ALLOCATE(vm, Fn);
+      pkByteBufferInit(&fn->opcodes);
+      pkUintBufferInit(&fn->oplines);
+      fn->stack_size = 0;
+      func->fn = fn;
+    }
   }
-
-  func->is_native = is_native;
-  func->upvalue_count = 0;
-
-  if (is_native) {
-    func->native = NULL;
-
-  } else {
-    Fn* fn = ALLOCATE(vm, Fn);
-    pkByteBufferInit(&fn->opcodes);
-    pkUintBufferInit(&fn->oplines);
-    fn->stack_size = 0;
-    func->fn = fn;
-  }
-
-  func->docstring = docstring;
 
   vmPopTempRef(vm); // func
   return func;
@@ -552,14 +525,13 @@ Class* newClass(PKVM* vm, Module* module, const char* name, uint32_t length,
 
   pkUintBufferInit(&cls->field_names);
   cls->owner = module;
-  cls->name = moduleAddName(module, vm, name, length);
+  cls->name = moduleAddString(module, vm, name, length, NULL);
 
   // Since characters '@' and '$' are special in stringFormat, and they
   // currently cannot be escaped (TODO), a string (char array) created
   // for that character and passed as C string format.
   char special[2] = { SPECIAL_NAME_CHAR, '\0' };
-  String* cls_name = module->names.data[cls->name];
-  String* ctor_name = stringFormat(vm, "$(Ctor:@)", special, cls_name);
+  String* ctor_name = stringFormat(vm, "$(Ctor:@)", special, cls->name);
 
   // Constructor.
   vmPushTempRef(vm, &ctor_name->_super); // ctor_name.
@@ -583,8 +555,7 @@ Instance* newInstance(PKVM* vm, Class* cls, bool initialize) {
 
   vmPushTempRef(vm, &inst->_super); // inst.
 
-  ASSERT(cls->name < cls->owner->names.count, OOPS);
-  inst->ty_name = cls->owner->names.data[cls->name]->data;
+  inst->ty_name = cls->name->data;
   inst->is_native = false;
 
   Inst* ins = ALLOCATE(vm, Inst);
@@ -1083,7 +1054,6 @@ void freeObject(PKVM* vm, Object* self) {
       pkVarBufferClear(&module->globals, vm);
       pkUintBufferClear(&module->global_names, vm);
       pkVarBufferClear(&module->constants, vm);
-      pkStringBufferClear(&module->names, vm);
     } break;
 
     case OBJ_FUNC: {
@@ -1143,24 +1113,37 @@ uint32_t moduleAddConstant(PKVM* vm, Module* module, Var value) {
   return (int)module->constants.count - 1;
 }
 
-uint32_t moduleAddName(Module* module, PKVM* vm, const char* name,
-                       uint32_t length) {
+String* moduleAddString(Module* module, PKVM* vm, const char* name,
+                        uint32_t length, int* index) {
 
-  for (uint32_t i = 0; i < module->names.count; i++) {
-    String* _name = module->names.data[i];
+  for (uint32_t i = 0; i < module->constants.count; i++) {
+    if (!IS_OBJ_TYPE(module->constants.data[i], OBJ_STRING)) continue;
+    String* _name = (String*)AS_OBJ(module->constants.data[i]);
     if (_name->length == length && strncmp(_name->data, name, length) == 0) {
       // Name already exists in the buffer.
-      return i;
+      if (index) *index = i;
+      return _name;
     }
   }
 
   // If we reach here the name doesn't exists in the buffer, so add it and
   // return the index.
   String* new_name = newStringLength(vm, name, length);
-  vmPushTempRef(vm, &new_name->_super);
-  pkStringBufferWrite(&module->names, vm, new_name);
-  vmPopTempRef(vm);
-  return module->names.count - 1;
+  vmPushTempRef(vm, &new_name->_super); // new_name
+  pkVarBufferWrite(&module->constants, vm, VAR_OBJ(new_name));
+  vmPopTempRef(vm); // new_name
+  if (index) *index = module->constants.count - 1;
+  return new_name;
+}
+
+String* moduleGetStringAt(Module* module, int index) {
+  ASSERT(index >= 0, OOPS);
+  if (index >= (int)module->constants.count) return NULL;
+  Var constant = module->constants.data[index];
+  if (IS_OBJ_TYPE(constant, OBJ_STRING)) {
+    return (String*)AS_OBJ(constant);
+  }
+  return NULL;
 }
 
 uint32_t moduleAddGlobal(PKVM* vm, Module* module,
@@ -1177,8 +1160,9 @@ uint32_t moduleAddGlobal(PKVM* vm, Module* module,
 
   // If we're reached here that means we don't already have a variable with
   // that name, create new one and set the value.
-  uint32_t name_ind = moduleAddName(module, vm, name, length);
-  pkUintBufferWrite(&module->global_names, vm, name_ind);
+  int name_index = 0;
+  moduleAddString(module, vm, name, length, &name_index);
+  pkUintBufferWrite(&module->global_names, vm, name_index);
   pkVarBufferWrite(&module->globals, vm, value);
   return module->globals.count - 1;
 }
@@ -1186,7 +1170,8 @@ uint32_t moduleAddGlobal(PKVM* vm, Module* module,
 int moduleGetGlobalIndex(Module* module, const char* name, uint32_t length) {
   for (uint32_t i = 0; i < module->global_names.count; i++) {
     uint32_t name_index = module->global_names.data[i];
-    String* g_name = module->names.data[name_index];
+    String* g_name = moduleGetStringAt(module, name_index);
+    ASSERT(g_name != NULL, OOPS);
     if (g_name->length == length && strncmp(g_name->data, name, length) == 0) {
       return (int)i;
     }
@@ -1271,8 +1256,8 @@ bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value) {
     Class* cls = inst->ins->type;
     for (uint32_t i = 0; i < cls->field_names.count; i++) {
       ASSERT_INDEX(i, cls->field_names.count);
-      ASSERT_INDEX(cls->field_names.data[i], cls->owner->names.count);
-      String* f_name = cls->owner->names.data[cls->field_names.data[i]];
+      String* f_name = moduleGetStringAt(cls->owner, cls->field_names.data[i]);
+      ASSERT(f_name != NULL, OOPS);
       if (IS_STR_EQ(f_name, attrib)) {
         *value = inst->ins->fields.data[i];
         return true;
@@ -1326,8 +1311,8 @@ bool instSetAttrib(PKVM* vm, Instance* inst, String* attrib, Var value) {
     Class* ty = inst->ins->type;
     for (uint32_t i = 0; i < ty->field_names.count; i++) {
       ASSERT_INDEX(i, ty->field_names.count);
-      ASSERT_INDEX(ty->field_names.data[i], ty->owner->names.count);
-      String* f_name = ty->owner->names.data[ty->field_names.data[i]];
+      String* f_name = moduleGetStringAt(ty->owner, ty->field_names.data[i]);
+      ASSERT(f_name != NULL, OOPS);
       if (f_name->hash == attrib->hash &&
         f_name->length == attrib->length &&
         memcmp(f_name->data, attrib->data, attrib->length) == 0) {
@@ -1686,8 +1671,7 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
       case OBJ_CLASS: {
         const Class* cls = (const Class*)obj;
         pkByteBufferAddString(buff, vm, "[Class:", 7);
-        String* ty_name = cls->owner->names.data[cls->name];
-        pkByteBufferAddString(buff, vm, ty_name->data, ty_name->length);
+        pkByteBufferAddString(buff, vm, cls->name->data, cls->name->length);
         pkByteBufferWrite(buff, vm, ']');
         return;
       }
@@ -1709,7 +1693,8 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
             if (i != 0) pkByteBufferWrite(buff, vm, ',');
 
             pkByteBufferWrite(buff, vm, ' ');
-            String* f_name = cls->owner->names.data[cls->field_names.data[i]];
+            String* f_name = moduleGetStringAt(cls->owner,
+                                               cls->field_names.data[i]);
             pkByteBufferAddString(buff, vm, f_name->data, f_name->length);
             pkByteBufferWrite(buff, vm, '=');
             _toStringInternal(vm, ins->fields.data[i], buff, outer, repr);
