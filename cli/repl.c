@@ -59,17 +59,6 @@ static inline bool is_str_empty(const char* line) {
   return true;
 }
 
-// Returns true if the string contains EOF, used to stop REPL in case
-// input contains EOF.
-static inline bool contains_eof(const char* line) {
-  ASSERT(line != NULL, OOPS);
-
-  for (const char* c = line; *c != '\0'; c++) {
-    if (*c == EOF) return true;
-  }
-  return false;
-}
-
 // The main loop of the REPL. Will return the exit code.
 int repl(PKVM* vm, const PkCompileOptions* options) {
 
@@ -107,7 +96,7 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
     bool is_empty = is_str_empty((const char*)line.data);
 
     // If the line contains EOF, REPL should be stopped.
-    if (contains_eof((const char*)line.data)) {
+    if (line.count >= 2 && *((char*)(line.data) + line.count -2) == EOF) {
       fprintf(stdout, "\n");
       break;
     }
