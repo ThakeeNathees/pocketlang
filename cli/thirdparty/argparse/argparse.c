@@ -101,11 +101,22 @@ argparse_getvalue(struct argparse *self, const struct argparse_option *opt,
     case ARGPARSE_OPT_FLOAT:
         errno = 0;
         if (self->optvalue) {
+// -- pocketlang start --
+// Not sure why but tcc cause an error "tcc: error: undefined symbol 'strtof'".
+#if defined(__TINYC__)
+            *(float*)opt->value = (float)strtod(self->optvalue, (char**)&s);
+#else
             *(float *)opt->value = strtof(self->optvalue, (char **)&s);
+#endif
             self->optvalue       = NULL;
         } else if (self->argc > 1) {
             self->argc--;
+#if defined(__TINYC__)
+            *(float*)opt->value = (float)strtod(*++self->argv, (char**)&s);
+#else
             *(float *)opt->value = strtof(*++self->argv, (char **)&s);
+#endif
+// -- pocketlang end --
         } else {
             argparse_error(self, opt, "requires a value", flags);
         }
@@ -278,10 +289,10 @@ unknown:
     }
 
 end:
-/* Modified By : https://www.github.com/ThakeeNathees */
+// -- pocketlang start --
     memmove((void*)(self->out + self->cpidx), (void*)(self->argv),
             self->argc * sizeof(*self->out));
-/* -------------------------------------------------- */
+// -- pocketlang end --
     self->out[self->cpidx + self->argc] = NULL;
 
     return self->cpidx + self->argc;
@@ -302,9 +313,9 @@ argparse_usage(struct argparse *self)
     if (self->description)
         fprintf(stdout, "%s\n", self->description);
 
-/* Modified By : https://www.github.com/ThakeeNathees */
+// -- pocketlang start --
 //    fputc('\n', stdout);
-/* -------------------------------------------------- */
+// -- pocketlang end --
 
     const struct argparse_option *options;
 
