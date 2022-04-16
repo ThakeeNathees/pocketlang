@@ -5,8 +5,7 @@
  */
 
 #include "internal.h"
-#include "modules.h"
-
+#include "modules/modules.h"
 #include "thirdparty/argparse/argparse.h"
 
 // FIXME: Everything below here is temporary and for testing.

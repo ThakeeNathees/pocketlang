@@ -4,76 +4,6 @@
  *  Distributed Under The MIT License
  */
 
-#include "modules.h"
-
-// Note: Everything here is for testing the native API, and will have to
-//       refactor everything.
-
-// Allocate a new module object of type [Ty].
-#define NEW_OBJ(Ty) (Ty*)malloc(sizeof(Ty))
-
-// Dellocate module object, allocated by NEW_OBJ(). Called by the freeObj
-// callback.
-#define FREE_OBJ(ptr) free(ptr)
-
-void initObj(Obj* obj, ObjType type) {
-  obj->type = type;
-}
-
-void objGetAttrib(PKVM* vm, void* instance, uint32_t id, PkStringPtr attrib) {
-  Obj* obj = (Obj*)instance;
-  ASSERT(obj->type == (ObjType)id, OOPS);
-
-  if (obj->type == OBJ_FILE) {
-    File* file = (File*)obj;
-    if (strcmp(attrib.string, "closed") == 0) {
-      pkReturnBool(vm, file->closed);
-      return;
-    }
-  }
-
-  return; // Attribute not found.
-}
-
-bool objSetAttrib(PKVM* vm, void* instance, uint32_t id, PkStringPtr attrib) {
-  Obj* obj = (Obj*)instance;
-  ASSERT(obj->type == (ObjType)id, OOPS);
-
-  if (obj->type == OBJ_FILE) {
-    File* file = (File*)obj;
-    // Nothing to change.
-  }
-
-  return false;
-}
-
-void freeObj(PKVM* vm, void* instance, uint32_t id) {
-  Obj* obj = (Obj*)instance;
-  ASSERT(obj->type == (ObjType)id, OOPS);
-
-  // If the file isn't closed, close it to flush it's buffer.
-  if (obj->type == OBJ_FILE) {
-    File* file = (File*)obj;
-    if (!file->closed) {
-      if (fclose(file->fp) != 0) { /* TODO: error! */ }
-      file->closed = true;
-    }
-  }
-
-  FREE_OBJ(obj);
-}
-
-const char* getObjName(uint32_t id) {
-  switch ((ObjType)id) {
-    case OBJ_FILE: return "File";
-  }
-  return NULL;
-}
-
-/*****************************************************************************/
-/* PATH MODULE                                                               */
-/*****************************************************************************/
-
 #include "thirdparty/cwalk/cwalk.h"
 #if defined(_WIN32) && (defined(_MSC_VER) || defined(__TINYC__))
   #include "thirdparty/dirent/dirent.h"
@@ -95,7 +25,7 @@ const char* getObjName(uint32_t id) {
 #define MAX_JOIN_PATHS 8
 
 /*****************************************************************************/
-/* PUBLIC FUNCTIONS                                                          */
+/* PATH SHARED FUNCTIONS                                                     */
 /*****************************************************************************/
 
 bool pathIsAbsolute(const char* path) {
@@ -157,7 +87,7 @@ static inline size_t pathAbs(const char* path, char* buff, size_t buff_size) {
 }
 
 /*****************************************************************************/
-/* PATH MODULES FUNCTIONS                                                    */
+/* PATH MODULE FUNCTIONS                                                     */
 /*****************************************************************************/
 
 static void _pathSetStyleUnix(PKVM* vm) {
@@ -304,129 +234,4 @@ void registerModulePath(PKVM* vm) {
   pkModuleAddFunction(vm, path, "isdir",     _pathIsDir,        1);
 
   pkReleaseHandle(vm, path);
-}
-
-/*****************************************************************************/
-/* FILE MODULE                                                               */
-/*****************************************************************************/
-
-static void _fileOpen(PKVM* vm) {
-
-  int argc = pkGetArgc(vm);
-  if (!pkCheckArgcRange(vm, argc, 1, 2)) return;
-
-  const char* path;
-  if (!pkGetArgString(vm, 1, &path, NULL)) return;
-
-  const char* mode_str = "r";
-  FileAccessMode mode = FMODE_READ;
-
-  if (argc == 2) {
-    if (!pkGetArgString(vm, 2, &mode_str, NULL)) return;
-
-    // Check if the mode string is valid, and update the mode value.
-    do {
-      if (strcmp(mode_str, "r")  == 0) { mode = FMODE_READ;       break; }
-      if (strcmp(mode_str, "w")  == 0) { mode = FMODE_WRITE;      break; }
-      if (strcmp(mode_str, "a")  == 0) { mode = FMODE_APPEND;     break; }
-      if (strcmp(mode_str, "r+") == 0) { mode = FMODE_READ_EXT;   break; }
-      if (strcmp(mode_str, "w+") == 0) { mode = FMODE_WRITE_EXT;  break; }
-      if (strcmp(mode_str, "a+") == 0) { mode = FMODE_APPEND_EXT; break; }
-
-      // TODO: (fmt, ...) va_arg for runtime error public api.
-      // If we reached here, that means it's an invalid mode string.
-      pkSetRuntimeError(vm, "Invalid mode string.");
-      return;
-    } while (false);
-  }
-
-  FILE* fp = fopen(path, mode_str);
-
-  if (fp != NULL) {
-    File* file = NEW_OBJ(File);
-    initObj(&file->_super, OBJ_FILE);
-    file->fp = fp;
-    file->mode = mode;
-    file->closed = false;
-
-    pkReturnInstNative(vm, (void*)file, OBJ_FILE);
-
-  } else {
-    pkReturnNull(vm);
-  }
-}
-
-static void _fileRead(PKVM* vm) {
-  File* file;
-  if (!pkGetArgInst(vm, 1, OBJ_FILE, (void**)&file)) return;
-
-  if (file->closed) {
-    pkSetRuntimeError(vm, "Cannot read from a closed file.");
-    return;
-  }
-
-  if ((file->mode != FMODE_READ) && ((_FMODE_EXT & file->mode) == 0)) {
-    pkSetRuntimeError(vm, "File is not readable.");
-    return;
-  }
-
-  // TODO: this is temporary.
-  char buff[2048];
-  fread((void*)buff, sizeof(char), sizeof(buff), file->fp);
-  pkReturnString(vm, (const char*)buff);
-}
-
-static void _fileWrite(PKVM* vm) {
-  File* file;
-  const char* text; uint32_t length;
-  if (!pkGetArgInst(vm, 1, OBJ_FILE, (void**)&file)) return;
-  if (!pkGetArgString(vm, 2, &text, &length)) return;
-
-  if (file->closed) {
-    pkSetRuntimeError(vm, "Cannot write to a closed file.");
-    return;
-  }
-
-  if ((file->mode != FMODE_WRITE) && ((_FMODE_EXT & file->mode) == 0)) {
-    pkSetRuntimeError(vm, "File is not writable.");
-    return;
-  }
-
-  fwrite(text, sizeof(char), (size_t)length, file->fp);
-}
-
-static void _fileClose(PKVM* vm) {
-  File* file;
-  if (!pkGetArgInst(vm, 1, OBJ_FILE, (void**)&file)) return;
-
-  if (file->closed) {
-    pkSetRuntimeError(vm, "File already closed.");
-    return;
-  }
-
-  if (fclose(file->fp) != 0) {
-    pkSetRuntimeError(vm, "fclose() failed!\n"                     \
-                      "  at " __FILE__ ":" STRINGIFY(__LINE__) ".");
-  }
-  file->closed = true;
-}
-
-void registerModuleFile(PKVM* vm) {
-  PkHandle* file = pkNewModule(vm, "File");
-
-  pkModuleAddFunction(vm, file, "open",  _fileOpen, -1);
-  pkModuleAddFunction(vm, file, "read",  _fileRead,  1);
-  pkModuleAddFunction(vm, file, "write", _fileWrite, 2);
-  pkModuleAddFunction(vm, file, "close", _fileClose, 1);
-
-  pkReleaseHandle(vm, file);
-}
-
-/*****************************************************************************/
-/* REGISTER MODULES                                                          */
-/*****************************************************************************/
-
-void registerModules(PKVM* vm) {
-  registerModuleFile(vm);
-  registerModulePath(vm);
 }

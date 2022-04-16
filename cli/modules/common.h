@@ -4,16 +4,8 @@
  *  Distributed Under The MIT License
  */
 
-// A collection of reusable macros that pocketlang use. This file doesn't have
-// any dependencies, you can just drag and drop this file in your project if
-// you want to use these macros.
-
 #ifndef PK_COMMON_H
 #define PK_COMMON_H
-
-#ifndef __has_builtin
-  #define __has_builtin(x) 0
-#endif
 
 #include <stdio.h> //< Only needed here for ASSERT() macro and for release mode
                    //< TODO; macro use this to print a crash report.

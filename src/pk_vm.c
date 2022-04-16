@@ -1664,5 +1664,6 @@ L_vm_main_loop:
 
   }
 
-  UNREACHABLE(); //return PK_RESULT_SUCCESS;
+  UNREACHABLE();
+  return PK_RESULT_RUNTIME_ERROR;
 }

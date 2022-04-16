@@ -8,21 +8,11 @@
 
 import os, sys, re
 from os import listdir
-from os.path import join, abspath, dirname, relpath
+from os.path import join, abspath, dirname, relpath, normpath
 
 ## The absolute path of this file, when run as a script.
 ## This file is not intended to be included in other files at the moment.
 THIS_PATH = abspath(dirname(__file__))
-
-## Converts a list of relative paths from the working directory
-## to a list of relative paths from this file's absolute directory.
-def to_abs_paths(sources):
-  return map(lambda s: os.path.join(THIS_PATH, s), sources)
-
-## Converts the path from absolute path to relative path from the
-## toplelve of the project.
-def to_rel_path(path):
-  return relpath(path, join(THIS_PATH, '..'))
 
 ## A list of source files, to check if the fnv1a hash values match it's
 ## corresponding cstring in the CASE_ATTRIB(name, hash) macro calls.
@@ -37,13 +27,20 @@ CHECK_EXTENTIONS = ('.c', '.h', '.py', '.pk', '.js')
 
 ## A list of strings, if a line contains it we allow it to be longer than
 ## 79 characters, It's not "the correct way" but it works.
-ALLOW_LONG = ('http://', 'https://', '<script ', '<link ', '<svg ')
+ALLOW_LONG_LINES = ('http://', 'https://', '<script ', '<link ', '<svg ')
+
+## A list of files that are allowed to be longer than 79 characters.
+ALLOW_LONG_FILES = (
+  "../cli/native.py",
+  "../cli/modules/pknative.gen.c",
+)
 
 ## A list of directory, contains C source files to perform static checks.
 ## This will include all files with extension from CHECK_EXTENTIONS.
 SOURCE_DIRS = [
   "../src/",
   "../cli/",
+  "../cli/modules/",
 
   "../docs/",
   "../docs/wasm/",
@@ -52,6 +49,16 @@ SOURCE_DIRS = [
 ## This global variable will be set to true if any check failed.
 checks_failed = False
 
+## Converts a list of relative paths from the working directory
+## to a list of relative paths from this file's absolute directory.
+def to_abs_paths(sources):
+  return map(lambda s: os.path.join(THIS_PATH, s), sources)
+
+## Converts the path from absolute path to relative path from the
+## toplelve of the project.
+def to_rel_path(path):
+  return relpath(path, join(THIS_PATH, '..'))
+  
 def main():
   check_fnv1_hash(to_abs_paths(HASH_CHECK_LIST))
   check_static(to_abs_paths(SOURCE_DIRS))
@@ -90,7 +97,8 @@ def check_static(dirs):
       if not file.endswith(CHECK_EXTENTIONS): continue
       if os.path.isdir(join(dir, file)): continue
       
-      fp = open(join(dir, file), 'r')
+      curr_file = normpath(join(dir, file))
+      fp = open(curr_file, 'r')
       
       ## Path of the file relative to top-level.
       file_path = to_rel_path(join(dir, file))
@@ -112,8 +120,15 @@ def check_static(dirs):
             
         if len(line) >= 80:
           skip = False
-          for ignore in ALLOW_LONG:
-            if ignore in line: skip = True; break
+          for ignore in ALLOW_LONG_LINES:
+            if ignore in line:
+              skip = True
+              break
+          for ignore in ALLOW_LONG_FILES:
+            ## TODO: the bellow normpath(join()) should be calcuated once.
+            if curr_file == normpath(join(THIS_PATH, ignore)):
+              skip = True
+              break
           if skip: continue
           
           _location = location(file_path, line_no)
