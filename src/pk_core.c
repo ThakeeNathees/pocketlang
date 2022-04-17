@@ -51,6 +51,14 @@ PkHandle* pkNewModule(PKVM* vm, const char* name) {
   return vmNewHandle(vm, VAR_OBJ(module));
 }
 
+void pkRegisterModule(PKVM* vm, PkHandle* module) {
+  ASSERT(module != NULL, "Argument module was NULL.");
+  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
+         "Given handle is not a module.");
+  Module* module_ = (Module*)AS_OBJ(module->value);
+  vmRegisterModule(vm, module_, module_->name);
+}
+
 void pkModuleAddGlobal(PKVM* vm, PkHandle* module,
                                  const char* name, PkHandle* value) {
   ASSERT(module != NULL, "Argument module was NULL.");
@@ -413,17 +421,12 @@ static inline bool validateCond(PKVM* vm, bool condition, const char* err) {
 
 static void initializeBuiltinFunctions(PKVM* vm);
 static void initializeCoreModules(PKVM* vm);
+static void initializePrimitiveClasses(PKVM* vm);
 
 void initializeCore(PKVM* vm) {
   initializeBuiltinFunctions(vm);
   initializeCoreModules(vm);
-}
-
-Module* getCoreLib(const PKVM* vm, String* name) {
-  Var lib = mapGet(vm->core_libs, VAR_OBJ(name));
-  if (IS_UNDEF(lib)) return NULL;
-  ASSERT(IS_OBJ_TYPE(lib, OBJ_MODULE), OOPS);
-  return (Module*)AS_OBJ(lib);
+  initializePrimitiveClasses(vm);
 }
 
 /*****************************************************************************/
@@ -805,18 +808,15 @@ static Module* newModuleInternal(PKVM* vm, const char* name) {
 
   // Check if any module with the same name already exists and assert to the
   // hosting application.
-  if (!IS_UNDEF(mapGet(vm->core_libs, VAR_OBJ(_name)))) {
+  if (vmGetModule(vm, _name) != NULL) {
     ASSERT(false, stringFormat(vm,
            "A module named '$' already exists", name)->data);
   }
 
-  Module* module = newModule(vm, _name, true);
+  Module* module = newModule(vm);
+  module->name = _name;
+  module->initialized = true;
   vmPopTempRef(vm); // _name
-
-  // Add the module to core_libs.
-  vmPushTempRef(vm, &module->_super); // module.
-  mapSet(vm, vm->core_libs, VAR_OBJ(_name), VAR_OBJ(module));
-  vmPopTempRef(vm); // module.
 
   return module;
 }
@@ -905,6 +905,8 @@ DEF(stdLangWrite,
   }
 }
 
+// TODO: Move math to cli as it's not part of the pocketlang core.
+//
 // 'math' library methods.
 // -----------------------
 
@@ -1155,7 +1157,13 @@ static void initializeCoreModules(PKVM* vm) {
 #define MODULE_ADD_FN(module, name, fn, argc) \
   moduleAddFunctionInternal(vm, module, name, fn, argc, DOCSTRING(fn))
 
-  Module* lang = newModuleInternal(vm, "lang");
+#define NEW_MODULE(module, name_string)                \
+  Module* module = newModuleInternal(vm, name_string); \
+  vmPushTempRef(vm, &module->_super); /* module */     \
+  vmRegisterModule(vm, module, module->name);          \
+  vmPopTempRef(vm) /* module */
+
+  NEW_MODULE(lang, "lang");
   MODULE_ADD_FN(lang, "clock", stdLangClock,  0);
   MODULE_ADD_FN(lang, "gc",    stdLangGC,     0);
   MODULE_ADD_FN(lang, "disas", stdLangDisas,  1);
@@ -1164,7 +1172,7 @@ static void initializeCoreModules(PKVM* vm) {
   MODULE_ADD_FN(lang, "debug_break", stdLangDebugBreak, 0);
 #endif
 
-  Module* math = newModuleInternal(vm, "math");
+  NEW_MODULE(math, "math");
   MODULE_ADD_FN(math, "floor",  stdMathFloor,      1);
   MODULE_ADD_FN(math, "ceil",   stdMathCeil,       1);
   MODULE_ADD_FN(math, "pow",    stdMathPow,        2);
@@ -1189,17 +1197,26 @@ static void initializeCoreModules(PKVM* vm) {
   // modify the PI, like in python.
   moduleAddGlobal(vm, math, "PI", 2, VAR_NUM(M_PI));
 
-  Module* fiber = newModuleInternal(vm, "Fiber");
+  NEW_MODULE(fiber, "Fiber");
   MODULE_ADD_FN(fiber, "new",    stdFiberNew,     1);
   MODULE_ADD_FN(fiber, "run",    stdFiberRun,    -1);
   MODULE_ADD_FN(fiber, "resume", stdFiberResume, -1);
 
 #undef MODULE_ADD_FN
+#undef NEW_MODULE
 }
 
 #undef IS_NUM_BYTE
 #undef DOCSTRING
 #undef DEF
+
+/*****************************************************************************/
+/* PRIMITIVE TYPES CLASS                                                     */
+/*****************************************************************************/
+
+static void initializePrimitiveClasses(PKVM* vm) {
+  // TODO
+}
 
 /*****************************************************************************/
 /* OPERATORS                                                                 */

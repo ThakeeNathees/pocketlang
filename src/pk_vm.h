@@ -105,17 +105,22 @@ struct PKVM {
   // a new module is being imported and compiled at compiletime.
   Compiler* compiler;
 
-  // A cache of the compiled modules with their path as key and the Scrpit
-  // object as the value.
+  // A map of all the modules which are compiled or natively registered.
+  // The key of the modules will be:
+  // 1. Native modules  : name of the module.
+  // 2. Compiled script :
+  //      - module name if one defined with the module keyword
+  //      - otherwise path of the module.
   Map* modules;
-
-  // A map of core libraries with their name as the key and the Module object
-  // as the value.
-  Map* core_libs;
 
   // Array of all builtin functions.
   Closure* builtins[BUILTIN_FN_CAPACITY];
   int builtins_count;
+
+  // An array of all the primitive types' class except for OBJ_INST. Since the
+  // type of the objects are enums starting from 0 we can directly get the
+  // class by using their enum (ex: primitives[OBJ_LIST]).
+  Class* primitives[(int)OBJ_INST];
 
   // Current fiber.
   Fiber* fiber;
@@ -183,9 +188,14 @@ void vmPushTempRef(PKVM* vm, Object* obj);
 // Pop the top most object from temporary reference stack.
 void vmPopTempRef(PKVM* vm);
 
-// Returns the module with the resolved [path] (also the key) in the VM's
-// modules cache. If not found itll return NULL.
-Module* vmGetModule(PKVM* vm, String* path);
+// Regsiter a module to the VM's modules map, the key could be either it's
+// name (for core module) or it's path (if it's a compiled script). If the
+// key doesn't match either of it's name or path an assertion will fail.
+void vmRegisterModule(PKVM* vm, Module* module, String* key);
+
+// Returns the module, where the [key] could be either it's name or path that
+// was used to register the module. If it doesn't exists, returns NULL.
+Module* vmGetModule(PKVM* vm, String* key);
 
 // ((Context switching - start))
 // Prepare a new fiber for execution with the given arguments. That can be used

@@ -69,8 +69,13 @@ PKVM* pkNewVM(PkConfiguration* config) {
   vm->heap_fill_percent = HEAP_FILL_PERCENT;
 
   vm->modules = newMap(vm);
-  vm->core_libs = newMap(vm);
   vm->builtins_count = 0;
+
+  // This is necessary to prevent garbage collection skip the entry in this
+  // array while we're building it.
+  for (int i = 0; i < OBJ_INST; i++) {
+    vm->primitives[i] = NULL;
+  }
 
   initializeCore(vm);
   return vm;
@@ -132,21 +137,23 @@ void pkReleaseHandle(PKVM* vm, PkHandle* handle) {
 PkResult pkInterpretSource(PKVM* vm, PkStringPtr source, PkStringPtr path,
                            const PkCompileOptions* options) {
 
-  String* path_name = newString(vm, path.string);
+  String* path_ = newString(vm, path.string);
   if (path.on_done) path.on_done(vm, path);
-  vmPushTempRef(vm, &path_name->_super); // path_name.
+  vmPushTempRef(vm, &path_->_super); // path_
 
-  // TODO: Should I clean the module if it already exists before compiling it?
+  // FIXME:
+  // Should I clean the module if it already exists before compiling it?
 
   // Load a new module to the vm's modules cache.
-  Module* module = vmGetModule(vm, path_name);
+  Module* module = vmGetModule(vm, path_);
   if (module == NULL) {
-    module = newModule(vm, path_name, false);
+    module = newModule(vm);
+    module->path = path_;
     vmPushTempRef(vm, &module->_super); // module.
-    mapSet(vm, vm->modules, VAR_OBJ(path_name), VAR_OBJ(module));
+    vmRegisterModule(vm, module, path_);
     vmPopTempRef(vm); // module.
   }
-  vmPopTempRef(vm); // path_name.
+  vmPopTempRef(vm); // path_
 
   // Compile the source.
   PkResult result = compile(vm, module, source.string, options);
@@ -241,8 +248,17 @@ void vmPopTempRef(PKVM* vm) {
   vm->temp_reference_count--;
 }
 
-Module* vmGetModule(PKVM* vm, String* path) {
-  Var module = mapGet(vm->modules, VAR_OBJ(path));
+void vmRegisterModule(PKVM* vm, Module* module, String* key) {
+  ASSERT((((module->name != NULL) && IS_STR_EQ(module->name, key)) ||
+         IS_STR_EQ(module->path, key)), OOPS);
+  // FIXME:
+  // Not sure what to do, if a module the the same key already exists. Should
+  // I override or assert.
+  mapSet(vm, vm->modules, VAR_OBJ(key), VAR_OBJ(module));
+}
+
+Module* vmGetModule(PKVM* vm, String* key) {
+  Var module = mapGet(vm->modules, VAR_OBJ(key));
   if (IS_UNDEF(module)) return NULL;
   ASSERT(AS_OBJ(module)->type == OBJ_MODULE, OOPS);
   return (Module*)AS_OBJ(module);
@@ -254,13 +270,25 @@ void vmCollectGarbage(PKVM* vm) {
   // required to know the size of each object that'll be freeing.
   vm->bytes_allocated = 0;
 
-  // Mark the core libs and builtin functions.
-  markObject(vm, &vm->core_libs->_super);
+  // Mark builtin functions.
   for (int i = 0; i < vm->builtins_count; i++) {
     markObject(vm, &vm->builtins[i]->_super);
   }
 
-  // Mark the modules cache.
+  // Mark primitive types' classes.
+  for (int i = 0; i < (int)OBJ_INST; i++) {
+    // Upvalue and functions aren't first class objects and they doesn't
+    // require classes.
+    if (i == OBJ_UPVALUE || i == OBJ_FUNC) continue;
+
+    // It's possible that a garbage collection could be triggered while we're
+    // building the primitives and the class could be NULL.
+    if (vm->primitives[i] == NULL) continue;
+
+    markObject(vm, &vm->primitives[i]->_super);
+  }
+
+  // Mark the modules.
   markObject(vm, &vm->modules->_super);
 
   // Mark temp references.
@@ -450,14 +478,9 @@ static void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
 //
 // Import and return the Module object with the [name] (if it's a scirpt
 // doesn't have a module name, the name would be it's resolved path).
-static inline Var importModule(PKVM* vm, String* name) {
+static inline Var importModule(PKVM* vm, String* key) {
 
-  // Check in the core libs.
-  Module* module = getCoreLib(vm, name);
-  if (module != NULL) return VAR_OBJ(module);
-
-  // Check in the modules cache.
-  Var entry = mapGet(vm->modules, VAR_OBJ(name));
+  Var entry = mapGet(vm->modules, VAR_OBJ(key));
   if (!IS_UNDEF(entry)) {
     ASSERT(AS_OBJ(entry)->type == OBJ_MODULE, OOPS);
     return entry;
@@ -1005,7 +1028,9 @@ L_vm_main_loop:
 
     OPCODE(IMPORT):
     {
-      String* name = module->names.data[READ_SHORT()];
+      uint16_t index = READ_SHORT();
+      String* name = moduleGetStringAt(module, (int)index);
+      ASSERT(name != NULL, OOPS);
 
       Var _imported = importModule(vm, name);
       ASSERT(IS_OBJ_TYPE(_imported, OBJ_MODULE), OOPS);
@@ -1332,7 +1357,8 @@ L_vm_main_loop:
     OPCODE(GET_ATTRIB):
     {
       Var on = PEEK(-1); // Don't pop yet, we need the reference for gc.
-      String* name = module->names.data[READ_SHORT()];
+      String* name = moduleGetStringAt(module, READ_SHORT());
+      ASSERT(name != NULL, OOPS);
       Var value = varGetAttrib(vm, on, name);
       DROP(); // on
       PUSH(value);
@@ -1344,7 +1370,8 @@ L_vm_main_loop:
     OPCODE(GET_ATTRIB_KEEP):
     {
       Var on = PEEK(-1);
-      String* name = module->names.data[READ_SHORT()];
+      String* name = moduleGetStringAt(module, READ_SHORT());
+      ASSERT(name != NULL, OOPS);
       PUSH(varGetAttrib(vm, on, name));
       CHECK_ERROR();
       DISPATCH();
@@ -1354,7 +1381,8 @@ L_vm_main_loop:
     {
       Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
       Var on = PEEK(-2);    // Don't pop yet, we need the reference for gc.
-      String* name = module->names.data[READ_SHORT()];
+      String* name = moduleGetStringAt(module, READ_SHORT());
+      ASSERT(name != NULL, OOPS);
       varSetAttrib(vm, on, name, value);
 
       DROP(); // value

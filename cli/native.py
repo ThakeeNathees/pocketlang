@@ -18,6 +18,7 @@ PK_API = "pk_api"
 PK_API_TYPE = "PkNativeApi"
 API_DEF = f'''\
 static {PK_API_TYPE} {PK_API};
+
 void pkInitApi({PK_API_TYPE}* api) {{%s
 }}
 '''

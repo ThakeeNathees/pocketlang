@@ -13,10 +13,6 @@
 // Initialize core language, builtin function and core libs.
 void initializeCore(PKVM* vm);
 
-// Return the core library with the [name] if exists in the core libs,
-// otherwise returns NULL.
-Module* getCoreLib(const PKVM* vm, String* name);
-
 /*****************************************************************************/
 /* OPERATORS                                                                 */
 /*****************************************************************************/

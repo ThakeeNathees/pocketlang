@@ -209,7 +209,7 @@ void pkByteBufferAddString(pkByteBuffer* self, PKVM* vm, const char* str,
 
 // Type enums of the pocketlang heap allocated types.
 typedef enum {
-  OBJ_STRING,
+  OBJ_STRING = 0,
   OBJ_LIST,
   OBJ_MAP,
   OBJ_RANGE,
@@ -219,7 +219,7 @@ typedef enum {
   OBJ_UPVALUE,
   OBJ_FIBER,
   OBJ_CLASS,
-  OBJ_INST,
+  OBJ_INST, // OBJ_INST should be the last element of this enums (don't move).
 } ObjectType;
 
 // Base struct for all heap allocated objects.
@@ -288,20 +288,10 @@ struct Module {
   // a moduel as well as classes.
   pkVarBuffer constants;
 
-  // All the variable names, globals name, attribute name etc, are stored in
-  // the [names] buffer. They can be stored in the constants but to make it
-  // more clear different between string literal and names they're stored in
-  // a different location.
-  pkStringBuffer names;
-
-  // TODO:
-  // Consider merging names and constants. Java's class file doesn't have
-  // a seperation between string literals and names in it's constant pool.
-
   // Globals is an array of global variables of the module. All the names
-  // (including global variables) are stored in the names buffer of the module
-  // (defined bellow). The (i)th global variables names is located at index (j)
-  // in the names buffer where j = global_names[i].
+  // (including global variables) are stored in the constant pool of the
+  // module. The (i)th global variable's names is located at index (j)
+  // in the constant pool where j = global_names[i].
   pkVarBuffer globals;
   pkUintBuffer global_names;
 
@@ -493,9 +483,8 @@ struct Class {
   // The module that owns this class.
   Module* owner;
 
-  // The index of the name of this class in the owner module's names
-  // buffer.
-  uint32_t name;
+  // Name of the class.
+  String* name;
 
   Closure* ctor; //< The constructor function.
   pkUintBuffer field_names; //< Buffer of field names.
@@ -525,11 +514,8 @@ struct Instance {
 /* "CONSTRUCTORS"                                                            */
 /*****************************************************************************/
 
-// Initialize the object with it's default value.
 void varInitObject(Object* self, PKVM* vm, ObjectType type);
 
-// Allocate new String object with from [text] with a given [length] and return
-// String*.
 String* newStringLength(PKVM* vm, const char* text, uint32_t length);
 
 // An inline function/macro implementation of newString(). Set below 0 to 1, to
@@ -547,32 +533,29 @@ String* newStringLength(PKVM* vm, const char* text, uint32_t length);
     (newStringLength(vm, text, (!(text)) ? 0 : (uint32_t)strlen(text)))
 #endif
 
-// Allocate new List and return List*.
 List* newList(PKVM* vm, uint32_t size);
 
-// Allocate new Map and return Map*.
 Map* newMap(PKVM* vm);
 
-// Allocate new Range object and return Range*.
 Range* newRange(PKVM* vm, double from, double to);
 
-// FIXME:
-// We may need 2 different constructor for native and script modules.
-Module* newModule(PKVM* vm, String* name, bool is_native);
+Module* newModule(PKVM* vm);
 
 // FIXME:
-// We may need 2 different constuctor for native and script functions.
-Function* newFunction(PKVM* vm, const char* name, int length, Module* owner,
+// The docstring should be allocated and stored in the module's constants
+// as a string if it's not a native function. (native function's docs are
+// C string liteals).
+//
+// Allocate a new function and return it.
+Function* newFunction(PKVM* vm, const char* name, int length,
+                      Module* owner,
                       bool is_native, const char* docstring,
                       int* fn_index);
 
-// Allocate a new closure object and return it.
 Closure* newClosure(PKVM* vm, Function* fn);
 
-// Allocate a new upvalue object for the [value] and return it.
 Upvalue* newUpvalue(PKVM* vm, Var* value);
 
-// Allocate new Fiber object for the [closure] and return Fiber*.
 Fiber* newFiber(PKVM* vm, Closure* closure);
 
 // FIXME:
@@ -689,10 +672,16 @@ bool fiberHasError(Fiber* fiber);
 // constant buffer and return it's index.
 uint32_t moduleAddConstant(PKVM* vm, Module* module, Var value);
 
-// Add the name (string literal) to the string buffer if not already exists and
-// return it's index in the buffer.
-uint32_t moduleAddName(Module* module, PKVM* vm, const char* name,
-                       uint32_t length);
+// Add a string literal to the module's constant buffer if not already exists
+// and return it. If the [index] isn't NULL, the index of the string will be
+// written on it.
+String* moduleAddString(Module* module, PKVM* vm, const char* name,
+                        uint32_t length, int* index);
+
+// Returns a string at the index of the module, if the index is invalid or the
+// constant at the index is not a string, it'll return NULL. (however if the
+// index is negative i'll fail an assertion).
+String* moduleGetStringAt(Module* module, int index);
 
 // Add a global [value] to the [module] and return its index.
 uint32_t moduleAddGlobal(PKVM* vm, Module* module,

@@ -133,14 +133,11 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         ASSERT_INDEX((uint32_t)cls_index, func->owner->constants.count);
         Var constant = func->owner->constants.data[cls_index];
         ASSERT(IS_OBJ_TYPE(constant, OBJ_CLASS), OOPS);
-        uint32_t name_ind = ((Class*)(AS_OBJ(constant)))->name;
-        ASSERT_INDEX(name_ind, func->owner->names.count);
-        String* cls_name = func->owner->names.data[name_ind];
 
         // Prints: %5d [Class:%s]\n
         PRINT_INT(cls_index);
         PRINT(" [Class:");
-        PRINT(cls_name->data);
+        PRINT(func->owner->name->data);
         PRINT("]\n");
         break;
       }
@@ -218,12 +215,10 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_STORE_GLOBAL:
       {
         int index = READ_BYTE();
-        int name_index = func->owner->global_names.data[index];
-        String* name = func->owner->names.data[name_index];
         // Prints: %5d '%s'\n
         PRINT_INT(index);
         PRINT(" '");
-        PRINT(name->data);
+        PRINT(func->owner->name->data);
         PRINT("'\n");
         break;
       }
@@ -273,7 +268,8 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_IMPORT:
       {
         int index = READ_SHORT();
-        String* name = func->owner->names.data[index];
+        String* name = moduleGetStringAt(func->owner, index);
+        ASSERT(name != NULL, OOPS);
         // Prints: %5d '%s'\n
         PRINT_INT(index);
         PRINT(" '");
@@ -330,7 +326,9 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_SET_ATTRIB:
       {
         int index = READ_SHORT();
-        String* name = func->owner->names.data[index];
+        String* name = moduleGetStringAt(func->owner, index);
+        ASSERT(name != NULL, OOPS);
+
         // Prints: %5d '%s'\n
         PRINT_INT(index);
         PRINT(" '");
@@ -397,7 +395,8 @@ void dumpGlobalValues(PKVM* vm) {
   Module* module = frame->closure->fn->owner;
 
   for (uint32_t i = 0; i < module->global_names.count; i++) {
-    String* name = module->names.data[module->global_names.data[i]];
+    String* name = moduleGetStringAt(module, module->global_names.data[i]);
+    ASSERT(name != NULL, OOPS);
     Var value = module->globals.data[i];
     printf("%10s = ", name->data);
     dumpValue(vm, value);

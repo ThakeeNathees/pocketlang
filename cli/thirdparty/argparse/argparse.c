@@ -102,7 +102,8 @@ argparse_getvalue(struct argparse *self, const struct argparse_option *opt,
         errno = 0;
         if (self->optvalue) {
 // -- pocketlang start --
-// Not sure why but tcc cause an error "tcc: error: undefined symbol 'strtof'".
+// tcc cause an error "tcc: error: undefined symbol 'strtof'" on Windows since
+// it depend on the libm. Maybe I should add _WIN32 marcro along with it.
 #if defined(__TINYC__)
             *(float*)opt->value = (float)strtod(self->optvalue, (char**)&s);
 #else

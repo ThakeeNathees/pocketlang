@@ -1931,8 +1931,9 @@ static void exprAttrib(Compiler* compiler) {
   int length = compiler->parser.previous.length;
 
   // Store the name in module's names buffer.
-  int index = moduleAddName(compiler->module, compiler->parser.vm,
-                            name, length);
+  int index = 0;
+  moduleAddString(compiler->module, compiler->parser.vm,
+                  name, length, &index);
 
   if (compiler->l_value && matchAssignment(compiler)) {
     TokenType assignment = compiler->parser.previous.type;
@@ -2319,12 +2320,14 @@ static void compileClass(Compiler* compiler) {
     const char* f_name = compiler->parser.previous.start;
     int f_len = compiler->parser.previous.length;
 
-    uint32_t f_index = moduleAddName(compiler->module, compiler->parser.vm,
-                                     f_name, f_len);
+    int f_index = 0;
+    String* new_name = moduleAddString(compiler->module, compiler->parser.vm,
+                                       f_name, f_len, &f_index);
 
-    String* new_name = compiler->module->names.data[f_index];
     for (uint32_t i = 0; i < cls->field_names.count; i++) {
-      String* prev = compiler->module->names.data[cls->field_names.data[i]];
+      String* prev = moduleGetStringAt(compiler->module,
+                                       cls->field_names.data[i]);
+      ASSERT(prev != NULL, OOPS);
       if (IS_STR_EQ(new_name, prev)) {
         parseError(compiler, "Class field with name '%s' already exists.",
                    new_name->data);
@@ -2519,13 +2522,15 @@ static Module* importFile(Compiler* compiler, const char* path) {
   }
 
   // Create new string for the resolved path. And free the resolved path.
-  int index = (int)moduleAddName(compiler->module, compiler->parser.vm,
-                           resolved.string, (uint32_t)strlen(resolved.string));
-  String* path_name = compiler->module->names.data[index];
+  int index = 0;
+  String* path_ = moduleAddString(compiler->module, compiler->parser.vm,
+                                      resolved.string,
+                                      (uint32_t)strlen(resolved.string),
+                                      &index);
   if (resolved.on_done != NULL) resolved.on_done(vm, resolved);
 
   // Check if the script already compiled and cached in the PKVM.
-  Var entry = mapGet(vm->modules, VAR_OBJ(path_name));
+  Var entry = mapGet(vm->modules, VAR_OBJ(path_));
   if (!IS_UNDEF(entry)) {
     ASSERT(IS_OBJ_TYPE(entry, OBJ_MODULE), OOPS);
 
@@ -2544,17 +2549,29 @@ static Module* importFile(Compiler* compiler, const char* path) {
   }
 
   // Load the script at the path.
-  PkStringPtr source = vm->config.load_script_fn(vm, path_name->data);
+  PkStringPtr source = vm->config.load_script_fn(vm, path_->data);
   if (source.string == NULL) {
-    parseError(compiler, "Error loading script at \"%s\"", path_name->data);
+    parseError(compiler, "Error loading script at \"%s\"", path_->data);
     return NULL;
   }
 
   // Make a new module and to compile it.
-  Module* module = newModule(vm, path_name, false);
-  vmPushTempRef(vm, &module->_super); // scr.
-  mapSet(vm, vm->modules, VAR_OBJ(path_name), VAR_OBJ(module));
-  vmPopTempRef(vm); // scr.
+  Module* module = newModule(vm);
+  module->path = path_;
+  vmPushTempRef(vm, &module->_super); // module.
+  {
+    moduleAddMain(vm, module);
+
+    // Add '__file__' variable with it's path as value. If the path starts with
+    // '@' It's a special file (@(REPL) or @(TRY)) and don't define __file__.
+    if (module->path->data[0] != SPECIAL_NAME_CHAR) {
+      moduleAddGlobal(vm, module, "__file__", 8, VAR_OBJ(module->path));
+    }
+    // TODO: Add ARGV to the module's globals.
+
+    vmRegisterModule(vm, module, path_);
+  }
+  vmPopTempRef(vm); // module.
 
   // Push the compiled script on the stack.
   emitOpcode(compiler, OP_IMPORT);
@@ -2572,7 +2589,7 @@ static Module* importFile(Compiler* compiler, const char* path) {
 
   if (result != PK_RESULT_SUCCESS) {
     parseError(compiler, "Compilation of imported script '%s' failed",
-               path_name->data);
+               path_->data);
   }
 
   return module;
@@ -2586,12 +2603,12 @@ static Module* importCoreLib(Compiler* compiler, const char* name_start,
 
   // Add the name to the module's name buffer, we need it as a key to the
   // PKVM's module cache.
-  int index = (int)moduleAddName(compiler->module, compiler->parser.vm,
-                                 name_start, name_length);
-  String* module_name = compiler->module->names.data[index];
+  int index = 0;
+  String* module_name = moduleAddString(compiler->module, compiler->parser.vm,
+                                        name_start, name_length, &index);
 
-  Var entry = mapGet(compiler->parser.vm->core_libs, VAR_OBJ(module_name));
-  if (IS_UNDEF(entry)) {
+  Module* imported = vmGetModule(compiler->parser.vm, module_name);
+  if (imported == NULL) {
     parseError(compiler, "No module named '%s' exists.", module_name->data);
     return NULL;
   }
@@ -2600,8 +2617,7 @@ static Module* importCoreLib(Compiler* compiler, const char* name_start,
   emitOpcode(compiler, OP_IMPORT);
   emitShort(compiler, index);
 
-  ASSERT(IS_OBJ_TYPE(entry, OBJ_MODULE), OOPS);
-  return (Module*)AS_OBJ(entry);
+  return imported;
 }
 
 // Push the imported module on the stack and return the pointer. It could be
@@ -2672,8 +2688,9 @@ static void compilerImportSingleEntry(Compiler* compiler,
   int line = compiler->parser.previous.line;
 
   // Add the name to the **current** module's name buffer.
-  int name_index = (int)moduleAddName(compiler->module, compiler->parser.vm,
-                                      name, length);
+  int name_index = 0;
+  moduleAddString(compiler->module, compiler->parser.vm,
+                  name, length, &name_index);
 
   // Get the global/function/class from the module.
   emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
@@ -2694,9 +2711,10 @@ static void compilerImportAll(Compiler* compiler, Module* module) {
   // Import all globals.
   ASSERT(module->global_names.count == module->globals.count, OOPS);
   for (uint32_t i = 0; i < module->globals.count; i++) {
-    ASSERT(module->global_names.data[i] < module->names.count, OOPS);
-    const String* name = module->names.data[module->global_names.data[i]];
-
+    String* name = moduleGetStringAt(module, module->global_names.data[i]);
+    ASSERT(name != NULL, OOPS);
+    // If a name starts with '_' we treat it as private and not importing.
+    if (name->length >= 1 && name->data[0] == '_') continue;
     compilerImportSingleEntry(compiler, name->data, name->length);
   }
 }
@@ -2726,9 +2744,9 @@ static void compileFromImport(Compiler* compiler) {
       int line = compiler->parser.previous.line;
 
       // Add the name of the symbol to the names buffer.
-      int name_index = (int)moduleAddName(compiler->module,
-                                          compiler->parser.vm,
-                                          name, length);
+      int name_index = 0;
+      moduleAddString(compiler->module, compiler->parser.vm,
+                      name, length, &name_index);
 
       // Don't pop the lib since it'll be used for the next entry.
       emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
@@ -3122,7 +3140,6 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
   // Remember the count of constants, names, and globals, If the compilation
   // failed discard all of them and roll back.
   uint32_t constants_count = module->constants.count;
-  uint32_t names_count = module->names.count;
   uint32_t globals_count = module->globals.count;
 
   Func curr_fn;
@@ -3184,7 +3201,6 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
   // If compilation failed, discard all the invalid functions and globals.
   if (compiler->parser.has_errors) {
     module->constants.count = constants_count;
-    module->names.count = names_count;
     module->globals.count = module->global_names.count = globals_count;
   }
 

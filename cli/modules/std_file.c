@@ -141,5 +141,6 @@ void registerModuleFile(PKVM* vm) {
   pkModuleAddFunction(vm, file, "write", _fileWrite, 2);
   pkModuleAddFunction(vm, file, "close", _fileClose, 1);
 
+  pkRegisterModule(vm, file);
   pkReleaseHandle(vm, file);
 }

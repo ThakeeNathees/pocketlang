@@ -233,5 +233,6 @@ void registerModulePath(PKVM* vm) {
   pkModuleAddFunction(vm, path, "isfile",    _pathIsFile,       1);
   pkModuleAddFunction(vm, path, "isdir",     _pathIsDir,        1);
 
+  pkRegisterModule(vm, path);
   pkReleaseHandle(vm, path);
 }

@@ -426,6 +426,10 @@ PK_PUBLIC PkHandle* pkNewMap(PKVM* vm);
 // already existed, otherwise an assertion will fail to indicate that.
 PK_PUBLIC PkHandle* pkNewModule(PKVM* vm, const char* name);
 
+// Register the module to the PKVM's modules map, once after it can be
+// imported in other modules.
+PK_PUBLIC void pkRegisterModule(PKVM* vm, PkHandle* module);
+
 // Create and return a new fiber around the function [fn].
 PK_PUBLIC PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn);
 
