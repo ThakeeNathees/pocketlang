@@ -18,7 +18,7 @@ assert(0xa1b2c3 == 10597059 and 0xff == 255)
 assert(0xffffffffffffffff == 18446744073709551615)
 
 ## Lists test.
-l1 = [1, false, null, func print('hello') end, true]
+l1 = [1, false, null, function print('hello') end, true]
 assert(l1[4])
 l1[3] = null; assert(!l1[3])
 l1 = [] + [] ; assert(l1.length == 0)
@@ -45,7 +45,7 @@ assert(math.ceil(1.1) == math.floor(2.9))
 
 ## Logical statement test
 val = 0; a = false; b = true
-get_true = func return true end
+get_true = function return true end
 if a and b then assert(false) end
 if a or b then val = 42 else assert(false) end assert(val == 42)
 if get_true() or false then val = 12 end assert(val == 12)

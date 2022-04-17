@@ -1,27 +1,27 @@
 
 ## If statements.
 variable = null ## Will be changed by the control flow.
-unreachable = func assert(false, 'Unreachable') end
+unreachable = function assert(false, 'Unreachable') end
 
 if true then variable = 42 else unreachable() end
 assert(variable == 42, 'If statement failed.')
 
 if false then unreachable()
-elsif true then variable = null
+else if true then variable = null
 else unreachable() end
 assert(variable == null)
 
 if false then unreachable()
-elsif false then unreachable()
-elsif false then unreachable()
+else if false then unreachable()
+else if false then unreachable()
 else variable = "changed" end
 assert(variable == "changed")
 
 if false then unreachable()
-elsif true
+else if true
   if false
     unreachable()
-  elsif true
+  else if true
     variable = 123
   else
     unreachable()
@@ -39,9 +39,9 @@ assert(variable == 1212)
 
 while true
 	variable = 22
-	if true then elsif false then end	
+	if true then else if false then end	
 	if false
-	elsif true
+	else if true
 		variable += 2300
 	end
 	variable += 1
@@ -54,6 +54,21 @@ for k in map
   sum += map[k]
 end
 assert(sum == 54)
+
+val = 2
+if val == 1 then val = null
+else if val == 2 then val = 'foo'
+else val = null
+end
+assert(val == 'foo')
+
+val = 2
+if val == 1 then val = null
+else
+  if val == 2 then val = 'bar'
+	end ##< Need an extra end since 'else if' != 'else \n if'.
+end
+assert(val == 'bar')
 
 
 # If we got here, that means all test were passed.

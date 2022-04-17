@@ -115,7 +115,7 @@ typedef enum {
   TK_AS,         // as
   TK_DEF,        // def
   TK_NATIVE,     // native (C function declaration)
-  TK_FUNC,       // func (literal function)
+  TK_FUNCTION,   // function (literal function)
   TK_END,        // end
 
   TK_NULL,       // null
@@ -131,7 +131,6 @@ typedef enum {
   TK_WHILE,      // while
   TK_FOR,        // for
   TK_IF,         // if
-  TK_ELSIF,      // elsif
   TK_ELSE,       // else
   TK_BREAK,      // break
   TK_CONTINUE,   // continue
@@ -178,7 +177,7 @@ static _Keyword _keywords[] = {
   { "as",       2, TK_AS       },
   { "def",      3, TK_DEF      },
   { "native",   6, TK_NATIVE   },
-  { "func",     4, TK_FUNC     },
+  { "function", 8, TK_FUNCTION },
   { "end",      3, TK_END      },
   { "null",     4, TK_NULL     },
   { "in",       2, TK_IN       },
@@ -192,7 +191,6 @@ static _Keyword _keywords[] = {
   { "while",    5, TK_WHILE    },
   { "for",      3, TK_FOR      },
   { "if",       2, TK_IF       },
-  { "elsif",    5, TK_ELSIF    },
   { "else",     4, TK_ELSE     },
   { "break",    5, TK_BREAK    },
   { "continue", 8, TK_CONTINUE },
@@ -1180,8 +1178,7 @@ static void skipNewLines(Compiler* compiler) {
   matchLine(compiler);
 }
 
-// Match semi collon, multiple new lines or peek 'end', 'else', 'elsif'
-// keywords.
+// Match semi collon, multiple new lines or peek 'end', 'else' keywords.
 static bool matchEndStatement(Compiler* compiler) {
   if (match(compiler, TK_SEMICOLLON)) {
     skipNewLines(compiler);
@@ -1191,9 +1188,8 @@ static bool matchEndStatement(Compiler* compiler) {
     return true;
 
   // In the below statement we don't require any new lines or semicolons.
-  // 'if cond then stmnt1 elsif cond2 then stmnt2 else stmnt3 end'
-  if (peek(compiler) == TK_END || peek(compiler) == TK_ELSE ||
-      peek(compiler) == TK_ELSIF)
+  // 'if cond then stmnt1 else if cond2 then stmnt2 else stmnt3 end'
+  if (peek(compiler) == TK_END || peek(compiler) == TK_ELSE)
     return true;
 
   return false;
@@ -1433,7 +1429,7 @@ static void compileExpression(Compiler* compiler);
 
 static void exprLiteral(Compiler* compiler);
 static void exprInterpolation(Compiler* compiler);
-static void exprFunc(Compiler* compiler);
+static void exprFunction(Compiler* compiler);
 static void exprName(Compiler* compiler);
 
 static void exprOr(Compiler* compiler);
@@ -1509,7 +1505,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_AS         */   NO_RULE,
   /* TK_DEF        */   NO_RULE,
   /* TK_EXTERN     */   NO_RULE,
-  /* TK_FUNC       */ { exprFunc,      NULL,             NO_INFIX },
+  /* TK_FUNCTION   */ { exprFunction,  NULL,             NO_INFIX },
   /* TK_END        */   NO_RULE,
   /* TK_NULL       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_IN         */ { NULL,          exprBinaryOp,     PREC_TEST },
@@ -1523,7 +1519,6 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_WHILE      */   NO_RULE,
   /* TK_FOR        */   NO_RULE,
   /* TK_IF         */   NO_RULE,
-  /* TK_ELSIF      */   NO_RULE,
   /* TK_ELSE       */   NO_RULE,
   /* TK_BREAK      */   NO_RULE,
   /* TK_CONTINUE   */   NO_RULE,
@@ -1676,7 +1671,7 @@ static void exprInterpolation(Compiler* compiler) {
 
 }
 
-static void exprFunc(Compiler* compiler) {
+static void exprFunction(Compiler* compiler) {
   compileFunction(compiler, true);
 }
 
@@ -2489,8 +2484,8 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
   }
 
   TokenType next = peek(compiler);
-  while (!(next == TK_END || next == TK_EOF || (
-    (type == BLOCK_IF) && (next == TK_ELSE || next == TK_ELSIF)))) {
+  while (!(next == TK_END || next == TK_EOF ||
+          ((type == BLOCK_IF) && (next == TK_ELSE)))) {
 
     compileStatement(compiler);
     skipNewLines(compiler);
@@ -2849,7 +2844,7 @@ static void compileExpression(Compiler* compiler) {
   parsePrecedence(compiler, PREC_LOWEST);
 }
 
-static void compileIfStatement(Compiler* compiler, bool elsif) {
+static void compileIfStatement(Compiler* compiler, bool else_if) {
 
   skipNewLines(compiler);
   compileExpression(compiler); //< Condition.
@@ -2858,38 +2853,40 @@ static void compileIfStatement(Compiler* compiler, bool elsif) {
 
   compileBlockBody(compiler, BLOCK_IF);
 
-  if (match(compiler, TK_ELSIF)) {
+  if (match(compiler, TK_ELSE)) {
 
-    // Jump pass else.
-    emitOpcode(compiler, OP_JUMP);
-    int exit_jump = emitShort(compiler, 0xffff); //< Will be patched.
+    if (match(compiler, TK_IF)) { //< Compile 'else if'.
+      // Jump pass else.
+      emitOpcode(compiler, OP_JUMP);
+      int exit_jump = emitShort(compiler, 0xffff); //< Will be patched.
 
-    // if (false) jump here.
-    patchJump(compiler, ifpatch);
+      // if (false) jump here.
+      patchJump(compiler, ifpatch);
 
-    compilerEnterBlock(compiler);
-    compileIfStatement(compiler, true);
-    compilerExitBlock(compiler);
+      compilerEnterBlock(compiler);
+      compileIfStatement(compiler, true);
+      compilerExitBlock(compiler);
 
-    patchJump(compiler, exit_jump);
+      patchJump(compiler, exit_jump);
 
-  } else if (match(compiler, TK_ELSE)) {
+    } else { //< Compile 'else'.
 
-    // Jump pass else.
-    emitOpcode(compiler, OP_JUMP);
-    int exit_jump = emitShort(compiler, 0xffff); //< Will be patched.
+      // Jump pass else.
+      emitOpcode(compiler, OP_JUMP);
+      int exit_jump = emitShort(compiler, 0xffff); //< Will be patched.
 
-    patchJump(compiler, ifpatch);
-    compileBlockBody(compiler, BLOCK_ELSE);
-    patchJump(compiler, exit_jump);
+      patchJump(compiler, ifpatch);
+      compileBlockBody(compiler, BLOCK_ELSE);
+      patchJump(compiler, exit_jump);
+    }
 
   } else {
     patchJump(compiler, ifpatch);
   }
 
-  // elsif will not consume the 'end' keyword as it'll be leaved to be consumed
-  // by it's 'if'.
-  if (!elsif) {
+  // 'else if' will not consume the 'end' keyword as it'll be leaved to be
+  // consumed by it's 'if'.
+  if (!else_if) {
     skipNewLines(compiler);
     consume(compiler, TK_END, "Expected 'end' after statement end.");
   }
