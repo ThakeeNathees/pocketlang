@@ -26,7 +26,7 @@ assert([1, 2, 3].length == 3)
 ## Function
 assert(print.arity == -1)
 assert(hex.arity == 1)
-assert(func(a, b)end .arity == 2)
+assert(function(a, b)end .arity == 2)
 assert(print.name == "print")
 def fn(p1, p2, p3) end
 assert(fn.name == "fn")

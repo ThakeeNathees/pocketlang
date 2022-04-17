@@ -1,0 +1,32 @@
+
+## Multiply two matrices.
+
+## A is 3x3 matrix
+A = [[1, 2, 3],
+     [4, 5, 6],
+     [7, 8, 9]]
+     
+## B is 3x4 matrix.     
+B = [[4, 6, 3, 2],
+     [8, 7, 0, 2],
+     [6, 0, 9, 4]]
+     
+## Result is 3x4 matrix.
+R = [[0,0,0,0],
+     [0,0,0,0],
+     [0,0,0,0]]
+
+## Iterate through rows of A.
+for i in 0..(A.length)
+  ## Iterate through columns of B.
+  for j in 0..(B[0].length)
+    for k in 0..(B.length)
+        R[i][j] += A[i][k] * B[k][j]
+    end
+  end
+end
+
+for row in R
+  print(row)
+end
+

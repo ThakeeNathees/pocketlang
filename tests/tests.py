@@ -37,6 +37,7 @@ TEST_SUITE = {
     "examples/fib.pk",
     "examples/fizzbuzz.pk",
     "examples/helloworld.pk",
+    "examples/matrix.pk",
     "examples/pi.pk",
     "examples/prime.pk",
   ),
