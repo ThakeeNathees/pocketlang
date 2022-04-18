@@ -86,14 +86,6 @@ PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn) {
   return handle;
 }
 
-PkHandle* pkNewInstNative(PKVM* vm, void* data, uint32_t id) {
-  Instance* inst = newInstanceNative(vm, data, id);
-  vmPushTempRef(vm, &inst->_super); // inst
-  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(inst));
-  vmPopTempRef(vm); // inst
-  return handle;
-}
-
 /*****************************************************************************/
 /* VAR INTERNALS                                                             */
 /*****************************************************************************/
@@ -289,17 +281,14 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       markObject(vm, &cls->owner->_super);
       markObject(vm, &cls->ctor->_super);
       markObject(vm, &cls->name->_super);
-      vm->bytes_allocated += sizeof(uint32_t) * cls->field_names.capacity;
     } break;
 
     case OBJ_INST:
     {
       Instance* inst = (Instance*)obj;
-      if (!inst->is_native) {
-        Inst* ins = inst->ins;
-        vm->bytes_allocated += sizeof(Inst);
-        vm->bytes_allocated += sizeof(Var*) * ins->fields.capacity;
-      }
+      markObject(vm, &inst->attribs._super);
+      markObject(vm, &inst->cls->_super);
+      vm->bytes_allocated += sizeof(Instance);
     } break;
   }
 }
@@ -394,50 +383,6 @@ Module* newModule(PKVM* vm) {
   return module;
 }
 
-Function* newFunction(PKVM* vm, const char* name, int length,
-                      Module* owner,
-                      bool is_native, const char* docstring,
-                      int* fn_index) {
-
-  Function* func = ALLOCATE(vm, Function);
-  varInitObject(&func->_super, vm, OBJ_FUNC);
-
-  vmPushTempRef(vm, &func->_super); // func
-
-  func->owner = owner;
-  func->is_native = is_native;
-  func->upvalue_count = 0;
-  func->arity = -2; // -2 means un-initialized (TODO: make it as a macro).
-  func->docstring = docstring;
-
-  ASSERT(is_native || owner != NULL, OOPS);
-
-  // Only builtin function does't have an owner module.
-  if (is_native && owner == NULL) {
-    func->name = name;
-    func->native = NULL;
-
-  } else {
-    uint32_t _fn_index = moduleAddConstant(vm, owner, VAR_OBJ(func));
-    if (fn_index) *fn_index = _fn_index;
-    func->name = moduleAddString(owner, vm, name, length, NULL)->data;
-
-    if (is_native) {
-      func->native = NULL;
-
-    } else {
-      Fn* fn = ALLOCATE(vm, Fn);
-      pkByteBufferInit(&fn->opcodes);
-      pkUintBufferInit(&fn->oplines);
-      fn->stack_size = 0;
-      func->fn = fn;
-    }
-  }
-
-  vmPopTempRef(vm); // func
-  return func;
-}
-
 Closure* newClosure(PKVM* vm, Function* fn) {
   Closure* closure = ALLOCATE_DYNAMIC(vm, Closure,
                                       fn->upvalue_count, Upvalue*);
@@ -512,79 +457,94 @@ Fiber* newFiber(PKVM* vm, Closure* closure) {
   return fiber;
 }
 
-Class* newClass(PKVM* vm, Module* module, const char* name, uint32_t length,
-                int* cls_index, int* ctor_index) {
+Function* newFunction(PKVM* vm, const char* name, int length,
+                      Module* owner,
+                      bool is_native, const char* docstring,
+                      int* fn_index) {
+
+  Function* func = ALLOCATE(vm, Function);
+  varInitObject(&func->_super, vm, OBJ_FUNC);
+
+  vmPushTempRef(vm, &func->_super); // func
+
+  func->owner = owner;
+  func->is_native = is_native;
+  func->upvalue_count = 0;
+  func->arity = -2; // -2 means un-initialized (TODO: make it as a macro).
+  func->docstring = docstring;
+
+  ASSERT(is_native || owner != NULL, OOPS);
+
+  // Only builtin function does't have an owner module.
+  if (is_native && owner == NULL) {
+    func->name = name;
+    func->native = NULL;
+
+  } else {
+    uint32_t _fn_index = moduleAddConstant(vm, owner, VAR_OBJ(func));
+    if (fn_index) *fn_index = _fn_index;
+    func->name = moduleAddString(owner, vm, name, length, NULL)->data;
+
+    if (is_native) {
+      func->native = NULL;
+
+    } else {
+      Fn* fn = ALLOCATE(vm, Fn);
+      pkByteBufferInit(&fn->opcodes);
+      pkUintBufferInit(&fn->oplines);
+      fn->stack_size = 0;
+      func->fn = fn;
+    }
+  }
+
+  vmPopTempRef(vm); // func
+  return func;
+}
+
+Class* newClass(PKVM* vm, const char* name, int length,
+                Module* module, const char* docstring,
+                int* cls_index) {
 
   Class* cls = ALLOCATE(vm, Class);
   varInitObject(&cls->_super, vm, OBJ_CLASS);
 
   vmPushTempRef(vm, &cls->_super); // class.
-
-  uint32_t _cls_index = moduleAddConstant(vm, module, VAR_OBJ(cls));
-  if (cls_index) *cls_index = (int)_cls_index;
-
-  pkUintBufferInit(&cls->field_names);
-  cls->owner = module;
-  cls->name = moduleAddString(module, vm, name, length, NULL);
-
-  // Since characters '@' and '$' are special in stringFormat, and they
-  // currently cannot be escaped (TODO), a string (char array) created
-  // for that character and passed as C string format.
-  char special[2] = { SPECIAL_NAME_CHAR, '\0' };
-  String* ctor_name = stringFormat(vm, "$(Ctor:@)", special, cls->name);
-
-  // Constructor.
-  vmPushTempRef(vm, &ctor_name->_super); // ctor_name.
   {
-    Function* ctor_fn = newFunction(vm, ctor_name->data, ctor_name->length,
-                                    module, false, NULL, ctor_index);
-    vmPushTempRef(vm, &ctor_fn->_super); // ctor_fn.
-    cls->ctor = newClosure(vm, ctor_fn);
-    vmPopTempRef(vm); // ctor_fn.
-  }
-  vmPopTempRef(vm); // ctor_name.
+    cls->owner = module;
+    cls->docstring = docstring;
+    cls->super = NULL;
+    cls->ctor = NULL;
+    cls->newfn = NULL;
+    cls->distructor = NULL;
+    cls->getter = NULL;
+    cls->setter = NULL;
 
+    // This should be set by the caller (we're just initializing it to false).
+    cls->is_native = false;
+
+    // Primitive type's classes don't have modules.
+    if (module != NULL) {
+      cls->name = moduleAddString(module, vm, name, length, NULL);
+
+      int _cls_index = moduleAddConstant(vm, module, VAR_OBJ(cls));
+      if (cls_index) *cls_index = _cls_index;
+
+      moduleAddGlobal(vm, module, name, length, VAR_OBJ(cls));
+
+    } else { //< Primitive type.
+      cls->name = newStringLength(vm, name, (uint32_t)length);
+    }
+  }
   vmPopTempRef(vm); // class.
+
   return cls;
 }
 
-Instance* newInstance(PKVM* vm, Class* cls, bool initialize) {
-
+Instance* newInstance(PKVM* vm, Class* cls) {
   Instance* inst = ALLOCATE(vm, Instance);
   varInitObject(&inst->_super, vm, OBJ_INST);
-
-  vmPushTempRef(vm, &inst->_super); // inst.
-
-  inst->ty_name = cls->name->data;
-  inst->is_native = false;
-
-  Inst* ins = ALLOCATE(vm, Inst);
-  inst->ins = ins;
-  ins->type = cls;
-  pkVarBufferInit(&ins->fields);
-
-  if (initialize && cls->field_names.count != 0) {
-    pkVarBufferFill(&ins->fields, vm, VAR_NULL, cls->field_names.count);
-  }
-
-  vmPopTempRef(vm); // inst.
-
-  return inst;
-}
-
-Instance* newInstanceNative(PKVM* vm, void* data, uint32_t id) {
-  Instance* inst = ALLOCATE(vm, Instance);
-  varInitObject(&inst->_super, vm, OBJ_INST);
-  inst->is_native = true;
-  inst->native_id = id;
-
-  if (vm->config.inst_name_fn != NULL) {
-    inst->ty_name = vm->config.inst_name_fn(id);
-  } else {
-    inst->ty_name = "$(?)";
-  }
-
-  inst->native = data;
+  inst->cls = cls;
+  inst->native = NULL;
   return inst;
 }
 
@@ -1067,7 +1027,7 @@ void freeObject(PKVM* vm, Object* self) {
 
     case OBJ_CLOSURE:
     case OBJ_UPVALUE:
-    break;
+      break;
 
     case OBJ_FIBER: {
       Fiber* fiber = (Fiber*)self;
@@ -1075,27 +1035,15 @@ void freeObject(PKVM* vm, Object* self) {
       DEALLOCATE(vm, fiber->frames);
     } break;
 
-    case OBJ_CLASS: {
-      Class* cls = (Class*)self;
-      pkUintBufferClear(&cls->field_names, vm);
-    } break;
+    case OBJ_CLASS:
+      break;
 
     case OBJ_INST:
     {
       Instance* inst = (Instance*)self;
-
-      if (inst->is_native) {
-        if (vm->config.inst_free_fn != NULL) {
-          // TODO: Allow user to set error when freeing the object.
-          vm->config.inst_free_fn(vm, inst->native, inst->native_id);
-        }
-
-      } else {
-        Inst* ins = inst->ins;
-        pkVarBufferClear(&ins->fields, vm);
-        DEALLOCATE(vm, ins);
+      if (inst->cls->is_native) {
+        TODO; // Call inst->cls->distructor?(inst).
       }
-
       break;
     }
   }
@@ -1204,129 +1152,38 @@ void moduleAddMain(PKVM* vm, Module* module) {
 }
 
 bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value) {
-  ASSERT(inst != NULL, OOPS);
-  ASSERT(attrib != NULL, OOPS);
-  ASSERT(value != NULL, OOPS);
+  ASSERT((inst != NULL) && (attrib != NULL) && (value != NULL), OOPS);
 
-  // This function should only be called at runtime.
-  ASSERT(vm->fiber != NULL, OOPS);
+  if (inst->cls->is_native) {
+    ASSERT(inst->native != NULL, OOPS);
 
-  if (inst->is_native) {
-
-    if (vm->config.inst_get_attrib_fn) {
-      // Temproarly change the fiber's "return address" to points to the
-      // below var 'val' so that the users can use 'pkReturn...()' function
-      // to return the attribute as well.
-      Var* temp = vm->fiber->ret;
-      Var val = VAR_UNDEFINED;
-
-      vm->fiber->ret = &val;
-      PkStringPtr attr = { attrib->data, NULL, NULL,
-                           attrib->length, attrib->hash };
-      vm->config.inst_get_attrib_fn(vm, inst->native, inst->native_id, attr);
-      vm->fiber->ret = temp;
-
-      if (IS_UNDEF(val)) {
-
-        // FIXME: add a list of attribute overrides.
-        if ((CHECK_HASH("as_string", 0xbdef4147) == attrib->hash) &&
-            IS_CSTR_EQ(attrib, "as_string", 9)) {
-          *value = VAR_OBJ(toRepr(vm, VAR_OBJ(inst)));
-          return true;
-        }
-
-        // If we reached here, the native instance don't have the attribute
-        // and no overriden attributes found, return false to indicate that the
-        // attribute doesn't exists.
-        return false;
-      }
-
-      // Attribute [val] updated by the hosting application.
-      *value = val;
-      return true;
-    }
-
-    // If the hosting application doesn't provided a getter function, we treat
-    // it as if the instance don't has the attribute.
-    return false;
-
-  } else {
-
-    // TODO: Optimize this with binary search.
-    Class* cls = inst->ins->type;
-    for (uint32_t i = 0; i < cls->field_names.count; i++) {
-      ASSERT_INDEX(i, cls->field_names.count);
-      String* f_name = moduleGetStringAt(cls->owner, cls->field_names.data[i]);
-      ASSERT(f_name != NULL, OOPS);
-      if (IS_STR_EQ(f_name, attrib)) {
-        *value = inst->ins->fields.data[i];
-        return true;
-      }
-    }
-
-    // Couldn't find the attribute in it's type class, return false.
-    return false;
+    // Try getting attribute from the native interface, and if found we should
+    // return otherwise the code "fall through" and check on it's dynamic
+    // attributes map.
+    TODO;
   }
 
-  UNREACHABLE();
-  return false;
+  Var value_ = mapGet(&inst->attribs, VAR_OBJ(attrib));
+  if (IS_UNDEF(value_)) return false;
+
+  *value = value_;
+  return true;
 }
 
 bool instSetAttrib(PKVM* vm, Instance* inst, String* attrib, Var value) {
+  ASSERT((inst != NULL) && (attrib != NULL), OOPS);
 
-  if (inst->is_native) {
+  if (inst->cls->is_native) {
+    ASSERT(inst->native != NULL, OOPS);
 
-    if (vm->config.inst_set_attrib_fn) {
-      // Temproarly change the fiber's "return address" to points to the
-      // below var 'attrib_ptr' so that the users can use 'pkGetArg...()'
-      // function to validate and get the attribute (users should use 0 as the
-      // index of the argument since it's at the return address and we cannot
-      // ensure fiber->ret[1] will be in bounds).
-      Var* temp = vm->fiber->ret;
-      Var attrib_ptr = value;
-
-      vm->fiber->ret = &attrib_ptr;
-      PkStringPtr attr = { attrib->data, NULL, NULL,
-                           attrib->length, attrib->hash };
-      bool exists = vm->config.inst_set_attrib_fn(vm, inst->native,
-                                                  inst->native_id, attr);
-      vm->fiber->ret = temp;
-
-      // If the type is incompatible there'll be an error by now, return false
-      // and the user of this function has to check VM_HAS_ERROR() as well.
-      if (VM_HAS_ERROR(vm)) return false;
-
-      // If the attribute exists on the native type, the host application would
-      // returned true by now, return it.
-      return exists;
-    }
-
-    // If the host application doesn't provided a setter we treat it as it
-    // doesn't has the attribute.
-    return false;
-
-  } else {
-
-    // TODO: Optimize this with binary search.
-    Class* ty = inst->ins->type;
-    for (uint32_t i = 0; i < ty->field_names.count; i++) {
-      ASSERT_INDEX(i, ty->field_names.count);
-      String* f_name = moduleGetStringAt(ty->owner, ty->field_names.data[i]);
-      ASSERT(f_name != NULL, OOPS);
-      if (f_name->hash == attrib->hash &&
-        f_name->length == attrib->length &&
-        memcmp(f_name->data, attrib->data, attrib->length) == 0) {
-        inst->ins->fields.data[i] = value;
-        return true;
-      }
-    }
-
-    // Couldn't find the attribute in it's type class, return false.
-    return false;
+    // Try setting the attribute from the native interface, and if success, we
+    // should return. otherwise the code will "fall through" and set on it's
+    // dynamic attributes map.
+    TODO;
   }
 
-  UNREACHABLE();
-  return false;
+  mapSet(vm, &inst->attribs, VAR_OBJ(attrib), value);
+  return true;
 }
 
 /*****************************************************************************/
@@ -1680,35 +1537,16 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
       {
         const Instance* inst = (const Instance*)obj;
         pkByteBufferWrite(buff, vm, '[');
-        pkByteBufferAddString(buff, vm, inst->ty_name,
-                              (uint32_t)strlen(inst->ty_name));
+        pkByteBufferAddString(buff, vm, inst->cls->name->data,
+                              inst->cls->name->length);
         pkByteBufferWrite(buff, vm, ':');
 
-        if (!inst->is_native) {
-          const Class* cls = inst->ins->type;
-          const Inst* ins = inst->ins;
-          ASSERT(ins->fields.count == cls->field_names.count, OOPS);
-
-          for (uint32_t i = 0; i < cls->field_names.count; i++) {
-            if (i != 0) pkByteBufferWrite(buff, vm, ',');
-
-            pkByteBufferWrite(buff, vm, ' ');
-            String* f_name = moduleGetStringAt(cls->owner,
-                                               cls->field_names.data[i]);
-            pkByteBufferAddString(buff, vm, f_name->data, f_name->length);
-            pkByteBufferWrite(buff, vm, '=');
-            _toStringInternal(vm, ins->fields.data[i], buff, outer, repr);
-          }
-        } else {
-
-          char buff_addr[STR_HEX_BUFF_SIZE];
-          char* ptr = (char*)buff_addr;
-          (*ptr++) = '0'; (*ptr++) = 'x';
-          const int len = snprintf(ptr, sizeof(buff_addr) - 2,
-                                "%08x", (unsigned int)(uintptr_t)inst->native);
-          pkByteBufferAddString(buff, vm, buff_addr, (uint32_t)len);
-        }
-
+        char buff_addr[STR_HEX_BUFF_SIZE];
+        char* ptr = (char*)buff_addr;
+        (*ptr++) = '0'; (*ptr++) = 'x';
+        const int len = snprintf(ptr, sizeof(buff_addr) - 2,
+                                 "%08x", (unsigned int)(uintptr_t)inst);
+        pkByteBufferAddString(buff, vm, buff_addr, (uint32_t)len);
         pkByteBufferWrite(buff, vm, ']');
         return;
       }

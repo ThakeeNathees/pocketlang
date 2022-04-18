@@ -4,6 +4,8 @@
  *  Distributed Under The MIT License
  */
 
+#include "modules.h"
+
 #include "thirdparty/cwalk/cwalk.h"
 #if defined(_WIN32) && (defined(_MSC_VER) || defined(__TINYC__))
   #include "thirdparty/dirent/dirent.h"
@@ -48,6 +50,10 @@ size_t pathJoin(const char* path_a, const char* path_b, char* buffer,
 /*****************************************************************************/
 /* PATH INTERNAL FUNCTIONS                                                   */
 /*****************************************************************************/
+
+// FIXME:
+// The bellow methods (file exists? and directory exists?) aren't reliable,
+// and not the proper way to do it.
 
 static inline bool pathIsFileExists(const char* path) {
   FILE* file = fopen(path, "r");

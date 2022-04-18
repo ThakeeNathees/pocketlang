@@ -344,9 +344,8 @@ struct Function {
   // is prevent checking is_native everytime (which might be a bit faster).
   int upvalue_count;
 
-  // Docstring of the function, currently it's just the C string literal
-  // pointer, refactor this into String* so that we can support public
-  // native functions to provide a docstring.
+  // Docstring of the function. Could be either a C string literal or a string
+  // entry in it's owner module's constant pool.
   const char* docstring;
 
   // Function can be either native C function pointers or compiled pocket
@@ -483,31 +482,45 @@ struct Class {
   // The module that owns this class.
   Module* owner;
 
+  // The class this class is inheriting from.
+  Class* super;
+
   // Name of the class.
   String* name;
 
-  Closure* ctor; //< The constructor function.
-  pkUintBuffer field_names; //< Buffer of field names.
-  // TODO: ordered names buffer for binary search.
-};
+  // Docstring of the function. Could be either a C string literal or a string
+  // entry in it's owner module's constant pool.
+  const char* docstring;
 
-typedef struct {
-  Class* type;        //< Class this instance belongs to.
-  pkVarBuffer fields; //< Var buffer of the instance.
-} Inst;
+  // Native classes have destructors, getters and setters.
+  bool is_native;
+
+  // The constructor function.
+  Closure* ctor;
+
+  // FIXME:
+  // Define the native interface and override the void* with types.
+  void* newfn; //< To alloacte native instance.
+  void* distructor;
+  void* getter;
+  void* setter;
+};
 
 struct Instance {
   Object _super;
 
-  const char* ty_name;  //< Name of the type it belongs to.
+  Class* cls; //< Class of the instance.
 
-  bool is_native;       //< True if it's a native type instance.
-  uint32_t native_id;   //< Unique ID of this native instance.
+  // If the instance is native, the [native] pointer points to the user data
+  // (generally a heap allocated struct of that type) that contains it's
+  // attributes. We'll use it to access an attribute first with setters and
+  // getters and if the attribute not exists we'll continue search in the
+  // bellow attribs map.
+  void* native;
 
-  union {
-    void* native; //< C struct pointer. // TODO:
-    Inst* ins;    //< Module instance pointer.
-  };
+  // Dynamic attributes of an instance.
+  Map attribs;
+
 };
 
 /*****************************************************************************/
@@ -541,17 +554,6 @@ Range* newRange(PKVM* vm, double from, double to);
 
 Module* newModule(PKVM* vm);
 
-// FIXME:
-// The docstring should be allocated and stored in the module's constants
-// as a string if it's not a native function. (native function's docs are
-// C string liteals).
-//
-// Allocate a new function and return it.
-Function* newFunction(PKVM* vm, const char* name, int length,
-                      Module* owner,
-                      bool is_native, const char* docstring,
-                      int* fn_index);
-
 Closure* newClosure(PKVM* vm, Function* fn);
 
 Upvalue* newUpvalue(PKVM* vm, Var* value);
@@ -559,22 +561,22 @@ Upvalue* newUpvalue(PKVM* vm, Var* value);
 Fiber* newFiber(PKVM* vm, Closure* closure);
 
 // FIXME:
-// Same fix has to applied as newFunction() (see above).
-//
-// Allocate new Class object and return Class* with name [name].
-Class* newClass(PKVM* vm, Module* scr, const char* name, uint32_t length,
-                 int* cls_index, int* ctor_index);
+// The docstring should be allocated and stored in the module's constants
+// as a string if it's not a native function. (native function's docs are
+// C string liteals).
+Function* newFunction(PKVM* vm, const char* name, int length,
+                      Module* owner,
+                      bool is_native, const char* docstring,
+                      int* fn_index);
 
-// Allocate new instance with of the base [type]. Note that if [initialize] is
-// false, the field value buffer of the instance would be un initialized (ie.
-// the buffer count = 0). Otherwise they'll be set to VAR_NULL.
-Instance* newInstance(PKVM* vm, Class* cls, bool initialize);
+// If the module is not NULL, the name and the class object will be added to
+// the module's constant pool. The class will be added to the modules global
+// as well.
+Class* newClass(PKVM* vm, const char* name, int length,
+                Module* module, const char* docstring,
+                int* cls_index);
 
-// Allocate new native instance and with [data] as the native type handle and
-// return Instance*. The [id] is the unique id of the instance, this would be
-// used to check if two instances are equal and used to get the name of the
-// instance using NativeTypeNameFn callback.
-Instance* newInstanceNative(PKVM* vm, void* data, uint32_t id);
+Instance* newInstance(PKVM* vm, Class* cls);
 
 /*****************************************************************************/
 /* METHODS                                                                   */
@@ -707,8 +709,11 @@ bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value);
 
 // Set the attribute to the instance and return true on success, if the
 // attribute doesn't exists it'll return false but if the [value] type is
-// incompatible, this will set an error to the VM, which you can check with
-// VM_HAS_ERROR() macro function.
+// incompatible for native instance, this will set an error to the VM, which
+// you can check with VM_HAS_ERROR() macro function.
+//
+// Note that since we support dynamic attribute this function will return false
+// only when the attribute cannot be set on the native instance.
 bool instSetAttrib(PKVM* vm, Instance* inst, String* attrib, Var value);
 
 // Release all the object owned by the [self] including itself.

@@ -117,10 +117,12 @@ struct PKVM {
   Closure* builtins[BUILTIN_FN_CAPACITY];
   int builtins_count;
 
-  // An array of all the primitive types' class except for OBJ_INST. Since the
-  // type of the objects are enums starting from 0 we can directly get the
-  // class by using their enum (ex: primitives[OBJ_LIST]).
-  Class* primitives[(int)OBJ_INST];
+  // An array of all the primitive types' class except for OBJ_INST. The first
+  // element is the Object class (ie. primitives[0] = Class<Object>) which
+  // cannot be instanciated and it's the super class of all the classes. For
+  // every other primitive types primitives[OBJ_<type> + 1]  will give it's
+  // class For instances the classes is stored in itself.
+  Class* primitives[1 + OBJ_INST];
 
   // Current fiber.
   Fiber* fiber;

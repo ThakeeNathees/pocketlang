@@ -46,35 +46,52 @@ static void moduleAddFunctionInternal(PKVM* vm, Module* module,
 /* CORE PUBLIC API                                                           */
 /*****************************************************************************/
 
+#define CHECK_NULL(name) \
+  ASSERT(name != NULL, "Argument " #name " was NULL.");
+
+#define CHECK_TYPE(handle, type)              \
+  ASSERT(IS_OBJ_TYPE(handle->value, type),    \
+         "Given handle is not of type " #type ".");
+
 PkHandle* pkNewModule(PKVM* vm, const char* name) {
+  CHECK_NULL(name);
+
   Module* module = newModuleInternal(vm, name);
   return vmNewHandle(vm, VAR_OBJ(module));
 }
 
 void pkRegisterModule(PKVM* vm, PkHandle* module) {
-  ASSERT(module != NULL, "Argument module was NULL.");
-  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
-         "Given handle is not a module.");
+  CHECK_NULL(module);
+  CHECK_TYPE(module, OBJ_MODULE);
+
   Module* module_ = (Module*)AS_OBJ(module->value);
   vmRegisterModule(vm, module_, module_->name);
 }
 
+PkHandle* pkNewClass(PKVM* vm, PkHandle* module, const char* name) {
+  CHECK_NULL(module);
+  CHECK_NULL(name);
+  CHECK_TYPE(module, OBJ_MODULE);
+
+  Class* class_ = newClass(vm, name, (int)strlen(name),
+                           (Module*)AS_OBJ(module->value), NULL, NULL);
+  return vmNewHandle(vm, VAR_OBJ(class_));
+}
+
 void pkModuleAddGlobal(PKVM* vm, PkHandle* module,
                                  const char* name, PkHandle* value) {
-  ASSERT(module != NULL, "Argument module was NULL.");
-  ASSERT(value != NULL, "Argument value was NULL.");
-  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
-         "Given handle is not a module.");
+  CHECK_NULL(module);
+  CHECK_NULL(value);
+  CHECK_TYPE(module, OBJ_MODULE);
 
   moduleAddGlobal(vm, (Module*)AS_OBJ(module->value),
                   name, (uint32_t)strlen(name), value->value);
 }
 
 PkHandle* pkModuleGetGlobal(PKVM* vm, PkHandle* module, const char* name) {
-  ASSERT(module != NULL, "Argument module was NULL.");
-  ASSERT(name != NULL, "Argument name was NULL.");
-  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
-         "Given handle is not a module.");
+  CHECK_NULL(module);
+  CHECK_NULL(name);
+  CHECK_TYPE(module, OBJ_MODULE);
 
   Module* module_ = (Module*)AS_OBJ(module->value);
   int index = moduleGetGlobalIndex(module_, name, (uint32_t)strlen(name));
@@ -84,18 +101,29 @@ PkHandle* pkModuleGetGlobal(PKVM* vm, PkHandle* module, const char* name) {
 
 void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
                          pkNativeFn fptr, int arity) {
-  ASSERT(module != NULL, "Argument module was NULL.");
-  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
-         "Given handle is not a module.");
+  CHECK_NULL(module);
+  CHECK_NULL(fptr);
+  CHECK_TYPE(module, OBJ_MODULE);
+
   moduleAddFunctionInternal(vm, (Module*)AS_OBJ(module->value),
                             name, fptr, arity,
                             NULL /*TODO: Public API for function docstring.*/);
 }
 
-PkHandle* pkGetMainFunction(PKVM* vm, PkHandle* module) {
-  ASSERT(module != NULL, "Argument module was NULL.");
-  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
-         "Given handle is not a module.");
+void pkClassAddMethod(PKVM* vm, PkHandle* cls,
+                      const char* name,
+                      pkNativeFn fptr, int arity) {
+  CHECK_NULL(cls);
+  CHECK_NULL(fptr);
+  CHECK_TYPE(cls, OBJ_MODULE);
+
+  TODO;
+}
+
+PkHandle* pkModuleGetMainFunction(PKVM* vm, PkHandle* module) {
+  CHECK_NULL(module);
+  CHECK_TYPE(module, OBJ_MODULE);
+
   Module* _module = (Module*)AS_OBJ(module->value);
 
   int main_index = moduleGetGlobalIndex(_module, IMPLICIT_MAIN_NAME,
@@ -182,6 +210,16 @@ PkVar pkGetArg(const PKVM* vm, int arg) {
   return &(ARG(arg));
 }
 
+void* pkGetSelf(const PKVM* vm) {
+  // Assert we're inside of a method.
+  TODO;
+}
+
+void pkSetSelf(PKVM* vm, void* self) {
+  // Assert it's a constructor.
+  TODO;
+}
+
 bool pkGetArgBool(PKVM* vm, int arg, bool* value) {
   CHECK_GET_ARG_API_ERRORS();
 
@@ -219,33 +257,6 @@ bool pkGetArgString(PKVM* vm, int arg, const char** value, uint32_t* length) {
 
   } else {
     ERR_INVALID_ARG_TYPE("string");
-    return false;
-  }
-
-  return true;
-}
-
-bool pkGetArgInst(PKVM* vm, int arg, uint32_t id, void** value) {
-  CHECK_GET_ARG_API_ERRORS();
-
-  Var val = ARG(arg);
-  bool is_native_instance = false;
-
-  if (IS_OBJ_TYPE(val, OBJ_INST)) {
-    Instance* inst = ((Instance*)AS_OBJ(val));
-    if (inst->is_native && inst->native_id == id) {
-      *value = inst->native;
-      is_native_instance = true;
-    }
-  }
-
-  if (!is_native_instance) {
-    const char* ty_name = "$(?)";
-    if (vm->config.inst_name_fn != NULL) {
-      ty_name = vm->config.inst_name_fn(id);
-    }
-
-    ERR_INVALID_ARG_TYPE(ty_name);
     return false;
   }
 
@@ -295,10 +306,6 @@ void pkReturnHandle(PKVM* vm, PkHandle* handle) {
   RET(handle->value);
 }
 
-void pkReturnInstNative(PKVM* vm, void* data, uint32_t id) {
-  RET(VAR_OBJ(newInstanceNative(vm, data, id)));
-}
-
 const char* pkStringGetData(const PkVar value) {
   const Var str = (*(const Var*)value);
   ASSERT(IS_OBJ_TYPE(str, OBJ_STRING), "Value should be of type string.");
@@ -320,6 +327,9 @@ bool pkFiberIsDone(const PkHandle* fiber) {
   Fiber* _fiber = (Fiber*)AS_OBJ(fb);
   return _fiber->state == FIBER_DONE;
 }
+
+#undef CHECK_NULL
+#undef CHECK_TYPE
 
 /*****************************************************************************/
 /* VALIDATORS                                                                */
@@ -1197,7 +1207,9 @@ static void initializeCoreModules(PKVM* vm) {
   // modify the PI, like in python.
   moduleAddGlobal(vm, math, "PI", 2, VAR_NUM(M_PI));
 
-  NEW_MODULE(fiber, "Fiber");
+  // FIXME:
+  // This module should be removed once method implemented on primitive types.
+  NEW_MODULE(fiber, "_Fiber");
   MODULE_ADD_FN(fiber, "new",    stdFiberNew,     1);
   MODULE_ADD_FN(fiber, "run",    stdFiberRun,    -1);
   MODULE_ADD_FN(fiber, "resume", stdFiberResume, -1);
@@ -1215,7 +1227,17 @@ static void initializeCoreModules(PKVM* vm) {
 /*****************************************************************************/
 
 static void initializePrimitiveClasses(PKVM* vm) {
-  // TODO
+
+  Class* cls_obj = newClass(vm, "Object", 6, NULL, NULL, NULL);
+  vm->primitives[0] = cls_obj;
+
+  for (int i = 0; i < OBJ_INST; i++) {
+    const char* type_name = getObjectTypeName((ObjectType)i);
+    vm->primitives[i + 1] = newClass(vm, type_name, (int)strlen(type_name),
+                                     NULL, NULL, NULL);
+  }
+
+  // TODO: Add methods to those types.
 }
 
 /*****************************************************************************/
