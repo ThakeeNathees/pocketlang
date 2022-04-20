@@ -1243,7 +1243,66 @@ static void initializeCoreModules(PKVM* vm) {
 #undef DEF
 
 /*****************************************************************************/
-/* PRIMITIVE TYPES CLASS                                                     */
+/* BUILTIN CLASS METHODS                                                     */
+/*****************************************************************************/
+
+static forceinline void _setSelf(PKVM* vm, Var value) {
+  vm->fiber->frames[vm->fiber->frame_count - 1].self = value;
+}
+
+static void _ctorNull(PKVM* vm) {
+  _setSelf(vm, VAR_NULL);
+}
+
+static void _ctorBool(PKVM* vm) {
+  _setSelf(vm, toBool(ARG(1)));
+}
+
+static void _ctorNumber(PKVM* vm) {
+  double value;
+  if (!validateNumeric(vm, ARG(1), &value, "Argument 1")) return;
+  _setSelf(vm, VAR_NUM(value));
+}
+
+static void _ctorString(PKVM* vm) {
+  if (!pkCheckArgcRange(vm, ARGC, 0, 1)) return;
+  if (ARGC == 0) {
+    _setSelf(vm, VAR_OBJ(newStringLength(vm, NULL, 0)));
+    return;
+  }
+  _setSelf(vm, VAR_OBJ(toString(vm, ARG(1))));
+}
+
+static void _ctorList(PKVM* vm) {
+  List* list = newList(vm, ARGC);
+  vmPushTempRef(vm, &list->_super); // list.
+  for (int i = 0; i < ARGC; i++) {
+    listAppend(vm, list, ARG(i + 1));
+  }
+  vmPopTempRef(vm); // list.
+  _setSelf(vm, VAR_OBJ(list));
+}
+
+static void _ctorMap(PKVM* vm) {
+  _setSelf(vm, VAR_OBJ(newMap(vm)));
+}
+
+static void _ctorRange(PKVM* vm) {
+  double from, to;
+  if (!validateNumeric(vm, ARG(1), &from, "Argument 1")) return;
+  if (!validateNumeric(vm, ARG(2), &to, "Argument 2")) return;
+
+  _setSelf(vm, VAR_OBJ(newRange(vm, from, to)));
+}
+
+static void _ctorFiber(PKVM* vm) {
+  Closure* closure;
+  if (!validateArgClosure(vm, 1, &closure)) return;
+  _setSelf(vm, VAR_OBJ(newFiber(vm, closure)));
+}
+
+/*****************************************************************************/
+/* BUILTIN CLASS INITIALIZATION                                              */
 /*****************************************************************************/
 
 static void initializePrimitiveClasses(PKVM* vm) {
@@ -1255,12 +1314,112 @@ static void initializePrimitiveClasses(PKVM* vm) {
                                       super, NULL, NULL, NULL);
   }
 
-  // TODO: Add methods to those classes.
+#define ADD_CTOR(type, name, ptr, arity_)                    \
+  do {                                                       \
+    Function* fn = newFunction(vm, name, (int)strlen(name),  \
+                               NULL, true, NULL, NULL);      \
+    fn->native = ptr;                                        \
+    fn->arity = arity_;                                      \
+    vmPushTempRef(vm, &fn->_super); /* fn. */                \
+    vm->builtin_classes[type]->ctor = newClosure(vm, fn);    \
+    vmPopTempRef(vm); /* fn. */                              \
+  } while (false)
+
+  ADD_CTOR(PK_NULL,   "@ctorNull",   _ctorNull,    0);
+  ADD_CTOR(PK_BOOL,   "@ctorBool",   _ctorBool,    1);
+  ADD_CTOR(PK_NUMBER, "@ctorNumber", _ctorNumber,  1);
+  ADD_CTOR(PK_STRING, "@ctorString", _ctorString, -1);
+  ADD_CTOR(PK_LIST,   "@ctorList",   _ctorList,   -1);
+  ADD_CTOR(PK_MAP,    "@ctorMap",    _ctorMap,     0);
+  ADD_CTOR(PK_FIBER,  "@ctorFiber",  _ctorFiber,   1);
+
+  // TODO: add methods.
+
 }
 
 /*****************************************************************************/
 /* OPERATORS                                                                 */
 /*****************************************************************************/
+
+Var preConstructSelf(PKVM* vm, Class* cls) {
+
+#define NO_INSTANCE(type_name)   \
+  VM_SET_ERROR(vm, newString(vm, \
+               "Class '" type_name "' cannot be instanciated."))
+
+  for (int i = 0; i < PK_INSTANCE; i++) {
+    if (vm->builtin_classes[i] == cls) {
+
+      switch ((PkVarType)i) {
+        case PK_OBJECT:
+          NO_INSTANCE("Object");
+          return VAR_NULL;
+
+        case PK_NULL:
+        case PK_BOOL:
+        case PK_NUMBER:
+        case PK_STRING:
+        case PK_LIST:
+        case PK_MAP:
+        case PK_RANGE:
+          return VAR_NULL; // Constructor will override the null.
+
+        case PK_MODULE:
+          NO_INSTANCE("Module");
+          return VAR_NULL;
+
+        case PK_CLOSURE:
+          NO_INSTANCE("Closure");
+          return VAR_NULL;
+
+        case PK_FIBER:
+          return VAR_NULL;
+
+        case PK_CLASS:
+          NO_INSTANCE("Class");
+          return VAR_NULL;
+
+        case PK_INSTANCE:
+          UNREACHABLE();
+          return VAR_NULL;
+      }
+    }
+  }
+
+  return VAR_OBJ(newInstance(vm, cls));
+}
+
+Class* getClass(PKVM* vm, Var instance) {
+  PkVarType type = getVarType(instance);
+  if (0 <= type && type < PK_INSTANCE) {
+    return vm->builtin_classes[type];
+  }
+  ASSERT(IS_OBJ_TYPE(instance, OBJ_INST), OOPS);
+  Instance* inst = (Instance*)AS_OBJ(instance);
+  return inst->cls;
+}
+
+Var getMethod(PKVM* vm, Var self, String* name, bool* is_method) {
+
+  Class* cls = getClass(vm, self);
+  ASSERT(cls != NULL, OOPS);
+
+  Class* cls_ = cls;
+  do {
+    for (int i = 0; i < (int)cls_->methods.count; i++) {
+      Closure* method = cls_->methods.data[i];
+      if (IS_CSTR_EQ(name, method->fn->name, name->length)) {
+        if (is_method) *is_method = true;
+        return VAR_OBJ(method);
+      }
+    }
+    cls_ = cls_->super_class;
+  } while (cls_ != NULL);
+
+  // If the attribute not found it'll set an error.
+  if (is_method) *is_method = false;
+  return varGetAttrib(vm, self, name);
+}
 
 #define UNSUPPORTED_OPERAND_TYPES(op)                                  \
   VM_SET_ERROR(vm, stringFormat(vm, "Unsupported operand types for "   \

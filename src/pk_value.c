@@ -536,6 +536,19 @@ Class* newClass(PKVM* vm, const char* name, int length,
 }
 
 Instance* newInstance(PKVM* vm, Class* cls) {
+
+#ifdef DEBUG
+  bool _builtin_class = false;
+  for (int i = 0; i < PK_INSTANCE; i++) {
+    if (vm->builtin_classes[i] == cls) {
+      _builtin_class = true;
+      break;
+    }
+  }
+  ASSERT(!_builtin_class, "Cannot create an instace of builtin class "
+                          "with newInstance() function.");
+#endif // DEBUG
+
   Instance* inst = ALLOCATE(vm, Instance);
   varInitObject(&inst->_super, vm, OBJ_INST);
   inst->cls = cls;
@@ -1270,6 +1283,16 @@ const char* varTypeName(Var v) {
   ASSERT(IS_OBJ(v), OOPS);
   Object* obj = AS_OBJ(v);
   return getObjectTypeName(obj->type);
+}
+
+PkVarType getVarType(Var v) {
+  if (IS_NULL(v)) return PK_NULL;
+  if (IS_BOOL(v)) return PK_BOOL;
+  if (IS_NUM(v))  return PK_NUMBER;
+
+  ASSERT(IS_OBJ(v), OOPS);
+  Object* obj = AS_OBJ(v);
+  return getObjPkVarType(obj->type);
 }
 
 bool isValuesSame(Var v1, Var v2) {

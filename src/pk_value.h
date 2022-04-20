@@ -744,6 +744,9 @@ const char* getObjectTypeName(ObjectType type);
 // Returns the type name of the var [v].
 const char* varTypeName(Var v);
 
+// Returns the PkVarType of the first class varaible [v].
+PkVarType getVarType(Var v);
+
 // Returns true if both variables are the same (ie v1 is v2).
 bool isValuesSame(Var v1, Var v2);
 

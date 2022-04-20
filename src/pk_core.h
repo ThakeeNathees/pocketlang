@@ -17,6 +17,24 @@ void initializeCore(PKVM* vm);
 /* OPERATORS                                                                 */
 /*****************************************************************************/
 
+// This method is called just before constructing a type to initialize self
+// and after that the constructor will be called. For builtin types this
+// function will return VAR_NULL and the constructor will override self to
+// it's instance (because for some classes we cannot create without argument
+// example Fiber(fn), Range(from, to) etc). If the class cannot be
+// instanciated (ex: Class 'Module') it'll set an error and return VAR_NULL.
+// For other classes the return value will be an Instance.
+Var preConstructSelf(PKVM* vm, Class* cls);
+
+// Returns the class of the [instance].
+Class* getClass(PKVM* vm, Var instance);
+
+// Returns the method (closure) in the instance [self]. If it's not an method
+// but just an attribute the [is_method] pointer will be set to false and
+// returns the value.
+// If the method / attribute not found, it'll set a runtime error on the VM.
+Var getMethod(PKVM* vm, Var self, String* name, bool* is_method);
+
 Var varAdd(PKVM* vm, Var v1, Var v2);         // Returns v1 + v2.
 Var varSubtract(PKVM* vm, Var v1, Var v2);    // Returns v1 - v2.
 Var varMultiply(PKVM* vm, Var v1, Var v2);    // Returns v1 * v2.
