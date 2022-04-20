@@ -40,6 +40,9 @@ OPCODE(PUSH_LIST, 2, 1)
 // Push a new map to construct from literal.
 OPCODE(PUSH_MAP, 0, 1)
 
+// Push the self of the current method on the stack.
+OPCODE(PUSH_SELF, 0, 1)
+
 // Push a new instance to the stack.
 // param: 1 byte index.
 OPCODE(PUSH_INSTANCE, 1, 1)

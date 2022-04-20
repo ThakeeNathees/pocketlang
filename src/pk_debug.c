@@ -141,10 +141,13 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         PRINT("]\n");
         break;
       }
-      case OP_PUSH_MAP:      NO_ARGS();   break;
-      case OP_LIST_APPEND:   NO_ARGS();   break;
-      case OP_MAP_INSERT:    NO_ARGS();   break;
-      case OP_INST_APPEND:   NO_ARGS();   break;
+      case OP_PUSH_MAP:
+      case OP_PUSH_SELF:
+      case OP_LIST_APPEND:
+      case OP_MAP_INSERT:
+      case OP_INST_APPEND:
+        NO_ARGS();
+        break;
 
       case OP_PUSH_LOCAL_0:
       case OP_PUSH_LOCAL_1:

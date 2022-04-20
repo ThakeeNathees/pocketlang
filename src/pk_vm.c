@@ -555,6 +555,7 @@ static inline void pushCallFrame(PKVM* vm, const Closure* closure, Var* rbp) {
   frame->rbp = rbp;
   frame->closure = closure;
   frame->ip = closure->fn->fn->opcodes.data;
+  frame->self = VAR_UNDEFINED;
 }
 
 static inline void reuseCallFrame(PKVM* vm, const Closure* closure) {
@@ -709,6 +710,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber_) {
   register const uint8_t* ip;
 
   register Var* rbp;         //< Stack base pointer register.
+  register Var* self;        //< Points to the self in the current call frame.
   register CallFrame* frame; //< Current call frame.
   register Module* module;   //< Currently executing module.
   register Fiber* fiber = fiber_;
@@ -770,6 +772,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber_) {
     frame = &fiber->frames[fiber->frame_count-1];  \
     ip = frame->ip;                                \
     rbp = frame->rbp;                              \
+    self = &frame->self;                           \
     module = frame->closure->fn->owner;            \
   } while (false)
 
@@ -845,6 +848,12 @@ L_vm_main_loop:
     {
       Map* map = newMap(vm);
       PUSH(VAR_OBJ(map));
+      DISPATCH();
+    }
+
+    OPCODE(PUSH_SELF):
+    {
+      PUSH(*self);
       DISPATCH();
     }
 

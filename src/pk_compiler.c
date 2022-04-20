@@ -2271,88 +2271,28 @@ static void compileBlockBody(Compiler* compiler, BlockType type);
 // Compile a class and return it's index in the module's types buffer.
 static void compileClass(Compiler* compiler) {
 
+  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
+
+  TODO; //< compileClass Function is in-compilete.
+
   // Consume the name of the type.
   consume(compiler, TK_NAME, "Expected a type name.");
   const char* name = compiler->parser.previous.start;
   int name_len = compiler->parser.previous.length;
+  int name_line = compiler->parser.previous.line;
 
   // Create a new class.
-  int cls_index, ctor_index;
-  Class* cls = newClass(compiler->parser.vm, compiler->module,
-                        name, (uint32_t)name_len, &cls_index, &ctor_index);
-  cls->ctor->fn->arity = 0;
-
-  // FIXME:
-  // Temproary patch for moving functions and classes to constant buffer.
-  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
-  int index = compilerAddVariable(compiler,
-                                  compiler->parser.previous.start,
-                                  compiler->parser.previous.length,
-                                  compiler->parser.previous.line);
-  moduleSetGlobal(compiler->module, index, VAR_OBJ(cls));
+  int cls_index;
+  Class* cls = newClass(compiler->parser.vm, name, name_len,
+                        compiler->module, NULL, &cls_index);
 
   // Check count exceeded.
   checkMaxConstantsReached(compiler, cls_index);
-  checkMaxConstantsReached(compiler, ctor_index);
 
-  // Compile the constructor function.
-  ASSERT(compiler->func->ptr == compiler->module->body->fn, OOPS);
-  Func curr_fn;
-  compilerPushFunc(compiler, &curr_fn, cls->ctor->fn);
-  compilerEnterBlock(compiler);
+  // Compile all the methods and constructors.
+  TODO;
 
-  // Push an instance on the stack.
-  emitOpcode(compiler, OP_PUSH_INSTANCE);
-  emitShort(compiler, cls_index);
-
-  skipNewLines(compiler);
-  TokenType next = peek(compiler);
-  while (next != TK_END && next != TK_EOF) {
-
-    // Compile field name.
-    consume(compiler, TK_NAME, "Expected a type name.");
-    const char* f_name = compiler->parser.previous.start;
-    int f_len = compiler->parser.previous.length;
-
-    int f_index = 0;
-    String* new_name = moduleAddString(compiler->module, compiler->parser.vm,
-                                       f_name, f_len, &f_index);
-
-    for (uint32_t i = 0; i < cls->field_names.count; i++) {
-      String* prev = moduleGetStringAt(compiler->module,
-                                       cls->field_names.data[i]);
-      ASSERT(prev != NULL, OOPS);
-      if (IS_STR_EQ(new_name, prev)) {
-        parseError(compiler, "Class field with name '%s' already exists.",
-                   new_name->data);
-      }
-    }
-
-    pkUintBufferWrite(&cls->field_names, compiler->parser.vm, f_index);
-
-    // Consume the assignment expression.
-    consume(compiler, TK_EQ, "Expected an assignment after field name.");
-    compileExpression(compiler); // Assigned value.
-    consumeEndStatement(compiler);
-
-    // At this point the stack top would be the expression.
-    emitOpcode(compiler, OP_INST_APPEND);
-
-    skipNewLines(compiler);
-    next = peek(compiler);
-  }
   consume(compiler, TK_END, "Expected 'end' after a class declaration end.");
-
-  // The instance pushed by the OP_PUSH_INSTANCE instruction is at the top
-  // of the stack, return it (Constructor will return the instance). Note that
-  // the emitFunctionEnd function will also add a return instruction but that's
-  // for functions which doesn't return anything explicitly. This return won't
-  // change compiler's stack size because it won't pop the return value.
-  emitOpcode(compiler, OP_RETURN);
-
-  compilerExitBlock(compiler);
-  emitFunctionEnd(compiler);
-  compilerPopFunc(compiler);
 }
 
 // Compile a function and return it's index in the module's function buffer.

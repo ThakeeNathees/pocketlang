@@ -1205,7 +1205,9 @@ static void initializeCoreModules(PKVM* vm) {
   // modify the PI, like in python.
   moduleAddGlobal(vm, math, "PI", 2, VAR_NUM(M_PI));
 
-  NEW_MODULE(fiber, "Fiber");
+  // FIXME:
+  // Temproarly rename the fiber to move it to the builtin type classes.
+  NEW_MODULE(fiber, "_Fiber");
   MODULE_ADD_FN(fiber, "new",    stdFiberNew,     1);
   MODULE_ADD_FN(fiber, "run",    stdFiberRun,    -1);
   MODULE_ADD_FN(fiber, "resume", stdFiberResume, -1);

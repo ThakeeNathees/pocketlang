@@ -263,6 +263,7 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       // Mark call frames.
       for (int i = 0; i < fiber->frame_count; i++) {
         markObject(vm, (Object*)&fiber->frames[i].closure->_super);
+        markValue(vm, fiber->frames[i].self);
       }
       vm->bytes_allocated += sizeof(CallFrame) * fiber->frame_capacity;
 
@@ -501,38 +502,28 @@ Fiber* newFiber(PKVM* vm, Closure* closure) {
   return fiber;
 }
 
-Class* newClass(PKVM* vm, Module* module, const char* name, uint32_t length,
-                int* cls_index, int* ctor_index) {
+Class* newClass(PKVM* vm, const char* name, int length,
+                Module* module, const char* docstring,
+                int* cls_index) {
 
   Class* cls = ALLOCATE(vm, Class);
   varInitObject(&cls->_super, vm, OBJ_CLASS);
 
   vmPushTempRef(vm, &cls->_super); // class.
 
-  uint32_t _cls_index = moduleAddConstant(vm, module, VAR_OBJ(cls));
-  if (cls_index) *cls_index = (int)_cls_index;
-
-  pkUintBufferInit(&cls->field_names);
-  cls->owner = module;
+  cls->owner = NULL;
   cls->docstring = NULL;
-  cls->name = moduleAddString(module, vm, name, length, NULL);
+  cls->ctor = NULL;
 
-  // Since characters '@' and '$' are special in stringFormat, and they
-  // currently cannot be escaped (TODO), a string (char array) created
-  // for that character and passed as C string format.
-  char special[2] = { SPECIAL_NAME_CHAR, '\0' };
-  String* ctor_name = stringFormat(vm, "$(Ctor:@)", special, cls->name);
-
-  // Constructor.
-  vmPushTempRef(vm, &ctor_name->_super); // ctor_name.
-  {
-    Function* ctor_fn = newFunction(vm, ctor_name->data, ctor_name->length,
-                                    module, false, NULL, ctor_index);
-    vmPushTempRef(vm, &ctor_fn->_super); // ctor_fn.
-    cls->ctor = newClosure(vm, ctor_fn);
-    vmPopTempRef(vm); // ctor_fn.
+  // Builtin types doesn't belongs to a module.
+  if (module != NULL) {
+    cls->name = moduleAddString(module, vm, name, length, NULL);
+    int _cls_index = moduleAddConstant(vm, module, VAR_OBJ(cls));
+    if (cls_index) *cls_index = _cls_index;
+    moduleAddGlobal(vm, module, name, length, VAR_OBJ(cls));
+  } else {
+    cls->name = newStringLength(vm, name, (uint32_t)length);
   }
-  vmPopTempRef(vm); // ctor_name.
 
   vmPopTempRef(vm); // class.
   return cls;

@@ -428,6 +428,7 @@ typedef struct {
   const uint8_t* ip;      //< Pointer to the next instruction byte code.
   const Closure* closure; //< Closure of the frame.
   Var* rbp;               //< Stack base pointer. (%rbp)
+  Var self;               //< Self reference of the current method.
 } CallFrame;
 
 typedef enum {
@@ -544,6 +545,12 @@ Range* newRange(PKVM* vm, double from, double to);
 
 Module* newModule(PKVM* vm);
 
+Closure* newClosure(PKVM* vm, Function* fn);
+
+Upvalue* newUpvalue(PKVM* vm, Var* value);
+
+Fiber* newFiber(PKVM* vm, Closure* closure);
+
 // FIXME:
 // The docstring should be allocated and stored in the module's constants
 // as a string if it's not a native function. (native function's docs are
@@ -555,18 +562,12 @@ Function* newFunction(PKVM* vm, const char* name, int length,
                       bool is_native, const char* docstring,
                       int* fn_index);
 
-Closure* newClosure(PKVM* vm, Function* fn);
-
-Upvalue* newUpvalue(PKVM* vm, Var* value);
-
-Fiber* newFiber(PKVM* vm, Closure* closure);
-
-// FIXME:
-// Same fix has to applied as newFunction() (see above).
-//
-// Allocate new Class object and return Class* with name [name].
-Class* newClass(PKVM* vm, Module* scr, const char* name, uint32_t length,
-                 int* cls_index, int* ctor_index);
+// If the module is not NULL, the name and the class object will be added to
+// the module's constant pool. The class will be added to the modules global
+// as well.
+Class* newClass(PKVM* vm, const char* name, int length,
+                Module* module, const char* docstring,
+                int* cls_index);
 
 // Allocate new instance with of the base [type]. Note that if [initialize] is
 // false, the field value buffer of the instance would be un initialized (ie.
