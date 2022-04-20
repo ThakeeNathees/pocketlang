@@ -92,6 +92,10 @@ OPCODE(STORE_GLOBAL, 1, 0)
 // params: 1 bytes index.
 OPCODE(PUSH_BUILTIN_FN, 1, 1)
 
+// Push a built in class.
+// params: 1 bytes index.
+OPCODE(PUSH_BUILTIN_TY, 1, 1)
+
 // Push an upvalue of the current closure at the index which is the first one
 // byte argument.
 // params: 1 byte index.

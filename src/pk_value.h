@@ -480,6 +480,9 @@ struct Fiber {
 struct Class {
   Object _super;
 
+  // The base class of this class.
+  Class* super_class;
+
   // The module that owns this class.
   Module* owner;
 
@@ -566,8 +569,8 @@ Function* newFunction(PKVM* vm, const char* name, int length,
 // the module's constant pool. The class will be added to the modules global
 // as well.
 Class* newClass(PKVM* vm, const char* name, int length,
-                Module* module, const char* docstring,
-                int* cls_index);
+                Class* super, Module* module,
+                const char* docstring, int* cls_index);
 
 // Allocate new instance with of the base [type].
 Instance* newInstance(PKVM* vm, Class* cls);

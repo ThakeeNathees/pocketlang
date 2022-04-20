@@ -949,6 +949,15 @@ L_vm_main_loop:
       DISPATCH();
     }
 
+    OPCODE(PUSH_BUILTIN_TY):
+    {
+      uint8_t index = READ_BYTE();
+      ASSERT_INDEX(index, PK_INSTANCE);
+      Class* cls = vm->builtin_classes[index];
+      PUSH(VAR_OBJ(cls));
+      DISPATCH();
+    }
+
     OPCODE(PUSH_UPVALUE):
     {
       uint8_t index = READ_BYTE();

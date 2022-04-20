@@ -288,7 +288,9 @@ PK_PUBLIC PkHandle* pkNewModule(PKVM* vm, const char* name);
 PK_PUBLIC void pkRegisterModule(PKVM* vm, PkHandle* module);
 
 // Create a new class on the [module] with the [name] and return it.
-PK_PUBLIC PkHandle* pkNewClass(PKVM* vm, PkHandle* module, const char* name);
+// If the [base_class] is NULL by default it'll set to "Object" class.
+PK_PUBLIC PkHandle* pkNewClass(PKVM* vm, PkHandle* base_class,
+                               PkHandle* module, const char* name);
 
 // Add a native method to the given class. If the [arity] is -1 that means
 // the method has variadic parameters and use pkGetArgc() to get the argc.

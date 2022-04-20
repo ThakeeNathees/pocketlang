@@ -227,6 +227,19 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         break;
       }
 
+      case OP_PUSH_BUILTIN_TY:
+      {
+        int index = READ_BYTE();
+        ASSERT_INDEX(index, PK_INSTANCE);
+        const char* name = vm->builtin_classes[index]->name->data;
+        // Prints: %5d [Fn:%s]\n
+        PRINT_INT(index);
+        PRINT(" [Class:");
+        PRINT(name);
+        PRINT("]\n");
+        break;
+      }
+
       case OP_PUSH_UPVALUE:
       case OP_STORE_UPVALUE:
       {

@@ -69,13 +69,21 @@ void pkRegisterModule(PKVM* vm, PkHandle* module) {
   vmRegisterModule(vm, module_, module_->name);
 }
 
-PkHandle* pkNewClass(PKVM* vm, PkHandle* module, const char* name) {
+PkHandle* pkNewClass(PKVM* vm, PkHandle* base_class, PkHandle* module,
+                     const char* name) {
   CHECK_NULL(module);
   CHECK_NULL(name);
   CHECK_TYPE(module, OBJ_MODULE);
 
+  Class* super = vm->builtin_classes[PK_OBJECT];
+  if (base_class != NULL) {
+    CHECK_TYPE(base_class, OBJ_CLASS);
+    super = (Class*)AS_OBJ(base_class->value);
+  }
+
   Class* class_ = newClass(vm, name, (int)strlen(name),
-                           (Module*)AS_OBJ(module->value), NULL, NULL);
+                           super, (Module*)AS_OBJ(module->value),
+                           NULL, NULL);
   return vmNewHandle(vm, VAR_OBJ(class_));
 }
 
@@ -1222,7 +1230,15 @@ static void initializeCoreModules(PKVM* vm) {
 /*****************************************************************************/
 
 static void initializePrimitiveClasses(PKVM* vm) {
-  // TODO
+  for (int i = 0; i < PK_INSTANCE; i++) {
+    Class* super = NULL;
+    if (i != 0) super = vm->builtin_classes[PK_OBJECT];
+    const char* name = getPkVarTypeName((PkVarType)i);
+    vm->builtin_classes[i] = newClass(vm, name, (int)strlen(name),
+                                      super, NULL, NULL, NULL);
+  }
+
+  // TODO: Add methods to those classes.
 }
 
 /*****************************************************************************/

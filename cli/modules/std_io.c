@@ -171,7 +171,7 @@ static void _fileClose(PKVM* vm) {
 void registerModuleIO(PKVM* vm) {
   PkHandle* io = pkNewModule(vm, "io");
 
-  PkHandle* cls_file = pkNewClass(vm, io, "File");
+  PkHandle* cls_file = pkNewClass(vm, NULL, io, "File");
   pkClassAddMethod(vm, cls_file, "open",  _fileOpen, -1);
   pkClassAddMethod(vm, cls_file, "read",  _fileRead,  0);
   pkClassAddMethod(vm, cls_file, "write", _fileWrite, 1);

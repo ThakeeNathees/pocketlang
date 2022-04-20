@@ -1257,6 +1257,19 @@ static int findBuiltinFunction(const PKVM* vm,
   return -1;
 }
 
+// Find the builtin classes name and returns it's index in the VM's builtin
+// classes array, if not found returns -1.
+static int findBuiltinClass(const PKVM* vm,
+                            const char* name, uint32_t length) {
+  for (int i = 0; i < PK_INSTANCE; i++) {
+    uint32_t bfn_length = vm->builtin_classes[i]->name->length;
+    if (IS_CSTR_EQ(vm->builtin_classes[i]->name, name, length)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 // Find the local with the [name] in the given function [func] and return
 // it's index, if not found returns -1.
 static int findLocal(Func* func, const char* name, uint32_t length) {
@@ -1337,7 +1350,8 @@ typedef enum {
   NAME_LOCAL_VAR,  //< Including parameter.
   NAME_UPVALUE,    //< Local to an enclosing function.
   NAME_GLOBAL_VAR,
-  NAME_BUILTIN_FN,    //< Native builtin function.
+  NAME_BUILTIN_FN, //< Native builtin function.
+  NAME_BUILTIN_TY, //< Builtin primitive type classes.
 } NameDefnType;
 
 // Identifier search result.
@@ -1390,6 +1404,13 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
   index = findBuiltinFunction(compiler->parser.vm, name, length);
   if (index != -1) {
     result.type = NAME_BUILTIN_FN;
+    result.index = index;
+    return result;
+  }
+
+  index = findBuiltinClass(compiler->parser.vm, name, length);
+  if (index != -1) {
+    result.type = NAME_BUILTIN_TY;
     result.index = index;
     return result;
   }
@@ -1573,6 +1594,11 @@ static void emitPushName(Compiler* compiler, NameDefnType type, int index) {
       emitOpcode(compiler, OP_PUSH_BUILTIN_FN);
       emitByte(compiler, index);
       return;
+
+    case NAME_BUILTIN_TY:
+      emitOpcode(compiler, OP_PUSH_BUILTIN_TY);
+      emitByte(compiler, index);
+      return;
   }
 }
 
@@ -1584,6 +1610,7 @@ static void emitStoreName(Compiler* compiler, NameDefnType type, int index) {
   switch (type) {
     case NAME_NOT_DEFINED:
     case NAME_BUILTIN_FN:
+    case NAME_BUILTIN_TY:
       UNREACHABLE();
 
     case NAME_LOCAL_VAR:
@@ -1701,7 +1728,9 @@ static void exprName(Compiler* compiler) {
       // like python does) and it's recommented to define all the globals
       // before entering a local scope.
 
-      if (result.type == NAME_NOT_DEFINED || result.type == NAME_BUILTIN_FN) {
+      if (result.type == NAME_NOT_DEFINED ||
+          result.type == NAME_BUILTIN_FN  ||
+          result.type == NAME_BUILTIN_TY ) {
         name_type = (compiler->scope_depth == DEPTH_GLOBAL)
                     ? NAME_GLOBAL_VAR
                     : NAME_LOCAL_VAR;
@@ -2283,8 +2312,10 @@ static void compileClass(Compiler* compiler) {
 
   // Create a new class.
   int cls_index;
-  Class* cls = newClass(compiler->parser.vm, name, name_len,
-                        compiler->module, NULL, &cls_index);
+  PKVM* _vm = compiler->parser.vm;
+  Class* cls = newClass(_vm, name, name_len,
+                        _vm->builtin_classes[PK_OBJECT], compiler->module,
+                        NULL, &cls_index);
 
   // Check count exceeded.
   checkMaxConstantsReached(compiler, cls_index);

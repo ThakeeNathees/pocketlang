@@ -492,8 +492,8 @@ Fiber* newFiber(PKVM* vm, Closure* closure) {
 }
 
 Class* newClass(PKVM* vm, const char* name, int length,
-                Module* module, const char* docstring,
-                int* cls_index) {
+                Class* super, Module* module,
+                const char* docstring, int* cls_index) {
 
   Class* cls = ALLOCATE(vm, Class);
   varInitObject(&cls->_super, vm, OBJ_CLASS);
@@ -501,6 +501,7 @@ Class* newClass(PKVM* vm, const char* name, int length,
   vmPushTempRef(vm, &cls->_super); // class.
 
   cls->owner = NULL;
+  cls->super_class = super;
   cls->docstring = NULL;
   cls->ctor = NULL;
 
