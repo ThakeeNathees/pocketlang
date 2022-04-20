@@ -18,29 +18,18 @@
 
 PkVarType pkGetValueType(const PkVar value) {
   __ASSERT(value != NULL, "Given value was NULL.");
+  const Var value_ = *(const Var*)(value);
 
-  if (IS_NULL(*(const Var*)(value))) return PK_NULL;
-  if (IS_BOOL(*(const Var*)(value))) return PK_BOOL;
-  if (IS_NUM(*(const Var*)(value))) return PK_NUMBER;
+  if (IS_NULL(value_)) return PK_NULL;
+  if (IS_BOOL(value_)) return PK_BOOL;
+  if (IS_NUM(value_))  return PK_NUMBER;
 
-  __ASSERT(IS_OBJ(*(const Var*)(value)),
-           "Invalid var pointer. Might be a dangling pointer");
+  ASSERT(IS_OBJ(*(const Var*)(value)),
+         "Invalid var pointer (Might be a dangling pointer).");
 
-  const Object* obj = AS_OBJ(*(const Var*)(value));
-  switch (obj->type) {
-    case OBJ_STRING: return PK_STRING;
-    case OBJ_LIST:   return PK_LIST;
-    case OBJ_MAP:    return PK_MAP;
-    case OBJ_RANGE:  return PK_RANGE;
-    case OBJ_MODULE: return PK_MODULE;
-    case OBJ_FUNC:   return PK_FUNCTION;
-    case OBJ_FIBER:  return PK_FIBER;
-    case OBJ_CLASS:  return PK_CLASS;
-    case OBJ_INST:   return PK_INST;
-  }
+  const Object* obj = AS_OBJ(value_);
+  return getObjPkVarType(obj->type);
 
-  UNREACHABLE();
-  return PK_NULL;
 }
 
 PkHandle* pkNewString(PKVM* vm, const char* value) {
@@ -525,6 +514,7 @@ Class* newClass(PKVM* vm, Module* module, const char* name, uint32_t length,
 
   pkUintBufferInit(&cls->field_names);
   cls->owner = module;
+  cls->docstring = NULL;
   cls->name = moduleAddString(module, vm, name, length, NULL);
 
   // Since characters '@' and '$' are special in stringFormat, and they
@@ -1333,24 +1323,56 @@ bool instSetAttrib(PKVM* vm, Instance* inst, String* attrib, Var value) {
 /* UTILITY FUNCTIONS                                                         */
 /*****************************************************************************/
 
+PkVarType getObjPkVarType(ObjectType type) {
+  switch (type)  {
+    case OBJ_STRING:  return PK_STRING;
+    case OBJ_LIST:    return PK_LIST;
+    case OBJ_MAP:     return PK_MAP;
+    case OBJ_RANGE:   return PK_RANGE;
+    case OBJ_MODULE:  return PK_MODULE;
+    case OBJ_FUNC:    UNREACHABLE();
+    case OBJ_CLOSURE: return PK_CLOSURE;
+    case OBJ_UPVALUE: UNREACHABLE();
+    case OBJ_FIBER:   return PK_FIBER;
+    case OBJ_CLASS:   return PK_CLASS;
+    case OBJ_INST:    return PK_INSTANCE;
+  }
+
+  UNREACHABLE();
+  return (PkVarType) -1;
+}
+
+ObjectType getPkVarObjType(PkVarType type) {
+  switch (type)  {
+    case PK_OBJECT:
+    case PK_NULL:
+    case PK_BOOL:
+    case PK_NUMBER:
+      UNREACHABLE();
+
+    case PK_STRING:   return OBJ_STRING;
+    case PK_LIST:     return OBJ_LIST;
+    case PK_MAP:      return OBJ_MAP;
+    case PK_RANGE:    return OBJ_RANGE;
+    case PK_MODULE:   return OBJ_MODULE;
+    case PK_CLOSURE:  return OBJ_CLOSURE;
+    case PK_FIBER:    return OBJ_FIBER;
+    case PK_CLASS:    return OBJ_CLASS;
+    case PK_INSTANCE: return OBJ_INST;
+  }
+
+  UNREACHABLE();
+  return (ObjectType) -1;
+}
+
 const char* getPkVarTypeName(PkVarType type) {
   switch (type) {
+    case PK_OBJECT:   return "Object";
     case PK_NULL:     return "Null";
     case PK_BOOL:     return "Bool";
     case PK_NUMBER:   return "Number";
-    case PK_STRING:   return "String";
-    case PK_LIST:     return "List";
-    case PK_MAP:      return "Map";
-    case PK_RANGE:    return "Range";
-    case PK_MODULE:   return "Module";
-
-    // TODO: since functions are not first class citizens anymore, remove it
-    // and add closure (maybe with the same name PK_FUNCTION).
-    case PK_FUNCTION: return "Function";
-
-    case PK_FIBER:    return "Fiber";
-    case PK_CLASS:    return "Class";
-    case PK_INST:     return "Inst";
+    default:
+      return getObjectTypeName(getPkVarObjType(type));
   }
 
   UNREACHABLE();

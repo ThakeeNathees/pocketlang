@@ -12,7 +12,8 @@ from os.path import (join, exists, abspath,
 THIS_PATH = abspath(dirname(__file__))
 
 POCKET_HEADER = join(THIS_PATH, "../src/include/pocketlang.h")
-TARGET = join(THIS_PATH, "./modules/pknative.gen.c")
+TARGET_NATIVE = join(THIS_PATH, "./modules/pknative.gen.c")
+TARGET_DL     = join(THIS_PATH, "./modules/std_dl_api.gen.h")
 
 PK_API = "pk_api"
 PK_API_TYPE = "PkNativeApi"
@@ -109,15 +110,37 @@ def init_api(api_functions):
     assign += f"\n  {PK_API}.{fn}_ptr = api->{fn}_ptr;"
   return API_DEF % assign + '\n'
 
+def make_api(api_functions):
+  source = "#if defined(NATIVE_API_IMPLEMENT)\n\n"
+  source += f"{PK_API_TYPE} dlMakeApi() {{\n\n"
+  source += f"  {PK_API_TYPE} api;\n\n"
+  for fn, params, ret in api_functions:
+    source += f"  api.{fn}_ptr = {fn};\n"
+  source += "\n"
+  source += "  return api;\n"
+  source += "}\n\n"
+  source += "#endif // NATIVE_API_IMPLEMENT\n\n"
+  return source
+
 def generate():
   api_functions = get_api_functions()
-  with open(TARGET, 'w') as fp:
+
+  ## Generate pocket native api.
+  with open(TARGET_NATIVE, 'w') as fp:
     fp.write(SOURCE_GEN)
     fp.write(fn_typedefs(api_functions))
     fp.write(api_typedef(api_functions))
     fp.write(init_api(api_functions))
     fp.write(define_functions(api_functions))
 
+  ## Generate dl module api definition.
+  with open(TARGET_DL, 'w') as fp:
+    fp.write(SOURCE_GEN)
+    fp.write(fn_typedefs(api_functions))
+    fp.write(api_typedef(api_functions))
+    fp.write(make_api(api_functions))
+
 if __name__ == "__main__":
   generate()
-  print("Generated:", relpath(TARGET, os.getcwd()))
+  print("Generated:", relpath(TARGET_NATIVE, os.getcwd()))
+  print("Generated:", relpath(TARGET_DL, os.getcwd()))

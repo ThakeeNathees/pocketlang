@@ -237,7 +237,6 @@ typedef struct {
 } GrammarRule;
 
 typedef enum {
-  DEPTH_MODULE = -2, //< Only used for module body function's depth.
   DEPTH_GLOBAL = -1, //< Global variables.
   DEPTH_LOCAL,       //< Local scope. Increase with inner scope.
 } Depth;
@@ -1249,9 +1248,9 @@ static bool matchAssignment(Compiler* compiler) {
 static int findBuiltinFunction(const PKVM* vm,
                                const char* name, uint32_t length) {
   for (int i = 0; i < vm->builtins_count; i++) {
-    uint32_t bfn_length = (uint32_t)strlen(vm->builtins[i]->fn->name);
+    uint32_t bfn_length = (uint32_t)strlen(vm->builtins_funcs[i]->fn->name);
     if (bfn_length != length) continue;
-    if (strncmp(name, vm->builtins[i]->fn->name, length) == 0) {
+    if (strncmp(name, vm->builtins_funcs[i]->fn->name, length) == 0) {
       return i;
     }
   }
@@ -3141,10 +3140,6 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
 
   Func curr_fn;
   compilerPushFunc(compiler, &curr_fn, module->body->fn);
-
-  // At the begining the compiler's scope will be DEPTH_GLOBAL and that'll be
-  // set to to the current functions depth. Override for the body function.
-  curr_fn.depth = DEPTH_MODULE;
 
   // Lex initial tokens. current <-- next.
   lexToken(&(compiler->parser));

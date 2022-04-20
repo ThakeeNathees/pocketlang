@@ -46,35 +46,41 @@ static void moduleAddFunctionInternal(PKVM* vm, Module* module,
 /* CORE PUBLIC API                                                           */
 /*****************************************************************************/
 
+#define CHECK_NULL(name) \
+  ASSERT(name != NULL, "Argument " #name " was NULL.");
+
+#define CHECK_TYPE(handle, type)                 \
+  do {                                           \
+    CHECK_NULL(handle);                          \
+    ASSERT(IS_OBJ_TYPE(handle->value, type),     \
+      "Given handle is not of type " #type "."); \
+  } while (false)
+
 PkHandle* pkNewModule(PKVM* vm, const char* name) {
+  CHECK_NULL(name);
   Module* module = newModuleInternal(vm, name);
   return vmNewHandle(vm, VAR_OBJ(module));
 }
 
 void pkRegisterModule(PKVM* vm, PkHandle* module) {
-  ASSERT(module != NULL, "Argument module was NULL.");
-  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
-         "Given handle is not a module.");
+  CHECK_TYPE(module, OBJ_MODULE);
+
   Module* module_ = (Module*)AS_OBJ(module->value);
   vmRegisterModule(vm, module_, module_->name);
 }
 
 void pkModuleAddGlobal(PKVM* vm, PkHandle* module,
                                  const char* name, PkHandle* value) {
-  ASSERT(module != NULL, "Argument module was NULL.");
-  ASSERT(value != NULL, "Argument value was NULL.");
-  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
-         "Given handle is not a module.");
+  CHECK_TYPE(module, OBJ_MODULE);
+  CHECK_NULL(value);
 
   moduleAddGlobal(vm, (Module*)AS_OBJ(module->value),
                   name, (uint32_t)strlen(name), value->value);
 }
 
 PkHandle* pkModuleGetGlobal(PKVM* vm, PkHandle* module, const char* name) {
-  ASSERT(module != NULL, "Argument module was NULL.");
-  ASSERT(name != NULL, "Argument name was NULL.");
-  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
-         "Given handle is not a module.");
+  CHECK_TYPE(module, OBJ_MODULE);
+  CHECK_NULL(name);
 
   Module* module_ = (Module*)AS_OBJ(module->value);
   int index = moduleGetGlobalIndex(module_, name, (uint32_t)strlen(name));
@@ -84,18 +90,17 @@ PkHandle* pkModuleGetGlobal(PKVM* vm, PkHandle* module, const char* name) {
 
 void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
                          pkNativeFn fptr, int arity) {
-  ASSERT(module != NULL, "Argument module was NULL.");
-  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
-         "Given handle is not a module.");
+  CHECK_TYPE(module, OBJ_MODULE);
+  CHECK_NULL(fptr);
+
   moduleAddFunctionInternal(vm, (Module*)AS_OBJ(module->value),
                             name, fptr, arity,
                             NULL /*TODO: Public API for function docstring.*/);
 }
 
-PkHandle* pkGetMainFunction(PKVM* vm, PkHandle* module) {
-  ASSERT(module != NULL, "Argument module was NULL.");
-  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE),
-         "Given handle is not a module.");
+PkHandle* pkModuleGetMainFunction(PKVM* vm, PkHandle* module) {
+  CHECK_TYPE(module, OBJ_MODULE);
+
   Module* _module = (Module*)AS_OBJ(module->value);
 
   int main_index = moduleGetGlobalIndex(_module, IMPLICIT_MAIN_NAME,
@@ -320,6 +325,9 @@ bool pkFiberIsDone(const PkHandle* fiber) {
   Fiber* _fiber = (Fiber*)AS_OBJ(fb);
   return _fiber->state == FIBER_DONE;
 }
+
+#undef CHECK_NULL
+#undef CHECK_TYPE
 
 /*****************************************************************************/
 /* VALIDATORS                                                                */
@@ -766,8 +774,8 @@ static void initializeBuiltinFN(PKVM* vm, Closure** bfn, const char* name,
 }
 
 static void initializeBuiltinFunctions(PKVM* vm) {
-#define INITIALIZE_BUILTIN_FN(name, fn, argc)                        \
-  initializeBuiltinFN(vm, &vm->builtins[vm->builtins_count++], name, \
+#define INITIALIZE_BUILTIN_FN(name, fn, argc)                              \
+  initializeBuiltinFN(vm, &vm->builtins_funcs[vm->builtins_count++], name, \
                       (int)strlen(name), argc, fn, DOCSTRING(fn));
   // General functions.
   INITIALIZE_BUILTIN_FN("type_name", coreTypeName, 1);
@@ -1467,8 +1475,8 @@ bool varContains(PKVM* vm, Var elem, Var container) {
 
 Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
-#define ERR_NO_ATTRIB(vm, on, attrib)                                        \
-  VM_SET_ERROR(vm, stringFormat(vm, "'$' object has no attribute named '$'", \
+#define ERR_NO_ATTRIB(vm, on, attrib)                                         \
+  VM_SET_ERROR(vm, stringFormat(vm, "'$' object has no attribute named '$'.", \
                                 varTypeName(on), attrib->data))
 
   if (!IS_OBJ(on)) {

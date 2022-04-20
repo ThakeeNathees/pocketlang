@@ -73,8 +73,8 @@ PKVM* pkNewVM(PkConfiguration* config) {
 
   // This is necessary to prevent garbage collection skip the entry in this
   // array while we're building it.
-  for (int i = 0; i < OBJ_INST; i++) {
-    vm->primitives[i] = NULL;
+  for (int i = 0; i < PK_INSTANCE; i++) {
+    vm->builtin_classes[i] = NULL;
   }
 
   initializeCore(vm);
@@ -272,20 +272,16 @@ void vmCollectGarbage(PKVM* vm) {
 
   // Mark builtin functions.
   for (int i = 0; i < vm->builtins_count; i++) {
-    markObject(vm, &vm->builtins[i]->_super);
+    markObject(vm, &vm->builtins_funcs[i]->_super);
   }
 
   // Mark primitive types' classes.
-  for (int i = 0; i < (int)OBJ_INST; i++) {
-    // Upvalue and functions aren't first class objects and they doesn't
-    // require classes.
-    if (i == OBJ_UPVALUE || i == OBJ_FUNC) continue;
-
+  for (int i = 0; i < PK_INSTANCE; i++) {
     // It's possible that a garbage collection could be triggered while we're
     // building the primitives and the class could be NULL.
-    if (vm->primitives[i] == NULL) continue;
+    if (vm->builtin_classes[i] == NULL) continue;
 
-    markObject(vm, &vm->primitives[i]->_super);
+    markObject(vm, &vm->builtin_classes[i]->_super);
   }
 
   // Mark the modules.
@@ -970,7 +966,7 @@ L_vm_main_loop:
     {
       uint8_t index = READ_BYTE();
       ASSERT_INDEX(index, vm->builtins_count);
-      Closure* closure = vm->builtins[index];
+      Closure* closure = vm->builtins_funcs[index];
       PUSH(VAR_OBJ(closure));
       DISPATCH();
     }

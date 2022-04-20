@@ -74,9 +74,11 @@ typedef struct PkHandle PkHandle;
 // alive use `pkNewHandle()`.
 typedef void* PkVar;
 
-// Type enum of the pocketlang variables, this can be used to get the type
-// from a PkVar in the method pkGetVarType().
+// Type enum of the pocketlang's first class types. Note that Object isn't
+// instanciable (as of now) but they're considered first calss.
 typedef enum {
+  PK_OBJECT = 0,
+
   PK_NULL,
   PK_BOOL,
   PK_NUMBER,
@@ -85,10 +87,10 @@ typedef enum {
   PK_MAP,
   PK_RANGE,
   PK_MODULE,
-  PK_FUNCTION,
+  PK_CLOSURE,
   PK_FIBER,
   PK_CLASS,
-  PK_INST,
+  PK_INSTANCE,
 } PkVarType;
 
 typedef struct PkStringPtr PkStringPtr;
@@ -257,7 +259,7 @@ PK_PUBLIC void pkModuleAddFunction(PKVM* vm, PkHandle* module,
 
 // Returns the main function of the [module]. When a module is compiled all of
 // it's statements are wrapped around an implicit main function.
-PK_PUBLIC PkHandle* pkGetMainFunction(PKVM* vm, PkHandle* module);
+PK_PUBLIC PkHandle* pkModuleGetMainFunction(PKVM* vm, PkHandle* module);
 
 // Compile the [module] with the provided [source]. Set the compiler options
 // with the the [options] argument or set to NULL for default options.
