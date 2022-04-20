@@ -491,8 +491,6 @@ struct Class {
   const char* docstring;
 
   Closure* ctor; //< The constructor function.
-  pkUintBuffer field_names; //< Buffer of field names.
-  // TODO: ordered names buffer for binary search.
 };
 
 typedef struct {
@@ -503,15 +501,17 @@ typedef struct {
 struct Instance {
   Object _super;
 
-  const char* ty_name;  //< Name of the type it belongs to.
+  Class* cls; //< Class of the instance.
 
-  bool is_native;       //< True if it's a native type instance.
-  uint32_t native_id;   //< Unique ID of this native instance.
+  // If the instance is native, the [native] pointer points to the user data
+  // (generally a heap allocated struct of that type) that contains it's
+  // attributes. We'll use it to access an attribute first with setters and
+  // getters and if the attribute not exists we'll continue search in the
+  // bellow attribs map.
+  void* native;
 
-  union {
-    void* native; //< C struct pointer. // TODO:
-    Inst* ins;    //< Module instance pointer.
-  };
+  // Dynamic attributes of an instance.
+  Map attribs;
 };
 
 /*****************************************************************************/
@@ -569,16 +569,8 @@ Class* newClass(PKVM* vm, const char* name, int length,
                 Module* module, const char* docstring,
                 int* cls_index);
 
-// Allocate new instance with of the base [type]. Note that if [initialize] is
-// false, the field value buffer of the instance would be un initialized (ie.
-// the buffer count = 0). Otherwise they'll be set to VAR_NULL.
-Instance* newInstance(PKVM* vm, Class* cls, bool initialize);
-
-// Allocate new native instance and with [data] as the native type handle and
-// return Instance*. The [id] is the unique id of the instance, this would be
-// used to check if two instances are equal and used to get the name of the
-// instance using NativeTypeNameFn callback.
-Instance* newInstanceNative(PKVM* vm, void* data, uint32_t id);
+// Allocate new instance with of the base [type].
+Instance* newInstance(PKVM* vm, Class* cls);
 
 /*****************************************************************************/
 /* METHODS                                                                   */

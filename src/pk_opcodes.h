@@ -43,10 +43,6 @@ OPCODE(PUSH_MAP, 0, 1)
 // Push the self of the current method on the stack.
 OPCODE(PUSH_SELF, 0, 1)
 
-// Push a new instance to the stack.
-// param: 1 byte index.
-OPCODE(PUSH_INSTANCE, 1, 1)
-
 // Pop the value on the stack the next stack top would be a list. Append the
 // value to the list. Used in literal array construction.
 OPCODE(LIST_APPEND, 0, -1)
@@ -54,10 +50,6 @@ OPCODE(LIST_APPEND, 0, -1)
 // Pop the top 2 values from the stack, the next stack top would be the map.
 // Insert the key value pairs to the map. Used in literal map construction.
 OPCODE(MAP_INSERT, 0, -2)
-
-// Pop the value on the stack, the next stack top would be an instance. Append
-// the value to the instance. Used in instance construction.
-OPCODE(INST_APPEND, 0, -1)
 
 // Push stack local on top of the stack. Locals at 0 to 8 marked explicitly
 // since it's performance critical.

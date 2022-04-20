@@ -31,11 +31,6 @@ PkConfiguration pkNewConfiguration(void) {
   config.write_fn = NULL;
   config.read_fn = NULL;
 
-  config.inst_free_fn = NULL;
-  config.inst_name_fn = NULL;
-  config.inst_get_attrib_fn = NULL;
-  config.inst_set_attrib_fn = NULL;
-
   config.load_script_fn = NULL;
   config.resolve_path_fn = NULL;
   config.user_data = NULL;
@@ -857,17 +852,6 @@ L_vm_main_loop:
       DISPATCH();
     }
 
-    OPCODE(PUSH_INSTANCE):
-    {
-      uint8_t index = READ_SHORT();
-      ASSERT_INDEX(index, module->constants.count);
-      ASSERT(IS_OBJ_TYPE(module->constants.data[index], OBJ_CLASS), OOPS);
-      Instance* inst = newInstance(vm,
-                       (Class*)AS_OBJ(module->constants.data[index]), false);
-      PUSH(VAR_OBJ(inst));
-      DISPATCH();
-    }
-
     OPCODE(LIST_APPEND):
     {
       Var elem = PEEK(-1); // Don't pop yet, we need the reference for gc.
@@ -894,21 +878,6 @@ L_vm_main_loop:
 
       DROP(); // value
       DROP(); // key
-
-      DISPATCH();
-    }
-
-    OPCODE(INST_APPEND):
-    {
-      Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
-      Var inst = PEEK(-2);
-      ASSERT(IS_OBJ_TYPE(inst, OBJ_INST), OOPS);
-
-      Instance* inst_p = (Instance*)AS_OBJ(inst);
-      ASSERT(!inst_p->is_native, OOPS);
-      Inst* ins = inst_p->ins;
-      pkVarBufferWrite(&ins->fields, vm, value);
-      DROP(); // value
 
       DISPATCH();
     }

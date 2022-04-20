@@ -69,6 +69,34 @@ void pkRegisterModule(PKVM* vm, PkHandle* module) {
   vmRegisterModule(vm, module_, module_->name);
 }
 
+PkHandle* pkNewClass(PKVM* vm, PkHandle* module, const char* name) {
+  CHECK_NULL(module);
+  CHECK_NULL(name);
+  CHECK_TYPE(module, OBJ_MODULE);
+
+  Class* class_ = newClass(vm, name, (int)strlen(name),
+                           (Module*)AS_OBJ(module->value), NULL, NULL);
+  return vmNewHandle(vm, VAR_OBJ(class_));
+}
+
+void pkClassAddMethod(PKVM* vm, PkHandle* cls,
+                      const char* name,
+                      pkNativeFn fptr, int arity) {
+  CHECK_NULL(cls);
+  CHECK_NULL(fptr);
+  CHECK_TYPE(cls, OBJ_MODULE);
+
+  TODO;
+}
+
+void* pkGetSelf(const PKVM* vm) {
+  Var self = vm->fiber->frames[vm->fiber->frame_count - 1].self;
+  ASSERT(IS_OBJ_TYPE(self, OBJ_INST), OOPS);
+  Instance* inst = (Instance*)AS_OBJ(self);
+  ASSERT(inst->native != NULL, OOPS);
+  return inst->native;
+}
+
 void pkModuleAddGlobal(PKVM* vm, PkHandle* module,
                                  const char* name, PkHandle* value) {
   CHECK_TYPE(module, OBJ_MODULE);
@@ -230,33 +258,6 @@ bool pkGetArgString(PKVM* vm, int arg, const char** value, uint32_t* length) {
   return true;
 }
 
-bool pkGetArgInst(PKVM* vm, int arg, uint32_t id, void** value) {
-  CHECK_GET_ARG_API_ERRORS();
-
-  Var val = ARG(arg);
-  bool is_native_instance = false;
-
-  if (IS_OBJ_TYPE(val, OBJ_INST)) {
-    Instance* inst = ((Instance*)AS_OBJ(val));
-    if (inst->is_native && inst->native_id == id) {
-      *value = inst->native;
-      is_native_instance = true;
-    }
-  }
-
-  if (!is_native_instance) {
-    const char* ty_name = "$(?)";
-    if (vm->config.inst_name_fn != NULL) {
-      ty_name = vm->config.inst_name_fn(id);
-    }
-
-    ERR_INVALID_ARG_TYPE(ty_name);
-    return false;
-  }
-
-  return true;
-}
-
 bool pkGetArgValue(PKVM* vm, int arg, PkVarType type, PkVar* value) {
   CHECK_GET_ARG_API_ERRORS();
 
@@ -298,10 +299,6 @@ void pkReturnValue(PKVM* vm, PkVar value) {
 
 void pkReturnHandle(PKVM* vm, PkHandle* handle) {
   RET(handle->value);
-}
-
-void pkReturnInstNative(PKVM* vm, void* data, uint32_t id) {
-  RET(VAR_OBJ(newInstanceNative(vm, data, id)));
 }
 
 const char* pkStringGetData(const PkVar value) {

@@ -126,26 +126,14 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         NO_ARGS();
         break;
 
-      case OP_PUSH_LIST:     SHORT_ARG(); break;
-      case OP_PUSH_INSTANCE:
-      {
-        int cls_index = READ_SHORT();
-        ASSERT_INDEX((uint32_t)cls_index, func->owner->constants.count);
-        Var constant = func->owner->constants.data[cls_index];
-        ASSERT(IS_OBJ_TYPE(constant, OBJ_CLASS), OOPS);
-
-        // Prints: %5d [Class:%s]\n
-        PRINT_INT(cls_index);
-        PRINT(" [Class:");
-        PRINT(func->owner->name->data);
-        PRINT("]\n");
+      case OP_PUSH_LIST:
+        SHORT_ARG();
         break;
-      }
+
       case OP_PUSH_MAP:
       case OP_PUSH_SELF:
       case OP_LIST_APPEND:
       case OP_MAP_INSERT:
-      case OP_INST_APPEND:
         NO_ARGS();
         break;
 
