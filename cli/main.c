@@ -188,8 +188,7 @@ int main(int argc, const char** argv) {
   user_data.repl_mode = false;
   pkSetUserData(vm, &user_data);
 
-  registerModulePath(vm);
-  //REGISTER_ALL_MODULES(vm);
+  REGISTER_ALL_MODULES(vm);
 
   PkCompileOptions options = pkNewCompilerOptions();
   options.debug = debug;

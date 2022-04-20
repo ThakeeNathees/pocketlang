@@ -69,8 +69,10 @@ void pkRegisterModule(PKVM* vm, PkHandle* module) {
   vmRegisterModule(vm, module_, module_->name);
 }
 
-PkHandle* pkNewClass(PKVM* vm, PkHandle* base_class, PkHandle* module,
-                     const char* name) {
+PkHandle* pkNewClass(PKVM* vm, const char* name,
+                     PkHandle* base_class, PkHandle* module,
+                     pkNewInstanceFn new_fn,
+                     pkDeleteInstanceFn delete_fn) {
   CHECK_NULL(module);
   CHECK_NULL(name);
   CHECK_TYPE(module, OBJ_MODULE);
@@ -84,6 +86,9 @@ PkHandle* pkNewClass(PKVM* vm, PkHandle* base_class, PkHandle* module,
   Class* class_ = newClass(vm, name, (int)strlen(name),
                            super, (Module*)AS_OBJ(module->value),
                            NULL, NULL);
+  class_->new_fn = new_fn;
+  class_->delete_fn = delete_fn;
+
   return vmNewHandle(vm, VAR_OBJ(class_));
 }
 
@@ -92,9 +97,21 @@ void pkClassAddMethod(PKVM* vm, PkHandle* cls,
                       pkNativeFn fptr, int arity) {
   CHECK_NULL(cls);
   CHECK_NULL(fptr);
-  CHECK_TYPE(cls, OBJ_MODULE);
+  CHECK_TYPE(cls, OBJ_CLASS);
 
-  TODO;
+  Class* class_ = (Class*)AS_OBJ(cls->value);
+
+  Function* fn = newFunction(vm, name, (int)strlen(name),
+                             class_->owner, true, NULL, NULL);
+
+  // No need to push the function to temp references of the VM
+  // since it's written to the constant pool of the module and the module
+  // won't be garbage collected (class handle has reference to the module).
+
+  Closure* method = newClosure(vm, fn);
+  vmPushTempRef(vm, &method->_super); // method.
+  pkClosureBufferWrite(&class_->methods, vm, method);
+  vmPopTempRef(vm); // method.
 }
 
 void* pkGetSelf(const PKVM* vm) {

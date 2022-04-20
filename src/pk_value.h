@@ -200,6 +200,7 @@ DECLARE_BUFFER(Uint, uint32_t)
 DECLARE_BUFFER(Byte, uint8_t)
 DECLARE_BUFFER(Var, Var)
 DECLARE_BUFFER(String, String*)
+DECLARE_BUFFER(Closure, Closure*)
 
 // Add all the characters to the buffer, byte buffer can also be used as a
 // buffer to write string (like a string stream). Note that this will not
@@ -494,6 +495,15 @@ struct Class {
   const char* docstring;
 
   Closure* ctor; //< The constructor function.
+
+  // A buffer of methods of the class.
+  pkClosureBuffer methods;
+
+  // Allocater and de-allocator functions for native types.
+  // For script/ builtin types it'll be NULL.
+  pkNewInstanceFn new_fn;
+  pkDeleteInstanceFn delete_fn;
+
 };
 
 typedef struct {

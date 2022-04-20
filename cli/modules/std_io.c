@@ -6,6 +6,10 @@
 
 #include "modules.h"
 
+/*****************************************************************************/
+/* FILE CLASS                                                                */
+/*****************************************************************************/
+
  // Str  | If already exists | If does not exist |
  // -----+-------------------+-------------------|
  // 'r'  |  read from start  |   failure to open |
@@ -31,26 +35,21 @@ typedef struct {
   bool closed;         // True if the file isn't closed yet.
 } File;
 
-/*****************************************************************************/
-/* FILE OBJECT OPERATORS                                                     */
-/*****************************************************************************/
-
-void fileGetAttrib(PKVM* vm, File* file, const char* attrib) {
-  if (strcmp(attrib, "closed") == 0) {
-    pkReturnBool(vm, file->closed);
-    return;
-  }
+void* _newFile() {
+  File* file = NEW_OBJ(File);
+  file->closed = true;
+  file->mode = FMODE_NONE;
+  file->fp = NULL;
+  return file;
 }
 
-bool fileSetAttrib(PKVM* vm, File* file, const char* attrib) {
-  return false;
-}
-
-void fileClean(PKVM* vm, File* file) {
+void _deleteFile(void* ptr) {
+  File* file = (File*)ptr;
   if (!file->closed) {
     if (fclose(file->fp) != 0) { /* TODO: error! */ }
     file->closed = true;
   }
+  FREE_OBJ(file);
 }
 
 /*****************************************************************************/
@@ -171,7 +170,7 @@ static void _fileClose(PKVM* vm) {
 void registerModuleIO(PKVM* vm) {
   PkHandle* io = pkNewModule(vm, "io");
 
-  PkHandle* cls_file = pkNewClass(vm, NULL, io, "File");
+  PkHandle* cls_file = pkNewClass(vm, "File", NULL, io, _newFile, _deleteFile);
   pkClassAddMethod(vm, cls_file, "open",  _fileOpen, -1);
   pkClassAddMethod(vm, cls_file, "read",  _fileRead,  0);
   pkClassAddMethod(vm, cls_file, "write", _fileWrite, 1);

@@ -94,6 +94,7 @@ DEFINE_BUFFER(Uint, uint32_t)
 DEFINE_BUFFER(Byte, uint8_t)
 DEFINE_BUFFER(Var, Var)
 DEFINE_BUFFER(String, String*)
+DEFINE_BUFFER(Closure, Closure*)
 
 void pkByteBufferAddString(pkByteBuffer* self, PKVM* vm, const char* str,
                            uint32_t length) {
@@ -140,6 +141,13 @@ void markVarBuffer(PKVM* vm, pkVarBuffer* self) {
 }
 
 void markStringBuffer(PKVM* vm, pkStringBuffer* self) {
+  if (self == NULL) return;
+  for (uint32_t i = 0; i < self->count; i++) {
+    markObject(vm, &self->data[i]->_super);
+  }
+}
+
+void markClosureBuffer(PKVM* vm, pkClosureBuffer* self) {
   if (self == NULL) return;
   for (uint32_t i = 0; i < self->count; i++) {
     markObject(vm, &self->data[i]->_super);
@@ -271,6 +279,10 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       markObject(vm, &cls->owner->_super);
       markObject(vm, &cls->ctor->_super);
       markObject(vm, &cls->name->_super);
+
+      markClosureBuffer(vm, &cls->methods);
+      vm->bytes_allocated += sizeof(Closure) * cls->methods.capacity;
+
     } break;
 
     case OBJ_INST:
@@ -500,10 +512,14 @@ Class* newClass(PKVM* vm, const char* name, int length,
 
   vmPushTempRef(vm, &cls->_super); // class.
 
+  pkClosureBufferInit(&cls->methods);
+
   cls->owner = NULL;
   cls->super_class = super;
   cls->docstring = NULL;
   cls->ctor = NULL;
+  cls->new_fn = NULL;
+  cls->delete_fn = NULL;
 
   // Builtin types doesn't belongs to a module.
   if (module != NULL) {
@@ -523,7 +539,13 @@ Instance* newInstance(PKVM* vm, Class* cls) {
   Instance* inst = ALLOCATE(vm, Instance);
   varInitObject(&inst->_super, vm, OBJ_INST);
   inst->cls = cls;
-  inst->native = NULL;
+  if (cls->new_fn != NULL) {
+    vmPushTempRef(vm, &inst->_super); // inst.
+    inst->native = cls->new_fn();
+    vmPopTempRef(vm); // inst.
+  } else {
+    inst->native = NULL;
+  }
   return inst;
 }
 
@@ -1016,12 +1038,13 @@ void freeObject(PKVM* vm, Object* self) {
 
     case OBJ_CLASS: {
       Class* cls = (Class*)self;
+      pkClosureBufferClear(&cls->methods, vm);
     } break;
 
     case OBJ_INST: {
       Instance* inst = (Instance*)self;
-      if (inst->native) {
-        TODO; // Call native clean function.
+      if (inst->cls->delete_fn != NULL) {
+        inst->cls->delete_fn(inst->native);
       }
     } break;
   }

@@ -127,6 +127,15 @@ typedef PkStringPtr (*pkResolvePathFn) (PKVM* vm, const char* from,
 // to indicate if it's failed to load the script.
 typedef PkStringPtr (*pkLoadScriptFn) (PKVM* vm, const char* path);
 
+// A function callback to allocate and return a new instance of the registered
+// class. Which will be called when the instance is constructed. The returned/
+// data is expected to be alive till the delete callback occurs.
+typedef void* (*pkNewInstanceFn) ();
+
+// A function callback to de-allocate the aloocated native instance of the
+// registered class.
+typedef void (*pkDeleteInstanceFn) (void*);
+
 /*****************************************************************************/
 /* POCKETLANG TYPES                                                          */
 /*****************************************************************************/
@@ -289,8 +298,10 @@ PK_PUBLIC void pkRegisterModule(PKVM* vm, PkHandle* module);
 
 // Create a new class on the [module] with the [name] and return it.
 // If the [base_class] is NULL by default it'll set to "Object" class.
-PK_PUBLIC PkHandle* pkNewClass(PKVM* vm, PkHandle* base_class,
-                               PkHandle* module, const char* name);
+PK_PUBLIC PkHandle* pkNewClass(PKVM* vm, const char* name,
+                               PkHandle* base_class, PkHandle* module,
+                               pkNewInstanceFn new_fn,
+                               pkDeleteInstanceFn delete_fn);
 
 // Add a native method to the given class. If the [arity] is -1 that means
 // the method has variadic parameters and use pkGetArgc() to get the argc.
