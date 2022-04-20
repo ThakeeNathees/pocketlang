@@ -133,7 +133,7 @@ int repl(PKVM* vm, const PkCompileOptions* options) {
     if (result != PK_RESULT_SUCCESS) continue;
 
     // Compiled source would be the "main" function of the module. Run it.
-    PkHandle* _main = pkGetMainFunction(vm, module);
+    PkHandle* _main = pkModuleGetMainFunction(vm, module);
     PkHandle* fiber = pkNewFiber(vm, _main);
     ASSERT((_main != NULL) && (fiber != NULL), OOPS);
 

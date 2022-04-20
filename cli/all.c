@@ -35,15 +35,3 @@
 // Source  : https://github.com/cofyc/argparse/
 // About   : Command-line arguments parsing library.
 #include "thirdparty/argparse/argparse.c"
-
-// Library : dlfcn-win32
-// License : MIT
-// Source  : https://github.com/dlfcn-win32/dlfcn-win32/
-// About   :  An implementation of dlfcn for Windows.
-#ifdef _WIN32
-// FIXME:
-// This library redefine the malloc family macro, which cause a compile
-// time warning.
-//
-//  #include "modules/thirdparty/dlfcn-win32/dlfcn.c"
-#endif

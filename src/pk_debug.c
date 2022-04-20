@@ -227,7 +227,7 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       {
         int index = READ_BYTE();
         ASSERT_INDEX(index, vm->builtins_count);
-        const char* name = vm->builtins[index]->fn->name;
+        const char* name = vm->builtins_funcs[index]->fn->name;
         // Prints: %5d [Fn:%s]\n
         PRINT_INT(index);
         PRINT(" [Fn:");

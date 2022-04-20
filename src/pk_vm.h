@@ -114,13 +114,13 @@ struct PKVM {
   Map* modules;
 
   // Array of all builtin functions.
-  Closure* builtins[BUILTIN_FN_CAPACITY];
+  Closure* builtins_funcs[BUILTIN_FN_CAPACITY];
   int builtins_count;
 
   // An array of all the primitive types' class except for OBJ_INST. Since the
   // type of the objects are enums starting from 0 we can directly get the
   // class by using their enum (ex: primitives[OBJ_LIST]).
-  Class* primitives[(int)OBJ_INST];
+  Class* builtin_classes[PK_INSTANCE];
 
   // Current fiber.
   Fiber* fiber;

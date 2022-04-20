@@ -344,9 +344,8 @@ struct Function {
   // is prevent checking is_native everytime (which might be a bit faster).
   int upvalue_count;
 
-  // Docstring of the function, currently it's just the C string literal
-  // pointer, refactor this into String* so that we can support public
-  // native functions to provide a docstring.
+  // Docstring of the function. Could be either a C string literal or a string
+  // entry in it's owner module's constant pool.
   const char* docstring;
 
   // Function can be either native C function pointers or compiled pocket
@@ -486,6 +485,10 @@ struct Class {
   // Name of the class.
   String* name;
 
+  // Docstring of the class. Could be either a C string literal or a string
+  // entry in it's owner module's constant pool.
+  const char* docstring;
+
   Closure* ctor; //< The constructor function.
   pkUintBuffer field_names; //< Buffer of field names.
   // TODO: ordered names buffer for binary search.
@@ -591,10 +594,6 @@ void markValue(PKVM* vm, Var self);
 // Mark the elements of the buffer as reachable at the mark-and-sweep phase of
 // the garbage collection.
 void markVarBuffer(PKVM* vm, pkVarBuffer* self);
-
-// Mark the elements of the buffer as reachable at the mark-and-sweep phase of
-// the garbage collection.
-void markStringBuffer(PKVM* vm, pkStringBuffer* self);
 
 // Pop the marked objects from the working set of the VM and add it's
 // referenced objects to the working set, continue traversing and mark
@@ -723,6 +722,12 @@ Var doubleToVar(double value);
 
 // Internal method behind AS_NUM(value) don't use it directly.
 double varToDouble(Var value);
+
+// Returns the PkVarType of the object type.
+PkVarType getObjPkVarType(ObjectType type);
+
+// Returns the ObjectType of the PkVar type.
+ObjectType getPkVarObjType(PkVarType type);
 
 // Returns the type name of the PkVarType enum value.
 const char* getPkVarTypeName(PkVarType type);
