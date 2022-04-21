@@ -551,7 +551,7 @@ static inline void pushCallFrame(PKVM* vm, const Closure* closure, Var* rbp) {
   frame->closure = closure;
   frame->ip = closure->fn->fn->opcodes.data;
 
-  // Eat the self.
+  // Capture self.
   frame->self = vm->fiber->self;
   vm->fiber->self = VAR_UNDEFINED;
 }
@@ -567,7 +567,10 @@ static inline void reuseCallFrame(PKVM* vm, const Closure* closure) {
   CallFrame* frame = fb->frames + fb->frame_count - 1;
   frame->closure = closure;
   frame->ip = closure->fn->fn->opcodes.data;
-  frame->self = VAR_UNDEFINED;
+
+  // Capture self.
+  frame->self = vm->fiber->self;
+  vm->fiber->self = VAR_UNDEFINED;
 
   ASSERT(*frame->rbp == VAR_NULL, OOPS);
 

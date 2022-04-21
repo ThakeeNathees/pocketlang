@@ -288,7 +288,7 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
     case OBJ_INST:
     {
       Instance* inst = (Instance*)obj;
-      markObject(vm, &inst->attribs._super);
+      markObject(vm, &inst->attribs->_super);
       markObject(vm, &inst->cls->_super);
       vm->bytes_allocated += sizeof(Instance);
     } break;
@@ -515,6 +515,7 @@ Class* newClass(PKVM* vm, const char* name, int length,
 
   pkClosureBufferInit(&cls->methods);
 
+  cls->class_of = PK_INSTANCE;
   cls->owner = NULL;
   cls->super_class = super;
   cls->docstring = NULL;
@@ -538,28 +539,23 @@ Class* newClass(PKVM* vm, const char* name, int length,
 
 Instance* newInstance(PKVM* vm, Class* cls) {
 
-#ifdef DEBUG
-  bool _builtin_class = false;
-  for (int i = 0; i < PK_INSTANCE; i++) {
-    if (vm->builtin_classes[i] == cls) {
-      _builtin_class = true;
-      break;
-    }
-  }
-  ASSERT(!_builtin_class, "Cannot create an instace of builtin class "
-                          "with newInstance() function.");
-#endif // DEBUG
+  ASSERT(cls->class_of == PK_INSTANCE, "Cannot create an instace of builtin "
+                                       "class with newInstance() function.");
 
   Instance* inst = ALLOCATE(vm, Instance);
   varInitObject(&inst->_super, vm, OBJ_INST);
+  vmPushTempRef(vm, &inst->_super); // inst.
+
   inst->cls = cls;
+  inst->attribs = newMap(vm);
+
   if (cls->new_fn != NULL) {
-    vmPushTempRef(vm, &inst->_super); // inst.
     inst->native = cls->new_fn();
-    vmPopTempRef(vm); // inst.
   } else {
     inst->native = NULL;
   }
+
+  vmPopTempRef(vm); // inst.
   return inst;
 }
 
@@ -1170,10 +1166,10 @@ bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value) {
   ASSERT((inst != NULL) && (attrib != NULL) && (value != NULL), OOPS);
 
   if (inst->native != NULL) {
+    TODO;
   }
-  TODO;
 
-  Var value_ = mapGet(&inst->attribs, VAR_OBJ(attrib));
+  Var value_ = mapGet(inst->attribs, VAR_OBJ(attrib));
   if (IS_UNDEF(value_)) return false;
 
   *value = value_;
@@ -1194,7 +1190,7 @@ bool instSetAttrib(PKVM* vm, Instance* inst, String* attrib, Var value) {
     return true;
   }
 
-  mapSet(vm, &inst->attribs, VAR_OBJ(attrib), value);
+  mapSet(vm, inst->attribs, VAR_OBJ(attrib), value);
   return true;
 }
 
@@ -1591,9 +1587,10 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
       {
         const Instance* inst = (const Instance*)obj;
         pkByteBufferWrite(buff, vm, '[');
+        pkByteBufferWrite(buff, vm, '\'');
         pkByteBufferAddString(buff, vm, inst->cls->name->data,
           inst->cls->name->length);
-        pkByteBufferWrite(buff, vm, ':');
+        pkByteBufferAddString(buff, vm, "' instance at ", 14);
 
         char buff_addr[STR_HEX_BUFF_SIZE];
         char* ptr = (char*)buff_addr;

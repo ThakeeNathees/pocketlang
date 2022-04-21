@@ -1289,8 +1289,10 @@ static void initializePrimitiveClasses(PKVM* vm) {
     Class* super = NULL;
     if (i != 0) super = vm->builtin_classes[PK_OBJECT];
     const char* name = getPkVarTypeName((PkVarType)i);
-    vm->builtin_classes[i] = newClass(vm, name, (int)strlen(name),
-                                      super, NULL, NULL, NULL);
+    Class* cls = newClass(vm, name, (int)strlen(name),
+                          super, NULL, NULL, NULL);
+    vm->builtin_classes[i] = cls;
+    cls->class_of = (PkVarType)i;
   }
 
 #define ADD_CTOR(type, name, ptr, arity_)                    \
@@ -1347,46 +1349,41 @@ Var preConstructSelf(PKVM* vm, Class* cls) {
   VM_SET_ERROR(vm, newString(vm, \
                "Class '" type_name "' cannot be instanciated."))
 
-  for (int i = 0; i < PK_INSTANCE; i++) {
-    if (vm->builtin_classes[i] == cls) {
+  switch (cls->class_of) {
+    case PK_OBJECT:
+      NO_INSTANCE("Object");
+      return VAR_NULL;
 
-      switch ((PkVarType)i) {
-        case PK_OBJECT:
-          NO_INSTANCE("Object");
-          return VAR_NULL;
+    case PK_NULL:
+    case PK_BOOL:
+    case PK_NUMBER:
+    case PK_STRING:
+    case PK_LIST:
+    case PK_MAP:
+    case PK_RANGE:
+      return VAR_NULL; // Constructor will override the null.
 
-        case PK_NULL:
-        case PK_BOOL:
-        case PK_NUMBER:
-        case PK_STRING:
-        case PK_LIST:
-        case PK_MAP:
-        case PK_RANGE:
-          return VAR_NULL; // Constructor will override the null.
+    case PK_MODULE:
+      NO_INSTANCE("Module");
+      return VAR_NULL;
 
-        case PK_MODULE:
-          NO_INSTANCE("Module");
-          return VAR_NULL;
+    case PK_CLOSURE:
+      NO_INSTANCE("Closure");
+      return VAR_NULL;
 
-        case PK_CLOSURE:
-          NO_INSTANCE("Closure");
-          return VAR_NULL;
+    case PK_FIBER:
+      return VAR_NULL;
 
-        case PK_FIBER:
-          return VAR_NULL;
+    case PK_CLASS:
+      NO_INSTANCE("Class");
+      return VAR_NULL;
 
-        case PK_CLASS:
-          NO_INSTANCE("Class");
-          return VAR_NULL;
-
-        case PK_INSTANCE:
-          UNREACHABLE();
-          return VAR_NULL;
-      }
-    }
+    case PK_INSTANCE:
+      return VAR_OBJ(newInstance(vm, cls));
   }
 
-  return VAR_OBJ(newInstance(vm, cls));
+  UNREACHABLE();
+  return VAR_NULL;
 }
 
 Class* getClass(PKVM* vm, Var instance) {

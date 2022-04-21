@@ -501,6 +501,11 @@ struct Class {
   // entry in it's owner module's constant pool.
   const char* docstring;
 
+  // For builtin type it'll be it's enum (ex: PK_STRING, PK_NUMBER, ...) for
+  // every other classes it'll be PK_INSTANCE to indicate that it's not a
+  // builtin type's class.
+  PkVarType class_of;
+
   Closure* ctor; //< The constructor function.
 
   // A buffer of methods of the class.
@@ -531,7 +536,7 @@ struct Instance {
   void* native;
 
   // Dynamic attributes of an instance.
-  Map attribs;
+  Map* attribs;
 };
 
 /*****************************************************************************/
