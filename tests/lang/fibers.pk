@@ -3,10 +3,8 @@ def f0()
 	yield("yield value")
 end
 
-import _Fiber
-
-fiber = _Fiber.new(f0)
-yield_value = _Fiber.run(fiber)
+fiber = Fiber(f0)
+yield_value = fiber.run()
 assert(yield_value == "yield value")
 assert(!fiber.is_done)
 
@@ -14,9 +12,10 @@ def f1()
 	assert(yield("y") == "r")
 	yield()
 end
-fiber = _Fiber.new(f1)
-assert(_Fiber.run(fiber) == "y")
-_Fiber.resume(fiber, "r")
+
+fiber = Fiber(f1)
+assert(fiber.run() == "y")
+fiber.resume("r")
 assert(!fiber.is_done)
 
 def f2(p1, p2, p3)
@@ -27,11 +26,11 @@ def f2(p1, p2, p3)
 	return p1 + p2 * p3
 end
 
-fiber = _Fiber.new(f2)
-p3 = _Fiber.run(fiber, 1, 2, 3); assert(p3 == 3)
-p2 = _Fiber.resume(fiber, 'r1'); assert(p2 == 2)
-p1 = _Fiber.resume(fiber, 'r2'); assert(p1 == 1)
-pa = _Fiber.resume(fiber, 'r3'); assert(pa == 7)
+fiber = Fiber(f2)
+p3 = fiber.run(1, 2, 3); assert(p3 == 3)
+p2 = fiber.resume('r1'); assert(p2 == 2)
+p1 = fiber.resume('r2'); assert(p1 == 1)
+pa = fiber.resume('r3'); assert(pa == 7)
 assert(fiber.is_done)
 
 # If we got here, that means all test were passed.

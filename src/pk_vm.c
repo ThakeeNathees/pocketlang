@@ -1087,13 +1087,30 @@ L_do_call:
         closure = (const Closure*)AS_OBJ(callable);
 
       } else if (IS_OBJ_TYPE(callable, OBJ_CLASS)) {
-        closure = (const Closure*)((Class*)AS_OBJ(callable))->ctor;
+        Class* cls = (Class*)AS_OBJ(callable);
+
+        // Allocate / create a new self before calling constructor on it.
+        fiber->self = preConstructSelf(vm, cls);
+        CHECK_ERROR();
+
+        closure = (const Closure*)(cls)->ctor;
+
+        // No constructor is defined on the class. Just return self.
+        if (closure == NULL) {
+          if (argc != 0) {
+            String* msg = stringFormat(vm, "Expected exactly 0 argument(s).");
+            RUNTIME_ERROR(msg);
+          }
+
+          *fiber->ret = fiber->self;
+          fiber->self = VAR_UNDEFINED;
+          DISPATCH();
+        }
 
       } else {
         RUNTIME_ERROR(stringFormat(vm, "$ $(@).", "Expected a callable to "
                       "call, instead got",
                       varTypeName(callable), toString(vm, callable)));
-        DISPATCH();
       }
 
       // If we reached here it's a valid callable.

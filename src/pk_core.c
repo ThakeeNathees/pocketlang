@@ -122,7 +122,7 @@ void* pkGetSelf(const PKVM* vm) {
 }
 
 void pkModuleAddGlobal(PKVM* vm, PkHandle* module,
-                                 const char* name, PkHandle* value) {
+                       const char* name, PkHandle* value) {
   CHECK_TYPE(module, OBJ_MODULE);
   CHECK_NULL(value);
 
@@ -1120,68 +1120,6 @@ DEF(stdMathRound,
   RET(VAR_NUM(round(num)));
 }
 
-// 'Fiber' module methods.
-// -----------------------
-
-DEF(stdFiberNew,
-  "new(fn:Closure) -> fiber\n"
-  "Create and return a new fiber from the given function [fn].") {
-
-  Closure* closure;
-  if (!validateArgClosure(vm, 1, &closure)) return;
-  RET(VAR_OBJ(newFiber(vm, closure)));
-}
-
-DEF(stdFiberRun,
-  "run(fb:Fiber, ...) -> var\n"
-  "Runs the fiber's function with the provided arguments and returns it's "
-  "return value or the yielded value if it's yielded.") {
-
-  int argc = ARGC;
-  if (argc == 0) // Missing the fiber argument.
-    RET_ERR(newString(vm, "Missing argument - fiber."));
-
-  Fiber* fb;
-  if (!validateArgFiber(vm, 1, &fb)) return;
-
-  // Buffer of argument to call vmPrepareFiber().
-  Var* args[MAX_ARGC];
-
-  // ARG(1) is fiber, function arguments are ARG(2), ARG(3), ... ARG(argc).
-  for (int i = 1; i < argc; i++) {
-    args[i - 1] = &ARG(i + 1);
-  }
-
-  // Switch fiber and start execution.
-  if (vmPrepareFiber(vm, fb, argc - 1, args)) {
-    ASSERT(fb == vm->fiber, OOPS);
-    fb->state = FIBER_RUNNING;
-  }
-}
-
-DEF(stdFiberResume,
-  "resume(fb:Fiber) -> var\n"
-  "Resumes a yielded function from a previous call of fiber_run() function. "
-  "Return it's return value or the yielded value if it's yielded.") {
-
-  int argc = ARGC;
-  if (argc == 0) // Missing the fiber argument.
-    RET_ERR(newString(vm, "Expected at least 1 argument(s)."));
-  if (argc > 2) // Can only accept 1 argument for resume.
-    RET_ERR(newString(vm, "Expected at most 2 argument(s)."));
-
-  Fiber* fb;
-  if (!validateArgFiber(vm, 1, &fb)) return;
-
-  Var value = (argc == 1) ? VAR_NULL : ARG(2);
-
-  // Switch fiber and resume execution.
-  if (vmSwitchFiber(vm, fb, &value)) {
-    ASSERT(fb == vm->fiber, OOPS);
-    fb->state = FIBER_RUNNING;
-  }
-}
-
 static void initializeCoreModules(PKVM* vm) {
 #define MODULE_ADD_FN(module, name, fn, argc) \
   moduleAddFunctionInternal(vm, module, name, fn, argc, DOCSTRING(fn))
@@ -1226,54 +1164,35 @@ static void initializeCoreModules(PKVM* vm) {
   // modify the PI, like in python.
   moduleAddGlobal(vm, math, "PI", 2, VAR_NUM(M_PI));
 
-  // FIXME:
-  // Temproarly rename the fiber to move it to the builtin type classes.
-  NEW_MODULE(fiber, "_Fiber");
-  MODULE_ADD_FN(fiber, "new",    stdFiberNew,     1);
-  MODULE_ADD_FN(fiber, "run",    stdFiberRun,    -1);
-  MODULE_ADD_FN(fiber, "resume", stdFiberResume, -1);
-
 #undef MODULE_ADD_FN
 #undef NEW_MODULE
 }
-
-#undef IS_NUM_BYTE
-#undef DOCSTRING
-#undef DEF
 
 /*****************************************************************************/
 /* BUILTIN CLASS CONSTRUCTORS                                                */
 /*****************************************************************************/
 
-static inline void _setSelf(PKVM* vm, Var value) {
-  vm->fiber->self = value;
-}
-
-static inline Var _getSelf(PKVM* vm) {
-  return vm->fiber->self;
-}
-
 static void _ctorNull(PKVM* vm) {
-  _setSelf(vm, VAR_NULL);
+  RET(VAR_NULL);
 }
 
 static void _ctorBool(PKVM* vm) {
-  _setSelf(vm, toBool(ARG(1)));
+  RET(toBool(ARG(1)));
 }
 
 static void _ctorNumber(PKVM* vm) {
   double value;
   if (!validateNumeric(vm, ARG(1), &value, "Argument 1")) return;
-  _setSelf(vm, VAR_NUM(value));
+  RET(VAR_NUM(value));
 }
 
 static void _ctorString(PKVM* vm) {
   if (!pkCheckArgcRange(vm, ARGC, 0, 1)) return;
   if (ARGC == 0) {
-    _setSelf(vm, VAR_OBJ(newStringLength(vm, NULL, 0)));
+    RET(VAR_OBJ(newStringLength(vm, NULL, 0)));
     return;
   }
-  _setSelf(vm, VAR_OBJ(toString(vm, ARG(1))));
+  RET(VAR_OBJ(toString(vm, ARG(1))));
 }
 
 static void _ctorList(PKVM* vm) {
@@ -1283,11 +1202,11 @@ static void _ctorList(PKVM* vm) {
     listAppend(vm, list, ARG(i + 1));
   }
   vmPopTempRef(vm); // list.
-  _setSelf(vm, VAR_OBJ(list));
+  RET(VAR_OBJ(list));
 }
 
 static void _ctorMap(PKVM* vm) {
-  _setSelf(vm, VAR_OBJ(newMap(vm)));
+  RET(VAR_OBJ(newMap(vm)));
 }
 
 static void _ctorRange(PKVM* vm) {
@@ -1295,25 +1214,71 @@ static void _ctorRange(PKVM* vm) {
   if (!validateNumeric(vm, ARG(1), &from, "Argument 1")) return;
   if (!validateNumeric(vm, ARG(2), &to, "Argument 2")) return;
 
-  _setSelf(vm, VAR_OBJ(newRange(vm, from, to)));
+  RET(VAR_OBJ(newRange(vm, from, to)));
 }
 
 static void _ctorFiber(PKVM* vm) {
   Closure* closure;
   if (!validateArgClosure(vm, 1, &closure)) return;
-  _setSelf(vm, VAR_OBJ(newFiber(vm, closure)));
+  RET(VAR_OBJ(newFiber(vm, closure)));
 }
 
 /*****************************************************************************/
 /* BUILTIN CLASS METHODS                                                     */
 /*****************************************************************************/
 
-static void _listAppend(PKVM* vm) {
-  Var self = _getSelf(vm);
-  ASSERT(IS_OBJ_TYPE(self, OBJ_LIST), OOPS);
-  listAppend(vm, ((List*)AS_OBJ(self)), ARG(1));
-  RET(self);
+#define SELF (vm->fiber->self)
+
+DEF(_listAppend,
+  "List.append(value:var) -> List\n"
+  "Append the [value] to the list and return the list.") {
+
+  ASSERT(IS_OBJ_TYPE(SELF, OBJ_LIST), OOPS);
+
+  listAppend(vm, ((List*)AS_OBJ(SELF)), ARG(1));
+  RET(SELF);
 }
+
+DEF(_fiberRun,
+  "Fiber.run(...) -> var\n"
+  "Runs the fiber's function with the provided arguments and returns it's "
+  "return value or the yielded value if it's yielded.") {
+
+  ASSERT(IS_OBJ_TYPE(SELF, OBJ_FIBER), OOPS);
+  Fiber* self = (Fiber*)AS_OBJ(SELF);
+
+  // Buffer of argument to call vmPrepareFiber().
+  Var* args[MAX_ARGC];
+
+  for (int i = 0; i < ARGC; i++) {
+    args[i] = &ARG(i + 1);
+  }
+
+  // Switch fiber and start execution.
+  if (vmPrepareFiber(vm, self, ARGC, args)) {
+    self->state = FIBER_RUNNING;
+  }
+}
+
+DEF(_fiberResume,
+  "Fiber.resume() -> var\n"
+  "Resumes a yielded function from a previous call of fiber_run() function. "
+  "Return it's return value or the yielded value if it's yielded.") {
+
+  ASSERT(IS_OBJ_TYPE(SELF, OBJ_FIBER), OOPS);
+  Fiber* self = (Fiber*)AS_OBJ(SELF);
+
+  if (!pkCheckArgcRange(vm, ARGC, 0, 1)) return;
+
+  Var value = (ARGC == 1) ? ARG(1) : VAR_NULL;
+
+  // Switch fiber and resume execution.
+  if (vmSwitchFiber(vm, self, &value)) {
+    self->state = FIBER_RUNNING;
+  }
+}
+
+#undef SELF
 
 /*****************************************************************************/
 /* BUILTIN CLASS INITIALIZATION                                              */
@@ -1349,23 +1314,28 @@ static void initializePrimitiveClasses(PKVM* vm) {
 
 #undef ADD_CTOR
 
-#define ADD_METHOD(type, name, ptr, arity_)                   \
-  do {                                                        \
-    Function* fn = newFunction(vm, name, (int)strlen(name),   \
-                               NULL, true, NULL, NULL);       \
-    fn->native = ptr;                                         \
-    fn->arity = arity_;                                       \
-    vmPushTempRef(vm, &fn->_super); /* fn. */                 \
-    pkClosureBufferWrite(&vm->builtin_classes[type]->methods, \
-                         vm, newClosure(vm, fn));             \
-    vmPopTempRef(vm); /* fn. */                               \
+#define ADD_METHOD(type, name, ptr, arity_)                       \
+  do {                                                            \
+    Function* fn = newFunction(vm, name, (int)strlen(name),       \
+                               NULL, true, DOCSTRING(ptr), NULL); \
+    fn->native = ptr;                                             \
+    fn->arity = arity_;                                           \
+    vmPushTempRef(vm, &fn->_super); /* fn. */                     \
+    pkClosureBufferWrite(&vm->builtin_classes[type]->methods,     \
+                         vm, newClosure(vm, fn));                 \
+    vmPopTempRef(vm); /* fn. */                                   \
   } while (false)
 
-  ADD_METHOD(PK_LIST, "append", _listAppend, 1);
+  ADD_METHOD(PK_LIST, "append",  _listAppend,   1);
+  ADD_METHOD(PK_FIBER, "run",    _fiberRun,    -1);
+  ADD_METHOD(PK_FIBER, "resume", _fiberResume, -1);
 
 #undef ADD_METHOD
-
 }
+
+#undef IS_NUM_BYTE
+#undef DOCSTRING
+#undef DEF
 
 /*****************************************************************************/
 /* OPERATORS                                                                 */
