@@ -65,7 +65,7 @@ def eval(expr, ind)
     return [r[1] / r[2], r[3]]
     
   else if isnum(c)
-    val = str_ord(c) - str_ord('0')
+    val = ord(c) - ord('0')
     assert(0 <= val and val < 10)
     return [val, ind]
 
@@ -93,7 +93,7 @@ end
 
 ## Return true if c in numeric.
 def isnum(c)
-  k = str_ord(c) - str_ord('0')
+  k = ord(c) - ord('0')
   ## TODO: k in 0..10
   return (0 <= k and k < 10)
 end

@@ -1,0 +1,67 @@
+
+class Node
+  def _init(val)
+    self.val = val
+    self.next = null
+  end
+  
+  def _to_string()
+    return "(${self.val})"
+  end
+end
+
+class LinkedList
+  def _init()
+    self.head = null
+  end
+  
+  def append(node)
+    if self.head == null
+      self.head = node
+    else
+      last = self.head
+      while last.next
+        last = last.next
+      end
+      last.next = node
+    end
+  end
+  
+  def reverse()
+    curr = self.head
+    prev = null; next = null
+    while curr
+      next = curr.next
+      curr.next = prev
+      prev = curr
+      curr = next
+    end
+    self.head = prev
+  end
+  
+  def _to_string()
+    ret = ""
+    next = self.head
+    while next
+      ret += next._to_string()
+      ret += " --> "
+      next = next.next
+    end
+    ret += "null"
+    return ret
+  end
+end
+
+ll = LinkedList()
+ll.append(Node(4))
+ll.append(Node(6))
+ll.append(Node(3))
+ll.append(Node(9))
+
+## FIXME: No override supported at the moment.
+print(ll._to_string())
+
+ll.reverse()
+
+print(ll._to_string())
+

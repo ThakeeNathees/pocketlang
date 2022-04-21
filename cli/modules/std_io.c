@@ -56,7 +56,7 @@ void _deleteFile(void* ptr) {
 /* FILE MODULE FUNCTIONS                                                     */
 /*****************************************************************************/
 
-static void _fileOpen(PKVM* vm) {
+DEF(_fileOpen, "") {
 
   int argc = pkGetArgc(vm);
   if (!pkCheckArgcRange(vm, argc, 1, 2)) return;
@@ -103,7 +103,7 @@ static void _fileOpen(PKVM* vm) {
   }
 }
 
-static void _fileRead(PKVM* vm) {
+DEF(_fileRead, "") {
   // This TODO is just a blockade from running the bellow code, complete the
   // native interface and test before removing it.
   TODO;
@@ -126,7 +126,7 @@ static void _fileRead(PKVM* vm) {
   pkReturnString(vm, (const char*)buff);
 }
 
-static void _fileWrite(PKVM* vm) {
+DEF(_fileWrite, "") {
   // This TODO is just a blockade from running the bellow code, complete the
   // native interface and test before removing it.
   TODO;
@@ -148,7 +148,7 @@ static void _fileWrite(PKVM* vm) {
   fwrite(text, sizeof(char), (size_t)length, file->fp);
 }
 
-static void _fileClose(PKVM* vm) {
+DEF(_fileClose, "") {
   // This TODO is just a blockade from running the bellow code, complete the
   // native interface and test before removing it.
   TODO;

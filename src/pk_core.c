@@ -15,13 +15,6 @@
 #include "pk_utils.h"
 #include "pk_vm.h"
 
-// M_PI is non standard. The macro _USE_MATH_DEFINES defining before importing
-// <math.h> will define the constants for MSVC. But for a portable solution,
-// we're defining it ourselves if it isn't already.
-#ifndef M_PI
-  #define M_PI 3.14159265358979323846
-#endif
-
 // Returns the docstring of the function, which is a static const char* defined
 // just above the function by the DEF() macro below.
 #define DOCSTRING(fn) _pk_doc_##fn
@@ -109,9 +102,16 @@ void pkClassAddMethod(PKVM* vm, PkHandle* cls,
   // won't be garbage collected (class handle has reference to the module).
 
   Closure* method = newClosure(vm, fn);
-  vmPushTempRef(vm, &method->_super); // method.
-  pkClosureBufferWrite(&class_->methods, vm, method);
-  vmPopTempRef(vm); // method.
+
+  // FIXME: name "_init" is literal everywhere.
+  if (strcmp(name, "_init") == 0) {
+    class_->ctor = method;
+
+  } else {
+    vmPushTempRef(vm, &method->_super); // method.
+    pkClosureBufferWrite(&class_->methods, vm, method);
+    vmPopTempRef(vm); // method.
+  }
 }
 
 void* pkGetSelf(const PKVM* vm) {
@@ -535,7 +535,7 @@ DEF(coreAssert,
 
 DEF(coreBin,
   "bin(value:num) -> string\n"
-  "Returns as a binary value string with '0x' prefix.") {
+  "Returns as a binary value string with '0b' prefix.") {
 
   int64_t value;
   if (!validateInteger(vm, ARG(1), &value, "Argument 1")) return;
@@ -611,6 +611,35 @@ DEF(coreToString,
   "Returns the string representation of the value.") {
 
   RET(VAR_OBJ(toString(vm, ARG(1))));
+}
+
+DEF(coreChr,
+  "chr(value:num) -> string\n"
+  "Returns the ASCII string value of the integer argument.") {
+
+  int64_t num;
+  if (!validateInteger(vm, ARG(1), &num, "Argument 1")) return;
+
+  if (!IS_NUM_BYTE(num)) {
+    RET_ERR(newString(vm, "The number is not in a byte range."));
+  }
+
+  char c = (char)num;
+  RET(VAR_OBJ(newStringLength(vm, &c, 1)));
+}
+
+DEF(coreOrd,
+  "ord(value:string) -> num\n"
+  "Returns integer value of the given ASCII character.") {
+
+  String* c;
+  if (!validateArgString(vm, 1, &c)) return;
+  if (c->length != 1) {
+    RET_ERR(newString(vm, "Expected a string of length 1."));
+
+  } else {
+    RET(VAR_NUM((double)c->data[0]));
+  }
 }
 
 DEF(corePrint,
@@ -700,35 +729,6 @@ DEF(coreStrSub,
   RET(VAR_OBJ(newStringLength(vm, str->data + pos, (uint32_t)len)));
 }
 
-DEF(coreStrChr,
-  "str_chr(value:num) -> string\n"
-  "Returns the ASCII string value of the integer argument.") {
-
-  int64_t num;
-  if (!validateInteger(vm, ARG(1), &num, "Argument 1")) return;
-
-  if (!IS_NUM_BYTE(num)) {
-    RET_ERR(newString(vm, "The number is not in a byte range."));
-  }
-
-  char c = (char)num;
-  RET(VAR_OBJ(newStringLength(vm, &c, 1)));
-}
-
-DEF(coreStrOrd,
-  "str_ord(value:string) -> num\n"
-  "Returns integer value of the given ASCII character.") {
-
-  String* c;
-  if (!validateArgString(vm, 1, &c)) return;
-  if (c->length != 1) {
-    RET_ERR(newString(vm, "Expected a string of length 1."));
-
-  } else {
-    RET(VAR_NUM((double)c->data[0]));
-  }
-}
-
 // List functions.
 // ---------------
 
@@ -806,14 +806,17 @@ static void initializeBuiltinFunctions(PKVM* vm) {
   INITIALIZE_BUILTIN_FN("hex",       coreHex,      1);
   INITIALIZE_BUILTIN_FN("yield",     coreYield,   -1);
   INITIALIZE_BUILTIN_FN("to_string", coreToString, 1);
+  INITIALIZE_BUILTIN_FN("chr",       coreChr,      1);
+  INITIALIZE_BUILTIN_FN("ord",       coreOrd,      1);
   INITIALIZE_BUILTIN_FN("print",     corePrint,   -1);
   INITIALIZE_BUILTIN_FN("input",     coreInput,   -1);
   INITIALIZE_BUILTIN_FN("exit",      coreExit,    -1);
 
+  // FIXME:
+  // move this functions as methods. and make "append()" a builtin.
+
   // String functions.
   INITIALIZE_BUILTIN_FN("str_sub", coreStrSub, 3);
-  INITIALIZE_BUILTIN_FN("str_chr", coreStrChr, 1);
-  INITIALIZE_BUILTIN_FN("str_ord", coreStrOrd, 1);
 
   // List functions.
   INITIALIZE_BUILTIN_FN("list_append", coreListAppend, 2);
@@ -934,192 +937,6 @@ DEF(stdLangWrite,
   }
 }
 
-// TODO: Move math to cli as it's not part of the pocketlang core.
-//
-// 'math' library methods.
-// -----------------------
-
-DEF(stdMathFloor,
-  "floor(value:num) -> num\n") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  RET(VAR_NUM(floor(num)));
-}
-
-DEF(stdMathCeil,
-  "ceil(value:num) -> num\n") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  RET(VAR_NUM(ceil(num)));
-}
-
-DEF(stdMathPow,
-  "pow(value:num) -> num\n") {
-
-  double num, ex;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  if (!validateNumeric(vm, ARG(2), &ex, "Argument 2")) return;
-  RET(VAR_NUM(pow(num, ex)));
-}
-
-DEF(stdMathSqrt,
-  "sqrt(value:num) -> num\n") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  RET(VAR_NUM(sqrt(num)));
-}
-
-DEF(stdMathAbs,
-  "abs(value:num) -> num\n") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  if (num < 0) num = -num;
-  RET(VAR_NUM(num));
-}
-
-DEF(stdMathSign,
-  "sign(value:num) -> num\n") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  if (num < 0) num = -1;
-  else if (num > 0) num = +1;
-  else num = 0;
-  RET(VAR_NUM(num));
-}
-
-DEF(stdMathHash,
-  "hash(value:var) -> num\n"
-  "Return the hash value of the variable, if it's not hashable it'll "
-  "return null.") {
-
-  if (IS_OBJ(ARG(1))) {
-    if (!isObjectHashable(AS_OBJ(ARG(1))->type)) {
-      RET(VAR_NULL);
-    }
-  }
-  RET(VAR_NUM((double)varHashValue(ARG(1))));
-}
-
-DEF(stdMathSine,
-  "sin(rad:num) -> num\n"
-  "Return the sine value of the argument [rad] which is an angle expressed "
-  "in radians.") {
-
-  double rad;
-  if (!validateNumeric(vm, ARG(1), &rad, "Argument 1")) return;
-  RET(VAR_NUM(sin(rad)));
-}
-
-DEF(stdMathCosine,
-  "cos(rad:num) -> num\n"
-  "Return the cosine value of the argument [rad] which is an angle expressed "
-  "in radians.") {
-
-  double rad;
-  if (!validateNumeric(vm, ARG(1), &rad, "Argument 1")) return;
-  RET(VAR_NUM(cos(rad)));
-}
-
-DEF(stdMathTangent,
-  "tan(rad:num) -> num\n"
-  "Return the tangent value of the argument [rad] which is an angle expressed "
-  "in radians.") {
-
-  double rad;
-  if (!validateNumeric(vm, ARG(1), &rad, "Argument 1")) return;
-  RET(VAR_NUM(tan(rad)));
-}
-
-DEF(stdMathSinh,
-  "sinh(val) -> val\n"
-  "Return the hyperbolic sine value of the argument [val].") {
-
-  double val;
-  if (!validateNumeric(vm, ARG(1), &val, "Argument 1")) return;
-  RET(VAR_NUM(sinh(val)));
-}
-
-DEF(stdMathCosh,
-  "cosh(val) -> val\n"
-  "Return the hyperbolic cosine value of the argument [val].") {
-
-  double val;
-  if (!validateNumeric(vm, ARG(1), &val, "Argument 1")) return;
-  RET(VAR_NUM(cosh(val)));
-}
-
-DEF(stdMathTanh,
-  "tanh(val) -> val\n"
-  "Return the hyperbolic tangent value of the argument [val].") {
-
-  double val;
-  if (!validateNumeric(vm, ARG(1), &val, "Argument 1")) return;
-  RET(VAR_NUM(tanh(val)));
-}
-
-DEF(stdMathArcSine,
-  "asin(num) -> num\n"
-  "Return the arcsine value of the argument [num] which is an angle "
-  "expressed in radians.") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-
-  if (num < -1 || 1 < num) {
-    RET_ERR(newString(vm, "Argument should be between -1 and +1"));
-  }
-
-  RET(VAR_NUM(asin(num)));
-}
-
-DEF(stdMathArcCosine,
-  "acos(num) -> num\n"
-  "Return the arc cosine value of the argument [num] which is "
-  "an angle expressed in radians.") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-
-  if (num < -1 || 1 < num) {
-    RET_ERR(newString(vm, "Argument should be between -1 and +1"));
-  }
-
-  RET(VAR_NUM(acos(num)));
-}
-
-DEF(stdMathArcTangent,
-  "atan(num) -> num\n"
-  "Return the arc tangent value of the argument [num] which is "
-  "an angle expressed in radians.") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  RET(VAR_NUM(atan(num)));
-}
-
-DEF(stdMathLog10,
-  "log10(value:num) -> num\n"
-  "Return the logarithm to base 10 of argument [value]") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  RET(VAR_NUM(log10(num)));
-}
-
-DEF(stdMathRound,
-  "round(value:num) -> num\n"
-  "Round to nearest integer, away from zero and return the number.") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  RET(VAR_NUM(round(num)));
-}
-
 static void initializeCoreModules(PKVM* vm) {
 #define MODULE_ADD_FN(module, name, fn, argc) \
   moduleAddFunctionInternal(vm, module, name, fn, argc, DOCSTRING(fn))
@@ -1138,31 +955,6 @@ static void initializeCoreModules(PKVM* vm) {
 #ifdef DEBUG
   MODULE_ADD_FN(lang, "debug_break", stdLangDebugBreak, 0);
 #endif
-
-  NEW_MODULE(math, "math");
-  MODULE_ADD_FN(math, "floor",  stdMathFloor,      1);
-  MODULE_ADD_FN(math, "ceil",   stdMathCeil,       1);
-  MODULE_ADD_FN(math, "pow",    stdMathPow,        2);
-  MODULE_ADD_FN(math, "sqrt",   stdMathSqrt,       1);
-  MODULE_ADD_FN(math, "abs",    stdMathAbs,        1);
-  MODULE_ADD_FN(math, "sign",   stdMathSign,       1);
-  MODULE_ADD_FN(math, "hash",   stdMathHash,       1);
-  MODULE_ADD_FN(math, "sin",    stdMathSine,       1);
-  MODULE_ADD_FN(math, "cos",    stdMathCosine,     1);
-  MODULE_ADD_FN(math, "tan",    stdMathTangent,    1);
-  MODULE_ADD_FN(math, "sinh",   stdMathSinh,       1);
-  MODULE_ADD_FN(math, "cosh",   stdMathCosh,       1);
-  MODULE_ADD_FN(math, "tanh",   stdMathTanh,       1);
-  MODULE_ADD_FN(math, "asin",   stdMathArcSine,    1);
-  MODULE_ADD_FN(math, "acos",   stdMathArcCosine,  1);
-  MODULE_ADD_FN(math, "atan",   stdMathArcTangent, 1);
-  MODULE_ADD_FN(math, "log10",  stdMathLog10,      1);
-  MODULE_ADD_FN(math, "round",  stdMathRound,      1);
-
-  // Note that currently it's mutable (since it's a global variable, not
-  // constant and pocketlang doesn't support constant) so the user shouldn't
-  // modify the PI, like in python.
-  moduleAddGlobal(vm, math, "PI", 2, VAR_NUM(M_PI));
 
 #undef MODULE_ADD_FN
 #undef NEW_MODULE

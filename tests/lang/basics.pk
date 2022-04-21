@@ -37,11 +37,9 @@ assert(!('foo' in {'bar':'baz'}))
 ## Builtin functions tests.
 assert(to_string(42) == '42')
 
-## Core module test.
-import math
-h1 = math.hash("testing"); h2 = math.hash("test" + "ing")
-assert(h1 == h2)
-assert(math.ceil(1.1) == math.floor(2.9))
+## FIXME: add hash function.
+##h1 = math.hash("testing"); h2 = math.hash("test" + "ing")
+##assert(h1 == h2)
 
 ## Logical statement test
 val = 0; a = false; b = true

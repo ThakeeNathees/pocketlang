@@ -779,7 +779,8 @@ List* listJoin(PKVM* vm, List* l1, List* l2) {
   return list;
 }
 
-// Return a hash value for the object.
+// Return a hash value for the object. Only String and Range objects can be
+// hashable.
 static uint32_t _hashObject(Object* obj) {
 
   ASSERT(isObjectHashable(obj->type),
@@ -790,28 +791,10 @@ static uint32_t _hashObject(Object* obj) {
     case OBJ_STRING:
       return ((String*)obj)->hash;
 
-    case OBJ_LIST:
-    case OBJ_MAP:
-      goto L_unhashable;
-
-    case OBJ_RANGE:
-    {
+    case OBJ_RANGE: {
       Range* range = (Range*)obj;
       return utilHashNumber(range->from) ^ utilHashNumber(range->to);
     }
-
-    case OBJ_MODULE:
-    case OBJ_FUNC:
-    case OBJ_FIBER:
-    case OBJ_CLASS:
-    case OBJ_INST:
-      TODO;
-      UNREACHABLE();
-
-    default:
-    L_unhashable:
-      UNREACHABLE();
-      break;
   }
 
   UNREACHABLE();
@@ -1346,8 +1329,8 @@ bool isValuesEqual(Var v1, Var v2) {
 }
 
 bool isObjectHashable(ObjectType type) {
-  // Only list and map are un-hashable.
-  return type != OBJ_LIST && type != OBJ_MAP;
+  // Only String and Range are hashable (since they're immutable).
+  return type == OBJ_STRING || type == OBJ_RANGE;
 }
 
 // This will prevent recursive list/map from crash when calling to_string, by

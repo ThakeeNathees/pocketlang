@@ -26,8 +26,13 @@ TEST_SUITE = {
     "lang/functions.pk",
     "lang/import.pk",
   ),
+  
+  "Modules Test" : (
+    "modules/math.pk",
+  ),
 
   "Random Scripts" : (
+    "random/linked_list.pk",
     "random/lisp_eval.pk",
     "random/string_algo.pk",
   ),

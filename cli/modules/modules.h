@@ -16,12 +16,14 @@
 
 void registerModuleIO(PKVM* vm);
 void registerModulePath(PKVM* vm);
+void registerModuleMath(PKVM* vm);
 
 // Registers all the cli modules.
 #define REGISTER_ALL_MODULES(vm) \
   do {                           \
     registerModuleIO(vm);        \
     registerModulePath(vm);      \
+    registerModuleMath(vm);      \
   } while (false)
 
 /*****************************************************************************/
@@ -34,6 +36,16 @@ void registerModulePath(PKVM* vm);
 // Dellocate module object, allocated by NEW_OBJ(). Called by the freeObj
 // callback.
 #define FREE_OBJ(ptr) free(ptr)
+
+// Returns the docstring of the function, which is a static const char* defined
+// just above the function by the DEF() macro below.
+#define DOCSTRING(fn) __doc_##fn
+
+// A macro to declare a function, with docstring, which is defined as
+// ___doc_<fn> = docstring; That'll used to generate function help text.
+#define DEF(fn, docstring)                      \
+  static const char* DOCSTRING(fn) = docstring; \
+  static void fn(PKVM* vm)
 
 /*****************************************************************************/
 /* SHARED FUNCTIONS                                                          */

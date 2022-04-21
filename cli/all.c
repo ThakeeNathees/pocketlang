@@ -15,6 +15,7 @@
 
 #include "modules/std_io.c"
 #include "modules/std_path.c"
+#include "modules/std_math.c"
 
 /*****************************************************************************/
 /* THIRDPARTY SOURCES                                                        */

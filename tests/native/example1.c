@@ -10,17 +10,17 @@
 
 // The pocket script we're using to test.
 static const char* code =
-  "  from YourModule import variableToC \n"
-  "  a = 42                             \n"
-  "  b = variableToC(a)                 \n"
-  "  print('[pocket] b =', b)           \n"
+  "  from my_module import cFunction \n"
+  "  a = 42                          \n"
+  "  b = cFunction(a)                \n"
+  "  print('[pocket] b = $b')        \n"
   ;
 
 /*****************************************************************************/
 /* MODULE FUNCTION                                                           */
 /*****************************************************************************/
 
-static void variableToC(PKVM* vm) {
+static void cFunction(PKVM* vm) {
   
   // Get the parameter from pocket VM.
   double a;
@@ -36,15 +36,7 @@ static void variableToC(PKVM* vm) {
 /* POCKET VM CALLBACKS                                                       */
 /*****************************************************************************/
 
-// Error report callback.
-static void reportError(PKVM* vm, PkErrorType type,
-                        const char* file, int line,
-                        const char* message) {
-  fprintf(stderr, "Error: %s\n", message);
-}
-
-// print() callback to write stdout.
-static void stdoutWrite(PKVM* vm, const char* text) {
+static void stdoutCallback(PKVM* vm, const char* text) {
   fprintf(stdout, "%s", text);
 }
 
@@ -56,21 +48,20 @@ int main(int argc, char** argv) {
 
   // Pocket VM configuration.
   PkConfiguration config = pkNewConfiguration();
-  config.error_fn  = reportError;
-  config.write_fn  = stdoutWrite;
-  //config.read_fn = stdinRead;
+  config.write_fn = stdoutCallback;
 
   // Create a new pocket VM.
   PKVM* vm = pkNewVM(&config);
   
-  // Register your module.
-  PkHandle* your_module = pkNewModule(vm, "YourModule");
-  pkModuleAddFunction(vm, your_module, "variableToC",  variableToC, 1);
-  pkReleaseHandle(vm, your_module);
+  // Registering a native module.
+  PkHandle* my_module = pkNewModule(vm, "my_module");
+  pkModuleAddFunction(vm, my_module, "cFunction", cFunction, 1);
+  pkRegisterModule(vm, my_module);
+  pkReleaseHandle(vm, my_module);
   
   // The path and the source code.
-  PkStringPtr source = { code, NULL, NULL, 0, 0 };
-  PkStringPtr path = { "./some/path/", NULL, NULL, 0, 0 };
+  PkStringPtr source = { .string = code };
+  PkStringPtr path = { .string = "./some/path/" };
   
   // Run the code.
   PkResult result = pkInterpretSource(vm, source, path, NULL/*options*/);

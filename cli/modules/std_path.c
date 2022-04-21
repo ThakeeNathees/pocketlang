@@ -4,6 +4,8 @@
  *  Distributed Under The MIT License
  */
 
+#include "modules.h"
+
 #include "thirdparty/cwalk/cwalk.h"
 #if defined(_WIN32) && (defined(_MSC_VER) || defined(__TINYC__))
   #include "thirdparty/dirent/dirent.h"
@@ -90,13 +92,13 @@ static inline size_t pathAbs(const char* path, char* buff, size_t buff_size) {
 /* PATH MODULE FUNCTIONS                                                     */
 /*****************************************************************************/
 
-static void _pathSetStyleUnix(PKVM* vm) {
+DEF(_pathSetStyleUnix, "") {
   bool value;
   if (!pkGetArgBool(vm, 1, &value)) return;
   cwk_path_set_style((value) ? CWK_STYLE_UNIX : CWK_STYLE_WINDOWS);
 }
 
-static void _pathGetCWD(PKVM* vm) {
+DEF(_pathGetCWD, "") {
   char cwd[FILENAME_MAX];
   if (get_cwd(cwd, sizeof(cwd)) == NULL) {
     // TODO: Handle error.
@@ -104,7 +106,7 @@ static void _pathGetCWD(PKVM* vm) {
   pkReturnString(vm, cwd);
 }
 
-static void _pathAbspath(PKVM* vm) {
+DEF(_pathAbspath, "") {
   const char* path;
   if (!pkGetArgString(vm, 1, &path, NULL)) return;
 
@@ -113,7 +115,7 @@ static void _pathAbspath(PKVM* vm) {
   pkReturnStringLength(vm, abspath, len);
 }
 
-static void _pathRelpath(PKVM* vm) {
+DEF(_pathRelpath, "") {
   const char* from, * path;
   if (!pkGetArgString(vm, 1, &from, NULL)) return;
   if (!pkGetArgString(vm, 2, &path, NULL)) return;
@@ -130,7 +132,7 @@ static void _pathRelpath(PKVM* vm) {
   pkReturnStringLength(vm, result, len);
 }
 
-static void _pathJoin(PKVM* vm) {
+DEF(_pathJoin, "") {
   const char* paths[MAX_JOIN_PATHS + 1]; // +1 for NULL.
   int argc = pkGetArgc(vm);
 
@@ -150,7 +152,7 @@ static void _pathJoin(PKVM* vm) {
   pkReturnStringLength(vm, result, len);
 }
 
-static void _pathNormalize(PKVM* vm) {
+DEF(_pathNormalize, "") {
   const char* path;
   if (!pkGetArgString(vm, 1, &path, NULL)) return;
 
@@ -159,7 +161,7 @@ static void _pathNormalize(PKVM* vm) {
   pkReturnStringLength(vm, result, len);
 }
 
-static void _pathBaseName(PKVM* vm) {
+DEF(_pathBaseName, "") {
   const char* path;
   if (!pkGetArgString(vm, 1, &path, NULL)) return;
 
@@ -169,7 +171,7 @@ static void _pathBaseName(PKVM* vm) {
   pkReturnString(vm, base_name);
 }
 
-static void _pathDirName(PKVM* vm) {
+DEF(_pathDirName, "") {
   const char* path;
   if (!pkGetArgString(vm, 1, &path, NULL)) return;
 
@@ -178,14 +180,14 @@ static void _pathDirName(PKVM* vm) {
   pkReturnStringLength(vm, path, length);
 }
 
-static void _pathIsPathAbs(PKVM* vm) {
+DEF(_pathIsPathAbs, "") {
   const char* path;
   if (!pkGetArgString(vm, 1, &path, NULL)) return;
 
   pkReturnBool(vm, cwk_path_is_absolute(path));
 }
 
-static void _pathGetExtension(PKVM* vm) {
+DEF(_pathGetExtension, "") {
   const char* path;
   if (!pkGetArgString(vm, 1, &path, NULL)) return;
 
@@ -198,19 +200,19 @@ static void _pathGetExtension(PKVM* vm) {
   }
 }
 
-static void _pathExists(PKVM* vm) {
+DEF(_pathExists, "") {
   const char* path;
   if (!pkGetArgString(vm, 1, &path, NULL)) return;
   pkReturnBool(vm, pathIsExists(path));
 }
 
-static void _pathIsFile(PKVM* vm) {
+DEF(_pathIsFile, "") {
   const char* path;
   if (!pkGetArgString(vm, 1, &path, NULL)) return;
   pkReturnBool(vm, pathIsFileExists(path));
 }
 
-static void _pathIsDir(PKVM* vm) {
+DEF(_pathIsDir, "") {
   const char* path;
   if (!pkGetArgString(vm, 1, &path, NULL)) return;
   pkReturnBool(vm, pathIsDirectoryExists(path));
