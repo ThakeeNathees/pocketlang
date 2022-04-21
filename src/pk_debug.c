@@ -282,6 +282,24 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         break;
       }
 
+      case OP_METHOD_CALL:
+      {
+        int argc = READ_BYTE();
+        int index = READ_SHORT();
+        String* name = moduleGetStringAt(func->owner, index);
+        ASSERT(name != NULL, OOPS);
+
+        // Prints: %5d (argc) %d '%s'\n
+        PRINT_INT(argc);
+        PRINT(" (argc) ");
+
+        _PRINT_INT(index, 0);
+        PRINT(" '");
+        PRINT(name->data);
+        PRINT("'\n");
+        break;
+      }
+
       case OP_CALL:
         // Prints: %5d (argc)\n
         PRINT_INT(READ_BYTE());

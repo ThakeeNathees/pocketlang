@@ -466,6 +466,13 @@ struct Fiber {
   // overflowed.
   Var* ret;
 
+  // The self pointer to of the current method. It'll be updated before
+  // calling a native method. (Because native methods doesn't have a call
+  // frame we're doing it this way). Also updated just before calling a
+  // script method, and will be captured by the next allocated callframe
+  // and reset to VAR_UNDEFINED.
+  Var self;
+
   // Heap allocated array of call frames will grow as needed.
   CallFrame* frames;
   int frame_capacity; //< Capacity of the frames array.

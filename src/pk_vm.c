@@ -550,7 +550,10 @@ static inline void pushCallFrame(PKVM* vm, const Closure* closure, Var* rbp) {
   frame->rbp = rbp;
   frame->closure = closure;
   frame->ip = closure->fn->fn->opcodes.data;
-  frame->self = VAR_UNDEFINED;
+
+  // Eat the self.
+  frame->self = vm->fiber->self;
+  vm->fiber->self = VAR_UNDEFINED;
 }
 
 static inline void reuseCallFrame(PKVM* vm, const Closure* closure) {
@@ -564,6 +567,7 @@ static inline void reuseCallFrame(PKVM* vm, const Closure* closure) {
   CallFrame* frame = fb->frames + fb->frame_count - 1;
   frame->closure = closure;
   frame->ip = closure->fn->fn->opcodes.data;
+  frame->self = VAR_UNDEFINED;
 
   ASSERT(*frame->rbp == VAR_NULL, OOPS);
 
@@ -791,12 +795,18 @@ L_vm_main_loop:
   // defined, the next line become a declaration (Opcode instruction;).
   NO_OP;
 
+#define _DUMP_STACK()           \
+  do {                          \
+    system("cls"); /* FIXME: */ \
+    dumpGlobalValues(vm);       \
+    dumpStackFrame(vm);         \
+    DEBUG_BREAK();              \
+  } while (false)
+
 #if DUMP_STACK
-  system("cls"); // FIXME:
-  dumpGlobalValues(vm);
-  dumpStackFrame(vm);
-  DEBUG_BREAK();
+  _DUMP_STACK();
 #endif
+#undef _DUMP_STACK
 
   SWITCH() {
 
@@ -1045,32 +1055,49 @@ L_vm_main_loop:
       DISPATCH();
     }
 
+    {
+      uint8_t argc;
+      Var callable;
+      const Closure* closure;
+
+    OPCODE(METHOD_CALL):
+      argc = READ_BYTE();
+      fiber->ret = (fiber->sp - argc - 1);
+      fiber->self = *fiber->ret; //< Self for the next call.
+
+      uint16_t index = READ_SHORT();
+      bool is_method;
+      String* name = moduleGetStringAt(module, (int)index);
+      callable = getMethod(vm, fiber->self, name, &is_method);
+      CHECK_ERROR();
+      goto L_do_call;
+
     OPCODE(CALL):
     OPCODE(TAIL_CALL):
-    {
-      const uint8_t argc = READ_BYTE();
-      Var* callable = fiber->sp - argc - 1;
+      argc = READ_BYTE();
+      fiber->ret = fiber->sp - argc - 1;
+      callable = *fiber->ret;
 
-      const Closure* closure = NULL;
-
+L_do_call:
       // Raw functions cannot be on the stack, since they're not first class
       // citizens.
-      ASSERT(!IS_OBJ_TYPE(*callable, OBJ_FUNC), OOPS);
+      ASSERT(!IS_OBJ_TYPE(callable, OBJ_FUNC), OOPS);
 
-      if (IS_OBJ_TYPE(*callable, OBJ_CLOSURE)) {
-        closure = (const Closure*)AS_OBJ(*callable);
+      if (IS_OBJ_TYPE(callable, OBJ_CLOSURE)) {
+        closure = (const Closure*)AS_OBJ(callable);
 
-      } else if (IS_OBJ_TYPE(*callable, OBJ_CLASS)) {
-        closure = (const Closure*)((Class*)AS_OBJ(*callable))->ctor;
+      } else if (IS_OBJ_TYPE(callable, OBJ_CLASS)) {
+        closure = (const Closure*)((Class*)AS_OBJ(callable))->ctor;
 
       } else {
         RUNTIME_ERROR(stringFormat(vm, "$ $(@).", "Expected a callable to "
                       "call, instead got",
-                      varTypeName(*callable), toString(vm, *callable)));
+                      varTypeName(callable), toString(vm, callable)));
         DISPATCH();
       }
 
       // If we reached here it's a valid callable.
+      ASSERT(closure != NULL, OOPS);
 
       // -1 argument means multiple number of args.
       if (closure->fn->arity != -1 && closure->fn->arity != argc) {
@@ -1080,8 +1107,6 @@ L_vm_main_loop:
         RUNTIME_ERROR(msg);
       }
 
-      // Next call frame starts here. (including return value).
-      fiber->ret = callable;
       *(fiber->ret) = VAR_NULL; //< Set the return value to null.
 
       if (closure->fn->is_native) {
@@ -1116,9 +1141,9 @@ L_vm_main_loop:
 
       } else {
 
-        if (instruction == OP_CALL) {
+        if (instruction == OP_CALL || instruction == OP_METHOD_CALL) {
           UPDATE_FRAME(); //< Update the current frame's ip.
-          pushCallFrame(vm, closure, callable);
+          pushCallFrame(vm, closure, fiber->ret);
           LOAD_FRAME();  //< Load the top frame to vm's execution variables.
 
         } else {

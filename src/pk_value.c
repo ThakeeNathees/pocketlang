@@ -495,6 +495,7 @@ Fiber* newFiber(PKVM* vm, Closure* closure) {
   }
 
   fiber->open_upvalues = NULL;
+  fiber->self = VAR_UNDEFINED;
 
   // Initialize the return value to null (doesn't really have to do that here
   // but if we're trying to debut it may crash when dumping the return value).

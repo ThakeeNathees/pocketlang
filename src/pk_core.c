@@ -115,9 +115,8 @@ void pkClassAddMethod(PKVM* vm, PkHandle* cls,
 }
 
 void* pkGetSelf(const PKVM* vm) {
-  Var self = vm->fiber->frames[vm->fiber->frame_count - 1].self;
-  ASSERT(IS_OBJ_TYPE(self, OBJ_INST), OOPS);
-  Instance* inst = (Instance*)AS_OBJ(self);
+  ASSERT(IS_OBJ_TYPE(vm->fiber->self, OBJ_INST), OOPS);
+  Instance* inst = (Instance*)AS_OBJ(vm->fiber->self);
   ASSERT(inst->native != NULL, OOPS);
   return inst->native;
 }
@@ -1243,11 +1242,15 @@ static void initializeCoreModules(PKVM* vm) {
 #undef DEF
 
 /*****************************************************************************/
-/* BUILTIN CLASS METHODS                                                     */
+/* BUILTIN CLASS CONSTRUCTORS                                                */
 /*****************************************************************************/
 
-static forceinline void _setSelf(PKVM* vm, Var value) {
-  vm->fiber->frames[vm->fiber->frame_count - 1].self = value;
+static inline void _setSelf(PKVM* vm, Var value) {
+  vm->fiber->self = value;
+}
+
+static inline Var _getSelf(PKVM* vm) {
+  return vm->fiber->self;
 }
 
 static void _ctorNull(PKVM* vm) {
@@ -1302,6 +1305,17 @@ static void _ctorFiber(PKVM* vm) {
 }
 
 /*****************************************************************************/
+/* BUILTIN CLASS METHODS                                                     */
+/*****************************************************************************/
+
+static void _listAppend(PKVM* vm) {
+  Var self = _getSelf(vm);
+  ASSERT(IS_OBJ_TYPE(self, OBJ_LIST), OOPS);
+  listAppend(vm, ((List*)AS_OBJ(self)), ARG(1));
+  RET(self);
+}
+
+/*****************************************************************************/
 /* BUILTIN CLASS INITIALIZATION                                              */
 /*****************************************************************************/
 
@@ -1333,7 +1347,23 @@ static void initializePrimitiveClasses(PKVM* vm) {
   ADD_CTOR(PK_MAP,    "@ctorMap",    _ctorMap,     0);
   ADD_CTOR(PK_FIBER,  "@ctorFiber",  _ctorFiber,   1);
 
-  // TODO: add methods.
+#undef ADD_CTOR
+
+#define ADD_METHOD(type, name, ptr, arity_)                   \
+  do {                                                        \
+    Function* fn = newFunction(vm, name, (int)strlen(name),   \
+                               NULL, true, NULL, NULL);       \
+    fn->native = ptr;                                         \
+    fn->arity = arity_;                                       \
+    vmPushTempRef(vm, &fn->_super); /* fn. */                 \
+    pkClosureBufferWrite(&vm->builtin_classes[type]->methods, \
+                         vm, newClosure(vm, fn));             \
+    vmPopTempRef(vm); /* fn. */                               \
+  } while (false)
+
+  ADD_METHOD(PK_LIST, "append", _listAppend, 1);
+
+#undef ADD_METHOD
 
 }
 

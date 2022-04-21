@@ -1926,7 +1926,11 @@ static void exprMap(Compiler* compiler) {
   consume(compiler, TK_RBRACE, "Expected '}' after map elements.");
 }
 
-static void exprCall(Compiler* compiler) {
+// This function is reused between calls and method calls. if the [call_type]
+// is OP_METHOD_CALL the [method] should refer a string in the module's
+// constant pool, otherwise it's ignored.
+static void _compileCall(Compiler* compiler, Opcode call_type, int method) {
+  ASSERT((call_type == OP_CALL) || (call_type == OP_METHOD_CALL), OOPS);
 
   // Compile parameters.
   int argc = 0;
@@ -1940,12 +1944,22 @@ static void exprCall(Compiler* compiler) {
     consume(compiler, TK_RPARAN, "Expected ')' after parameter list.");
   }
 
-  emitOpcode(compiler, OP_CALL);
+  emitOpcode(compiler, call_type);
+
   emitByte(compiler, argc);
+
+  if (call_type == OP_METHOD_CALL) {
+    ASSERT_INDEX(method, (int)compiler->module->constants.count);
+    emitShort(compiler, method);
+  }
 
   // After the call the arguments will be popped and the callable
   // will be replaced with the return value.
   compilerChangeStack(compiler, -argc);
+}
+
+static void exprCall(Compiler* compiler) {
+  _compileCall(compiler, OP_CALL, -1);
 }
 
 static void exprAttrib(Compiler* compiler) {
@@ -1957,6 +1971,12 @@ static void exprAttrib(Compiler* compiler) {
   int index = 0;
   moduleAddString(compiler->module, compiler->parser.vm,
                   name, length, &index);
+
+  // Check if it's a method call.
+  if (match(compiler, TK_LPARAN)) {
+    _compileCall(compiler, OP_METHOD_CALL, index);
+    return;
+  }
 
   if (compiler->l_value && matchAssignment(compiler)) {
     TokenType assignment = compiler->parser.previous.type;
@@ -3168,7 +3188,7 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
   }
 
 #if DUMP_BYTECODE
-  dumpFunctionCode(compiler->parser.vm, module->body);
+  dumpFunctionCode(compiler->parser.vm, module->body->fn);
 #endif
 
   // Return the compilation result.
