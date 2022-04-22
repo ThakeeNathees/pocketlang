@@ -125,6 +125,8 @@ typedef enum {
   TK_NOT,        // not / !
   TK_TRUE,       // true
   TK_FALSE,      // false
+  TK_SELF,       // self
+  // TODO: TK_SUPER
 
   TK_DO,         // do
   TK_THEN,       // then
@@ -186,6 +188,7 @@ static _Keyword _keywords[] = {
   { "not",      3, TK_NOT      },
   { "true",     4, TK_TRUE     },
   { "false",    5, TK_FALSE    },
+  { "self",     4, TK_SELF     },
   { "do",       2, TK_DO       },
   { "then",     4, TK_THEN     },
   { "while",    5, TK_WHILE    },
@@ -240,6 +243,14 @@ typedef enum {
   DEPTH_GLOBAL = -1, //< Global variables.
   DEPTH_LOCAL,       //< Local scope. Increase with inner scope.
 } Depth;
+
+typedef enum {
+  FUNC_MAIN, // The body function of the script.
+  FUNC_TOPLEVEL,
+  FUNC_LITERAL,
+  FUNC_METHOD,
+  FUNC_CONSTRUCTOR,
+} FuncType;
 
 typedef struct {
   const char* name; //< Directly points into the source string.
@@ -313,6 +324,9 @@ typedef struct sUpvalueInfo {
 } UpvalueInfo;
 
 typedef struct sFunc {
+
+  // Type of the current function.
+  FuncType type;
 
   // Scope of the function. -2 for module body function, -1 for top level
   // function and literal functions will have the scope where it declared.
@@ -396,8 +410,9 @@ typedef struct sParser {
   ForwardName forwards[MAX_FORWARD_NAMES];
   int forwards_count;
 
-  bool repl_mode;       //< True if compiling for REPL.
-  bool has_errors;      //< True if any syntex error occurred at.
+  bool repl_mode;
+  bool parsing_class;
+  bool has_errors;
   bool need_more_lines; //< True if we need more lines in REPL mode.
 
 } Parser;
@@ -507,6 +522,7 @@ static void parserInit(Parser* parser, PKVM* vm, Compiler* compiler,
   parser->forwards_count = 0;
 
   parser->repl_mode = !!(compiler->options && compiler->options->repl_mode);
+  parser->parsing_class = false;
   parser->has_errors = false;
   parser->need_more_lines = false;
 }
@@ -1257,6 +1273,19 @@ static int findBuiltinFunction(const PKVM* vm,
   return -1;
 }
 
+// Find the builtin classes name and returns it's index in the VM's builtin
+// classes array, if not found returns -1.
+static int findBuiltinClass(const PKVM* vm,
+                            const char* name, uint32_t length) {
+  for (int i = 0; i < PK_INSTANCE; i++) {
+    uint32_t bfn_length = vm->builtin_classes[i]->name->length;
+    if (IS_CSTR_EQ(vm->builtin_classes[i]->name, name, length)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 // Find the local with the [name] in the given function [func] and return
 // it's index, if not found returns -1.
 static int findLocal(Func* func, const char* name, uint32_t length) {
@@ -1337,7 +1366,8 @@ typedef enum {
   NAME_LOCAL_VAR,  //< Including parameter.
   NAME_UPVALUE,    //< Local to an enclosing function.
   NAME_GLOBAL_VAR,
-  NAME_BUILTIN_FN,    //< Native builtin function.
+  NAME_BUILTIN_FN, //< Native builtin function.
+  NAME_BUILTIN_TY, //< Builtin primitive type classes.
 } NameDefnType;
 
 // Identifier search result.
@@ -1394,6 +1424,13 @@ static NameSearchResult compilerSearchName(Compiler* compiler,
     return result;
   }
 
+  index = findBuiltinClass(compiler->parser.vm, name, length);
+  if (index != -1) {
+    result.type = NAME_BUILTIN_TY;
+    result.index = index;
+    return result;
+  }
+
   return result;
 }
 
@@ -1423,7 +1460,7 @@ static void compilerChangeStack(Compiler* compiler, int num);
 
 // Forward declaration of grammar functions.
 static void parsePrecedence(Compiler* compiler, Precedence precedence);
-static void compileFunction(Compiler* compiler, bool is_literal);
+static int compileFunction(Compiler* compiler, FuncType fn_type);
 static void compileExpression(Compiler* compiler);
 
 static void exprLiteral(Compiler* compiler);
@@ -1447,6 +1484,8 @@ static void exprSubscript(Compiler* compiler);
 
 // true, false, null, self.
 static void exprValue(Compiler* compiler);
+
+static void exprSelf(Compiler* compiler);
 
 #define NO_RULE { NULL,          NULL,          PREC_NONE }
 #define NO_INFIX PREC_NONE
@@ -1513,6 +1552,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_NOT        */ { exprUnaryOp,   NULL,             PREC_UNARY },
   /* TK_TRUE       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_FALSE      */ { exprValue,     NULL,             NO_INFIX },
+  /* TK_FALSE      */ { exprSelf,      NULL,             NO_INFIX },
   /* TK_DO         */   NO_RULE,
   /* TK_THEN       */   NO_RULE,
   /* TK_WHILE      */   NO_RULE,
@@ -1573,6 +1613,11 @@ static void emitPushName(Compiler* compiler, NameDefnType type, int index) {
       emitOpcode(compiler, OP_PUSH_BUILTIN_FN);
       emitByte(compiler, index);
       return;
+
+    case NAME_BUILTIN_TY:
+      emitOpcode(compiler, OP_PUSH_BUILTIN_TY);
+      emitByte(compiler, index);
+      return;
   }
 }
 
@@ -1584,6 +1629,7 @@ static void emitStoreName(Compiler* compiler, NameDefnType type, int index) {
   switch (type) {
     case NAME_NOT_DEFINED:
     case NAME_BUILTIN_FN:
+    case NAME_BUILTIN_TY:
       UNREACHABLE();
 
     case NAME_LOCAL_VAR:
@@ -1671,7 +1717,7 @@ static void exprInterpolation(Compiler* compiler) {
 }
 
 static void exprFunction(Compiler* compiler) {
-  compileFunction(compiler, true);
+  compileFunction(compiler, FUNC_LITERAL);
 }
 
 static void exprName(Compiler* compiler) {
@@ -1701,7 +1747,9 @@ static void exprName(Compiler* compiler) {
       // like python does) and it's recommented to define all the globals
       // before entering a local scope.
 
-      if (result.type == NAME_NOT_DEFINED || result.type == NAME_BUILTIN_FN) {
+      if (result.type == NAME_NOT_DEFINED ||
+          result.type == NAME_BUILTIN_FN  ||
+          result.type == NAME_BUILTIN_TY ) {
         name_type = (compiler->scope_depth == DEPTH_GLOBAL)
                     ? NAME_GLOBAL_VAR
                     : NAME_LOCAL_VAR;
@@ -1897,7 +1945,11 @@ static void exprMap(Compiler* compiler) {
   consume(compiler, TK_RBRACE, "Expected '}' after map elements.");
 }
 
-static void exprCall(Compiler* compiler) {
+// This function is reused between calls and method calls. if the [call_type]
+// is OP_METHOD_CALL the [method] should refer a string in the module's
+// constant pool, otherwise it's ignored.
+static void _compileCall(Compiler* compiler, Opcode call_type, int method) {
+  ASSERT((call_type == OP_CALL) || (call_type == OP_METHOD_CALL), OOPS);
 
   // Compile parameters.
   int argc = 0;
@@ -1911,12 +1963,22 @@ static void exprCall(Compiler* compiler) {
     consume(compiler, TK_RPARAN, "Expected ')' after parameter list.");
   }
 
-  emitOpcode(compiler, OP_CALL);
+  emitOpcode(compiler, call_type);
+
   emitByte(compiler, argc);
+
+  if (call_type == OP_METHOD_CALL) {
+    ASSERT_INDEX(method, (int)compiler->module->constants.count);
+    emitShort(compiler, method);
+  }
 
   // After the call the arguments will be popped and the callable
   // will be replaced with the return value.
   compilerChangeStack(compiler, -argc);
+}
+
+static void exprCall(Compiler* compiler) {
+  _compileCall(compiler, OP_CALL, -1);
 }
 
 static void exprAttrib(Compiler* compiler) {
@@ -1928,6 +1990,12 @@ static void exprAttrib(Compiler* compiler) {
   int index = 0;
   moduleAddString(compiler->module, compiler->parser.vm,
                   name, length, &index);
+
+  // Check if it's a method call.
+  if (match(compiler, TK_LPARAN)) {
+    _compileCall(compiler, OP_METHOD_CALL, index);
+    return;
+  }
 
   if (compiler->l_value && matchAssignment(compiler)) {
     TokenType assignment = compiler->parser.previous.type;
@@ -1983,6 +2051,25 @@ static void exprValue(Compiler* compiler) {
     case TK_FALSE: emitOpcode(compiler, OP_PUSH_FALSE); break;
     default:
       UNREACHABLE();
+  }
+}
+
+static void exprSelf(Compiler* compiler) {
+
+  if (compiler->func->type == FUNC_CONSTRUCTOR ||
+      compiler->func->type == FUNC_METHOD) {
+    emitOpcode(compiler, OP_PUSH_SELF);
+    return;
+  }
+
+  // If we reach here 'self' is used in either non method or a closure
+  // inside a method.
+
+  if (!compiler->parser.parsing_class) {
+    parseError(compiler, "Invalid use of 'self'.");
+  } else {
+    // FIXME:
+    parseError(compiler, "TODO: Closures cannot capture 'self' for now.");
   }
 }
 
@@ -2155,7 +2242,8 @@ static void compilerExitBlock(Compiler* compiler) {
 }
 
 static void compilerPushFunc(Compiler* compiler, Func* fn,
-                             Function* func) {
+                             Function* func, FuncType type) {
+  fn->type = type;
   fn->outer_func = compiler->func;
   fn->local_count = 0;
   fn->stack_size = 0;
@@ -2269,99 +2357,74 @@ static void compileStatement(Compiler* compiler);
 static void compileBlockBody(Compiler* compiler, BlockType type);
 
 // Compile a class and return it's index in the module's types buffer.
-static void compileClass(Compiler* compiler) {
+static int compileClass(Compiler* compiler) {
+
+  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
   // Consume the name of the type.
-  consume(compiler, TK_NAME, "Expected a type name.");
+  consume(compiler, TK_NAME, "Expected a class name.");
   const char* name = compiler->parser.previous.start;
   int name_len = compiler->parser.previous.length;
+  int name_line = compiler->parser.previous.line;
 
   // Create a new class.
-  int cls_index, ctor_index;
-  Class* cls = newClass(compiler->parser.vm, compiler->module,
-                        name, (uint32_t)name_len, &cls_index, &ctor_index);
-  cls->ctor->fn->arity = 0;
-
-  // FIXME:
-  // Temproary patch for moving functions and classes to constant buffer.
-  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
-  int index = compilerAddVariable(compiler,
-                                  compiler->parser.previous.start,
-                                  compiler->parser.previous.length,
-                                  compiler->parser.previous.line);
-  moduleSetGlobal(compiler->module, index, VAR_OBJ(cls));
+  int cls_index;
+  PKVM* _vm = compiler->parser.vm;
+  Class* cls = newClass(_vm, name, name_len,
+                        _vm->builtin_classes[PK_OBJECT], compiler->module,
+                        NULL, &cls_index);
+  vmPushTempRef(_vm, &cls->_super); // cls.
+  compiler->parser.parsing_class = true;
 
   // Check count exceeded.
   checkMaxConstantsReached(compiler, cls_index);
-  checkMaxConstantsReached(compiler, ctor_index);
-
-  // Compile the constructor function.
-  ASSERT(compiler->func->ptr == compiler->module->body->fn, OOPS);
-  Func curr_fn;
-  compilerPushFunc(compiler, &curr_fn, cls->ctor->fn);
-  compilerEnterBlock(compiler);
-
-  // Push an instance on the stack.
-  emitOpcode(compiler, OP_PUSH_INSTANCE);
-  emitShort(compiler, cls_index);
 
   skipNewLines(compiler);
-  TokenType next = peek(compiler);
-  while (next != TK_END && next != TK_EOF) {
+  while (!match(compiler, TK_END)) {
+    // At the top level the stack size should be 0, before and after compiling
+    // a top level statement, since there aren't any locals at the top level.
+    ASSERT(compiler->parser.has_errors ||
+           compiler->func->stack_size == 0, OOPS);
 
-    // Compile field name.
-    consume(compiler, TK_NAME, "Expected a type name.");
-    const char* f_name = compiler->parser.previous.start;
-    int f_len = compiler->parser.previous.length;
+    consume(compiler, TK_DEF, "Expected method definition.");
+    int fn_index = compileFunction(compiler, FUNC_METHOD);
+    Var fn_var = compiler->module->constants.data[fn_index];
+    ASSERT(IS_OBJ_TYPE(fn_var, OBJ_FUNC), OOPS);
 
-    int f_index = 0;
-    String* new_name = moduleAddString(compiler->module, compiler->parser.vm,
-                                       f_name, f_len, &f_index);
+    // TODO: check if the constructor or method already exists and report
+    // error. Make sure the error report line match the name token's line.
 
-    for (uint32_t i = 0; i < cls->field_names.count; i++) {
-      String* prev = moduleGetStringAt(compiler->module,
-                                       cls->field_names.data[i]);
-      ASSERT(prev != NULL, OOPS);
-      if (IS_STR_EQ(new_name, prev)) {
-        parseError(compiler, "Class field with name '%s' already exists.",
-                   new_name->data);
-      }
+    Closure* method = newClosure(_vm, (Function*)AS_OBJ(fn_var));
+    if (strcmp(method->fn->name, "_init") == 0) {
+      cls->ctor = method;
+
+    } else {
+      vmPushTempRef(_vm, &method->_super); // method.
+      pkClosureBufferWrite(&cls->methods, _vm, method);
+      vmPopTempRef(_vm); // method.
     }
 
-    pkUintBufferWrite(&cls->field_names, compiler->parser.vm, f_index);
-
-    // Consume the assignment expression.
-    consume(compiler, TK_EQ, "Expected an assignment after field name.");
-    compileExpression(compiler); // Assigned value.
-    consumeEndStatement(compiler);
-
-    // At this point the stack top would be the expression.
-    emitOpcode(compiler, OP_INST_APPEND);
+    // At the top level the stack size should be 0, before and after compiling
+    // a top level statement, since there aren't any locals at the top level.
+    ASSERT(compiler->parser.has_errors ||
+           compiler->func->stack_size == 0, OOPS);
 
     skipNewLines(compiler);
-    next = peek(compiler);
   }
-  consume(compiler, TK_END, "Expected 'end' after a class declaration end.");
 
-  // The instance pushed by the OP_PUSH_INSTANCE instruction is at the top
-  // of the stack, return it (Constructor will return the instance). Note that
-  // the emitFunctionEnd function will also add a return instruction but that's
-  // for functions which doesn't return anything explicitly. This return won't
-  // change compiler's stack size because it won't pop the return value.
-  emitOpcode(compiler, OP_RETURN);
+  compiler->parser.parsing_class = false;
+  vmPopTempRef(_vm); // cls.
 
-  compilerExitBlock(compiler);
-  emitFunctionEnd(compiler);
-  compilerPopFunc(compiler);
+  return cls_index;
 }
 
 // Compile a function and return it's index in the module's function buffer.
-static void compileFunction(Compiler* compiler, bool is_literal) {
+static int compileFunction(Compiler* compiler, FuncType fn_type) {
 
   const char* name;
   int name_length;
 
-  if (!is_literal) {
+  if (fn_type != FUNC_LITERAL) {
     consume(compiler, TK_NAME, "Expected a function name.");
     name = compiler->parser.previous.start;
     name_length = compiler->parser.previous.length;
@@ -2376,7 +2439,7 @@ static void compileFunction(Compiler* compiler, bool is_literal) {
                                compiler->module, false, NULL, &fn_index);
   checkMaxConstantsReached(compiler, fn_index);
 
-  if (!is_literal) {
+  if (fn_type != FUNC_LITERAL) {
     ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
     int name_line = compiler->parser.previous.line;
     int g_index = compilerAddVariable(compiler, name, name_length, name_line);
@@ -2387,8 +2450,12 @@ static void compileFunction(Compiler* compiler, bool is_literal) {
     vmPopTempRef(compiler->parser.vm); // func.
   }
 
+  if (fn_type == FUNC_METHOD && strncmp(name, "_init", name_length) == 0) {
+    fn_type = FUNC_CONSTRUCTOR;
+  }
+
   Func curr_fn;
-  compilerPushFunc(compiler, &curr_fn, func);
+  compilerPushFunc(compiler, &curr_fn, func, fn_type);
 
   int argc = 0;
   compilerEnterBlock(compiler); // Parameter depth.
@@ -2431,6 +2498,11 @@ static void compileFunction(Compiler* compiler, bool is_literal) {
 
   compileBlockBody(compiler, BLOCK_FUNC);
 
+  if (fn_type == FUNC_CONSTRUCTOR) {
+    emitOpcode(compiler, OP_PUSH_SELF);
+    emitOpcode(compiler, OP_RETURN);
+  }
+
   consume(compiler, TK_END, "Expected 'end' after function definition end.");
   compilerExitBlock(compiler); // Parameter depth.
   emitFunctionEnd(compiler);
@@ -2448,7 +2520,7 @@ static void compileFunction(Compiler* compiler, bool is_literal) {
   // function of this function, and the bellow emit calls will write to the
   // outer function. If it's a literal function, we need to push a closure
   // of it on the stack.
-  if (is_literal) {
+  if (fn_type == FUNC_LITERAL) {
     emitOpcode(compiler, OP_PUSH_CLOSURE);
     emitShort(compiler, fn_index);
 
@@ -2458,6 +2530,8 @@ static void compileFunction(Compiler* compiler, bool is_literal) {
       emitByte(compiler, curr_fn.upvalues[i].index);
     }
   }
+
+  return fn_index;
 }
 
 // Finish a block body.
@@ -3022,10 +3096,22 @@ static void compileStatement(Compiler* compiler) {
     }
 
     if (matchEndStatement(compiler)) {
-      emitOpcode(compiler, OP_PUSH_NULL);
+
+      // Constructors will return self.
+      if (compiler->func->type == FUNC_CONSTRUCTOR) {
+        emitOpcode(compiler, OP_PUSH_SELF);
+      } else {
+        emitOpcode(compiler, OP_PUSH_NULL);
+      }
+
       emitOpcode(compiler, OP_RETURN);
 
     } else {
+
+      if (compiler->func->type == FUNC_CONSTRUCTOR) {
+        parseError(compiler, "Cannor 'return' a value from constructor.");
+      }
+
       compileExpression(compiler); //< Return value is at stack top.
 
       // If the last expression parsed with compileExpression() is a call
@@ -3085,7 +3171,7 @@ static void compileTopLevelStatement(Compiler* compiler) {
     compileClass(compiler);
 
   } else if (match(compiler, TK_DEF)) {
-    compileFunction(compiler, false);
+    compileFunction(compiler, FUNC_TOPLEVEL);
 
   } else if (match(compiler, TK_FROM)) {
     compileFromImport(compiler);
@@ -3139,7 +3225,7 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
   uint32_t globals_count = module->globals.count;
 
   Func curr_fn;
-  compilerPushFunc(compiler, &curr_fn, module->body->fn);
+  compilerPushFunc(compiler, &curr_fn, module->body->fn, FUNC_MAIN);
 
   // Lex initial tokens. current <-- next.
   lexToken(&(compiler->parser));
@@ -3197,7 +3283,7 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
   }
 
 #if DUMP_BYTECODE
-  dumpFunctionCode(compiler->parser.vm, module->body);
+  dumpFunctionCode(compiler->parser.vm, module->body->fn);
 #endif
 
   // Return the compilation result.

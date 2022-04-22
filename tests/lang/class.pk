@@ -1,36 +1,33 @@
 
-## TODO: Implement ctor with va arg to
-## initialize, fields.
+class Vec2
+  def _init(x, y)
+    self.x = x
+    self.y = y
+  end
 
-class _Vec
-  x = 0
-  y = 0
+  def add(other)
+    return Vec2(self.x + other.x,
+                self.y + other.y)
+  end
+
+  ## Note that operator overloading / friend functions
+  ## haven't implemented at this point (to_string won't actually
+  ## override it).
+  def to_string
+    return "[${self.x}, ${self.y}]"
+  end
+
 end
 
-def Vec(x, y)
-  ret = _Vec()
-  ret.x = x; ret.y = y
-  return ret
-end
+v1 = Vec2(1, 2); assert(v1.x == 1 and v1.y == 2)
+print("v1 = ${v1.to_string()}")
 
-def vecAdd(v1, v2)
-  return Vec(v1.x + v2.x,
-             v1.y + v2.y)
-end
+v2 = Vec2(3, 4); assert(v2.x == 3 and v2.y == 4)
+print("v2 = ${v2.to_string()}")
 
-v1 = Vec(1, 2); assert(v1.x == 1 and v1.y == 2)
-v2 = Vec(3, 4); assert(v2.x == 3 and v2.y == 4)
+v3 = v1.add(v2); assert(v3.x == 4 and v3.y == 6)
+print("v3 = ${v3.to_string()}")
 
-v3 = vecAdd(v1, v2)
-assert(v3.x == 4 and v3.y == 6)
+print('ALL TESTS PASSED')
 
-class Test
-  fn  = null
-  val = Vec(12, 32)
-end
-
-test = Test()
-test.fn = to_string
-res = test.fn(test.val)
-assert(res == "[_Vec: x=12, y=32]")
 

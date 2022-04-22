@@ -31,11 +31,6 @@ PkConfiguration pkNewConfiguration(void) {
   config.write_fn = NULL;
   config.read_fn = NULL;
 
-  config.inst_free_fn = NULL;
-  config.inst_name_fn = NULL;
-  config.inst_get_attrib_fn = NULL;
-  config.inst_set_attrib_fn = NULL;
-
   config.load_script_fn = NULL;
   config.resolve_path_fn = NULL;
   config.user_data = NULL;
@@ -555,6 +550,10 @@ static inline void pushCallFrame(PKVM* vm, const Closure* closure, Var* rbp) {
   frame->rbp = rbp;
   frame->closure = closure;
   frame->ip = closure->fn->fn->opcodes.data;
+
+  // Capture self.
+  frame->self = vm->fiber->self;
+  vm->fiber->self = VAR_UNDEFINED;
 }
 
 static inline void reuseCallFrame(PKVM* vm, const Closure* closure) {
@@ -568,6 +567,10 @@ static inline void reuseCallFrame(PKVM* vm, const Closure* closure) {
   CallFrame* frame = fb->frames + fb->frame_count - 1;
   frame->closure = closure;
   frame->ip = closure->fn->fn->opcodes.data;
+
+  // Capture self.
+  frame->self = vm->fiber->self;
+  vm->fiber->self = VAR_UNDEFINED;
 
   ASSERT(*frame->rbp == VAR_NULL, OOPS);
 
@@ -709,6 +712,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber_) {
   register const uint8_t* ip;
 
   register Var* rbp;         //< Stack base pointer register.
+  register Var* self;        //< Points to the self in the current call frame.
   register CallFrame* frame; //< Current call frame.
   register Module* module;   //< Currently executing module.
   register Fiber* fiber = fiber_;
@@ -770,6 +774,7 @@ static PkResult runFiber(PKVM* vm, Fiber* fiber_) {
     frame = &fiber->frames[fiber->frame_count-1];  \
     ip = frame->ip;                                \
     rbp = frame->rbp;                              \
+    self = &frame->self;                           \
     module = frame->closure->fn->owner;            \
   } while (false)
 
@@ -793,12 +798,18 @@ L_vm_main_loop:
   // defined, the next line become a declaration (Opcode instruction;).
   NO_OP;
 
+#define _DUMP_STACK()           \
+  do {                          \
+    system("cls"); /* FIXME: */ \
+    dumpGlobalValues(vm);       \
+    dumpStackFrame(vm);         \
+    DEBUG_BREAK();              \
+  } while (false)
+
 #if DUMP_STACK
-  system("cls"); // FIXME:
-  dumpGlobalValues(vm);
-  dumpStackFrame(vm);
-  DEBUG_BREAK();
+  _DUMP_STACK();
 #endif
+#undef _DUMP_STACK
 
   SWITCH() {
 
@@ -848,14 +859,9 @@ L_vm_main_loop:
       DISPATCH();
     }
 
-    OPCODE(PUSH_INSTANCE):
+    OPCODE(PUSH_SELF):
     {
-      uint8_t index = READ_SHORT();
-      ASSERT_INDEX(index, module->constants.count);
-      ASSERT(IS_OBJ_TYPE(module->constants.data[index], OBJ_CLASS), OOPS);
-      Instance* inst = newInstance(vm,
-                       (Class*)AS_OBJ(module->constants.data[index]), false);
-      PUSH(VAR_OBJ(inst));
+      PUSH(*self);
       DISPATCH();
     }
 
@@ -885,21 +891,6 @@ L_vm_main_loop:
 
       DROP(); // value
       DROP(); // key
-
-      DISPATCH();
-    }
-
-    OPCODE(INST_APPEND):
-    {
-      Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
-      Var inst = PEEK(-2);
-      ASSERT(IS_OBJ_TYPE(inst, OBJ_INST), OOPS);
-
-      Instance* inst_p = (Instance*)AS_OBJ(inst);
-      ASSERT(!inst_p->is_native, OOPS);
-      Inst* ins = inst_p->ins;
-      pkVarBufferWrite(&ins->fields, vm, value);
-      DROP(); // value
 
       DISPATCH();
     }
@@ -968,6 +959,15 @@ L_vm_main_loop:
       ASSERT_INDEX(index, vm->builtins_count);
       Closure* closure = vm->builtins_funcs[index];
       PUSH(VAR_OBJ(closure));
+      DISPATCH();
+    }
+
+    OPCODE(PUSH_BUILTIN_TY):
+    {
+      uint8_t index = READ_BYTE();
+      ASSERT_INDEX(index, PK_INSTANCE);
+      Class* cls = vm->builtin_classes[index];
+      PUSH(VAR_OBJ(cls));
       DISPATCH();
     }
 
@@ -1058,32 +1058,66 @@ L_vm_main_loop:
       DISPATCH();
     }
 
+    {
+      uint8_t argc;
+      Var callable;
+      const Closure* closure;
+
+    OPCODE(METHOD_CALL):
+      argc = READ_BYTE();
+      fiber->ret = (fiber->sp - argc - 1);
+      fiber->self = *fiber->ret; //< Self for the next call.
+
+      uint16_t index = READ_SHORT();
+      bool is_method;
+      String* name = moduleGetStringAt(module, (int)index);
+      callable = getMethod(vm, fiber->self, name, &is_method);
+      CHECK_ERROR();
+      goto L_do_call;
+
     OPCODE(CALL):
     OPCODE(TAIL_CALL):
-    {
-      const uint8_t argc = READ_BYTE();
-      Var* callable = fiber->sp - argc - 1;
+      argc = READ_BYTE();
+      fiber->ret = fiber->sp - argc - 1;
+      callable = *fiber->ret;
 
-      const Closure* closure = NULL;
-
+L_do_call:
       // Raw functions cannot be on the stack, since they're not first class
       // citizens.
-      ASSERT(!IS_OBJ_TYPE(*callable, OBJ_FUNC), OOPS);
+      ASSERT(!IS_OBJ_TYPE(callable, OBJ_FUNC), OOPS);
 
-      if (IS_OBJ_TYPE(*callable, OBJ_CLOSURE)) {
-        closure = (const Closure*)AS_OBJ(*callable);
+      if (IS_OBJ_TYPE(callable, OBJ_CLOSURE)) {
+        closure = (const Closure*)AS_OBJ(callable);
 
-      } else if (IS_OBJ_TYPE(*callable, OBJ_CLASS)) {
-        closure = (const Closure*)((Class*)AS_OBJ(*callable))->ctor;
+      } else if (IS_OBJ_TYPE(callable, OBJ_CLASS)) {
+        Class* cls = (Class*)AS_OBJ(callable);
+
+        // Allocate / create a new self before calling constructor on it.
+        fiber->self = preConstructSelf(vm, cls);
+        CHECK_ERROR();
+
+        closure = (const Closure*)(cls)->ctor;
+
+        // No constructor is defined on the class. Just return self.
+        if (closure == NULL) {
+          if (argc != 0) {
+            String* msg = stringFormat(vm, "Expected exactly 0 argument(s).");
+            RUNTIME_ERROR(msg);
+          }
+
+          *fiber->ret = fiber->self;
+          fiber->self = VAR_UNDEFINED;
+          DISPATCH();
+        }
 
       } else {
         RUNTIME_ERROR(stringFormat(vm, "$ $(@).", "Expected a callable to "
                       "call, instead got",
-                      varTypeName(*callable), toString(vm, *callable)));
-        DISPATCH();
+                      varTypeName(callable), toString(vm, callable)));
       }
 
       // If we reached here it's a valid callable.
+      ASSERT(closure != NULL, OOPS);
 
       // -1 argument means multiple number of args.
       if (closure->fn->arity != -1 && closure->fn->arity != argc) {
@@ -1093,8 +1127,6 @@ L_vm_main_loop:
         RUNTIME_ERROR(msg);
       }
 
-      // Next call frame starts here. (including return value).
-      fiber->ret = callable;
       *(fiber->ret) = VAR_NULL; //< Set the return value to null.
 
       if (closure->fn->is_native) {
@@ -1129,9 +1161,9 @@ L_vm_main_loop:
 
       } else {
 
-        if (instruction == OP_CALL) {
+        if (instruction == OP_CALL || instruction == OP_METHOD_CALL) {
           UPDATE_FRAME(); //< Update the current frame's ip.
-          pushCallFrame(vm, closure, callable);
+          pushCallFrame(vm, closure, fiber->ret);
           LOAD_FRAME();  //< Load the top frame to vm's execution variables.
 
         } else {

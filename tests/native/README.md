@@ -1,7 +1,7 @@
 ## Example on how to integrate pocket VM with in your application.
 
-- Including this example this repository contains several examples on how to integrate
-pocket VM with your application
+- Including this example this repository contains several examples on how to
+integrate pocket VM with your application
   - These examples (currently 2 examples)
   - The `cli/` application
   - The `docs/try/main.c` web assembly version of pocketlang

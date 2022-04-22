@@ -14,73 +14,38 @@
 #include <stdio.h>
 #include <string.h>
 
-/*****************************************************************************/
-/* MODULE OBJECTS                                                            */
-/*****************************************************************************/
-
-// Str  | If already exists | If does not exist |
-// -----+-------------------+-------------------|
-// 'r'  |  read from start  |   failure to open |
-// 'w'  |  destroy contents |   create new      |
-// 'a'  |  write to end     |   create new      |
-// 'r+' |  read from start  |   error           |
-// 'w+' |  destroy contents |   create new      |
-// 'a+' |  write to end     |   create new      |
-typedef enum {
-  FMODE_READ = (1 << 0),
-  FMODE_WRITE = (1 << 1),
-  FMODE_APPEND = (1 << 2),
-  _FMODE_EXT = (1 << 3),
-  FMODE_READ_EXT = (_FMODE_EXT | FMODE_READ),
-  FMODE_WRITE_EXT = (_FMODE_EXT | FMODE_WRITE),
-  FMODE_APPEND_EXT = (_FMODE_EXT | FMODE_APPEND),
-} FileAccessMode;
-
-typedef enum {
-  OBJ_FILE = 1,
-
-  _OBJ_MAX_
-} ObjType;
-
-typedef struct {
-  ObjType type;
-} Obj;
-
-typedef struct {
-  Obj _super;
-  FILE* fp;            // C file poinnter.
-  FileAccessMode mode; // Access mode of the file.
-  bool closed;         // True if the file isn't closed yet.
-} File;
-
-/*****************************************************************************/
-/* MODULE PUBLIC FUNCTIONS                                                   */
-/*****************************************************************************/
-
-// Initialize the native module object with it's default values.
-void initObj(Obj* obj, ObjType type);
-
-// A function callback called by pocket VM to get attribute of a native
-// instance. The value of the attributes will be returned with pkReturn...()
-// functions and if the attribute doesn't exists on the instance we're
-// shouldn't return anything, PKVM will know it and set error (or use some
-// common attributes like "as_string", "as_repr", etc).
-void objGetAttrib(PKVM* vm, void* instance, uint32_t id, PkStringPtr attrib);
-
-// A function callback called by pocket VM to set attribute of a native
-// instance.
-bool objSetAttrib(PKVM* vm, void* instance, uint32_t id, PkStringPtr attrib);
-
-// The free callback of the object, that'll called by pocketlang when a
-// pocketlang native instance garbage collected.
-void freeObj(PKVM* vm, void* instance, uint32_t id);
-
-// The native instance get_name callback used to get the name of a native
-// instance from pocketlang. Here the id we're using is the ObjType enum.
-const char* getObjName(uint32_t id);
+void registerModuleIO(PKVM* vm);
+void registerModulePath(PKVM* vm);
+void registerModuleMath(PKVM* vm);
 
 // Registers all the cli modules.
-void registerModules(PKVM* vm);
+#define REGISTER_ALL_MODULES(vm) \
+  do {                           \
+    registerModuleIO(vm);        \
+    registerModulePath(vm);      \
+    registerModuleMath(vm);      \
+  } while (false)
+
+/*****************************************************************************/
+/* MODULES INTERNAL                                                          */
+/*****************************************************************************/
+
+// Allocate a new module object of type [Ty].
+#define NEW_OBJ(Ty) (Ty*)malloc(sizeof(Ty))
+
+// Dellocate module object, allocated by NEW_OBJ(). Called by the freeObj
+// callback.
+#define FREE_OBJ(ptr) free(ptr)
+
+// Returns the docstring of the function, which is a static const char* defined
+// just above the function by the DEF() macro below.
+#define DOCSTRING(fn) __doc_##fn
+
+// A macro to declare a function, with docstring, which is defined as
+// ___doc_<fn> = docstring; That'll used to generate function help text.
+#define DEF(fn, docstring)                      \
+  static const char* DOCSTRING(fn) = docstring; \
+  static void fn(PKVM* vm)
 
 /*****************************************************************************/
 /* SHARED FUNCTIONS                                                          */

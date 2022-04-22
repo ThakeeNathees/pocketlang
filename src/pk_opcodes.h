@@ -40,9 +40,8 @@ OPCODE(PUSH_LIST, 2, 1)
 // Push a new map to construct from literal.
 OPCODE(PUSH_MAP, 0, 1)
 
-// Push a new instance to the stack.
-// param: 1 byte index.
-OPCODE(PUSH_INSTANCE, 1, 1)
+// Push the self of the current method on the stack.
+OPCODE(PUSH_SELF, 0, 1)
 
 // Pop the value on the stack the next stack top would be a list. Append the
 // value to the list. Used in literal array construction.
@@ -51,10 +50,6 @@ OPCODE(LIST_APPEND, 0, -1)
 // Pop the top 2 values from the stack, the next stack top would be the map.
 // Insert the key value pairs to the map. Used in literal map construction.
 OPCODE(MAP_INSERT, 0, -2)
-
-// Pop the value on the stack, the next stack top would be an instance. Append
-// the value to the instance. Used in instance construction.
-OPCODE(INST_APPEND, 0, -1)
 
 // Push stack local on top of the stack. Locals at 0 to 8 marked explicitly
 // since it's performance critical.
@@ -97,6 +92,10 @@ OPCODE(STORE_GLOBAL, 1, 0)
 // params: 1 bytes index.
 OPCODE(PUSH_BUILTIN_FN, 1, 1)
 
+// Push a built in class.
+// params: 1 bytes index.
+OPCODE(PUSH_BUILTIN_TY, 1, 1)
+
 // Push an upvalue of the current closure at the index which is the first one
 // byte argument.
 // params: 1 byte index.
@@ -123,6 +122,11 @@ OPCODE(POP, 0, -1)
 // already.
 // params: 2 byte name index.
 OPCODE(IMPORT, 2, 1)
+
+// Call a method on the variable at the stack top. See opcode CALL for detail.
+// params: 2 bytes method name index in the constant pool.
+//         1 byte argc.
+OPCODE(METHOD_CALL, 3, -0) //< Stack size will be calculated at compile time.
 
 // Calls a function using stack's top N values as the arguments and once it
 // done the stack top should be stored otherwise it'll be disregarded. The

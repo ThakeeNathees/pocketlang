@@ -7,32 +7,56 @@
 #include "modules.h"
 
 /*****************************************************************************/
-/* FILE OBJECT OPERATORS                                                     */
+/* FILE CLASS                                                                */
 /*****************************************************************************/
 
-void fileGetAttrib(PKVM* vm, File* file, const char* attrib) {
-  if (strcmp(attrib, "closed") == 0) {
-    pkReturnBool(vm, file->closed);
-    return;
-  }
+ // Str  | If already exists | If does not exist |
+ // -----+-------------------+-------------------|
+ // 'r'  |  read from start  |   failure to open |
+ // 'w'  |  destroy contents |   create new      |
+ // 'a'  |  write to end     |   create new      |
+ // 'r+' |  read from start  |   error           |
+ // 'w+' |  destroy contents |   create new      |
+ // 'a+' |  write to end     |   create new      |
+typedef enum {
+  FMODE_NONE       = 0,
+  FMODE_READ       = (1 << 0),
+  FMODE_WRITE      = (1 << 1),
+  FMODE_APPEND     = (1 << 2),
+  _FMODE_EXT       = (1 << 3),
+  FMODE_READ_EXT   = (_FMODE_EXT | FMODE_READ),
+  FMODE_WRITE_EXT  = (_FMODE_EXT | FMODE_WRITE),
+  FMODE_APPEND_EXT = (_FMODE_EXT | FMODE_APPEND),
+} FileAccessMode;
+
+typedef struct {
+  FILE* fp;            // C file poinnter.
+  FileAccessMode mode; // Access mode of the file.
+  bool closed;         // True if the file isn't closed yet.
+} File;
+
+void* _newFile() {
+  File* file = NEW_OBJ(File);
+  file->closed = true;
+  file->mode = FMODE_NONE;
+  file->fp = NULL;
+  return file;
 }
 
-bool fileSetAttrib(PKVM* vm, File* file, const char* attrib) {
-  return false;
-}
-
-void fileClean(PKVM* vm, File* file) {
+void _deleteFile(void* ptr) {
+  File* file = (File*)ptr;
   if (!file->closed) {
     if (fclose(file->fp) != 0) { /* TODO: error! */ }
     file->closed = true;
   }
+  FREE_OBJ(file);
 }
 
 /*****************************************************************************/
 /* FILE MODULE FUNCTIONS                                                     */
 /*****************************************************************************/
 
-static void _fileOpen(PKVM* vm) {
+DEF(_fileOpen, "") {
 
   int argc = pkGetArgc(vm);
   if (!pkCheckArgcRange(vm, argc, 1, 2)) return;
@@ -62,25 +86,29 @@ static void _fileOpen(PKVM* vm) {
     } while (false);
   }
 
+  // This TODO is just a blockade from running the bellow code, complete the
+  // native interface and test before removing it.
+  TODO;
+
   FILE* fp = fopen(path, mode_str);
 
   if (fp != NULL) {
-    File* file = NEW_OBJ(File);
-    initObj(&file->_super, OBJ_FILE);
-    file->fp = fp;
-    file->mode = mode;
-    file->closed = false;
-
-    pkReturnInstNative(vm, (void*)file, OBJ_FILE);
+    File* self = (File*)pkGetSelf(vm);
+    self->fp = fp;
+    self->mode = mode;
+    self->closed = false;
 
   } else {
-    pkReturnNull(vm);
+    pkSetRuntimeError(vm, "Error opening the file.");
   }
 }
 
-static void _fileRead(PKVM* vm) {
-  File* file;
-  if (!pkGetArgInst(vm, 1, OBJ_FILE, (void**)&file)) return;
+DEF(_fileRead, "") {
+  // This TODO is just a blockade from running the bellow code, complete the
+  // native interface and test before removing it.
+  TODO;
+
+  File* file = (File*)pkGetSelf(vm);
 
   if (file->closed) {
     pkSetRuntimeError(vm, "Cannot read from a closed file.");
@@ -98,11 +126,14 @@ static void _fileRead(PKVM* vm) {
   pkReturnString(vm, (const char*)buff);
 }
 
-static void _fileWrite(PKVM* vm) {
-  File* file;
+DEF(_fileWrite, "") {
+  // This TODO is just a blockade from running the bellow code, complete the
+  // native interface and test before removing it.
+  TODO;
+
+  File* file = (File*)pkGetSelf(vm);
   const char* text; uint32_t length;
-  if (!pkGetArgInst(vm, 1, OBJ_FILE, (void**)&file)) return;
-  if (!pkGetArgString(vm, 2, &text, &length)) return;
+  if (!pkGetArgString(vm, 1, &text, &length)) return;
 
   if (file->closed) {
     pkSetRuntimeError(vm, "Cannot write to a closed file.");
@@ -117,9 +148,12 @@ static void _fileWrite(PKVM* vm) {
   fwrite(text, sizeof(char), (size_t)length, file->fp);
 }
 
-static void _fileClose(PKVM* vm) {
-  File* file;
-  if (!pkGetArgInst(vm, 1, OBJ_FILE, (void**)&file)) return;
+DEF(_fileClose, "") {
+  // This TODO is just a blockade from running the bellow code, complete the
+  // native interface and test before removing it.
+  TODO;
+
+  File* file = (File*)pkGetSelf(vm);
 
   if (file->closed) {
     pkSetRuntimeError(vm, "File already closed.");
@@ -133,14 +167,16 @@ static void _fileClose(PKVM* vm) {
   file->closed = true;
 }
 
-void registerModuleFile(PKVM* vm) {
-  PkHandle* file = pkNewModule(vm, "File");
+void registerModuleIO(PKVM* vm) {
+  PkHandle* io = pkNewModule(vm, "io");
 
-  pkModuleAddFunction(vm, file, "open",  _fileOpen, -1);
-  pkModuleAddFunction(vm, file, "read",  _fileRead,  1);
-  pkModuleAddFunction(vm, file, "write", _fileWrite, 2);
-  pkModuleAddFunction(vm, file, "close", _fileClose, 1);
+  PkHandle* cls_file = pkNewClass(vm, "File", NULL, io, _newFile, _deleteFile);
+  pkClassAddMethod(vm, cls_file, "open",  _fileOpen, -1);
+  pkClassAddMethod(vm, cls_file, "read",  _fileRead,  0);
+  pkClassAddMethod(vm, cls_file, "write", _fileWrite, 1);
+  pkClassAddMethod(vm, cls_file, "close", _fileClose, 0);
+  pkReleaseHandle(vm, cls_file);
 
-  pkRegisterModule(vm, file);
-  pkReleaseHandle(vm, file);
+  pkRegisterModule(vm, io);
+  pkReleaseHandle(vm, io);
 }

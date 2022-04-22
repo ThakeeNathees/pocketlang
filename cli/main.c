@@ -129,11 +129,6 @@ static PKVM* intializePocketVM() {
   config.write_fn = writeFunction;
   config.read_fn = readFunction;
 
-  config.inst_free_fn = freeObj;
-  config.inst_name_fn = getObjName;
-  config.inst_get_attrib_fn = objGetAttrib;
-  config.inst_set_attrib_fn = objSetAttrib;
-
   config.load_script_fn = loadScript;
   config.resolve_path_fn = resolvePath;
 
@@ -193,7 +188,7 @@ int main(int argc, const char** argv) {
   user_data.repl_mode = false;
   pkSetUserData(vm, &user_data);
 
-  registerModules(vm);
+  REGISTER_ALL_MODULES(vm);
 
   PkCompileOptions options = pkNewCompilerOptions();
   options.debug = debug;

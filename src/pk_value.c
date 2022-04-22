@@ -75,14 +75,6 @@ PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn) {
   return handle;
 }
 
-PkHandle* pkNewInstNative(PKVM* vm, void* data, uint32_t id) {
-  Instance* inst = newInstanceNative(vm, data, id);
-  vmPushTempRef(vm, &inst->_super); // inst
-  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(inst));
-  vmPopTempRef(vm); // inst
-  return handle;
-}
-
 /*****************************************************************************/
 /* VAR INTERNALS                                                             */
 /*****************************************************************************/
@@ -102,6 +94,7 @@ DEFINE_BUFFER(Uint, uint32_t)
 DEFINE_BUFFER(Byte, uint8_t)
 DEFINE_BUFFER(Var, Var)
 DEFINE_BUFFER(String, String*)
+DEFINE_BUFFER(Closure, Closure*)
 
 void pkByteBufferAddString(pkByteBuffer* self, PKVM* vm, const char* str,
                            uint32_t length) {
@@ -148,6 +141,13 @@ void markVarBuffer(PKVM* vm, pkVarBuffer* self) {
 }
 
 void markStringBuffer(PKVM* vm, pkStringBuffer* self) {
+  if (self == NULL) return;
+  for (uint32_t i = 0; i < self->count; i++) {
+    markObject(vm, &self->data[i]->_super);
+  }
+}
+
+void markClosureBuffer(PKVM* vm, pkClosureBuffer* self) {
   if (self == NULL) return;
   for (uint32_t i = 0; i < self->count; i++) {
     markObject(vm, &self->data[i]->_super);
@@ -263,6 +263,7 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       // Mark call frames.
       for (int i = 0; i < fiber->frame_count; i++) {
         markObject(vm, (Object*)&fiber->frames[i].closure->_super);
+        markValue(vm, fiber->frames[i].self);
       }
       vm->bytes_allocated += sizeof(CallFrame) * fiber->frame_capacity;
 
@@ -278,17 +279,18 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       markObject(vm, &cls->owner->_super);
       markObject(vm, &cls->ctor->_super);
       markObject(vm, &cls->name->_super);
-      vm->bytes_allocated += sizeof(uint32_t) * cls->field_names.capacity;
+
+      markClosureBuffer(vm, &cls->methods);
+      vm->bytes_allocated += sizeof(Closure) * cls->methods.capacity;
+
     } break;
 
     case OBJ_INST:
     {
       Instance* inst = (Instance*)obj;
-      if (!inst->is_native) {
-        Inst* ins = inst->ins;
-        vm->bytes_allocated += sizeof(Inst);
-        vm->bytes_allocated += sizeof(Var*) * ins->fields.capacity;
-      }
+      markObject(vm, &inst->attribs->_super);
+      markObject(vm, &inst->cls->_super);
+      vm->bytes_allocated += sizeof(Instance);
     } break;
   }
 }
@@ -493,6 +495,7 @@ Fiber* newFiber(PKVM* vm, Closure* closure) {
   }
 
   fiber->open_upvalues = NULL;
+  fiber->self = VAR_UNDEFINED;
 
   // Initialize the return value to null (doesn't really have to do that here
   // but if we're trying to debut it may crash when dumping the return value).
@@ -501,80 +504,58 @@ Fiber* newFiber(PKVM* vm, Closure* closure) {
   return fiber;
 }
 
-Class* newClass(PKVM* vm, Module* module, const char* name, uint32_t length,
-                int* cls_index, int* ctor_index) {
+Class* newClass(PKVM* vm, const char* name, int length,
+                Class* super, Module* module,
+                const char* docstring, int* cls_index) {
 
   Class* cls = ALLOCATE(vm, Class);
   varInitObject(&cls->_super, vm, OBJ_CLASS);
 
   vmPushTempRef(vm, &cls->_super); // class.
 
-  uint32_t _cls_index = moduleAddConstant(vm, module, VAR_OBJ(cls));
-  if (cls_index) *cls_index = (int)_cls_index;
+  pkClosureBufferInit(&cls->methods);
 
-  pkUintBufferInit(&cls->field_names);
-  cls->owner = module;
+  cls->class_of = PK_INSTANCE;
+  cls->owner = NULL;
+  cls->super_class = super;
   cls->docstring = NULL;
-  cls->name = moduleAddString(module, vm, name, length, NULL);
+  cls->ctor = NULL;
+  cls->new_fn = NULL;
+  cls->delete_fn = NULL;
 
-  // Since characters '@' and '$' are special in stringFormat, and they
-  // currently cannot be escaped (TODO), a string (char array) created
-  // for that character and passed as C string format.
-  char special[2] = { SPECIAL_NAME_CHAR, '\0' };
-  String* ctor_name = stringFormat(vm, "$(Ctor:@)", special, cls->name);
-
-  // Constructor.
-  vmPushTempRef(vm, &ctor_name->_super); // ctor_name.
-  {
-    Function* ctor_fn = newFunction(vm, ctor_name->data, ctor_name->length,
-                                    module, false, NULL, ctor_index);
-    vmPushTempRef(vm, &ctor_fn->_super); // ctor_fn.
-    cls->ctor = newClosure(vm, ctor_fn);
-    vmPopTempRef(vm); // ctor_fn.
+  // Builtin types doesn't belongs to a module.
+  if (module != NULL) {
+    cls->name = moduleAddString(module, vm, name, length, NULL);
+    int _cls_index = moduleAddConstant(vm, module, VAR_OBJ(cls));
+    if (cls_index) *cls_index = _cls_index;
+    moduleAddGlobal(vm, module, name, length, VAR_OBJ(cls));
+  } else {
+    cls->name = newStringLength(vm, name, (uint32_t)length);
   }
-  vmPopTempRef(vm); // ctor_name.
 
   vmPopTempRef(vm); // class.
   return cls;
 }
 
-Instance* newInstance(PKVM* vm, Class* cls, bool initialize) {
+Instance* newInstance(PKVM* vm, Class* cls) {
+
+  ASSERT(cls->class_of == PK_INSTANCE, "Cannot create an instace of builtin "
+                                       "class with newInstance() function.");
 
   Instance* inst = ALLOCATE(vm, Instance);
   varInitObject(&inst->_super, vm, OBJ_INST);
-
   vmPushTempRef(vm, &inst->_super); // inst.
 
-  inst->ty_name = cls->name->data;
-  inst->is_native = false;
+  inst->cls = cls;
+  inst->attribs = newMap(vm);
 
-  Inst* ins = ALLOCATE(vm, Inst);
-  inst->ins = ins;
-  ins->type = cls;
-  pkVarBufferInit(&ins->fields);
-
-  if (initialize && cls->field_names.count != 0) {
-    pkVarBufferFill(&ins->fields, vm, VAR_NULL, cls->field_names.count);
+  if (cls->new_fn != NULL) {
+    inst->native = cls->new_fn();
+  } else {
+    inst->native = NULL;
   }
 
   vmPopTempRef(vm); // inst.
-
-  return inst;
-}
-
-Instance* newInstanceNative(PKVM* vm, void* data, uint32_t id) {
-  Instance* inst = ALLOCATE(vm, Instance);
-  varInitObject(&inst->_super, vm, OBJ_INST);
-  inst->is_native = true;
-  inst->native_id = id;
-
-  if (vm->config.inst_name_fn != NULL) {
-    inst->ty_name = vm->config.inst_name_fn(id);
-  } else {
-    inst->ty_name = "$(?)";
-  }
-
-  inst->native = data;
   return inst;
 }
 
@@ -798,7 +779,8 @@ List* listJoin(PKVM* vm, List* l1, List* l2) {
   return list;
 }
 
-// Return a hash value for the object.
+// Return a hash value for the object. Only String and Range objects can be
+// hashable.
 static uint32_t _hashObject(Object* obj) {
 
   ASSERT(isObjectHashable(obj->type),
@@ -809,28 +791,10 @@ static uint32_t _hashObject(Object* obj) {
     case OBJ_STRING:
       return ((String*)obj)->hash;
 
-    case OBJ_LIST:
-    case OBJ_MAP:
-      goto L_unhashable;
-
-    case OBJ_RANGE:
-    {
+    case OBJ_RANGE: {
       Range* range = (Range*)obj;
       return utilHashNumber(range->from) ^ utilHashNumber(range->to);
     }
-
-    case OBJ_MODULE:
-    case OBJ_FUNC:
-    case OBJ_FIBER:
-    case OBJ_CLASS:
-    case OBJ_INST:
-      TODO;
-      UNREACHABLE();
-
-    default:
-    L_unhashable:
-      UNREACHABLE();
-      break;
   }
 
   UNREACHABLE();
@@ -1067,27 +1031,15 @@ void freeObject(PKVM* vm, Object* self) {
 
     case OBJ_CLASS: {
       Class* cls = (Class*)self;
-      pkUintBufferClear(&cls->field_names, vm);
+      pkClosureBufferClear(&cls->methods, vm);
     } break;
 
-    case OBJ_INST:
-    {
+    case OBJ_INST: {
       Instance* inst = (Instance*)self;
-
-      if (inst->is_native) {
-        if (vm->config.inst_free_fn != NULL) {
-          // TODO: Allow user to set error when freeing the object.
-          vm->config.inst_free_fn(vm, inst->native, inst->native_id);
-        }
-
-      } else {
-        Inst* ins = inst->ins;
-        pkVarBufferClear(&ins->fields, vm);
-        DEALLOCATE(vm, ins);
+      if (inst->cls->delete_fn != NULL) {
+        inst->cls->delete_fn(inst->native);
       }
-
-      break;
-    }
+    } break;
   }
 
   DEALLOCATE(vm, self);
@@ -1194,129 +1146,35 @@ void moduleAddMain(PKVM* vm, Module* module) {
 }
 
 bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value) {
-  ASSERT(inst != NULL, OOPS);
-  ASSERT(attrib != NULL, OOPS);
-  ASSERT(value != NULL, OOPS);
+  ASSERT((inst != NULL) && (attrib != NULL) && (value != NULL), OOPS);
 
-  // This function should only be called at runtime.
-  ASSERT(vm->fiber != NULL, OOPS);
-
-  if (inst->is_native) {
-
-    if (vm->config.inst_get_attrib_fn) {
-      // Temproarly change the fiber's "return address" to points to the
-      // below var 'val' so that the users can use 'pkReturn...()' function
-      // to return the attribute as well.
-      Var* temp = vm->fiber->ret;
-      Var val = VAR_UNDEFINED;
-
-      vm->fiber->ret = &val;
-      PkStringPtr attr = { attrib->data, NULL, NULL,
-                           attrib->length, attrib->hash };
-      vm->config.inst_get_attrib_fn(vm, inst->native, inst->native_id, attr);
-      vm->fiber->ret = temp;
-
-      if (IS_UNDEF(val)) {
-
-        // FIXME: add a list of attribute overrides.
-        if ((CHECK_HASH("as_string", 0xbdef4147) == attrib->hash) &&
-            IS_CSTR_EQ(attrib, "as_string", 9)) {
-          *value = VAR_OBJ(toRepr(vm, VAR_OBJ(inst)));
-          return true;
-        }
-
-        // If we reached here, the native instance don't have the attribute
-        // and no overriden attributes found, return false to indicate that the
-        // attribute doesn't exists.
-        return false;
-      }
-
-      // Attribute [val] updated by the hosting application.
-      *value = val;
-      return true;
-    }
-
-    // If the hosting application doesn't provided a getter function, we treat
-    // it as if the instance don't has the attribute.
-    return false;
-
-  } else {
-
-    // TODO: Optimize this with binary search.
-    Class* cls = inst->ins->type;
-    for (uint32_t i = 0; i < cls->field_names.count; i++) {
-      ASSERT_INDEX(i, cls->field_names.count);
-      String* f_name = moduleGetStringAt(cls->owner, cls->field_names.data[i]);
-      ASSERT(f_name != NULL, OOPS);
-      if (IS_STR_EQ(f_name, attrib)) {
-        *value = inst->ins->fields.data[i];
-        return true;
-      }
-    }
-
-    // Couldn't find the attribute in it's type class, return false.
-    return false;
+  if (inst->native != NULL) {
+    TODO;
   }
 
-  UNREACHABLE();
-  return false;
+  Var value_ = mapGet(inst->attribs, VAR_OBJ(attrib));
+  if (IS_UNDEF(value_)) return false;
+
+  *value = value_;
+  return true;
 }
 
 bool instSetAttrib(PKVM* vm, Instance* inst, String* attrib, Var value) {
+  ASSERT((inst != NULL) && (attrib != NULL), OOPS);
 
-  if (inst->is_native) {
+  if (inst->native != NULL) {
+    // Try setting the attribute from the native interface, and if success, we
+    // should return. otherwise the code will "fall through" and set on it's
+    // dynamic attributes map.
+    TODO;
 
-    if (vm->config.inst_set_attrib_fn) {
-      // Temproarly change the fiber's "return address" to points to the
-      // below var 'attrib_ptr' so that the users can use 'pkGetArg...()'
-      // function to validate and get the attribute (users should use 0 as the
-      // index of the argument since it's at the return address and we cannot
-      // ensure fiber->ret[1] will be in bounds).
-      Var* temp = vm->fiber->ret;
-      Var attrib_ptr = value;
-
-      vm->fiber->ret = &attrib_ptr;
-      PkStringPtr attr = { attrib->data, NULL, NULL,
-                           attrib->length, attrib->hash };
-      bool exists = vm->config.inst_set_attrib_fn(vm, inst->native,
-                                                  inst->native_id, attr);
-      vm->fiber->ret = temp;
-
-      // If the type is incompatible there'll be an error by now, return false
-      // and the user of this function has to check VM_HAS_ERROR() as well.
-      if (VM_HAS_ERROR(vm)) return false;
-
-      // If the attribute exists on the native type, the host application would
-      // returned true by now, return it.
-      return exists;
-    }
-
-    // If the host application doesn't provided a setter we treat it as it
-    // doesn't has the attribute.
-    return false;
-
-  } else {
-
-    // TODO: Optimize this with binary search.
-    Class* ty = inst->ins->type;
-    for (uint32_t i = 0; i < ty->field_names.count; i++) {
-      ASSERT_INDEX(i, ty->field_names.count);
-      String* f_name = moduleGetStringAt(ty->owner, ty->field_names.data[i]);
-      ASSERT(f_name != NULL, OOPS);
-      if (f_name->hash == attrib->hash &&
-        f_name->length == attrib->length &&
-        memcmp(f_name->data, attrib->data, attrib->length) == 0) {
-        inst->ins->fields.data[i] = value;
-        return true;
-      }
-    }
-
-    // Couldn't find the attribute in it's type class, return false.
-    return false;
+    // FIXME:
+    // Only return true if attribute have been set.
+    return true;
   }
 
-  UNREACHABLE();
-  return false;
+  mapSet(vm, inst->attribs, VAR_OBJ(attrib), value);
+  return true;
 }
 
 /*****************************************************************************/
@@ -1407,6 +1265,16 @@ const char* varTypeName(Var v) {
   return getObjectTypeName(obj->type);
 }
 
+PkVarType getVarType(Var v) {
+  if (IS_NULL(v)) return PK_NULL;
+  if (IS_BOOL(v)) return PK_BOOL;
+  if (IS_NUM(v))  return PK_NUMBER;
+
+  ASSERT(IS_OBJ(v), OOPS);
+  Object* obj = AS_OBJ(v);
+  return getObjPkVarType(obj->type);
+}
+
 bool isValuesSame(Var v1, Var v2) {
 #if VAR_NAN_TAGGING
   // Bit representation of each values are unique so just compare the bits.
@@ -1461,8 +1329,8 @@ bool isValuesEqual(Var v1, Var v2) {
 }
 
 bool isObjectHashable(ObjectType type) {
-  // Only list and map are un-hashable.
-  return type != OBJ_LIST && type != OBJ_MAP;
+  // Only String and Range are hashable (since they're immutable).
+  return type == OBJ_STRING || type == OBJ_RANGE;
 }
 
 // This will prevent recursive list/map from crash when calling to_string, by
@@ -1702,35 +1570,17 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
       {
         const Instance* inst = (const Instance*)obj;
         pkByteBufferWrite(buff, vm, '[');
-        pkByteBufferAddString(buff, vm, inst->ty_name,
-                              (uint32_t)strlen(inst->ty_name));
-        pkByteBufferWrite(buff, vm, ':');
+        pkByteBufferWrite(buff, vm, '\'');
+        pkByteBufferAddString(buff, vm, inst->cls->name->data,
+          inst->cls->name->length);
+        pkByteBufferAddString(buff, vm, "' instance at ", 14);
 
-        if (!inst->is_native) {
-          const Class* cls = inst->ins->type;
-          const Inst* ins = inst->ins;
-          ASSERT(ins->fields.count == cls->field_names.count, OOPS);
-
-          for (uint32_t i = 0; i < cls->field_names.count; i++) {
-            if (i != 0) pkByteBufferWrite(buff, vm, ',');
-
-            pkByteBufferWrite(buff, vm, ' ');
-            String* f_name = moduleGetStringAt(cls->owner,
-                                               cls->field_names.data[i]);
-            pkByteBufferAddString(buff, vm, f_name->data, f_name->length);
-            pkByteBufferWrite(buff, vm, '=');
-            _toStringInternal(vm, ins->fields.data[i], buff, outer, repr);
-          }
-        } else {
-
-          char buff_addr[STR_HEX_BUFF_SIZE];
-          char* ptr = (char*)buff_addr;
-          (*ptr++) = '0'; (*ptr++) = 'x';
-          const int len = snprintf(ptr, sizeof(buff_addr) - 2,
-                                "%08x", (unsigned int)(uintptr_t)inst->native);
-          pkByteBufferAddString(buff, vm, buff_addr, (uint32_t)len);
-        }
-
+        char buff_addr[STR_HEX_BUFF_SIZE];
+        char* ptr = (char*)buff_addr;
+        (*ptr++) = '0'; (*ptr++) = 'x';
+        const int len = snprintf(ptr, sizeof(buff_addr) - 2,
+          "%08x", (unsigned int)(uintptr_t)inst);
+        pkByteBufferAddString(buff, vm, buff_addr, (uint32_t)len);
         pkByteBufferWrite(buff, vm, ']');
         return;
       }

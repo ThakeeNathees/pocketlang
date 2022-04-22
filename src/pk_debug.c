@@ -126,25 +126,16 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         NO_ARGS();
         break;
 
-      case OP_PUSH_LIST:     SHORT_ARG(); break;
-      case OP_PUSH_INSTANCE:
-      {
-        int cls_index = READ_SHORT();
-        ASSERT_INDEX((uint32_t)cls_index, func->owner->constants.count);
-        Var constant = func->owner->constants.data[cls_index];
-        ASSERT(IS_OBJ_TYPE(constant, OBJ_CLASS), OOPS);
-
-        // Prints: %5d [Class:%s]\n
-        PRINT_INT(cls_index);
-        PRINT(" [Class:");
-        PRINT(func->owner->name->data);
-        PRINT("]\n");
+      case OP_PUSH_LIST:
+        SHORT_ARG();
         break;
-      }
-      case OP_PUSH_MAP:      NO_ARGS();   break;
-      case OP_LIST_APPEND:   NO_ARGS();   break;
-      case OP_MAP_INSERT:    NO_ARGS();   break;
-      case OP_INST_APPEND:   NO_ARGS();   break;
+
+      case OP_PUSH_MAP:
+      case OP_PUSH_SELF:
+      case OP_LIST_APPEND:
+      case OP_MAP_INSERT:
+        NO_ARGS();
+        break;
 
       case OP_PUSH_LOCAL_0:
       case OP_PUSH_LOCAL_1:
@@ -236,6 +227,19 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         break;
       }
 
+      case OP_PUSH_BUILTIN_TY:
+      {
+        int index = READ_BYTE();
+        ASSERT_INDEX(index, PK_INSTANCE);
+        const char* name = vm->builtin_classes[index]->name->data;
+        // Prints: %5d [Fn:%s]\n
+        PRINT_INT(index);
+        PRINT(" [Class:");
+        PRINT(name);
+        PRINT("]\n");
+        break;
+      }
+
       case OP_PUSH_UPVALUE:
       case OP_STORE_UPVALUE:
       {
@@ -272,6 +276,24 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         ASSERT(name != NULL, OOPS);
         // Prints: %5d '%s'\n
         PRINT_INT(index);
+        PRINT(" '");
+        PRINT(name->data);
+        PRINT("'\n");
+        break;
+      }
+
+      case OP_METHOD_CALL:
+      {
+        int argc = READ_BYTE();
+        int index = READ_SHORT();
+        String* name = moduleGetStringAt(func->owner, index);
+        ASSERT(name != NULL, OOPS);
+
+        // Prints: %5d (argc) %d '%s'\n
+        PRINT_INT(argc);
+        PRINT(" (argc) ");
+
+        _PRINT_INT(index, 0);
         PRINT(" '");
         PRINT(name->data);
         PRINT("'\n");

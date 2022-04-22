@@ -67,7 +67,7 @@ def execute(expr)
 
     ## output the byte at the data pointer.      
     else if c == '.'
-      write(str_chr(mem[ptr]))
+      write(chr(mem[ptr]))
 
     else if c == ','
       assert(false, "Currently input isn't supported in pocketlang.")

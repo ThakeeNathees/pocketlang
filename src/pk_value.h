@@ -200,6 +200,7 @@ DECLARE_BUFFER(Uint, uint32_t)
 DECLARE_BUFFER(Byte, uint8_t)
 DECLARE_BUFFER(Var, Var)
 DECLARE_BUFFER(String, String*)
+DECLARE_BUFFER(Closure, Closure*)
 
 // Add all the characters to the buffer, byte buffer can also be used as a
 // buffer to write string (like a string stream). Note that this will not
@@ -428,6 +429,7 @@ typedef struct {
   const uint8_t* ip;      //< Pointer to the next instruction byte code.
   const Closure* closure; //< Closure of the frame.
   Var* rbp;               //< Stack base pointer. (%rbp)
+  Var self;               //< Self reference of the current method.
 } CallFrame;
 
 typedef enum {
@@ -464,6 +466,13 @@ struct Fiber {
   // overflowed.
   Var* ret;
 
+  // The self pointer to of the current method. It'll be updated before
+  // calling a native method. (Because native methods doesn't have a call
+  // frame we're doing it this way). Also updated just before calling a
+  // script method, and will be captured by the next allocated callframe
+  // and reset to VAR_UNDEFINED.
+  Var self;
+
   // Heap allocated array of call frames will grow as needed.
   CallFrame* frames;
   int frame_capacity; //< Capacity of the frames array.
@@ -479,6 +488,9 @@ struct Fiber {
 struct Class {
   Object _super;
 
+  // The base class of this class.
+  Class* super_class;
+
   // The module that owns this class.
   Module* owner;
 
@@ -489,9 +501,21 @@ struct Class {
   // entry in it's owner module's constant pool.
   const char* docstring;
 
+  // For builtin type it'll be it's enum (ex: PK_STRING, PK_NUMBER, ...) for
+  // every other classes it'll be PK_INSTANCE to indicate that it's not a
+  // builtin type's class.
+  PkVarType class_of;
+
   Closure* ctor; //< The constructor function.
-  pkUintBuffer field_names; //< Buffer of field names.
-  // TODO: ordered names buffer for binary search.
+
+  // A buffer of methods of the class.
+  pkClosureBuffer methods;
+
+  // Allocater and de-allocator functions for native types.
+  // For script/ builtin types it'll be NULL.
+  pkNewInstanceFn new_fn;
+  pkDeleteInstanceFn delete_fn;
+
 };
 
 typedef struct {
@@ -502,15 +526,17 @@ typedef struct {
 struct Instance {
   Object _super;
 
-  const char* ty_name;  //< Name of the type it belongs to.
+  Class* cls; //< Class of the instance.
 
-  bool is_native;       //< True if it's a native type instance.
-  uint32_t native_id;   //< Unique ID of this native instance.
+  // If the instance is native, the [native] pointer points to the user data
+  // (generally a heap allocated struct of that type) that contains it's
+  // attributes. We'll use it to access an attribute first with setters and
+  // getters and if the attribute not exists we'll continue search in the
+  // bellow attribs map.
+  void* native;
 
-  union {
-    void* native; //< C struct pointer. // TODO:
-    Inst* ins;    //< Module instance pointer.
-  };
+  // Dynamic attributes of an instance.
+  Map* attribs;
 };
 
 /*****************************************************************************/
@@ -544,6 +570,12 @@ Range* newRange(PKVM* vm, double from, double to);
 
 Module* newModule(PKVM* vm);
 
+Closure* newClosure(PKVM* vm, Function* fn);
+
+Upvalue* newUpvalue(PKVM* vm, Var* value);
+
+Fiber* newFiber(PKVM* vm, Closure* closure);
+
 // FIXME:
 // The docstring should be allocated and stored in the module's constants
 // as a string if it's not a native function. (native function's docs are
@@ -555,29 +587,15 @@ Function* newFunction(PKVM* vm, const char* name, int length,
                       bool is_native, const char* docstring,
                       int* fn_index);
 
-Closure* newClosure(PKVM* vm, Function* fn);
+// If the module is not NULL, the name and the class object will be added to
+// the module's constant pool. The class will be added to the modules global
+// as well.
+Class* newClass(PKVM* vm, const char* name, int length,
+                Class* super, Module* module,
+                const char* docstring, int* cls_index);
 
-Upvalue* newUpvalue(PKVM* vm, Var* value);
-
-Fiber* newFiber(PKVM* vm, Closure* closure);
-
-// FIXME:
-// Same fix has to applied as newFunction() (see above).
-//
-// Allocate new Class object and return Class* with name [name].
-Class* newClass(PKVM* vm, Module* scr, const char* name, uint32_t length,
-                 int* cls_index, int* ctor_index);
-
-// Allocate new instance with of the base [type]. Note that if [initialize] is
-// false, the field value buffer of the instance would be un initialized (ie.
-// the buffer count = 0). Otherwise they'll be set to VAR_NULL.
-Instance* newInstance(PKVM* vm, Class* cls, bool initialize);
-
-// Allocate new native instance and with [data] as the native type handle and
-// return Instance*. The [id] is the unique id of the instance, this would be
-// used to check if two instances are equal and used to get the name of the
-// instance using NativeTypeNameFn callback.
-Instance* newInstanceNative(PKVM* vm, void* data, uint32_t id);
+// Allocate new instance with of the base [type].
+Instance* newInstance(PKVM* vm, Class* cls);
 
 /*****************************************************************************/
 /* METHODS                                                                   */
@@ -737,6 +755,9 @@ const char* getObjectTypeName(ObjectType type);
 
 // Returns the type name of the var [v].
 const char* varTypeName(Var v);
+
+// Returns the PkVarType of the first class varaible [v].
+PkVarType getVarType(Var v);
 
 // Returns true if both variables are the same (ie v1 is v2).
 bool isValuesSame(Var v1, Var v2);

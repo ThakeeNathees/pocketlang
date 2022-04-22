@@ -15,13 +15,6 @@
 #include "pk_utils.h"
 #include "pk_vm.h"
 
-// M_PI is non standard. The macro _USE_MATH_DEFINES defining before importing
-// <math.h> will define the constants for MSVC. But for a portable solution,
-// we're defining it ourselves if it isn't already.
-#ifndef M_PI
-  #define M_PI 3.14159265358979323846
-#endif
-
 // Returns the docstring of the function, which is a static const char* defined
 // just above the function by the DEF() macro below.
 #define DOCSTRING(fn) _pk_doc_##fn
@@ -69,8 +62,67 @@ void pkRegisterModule(PKVM* vm, PkHandle* module) {
   vmRegisterModule(vm, module_, module_->name);
 }
 
+PkHandle* pkNewClass(PKVM* vm, const char* name,
+                     PkHandle* base_class, PkHandle* module,
+                     pkNewInstanceFn new_fn,
+                     pkDeleteInstanceFn delete_fn) {
+  CHECK_NULL(module);
+  CHECK_NULL(name);
+  CHECK_TYPE(module, OBJ_MODULE);
+
+  Class* super = vm->builtin_classes[PK_OBJECT];
+  if (base_class != NULL) {
+    CHECK_TYPE(base_class, OBJ_CLASS);
+    super = (Class*)AS_OBJ(base_class->value);
+  }
+
+  Class* class_ = newClass(vm, name, (int)strlen(name),
+                           super, (Module*)AS_OBJ(module->value),
+                           NULL, NULL);
+  class_->new_fn = new_fn;
+  class_->delete_fn = delete_fn;
+
+  return vmNewHandle(vm, VAR_OBJ(class_));
+}
+
+void pkClassAddMethod(PKVM* vm, PkHandle* cls,
+                      const char* name,
+                      pkNativeFn fptr, int arity) {
+  CHECK_NULL(cls);
+  CHECK_NULL(fptr);
+  CHECK_TYPE(cls, OBJ_CLASS);
+
+  Class* class_ = (Class*)AS_OBJ(cls->value);
+
+  Function* fn = newFunction(vm, name, (int)strlen(name),
+                             class_->owner, true, NULL, NULL);
+
+  // No need to push the function to temp references of the VM
+  // since it's written to the constant pool of the module and the module
+  // won't be garbage collected (class handle has reference to the module).
+
+  Closure* method = newClosure(vm, fn);
+
+  // FIXME: name "_init" is literal everywhere.
+  if (strcmp(name, "_init") == 0) {
+    class_->ctor = method;
+
+  } else {
+    vmPushTempRef(vm, &method->_super); // method.
+    pkClosureBufferWrite(&class_->methods, vm, method);
+    vmPopTempRef(vm); // method.
+  }
+}
+
+void* pkGetSelf(const PKVM* vm) {
+  ASSERT(IS_OBJ_TYPE(vm->fiber->self, OBJ_INST), OOPS);
+  Instance* inst = (Instance*)AS_OBJ(vm->fiber->self);
+  ASSERT(inst->native != NULL, OOPS);
+  return inst->native;
+}
+
 void pkModuleAddGlobal(PKVM* vm, PkHandle* module,
-                                 const char* name, PkHandle* value) {
+                       const char* name, PkHandle* value) {
   CHECK_TYPE(module, OBJ_MODULE);
   CHECK_NULL(value);
 
@@ -230,33 +282,6 @@ bool pkGetArgString(PKVM* vm, int arg, const char** value, uint32_t* length) {
   return true;
 }
 
-bool pkGetArgInst(PKVM* vm, int arg, uint32_t id, void** value) {
-  CHECK_GET_ARG_API_ERRORS();
-
-  Var val = ARG(arg);
-  bool is_native_instance = false;
-
-  if (IS_OBJ_TYPE(val, OBJ_INST)) {
-    Instance* inst = ((Instance*)AS_OBJ(val));
-    if (inst->is_native && inst->native_id == id) {
-      *value = inst->native;
-      is_native_instance = true;
-    }
-  }
-
-  if (!is_native_instance) {
-    const char* ty_name = "$(?)";
-    if (vm->config.inst_name_fn != NULL) {
-      ty_name = vm->config.inst_name_fn(id);
-    }
-
-    ERR_INVALID_ARG_TYPE(ty_name);
-    return false;
-  }
-
-  return true;
-}
-
 bool pkGetArgValue(PKVM* vm, int arg, PkVarType type, PkVar* value) {
   CHECK_GET_ARG_API_ERRORS();
 
@@ -298,10 +323,6 @@ void pkReturnValue(PKVM* vm, PkVar value) {
 
 void pkReturnHandle(PKVM* vm, PkHandle* handle) {
   RET(handle->value);
-}
-
-void pkReturnInstNative(PKVM* vm, void* data, uint32_t id) {
-  RET(VAR_OBJ(newInstanceNative(vm, data, id)));
 }
 
 const char* pkStringGetData(const PkVar value) {
@@ -514,7 +535,7 @@ DEF(coreAssert,
 
 DEF(coreBin,
   "bin(value:num) -> string\n"
-  "Returns as a binary value string with '0x' prefix.") {
+  "Returns as a binary value string with '0b' prefix.") {
 
   int64_t value;
   if (!validateInteger(vm, ARG(1), &value, "Argument 1")) return;
@@ -590,6 +611,35 @@ DEF(coreToString,
   "Returns the string representation of the value.") {
 
   RET(VAR_OBJ(toString(vm, ARG(1))));
+}
+
+DEF(coreChr,
+  "chr(value:num) -> string\n"
+  "Returns the ASCII string value of the integer argument.") {
+
+  int64_t num;
+  if (!validateInteger(vm, ARG(1), &num, "Argument 1")) return;
+
+  if (!IS_NUM_BYTE(num)) {
+    RET_ERR(newString(vm, "The number is not in a byte range."));
+  }
+
+  char c = (char)num;
+  RET(VAR_OBJ(newStringLength(vm, &c, 1)));
+}
+
+DEF(coreOrd,
+  "ord(value:string) -> num\n"
+  "Returns integer value of the given ASCII character.") {
+
+  String* c;
+  if (!validateArgString(vm, 1, &c)) return;
+  if (c->length != 1) {
+    RET_ERR(newString(vm, "Expected a string of length 1."));
+
+  } else {
+    RET(VAR_NUM((double)c->data[0]));
+  }
 }
 
 DEF(corePrint,
@@ -679,35 +729,6 @@ DEF(coreStrSub,
   RET(VAR_OBJ(newStringLength(vm, str->data + pos, (uint32_t)len)));
 }
 
-DEF(coreStrChr,
-  "str_chr(value:num) -> string\n"
-  "Returns the ASCII string value of the integer argument.") {
-
-  int64_t num;
-  if (!validateInteger(vm, ARG(1), &num, "Argument 1")) return;
-
-  if (!IS_NUM_BYTE(num)) {
-    RET_ERR(newString(vm, "The number is not in a byte range."));
-  }
-
-  char c = (char)num;
-  RET(VAR_OBJ(newStringLength(vm, &c, 1)));
-}
-
-DEF(coreStrOrd,
-  "str_ord(value:string) -> num\n"
-  "Returns integer value of the given ASCII character.") {
-
-  String* c;
-  if (!validateArgString(vm, 1, &c)) return;
-  if (c->length != 1) {
-    RET_ERR(newString(vm, "Expected a string of length 1."));
-
-  } else {
-    RET(VAR_NUM((double)c->data[0]));
-  }
-}
-
 // List functions.
 // ---------------
 
@@ -785,14 +806,17 @@ static void initializeBuiltinFunctions(PKVM* vm) {
   INITIALIZE_BUILTIN_FN("hex",       coreHex,      1);
   INITIALIZE_BUILTIN_FN("yield",     coreYield,   -1);
   INITIALIZE_BUILTIN_FN("to_string", coreToString, 1);
+  INITIALIZE_BUILTIN_FN("chr",       coreChr,      1);
+  INITIALIZE_BUILTIN_FN("ord",       coreOrd,      1);
   INITIALIZE_BUILTIN_FN("print",     corePrint,   -1);
   INITIALIZE_BUILTIN_FN("input",     coreInput,   -1);
   INITIALIZE_BUILTIN_FN("exit",      coreExit,    -1);
 
+  // FIXME:
+  // move this functions as methods. and make "append()" a builtin.
+
   // String functions.
   INITIALIZE_BUILTIN_FN("str_sub", coreStrSub, 3);
-  INITIALIZE_BUILTIN_FN("str_chr", coreStrChr, 1);
-  INITIALIZE_BUILTIN_FN("str_ord", coreStrOrd, 1);
 
   // List functions.
   INITIALIZE_BUILTIN_FN("list_append", coreListAppend, 2);
@@ -913,254 +937,6 @@ DEF(stdLangWrite,
   }
 }
 
-// TODO: Move math to cli as it's not part of the pocketlang core.
-//
-// 'math' library methods.
-// -----------------------
-
-DEF(stdMathFloor,
-  "floor(value:num) -> num\n") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  RET(VAR_NUM(floor(num)));
-}
-
-DEF(stdMathCeil,
-  "ceil(value:num) -> num\n") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  RET(VAR_NUM(ceil(num)));
-}
-
-DEF(stdMathPow,
-  "pow(value:num) -> num\n") {
-
-  double num, ex;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  if (!validateNumeric(vm, ARG(2), &ex, "Argument 2")) return;
-  RET(VAR_NUM(pow(num, ex)));
-}
-
-DEF(stdMathSqrt,
-  "sqrt(value:num) -> num\n") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  RET(VAR_NUM(sqrt(num)));
-}
-
-DEF(stdMathAbs,
-  "abs(value:num) -> num\n") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  if (num < 0) num = -num;
-  RET(VAR_NUM(num));
-}
-
-DEF(stdMathSign,
-  "sign(value:num) -> num\n") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  if (num < 0) num = -1;
-  else if (num > 0) num = +1;
-  else num = 0;
-  RET(VAR_NUM(num));
-}
-
-DEF(stdMathHash,
-  "hash(value:var) -> num\n"
-  "Return the hash value of the variable, if it's not hashable it'll "
-  "return null.") {
-
-  if (IS_OBJ(ARG(1))) {
-    if (!isObjectHashable(AS_OBJ(ARG(1))->type)) {
-      RET(VAR_NULL);
-    }
-  }
-  RET(VAR_NUM((double)varHashValue(ARG(1))));
-}
-
-DEF(stdMathSine,
-  "sin(rad:num) -> num\n"
-  "Return the sine value of the argument [rad] which is an angle expressed "
-  "in radians.") {
-
-  double rad;
-  if (!validateNumeric(vm, ARG(1), &rad, "Argument 1")) return;
-  RET(VAR_NUM(sin(rad)));
-}
-
-DEF(stdMathCosine,
-  "cos(rad:num) -> num\n"
-  "Return the cosine value of the argument [rad] which is an angle expressed "
-  "in radians.") {
-
-  double rad;
-  if (!validateNumeric(vm, ARG(1), &rad, "Argument 1")) return;
-  RET(VAR_NUM(cos(rad)));
-}
-
-DEF(stdMathTangent,
-  "tan(rad:num) -> num\n"
-  "Return the tangent value of the argument [rad] which is an angle expressed "
-  "in radians.") {
-
-  double rad;
-  if (!validateNumeric(vm, ARG(1), &rad, "Argument 1")) return;
-  RET(VAR_NUM(tan(rad)));
-}
-
-DEF(stdMathSinh,
-  "sinh(val) -> val\n"
-  "Return the hyperbolic sine value of the argument [val].") {
-
-  double val;
-  if (!validateNumeric(vm, ARG(1), &val, "Argument 1")) return;
-  RET(VAR_NUM(sinh(val)));
-}
-
-DEF(stdMathCosh,
-  "cosh(val) -> val\n"
-  "Return the hyperbolic cosine value of the argument [val].") {
-
-  double val;
-  if (!validateNumeric(vm, ARG(1), &val, "Argument 1")) return;
-  RET(VAR_NUM(cosh(val)));
-}
-
-DEF(stdMathTanh,
-  "tanh(val) -> val\n"
-  "Return the hyperbolic tangent value of the argument [val].") {
-
-  double val;
-  if (!validateNumeric(vm, ARG(1), &val, "Argument 1")) return;
-  RET(VAR_NUM(tanh(val)));
-}
-
-DEF(stdMathArcSine,
-  "asin(num) -> num\n"
-  "Return the arcsine value of the argument [num] which is an angle "
-  "expressed in radians.") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-
-  if (num < -1 || 1 < num) {
-    RET_ERR(newString(vm, "Argument should be between -1 and +1"));
-  }
-
-  RET(VAR_NUM(asin(num)));
-}
-
-DEF(stdMathArcCosine,
-  "acos(num) -> num\n"
-  "Return the arc cosine value of the argument [num] which is "
-  "an angle expressed in radians.") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-
-  if (num < -1 || 1 < num) {
-    RET_ERR(newString(vm, "Argument should be between -1 and +1"));
-  }
-
-  RET(VAR_NUM(acos(num)));
-}
-
-DEF(stdMathArcTangent,
-  "atan(num) -> num\n"
-  "Return the arc tangent value of the argument [num] which is "
-  "an angle expressed in radians.") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  RET(VAR_NUM(atan(num)));
-}
-
-DEF(stdMathLog10,
-  "log10(value:num) -> num\n"
-  "Return the logarithm to base 10 of argument [value]") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  RET(VAR_NUM(log10(num)));
-}
-
-DEF(stdMathRound,
-  "round(value:num) -> num\n"
-  "Round to nearest integer, away from zero and return the number.") {
-
-  double num;
-  if (!validateNumeric(vm, ARG(1), &num, "Argument 1")) return;
-  RET(VAR_NUM(round(num)));
-}
-
-// 'Fiber' module methods.
-// -----------------------
-
-DEF(stdFiberNew,
-  "new(fn:Closure) -> fiber\n"
-  "Create and return a new fiber from the given function [fn].") {
-
-  Closure* closure;
-  if (!validateArgClosure(vm, 1, &closure)) return;
-  RET(VAR_OBJ(newFiber(vm, closure)));
-}
-
-DEF(stdFiberRun,
-  "run(fb:Fiber, ...) -> var\n"
-  "Runs the fiber's function with the provided arguments and returns it's "
-  "return value or the yielded value if it's yielded.") {
-
-  int argc = ARGC;
-  if (argc == 0) // Missing the fiber argument.
-    RET_ERR(newString(vm, "Missing argument - fiber."));
-
-  Fiber* fb;
-  if (!validateArgFiber(vm, 1, &fb)) return;
-
-  // Buffer of argument to call vmPrepareFiber().
-  Var* args[MAX_ARGC];
-
-  // ARG(1) is fiber, function arguments are ARG(2), ARG(3), ... ARG(argc).
-  for (int i = 1; i < argc; i++) {
-    args[i - 1] = &ARG(i + 1);
-  }
-
-  // Switch fiber and start execution.
-  if (vmPrepareFiber(vm, fb, argc - 1, args)) {
-    ASSERT(fb == vm->fiber, OOPS);
-    fb->state = FIBER_RUNNING;
-  }
-}
-
-DEF(stdFiberResume,
-  "resume(fb:Fiber) -> var\n"
-  "Resumes a yielded function from a previous call of fiber_run() function. "
-  "Return it's return value or the yielded value if it's yielded.") {
-
-  int argc = ARGC;
-  if (argc == 0) // Missing the fiber argument.
-    RET_ERR(newString(vm, "Expected at least 1 argument(s)."));
-  if (argc > 2) // Can only accept 1 argument for resume.
-    RET_ERR(newString(vm, "Expected at most 2 argument(s)."));
-
-  Fiber* fb;
-  if (!validateArgFiber(vm, 1, &fb)) return;
-
-  Var value = (argc == 1) ? VAR_NULL : ARG(2);
-
-  // Switch fiber and resume execution.
-  if (vmSwitchFiber(vm, fb, &value)) {
-    ASSERT(fb == vm->fiber, OOPS);
-    fb->state = FIBER_RUNNING;
-  }
-}
-
 static void initializeCoreModules(PKVM* vm) {
 #define MODULE_ADD_FN(module, name, fn, argc) \
   moduleAddFunctionInternal(vm, module, name, fn, argc, DOCSTRING(fn))
@@ -1180,38 +956,175 @@ static void initializeCoreModules(PKVM* vm) {
   MODULE_ADD_FN(lang, "debug_break", stdLangDebugBreak, 0);
 #endif
 
-  NEW_MODULE(math, "math");
-  MODULE_ADD_FN(math, "floor",  stdMathFloor,      1);
-  MODULE_ADD_FN(math, "ceil",   stdMathCeil,       1);
-  MODULE_ADD_FN(math, "pow",    stdMathPow,        2);
-  MODULE_ADD_FN(math, "sqrt",   stdMathSqrt,       1);
-  MODULE_ADD_FN(math, "abs",    stdMathAbs,        1);
-  MODULE_ADD_FN(math, "sign",   stdMathSign,       1);
-  MODULE_ADD_FN(math, "hash",   stdMathHash,       1);
-  MODULE_ADD_FN(math, "sin",    stdMathSine,       1);
-  MODULE_ADD_FN(math, "cos",    stdMathCosine,     1);
-  MODULE_ADD_FN(math, "tan",    stdMathTangent,    1);
-  MODULE_ADD_FN(math, "sinh",   stdMathSinh,       1);
-  MODULE_ADD_FN(math, "cosh",   stdMathCosh,       1);
-  MODULE_ADD_FN(math, "tanh",   stdMathTanh,       1);
-  MODULE_ADD_FN(math, "asin",   stdMathArcSine,    1);
-  MODULE_ADD_FN(math, "acos",   stdMathArcCosine,  1);
-  MODULE_ADD_FN(math, "atan",   stdMathArcTangent, 1);
-  MODULE_ADD_FN(math, "log10",  stdMathLog10,      1);
-  MODULE_ADD_FN(math, "round",  stdMathRound,      1);
-
-  // Note that currently it's mutable (since it's a global variable, not
-  // constant and pocketlang doesn't support constant) so the user shouldn't
-  // modify the PI, like in python.
-  moduleAddGlobal(vm, math, "PI", 2, VAR_NUM(M_PI));
-
-  NEW_MODULE(fiber, "Fiber");
-  MODULE_ADD_FN(fiber, "new",    stdFiberNew,     1);
-  MODULE_ADD_FN(fiber, "run",    stdFiberRun,    -1);
-  MODULE_ADD_FN(fiber, "resume", stdFiberResume, -1);
-
 #undef MODULE_ADD_FN
 #undef NEW_MODULE
+}
+
+/*****************************************************************************/
+/* BUILTIN CLASS CONSTRUCTORS                                                */
+/*****************************************************************************/
+
+static void _ctorNull(PKVM* vm) {
+  RET(VAR_NULL);
+}
+
+static void _ctorBool(PKVM* vm) {
+  RET(toBool(ARG(1)));
+}
+
+static void _ctorNumber(PKVM* vm) {
+  double value;
+  if (!validateNumeric(vm, ARG(1), &value, "Argument 1")) return;
+  RET(VAR_NUM(value));
+}
+
+static void _ctorString(PKVM* vm) {
+  if (!pkCheckArgcRange(vm, ARGC, 0, 1)) return;
+  if (ARGC == 0) {
+    RET(VAR_OBJ(newStringLength(vm, NULL, 0)));
+    return;
+  }
+  RET(VAR_OBJ(toString(vm, ARG(1))));
+}
+
+static void _ctorList(PKVM* vm) {
+  List* list = newList(vm, ARGC);
+  vmPushTempRef(vm, &list->_super); // list.
+  for (int i = 0; i < ARGC; i++) {
+    listAppend(vm, list, ARG(i + 1));
+  }
+  vmPopTempRef(vm); // list.
+  RET(VAR_OBJ(list));
+}
+
+static void _ctorMap(PKVM* vm) {
+  RET(VAR_OBJ(newMap(vm)));
+}
+
+static void _ctorRange(PKVM* vm) {
+  double from, to;
+  if (!validateNumeric(vm, ARG(1), &from, "Argument 1")) return;
+  if (!validateNumeric(vm, ARG(2), &to, "Argument 2")) return;
+
+  RET(VAR_OBJ(newRange(vm, from, to)));
+}
+
+static void _ctorFiber(PKVM* vm) {
+  Closure* closure;
+  if (!validateArgClosure(vm, 1, &closure)) return;
+  RET(VAR_OBJ(newFiber(vm, closure)));
+}
+
+/*****************************************************************************/
+/* BUILTIN CLASS METHODS                                                     */
+/*****************************************************************************/
+
+#define SELF (vm->fiber->self)
+
+DEF(_listAppend,
+  "List.append(value:var) -> List\n"
+  "Append the [value] to the list and return the list.") {
+
+  ASSERT(IS_OBJ_TYPE(SELF, OBJ_LIST), OOPS);
+
+  listAppend(vm, ((List*)AS_OBJ(SELF)), ARG(1));
+  RET(SELF);
+}
+
+DEF(_fiberRun,
+  "Fiber.run(...) -> var\n"
+  "Runs the fiber's function with the provided arguments and returns it's "
+  "return value or the yielded value if it's yielded.") {
+
+  ASSERT(IS_OBJ_TYPE(SELF, OBJ_FIBER), OOPS);
+  Fiber* self = (Fiber*)AS_OBJ(SELF);
+
+  // Buffer of argument to call vmPrepareFiber().
+  Var* args[MAX_ARGC];
+
+  for (int i = 0; i < ARGC; i++) {
+    args[i] = &ARG(i + 1);
+  }
+
+  // Switch fiber and start execution.
+  if (vmPrepareFiber(vm, self, ARGC, args)) {
+    self->state = FIBER_RUNNING;
+  }
+}
+
+DEF(_fiberResume,
+  "Fiber.resume() -> var\n"
+  "Resumes a yielded function from a previous call of fiber_run() function. "
+  "Return it's return value or the yielded value if it's yielded.") {
+
+  ASSERT(IS_OBJ_TYPE(SELF, OBJ_FIBER), OOPS);
+  Fiber* self = (Fiber*)AS_OBJ(SELF);
+
+  if (!pkCheckArgcRange(vm, ARGC, 0, 1)) return;
+
+  Var value = (ARGC == 1) ? ARG(1) : VAR_NULL;
+
+  // Switch fiber and resume execution.
+  if (vmSwitchFiber(vm, self, &value)) {
+    self->state = FIBER_RUNNING;
+  }
+}
+
+#undef SELF
+
+/*****************************************************************************/
+/* BUILTIN CLASS INITIALIZATION                                              */
+/*****************************************************************************/
+
+static void initializePrimitiveClasses(PKVM* vm) {
+  for (int i = 0; i < PK_INSTANCE; i++) {
+    Class* super = NULL;
+    if (i != 0) super = vm->builtin_classes[PK_OBJECT];
+    const char* name = getPkVarTypeName((PkVarType)i);
+    Class* cls = newClass(vm, name, (int)strlen(name),
+                          super, NULL, NULL, NULL);
+    vm->builtin_classes[i] = cls;
+    cls->class_of = (PkVarType)i;
+  }
+
+#define ADD_CTOR(type, name, ptr, arity_)                    \
+  do {                                                       \
+    Function* fn = newFunction(vm, name, (int)strlen(name),  \
+                               NULL, true, NULL, NULL);      \
+    fn->native = ptr;                                        \
+    fn->arity = arity_;                                      \
+    vmPushTempRef(vm, &fn->_super); /* fn. */                \
+    vm->builtin_classes[type]->ctor = newClosure(vm, fn);    \
+    vmPopTempRef(vm); /* fn. */                              \
+  } while (false)
+
+  ADD_CTOR(PK_NULL,   "@ctorNull",   _ctorNull,    0);
+  ADD_CTOR(PK_BOOL,   "@ctorBool",   _ctorBool,    1);
+  ADD_CTOR(PK_NUMBER, "@ctorNumber", _ctorNumber,  1);
+  ADD_CTOR(PK_STRING, "@ctorString", _ctorString, -1);
+  ADD_CTOR(PK_LIST,   "@ctorList",   _ctorList,   -1);
+  ADD_CTOR(PK_MAP,    "@ctorMap",    _ctorMap,     0);
+  ADD_CTOR(PK_FIBER,  "@ctorFiber",  _ctorFiber,   1);
+
+#undef ADD_CTOR
+
+#define ADD_METHOD(type, name, ptr, arity_)                       \
+  do {                                                            \
+    Function* fn = newFunction(vm, name, (int)strlen(name),       \
+                               NULL, true, DOCSTRING(ptr), NULL); \
+    fn->native = ptr;                                             \
+    fn->arity = arity_;                                           \
+    vmPushTempRef(vm, &fn->_super); /* fn. */                     \
+    pkClosureBufferWrite(&vm->builtin_classes[type]->methods,     \
+                         vm, newClosure(vm, fn));                 \
+    vmPopTempRef(vm); /* fn. */                                   \
+  } while (false)
+
+  ADD_METHOD(PK_LIST, "append",  _listAppend,   1);
+  ADD_METHOD(PK_FIBER, "run",    _fiberRun,    -1);
+  ADD_METHOD(PK_FIBER, "resume", _fiberResume, -1);
+
+#undef ADD_METHOD
 }
 
 #undef IS_NUM_BYTE
@@ -1219,16 +1132,83 @@ static void initializeCoreModules(PKVM* vm) {
 #undef DEF
 
 /*****************************************************************************/
-/* PRIMITIVE TYPES CLASS                                                     */
-/*****************************************************************************/
-
-static void initializePrimitiveClasses(PKVM* vm) {
-  // TODO
-}
-
-/*****************************************************************************/
 /* OPERATORS                                                                 */
 /*****************************************************************************/
+
+Var preConstructSelf(PKVM* vm, Class* cls) {
+
+#define NO_INSTANCE(type_name)   \
+  VM_SET_ERROR(vm, newString(vm, \
+               "Class '" type_name "' cannot be instanciated."))
+
+  switch (cls->class_of) {
+    case PK_OBJECT:
+      NO_INSTANCE("Object");
+      return VAR_NULL;
+
+    case PK_NULL:
+    case PK_BOOL:
+    case PK_NUMBER:
+    case PK_STRING:
+    case PK_LIST:
+    case PK_MAP:
+    case PK_RANGE:
+      return VAR_NULL; // Constructor will override the null.
+
+    case PK_MODULE:
+      NO_INSTANCE("Module");
+      return VAR_NULL;
+
+    case PK_CLOSURE:
+      NO_INSTANCE("Closure");
+      return VAR_NULL;
+
+    case PK_FIBER:
+      return VAR_NULL;
+
+    case PK_CLASS:
+      NO_INSTANCE("Class");
+      return VAR_NULL;
+
+    case PK_INSTANCE:
+      return VAR_OBJ(newInstance(vm, cls));
+  }
+
+  UNREACHABLE();
+  return VAR_NULL;
+}
+
+Class* getClass(PKVM* vm, Var instance) {
+  PkVarType type = getVarType(instance);
+  if (0 <= type && type < PK_INSTANCE) {
+    return vm->builtin_classes[type];
+  }
+  ASSERT(IS_OBJ_TYPE(instance, OBJ_INST), OOPS);
+  Instance* inst = (Instance*)AS_OBJ(instance);
+  return inst->cls;
+}
+
+Var getMethod(PKVM* vm, Var self, String* name, bool* is_method) {
+
+  Class* cls = getClass(vm, self);
+  ASSERT(cls != NULL, OOPS);
+
+  Class* cls_ = cls;
+  do {
+    for (int i = 0; i < (int)cls_->methods.count; i++) {
+      Closure* method = cls_->methods.data[i];
+      if (IS_CSTR_EQ(name, method->fn->name, name->length)) {
+        if (is_method) *is_method = true;
+        return VAR_OBJ(method);
+      }
+    }
+    cls_ = cls_->super_class;
+  } while (cls_ != NULL);
+
+  // If the attribute not found it'll set an error.
+  if (is_method) *is_method = false;
+  return varGetAttrib(vm, self, name);
+}
 
 #define UNSUPPORTED_OPERAND_TYPES(op)                                  \
   VM_SET_ERROR(vm, stringFormat(vm, "Unsupported operand types for "   \
