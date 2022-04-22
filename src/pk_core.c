@@ -480,8 +480,8 @@ DEF(coreHelp,
 
   if (argc == 0) {
     // If there ins't an io function callback, we're done.
-    if (vm->config.write_fn == NULL) RET(VAR_NULL);
-    vm->config.write_fn(vm, "TODO: print help here\n");
+    if (vm->config.stdout_write == NULL) RET(VAR_NULL);
+    vm->config.stdout_write(vm, "TODO: print help here\n");
 
   } else if (argc == 1) {
 
@@ -492,15 +492,15 @@ DEF(coreHelp,
     if (!validateArgClosure(vm, 1, &closure)) return;
 
     // If there ins't an io function callback, we're done.
-    if (vm->config.write_fn == NULL) RET(VAR_NULL);
+    if (vm->config.stdout_write == NULL) RET(VAR_NULL);
 
     if (closure->fn->docstring != NULL) {
-      vm->config.write_fn(vm, closure->fn->docstring);
-      vm->config.write_fn(vm, "\n\n");
+      vm->config.stdout_write(vm, closure->fn->docstring);
+      vm->config.stdout_write(vm, "\n\n");
     } else {
-      vm->config.write_fn(vm, "function '");
-      vm->config.write_fn(vm, closure->fn->name);
-      vm->config.write_fn(vm, "()' doesn't have a docstring.\n");
+      vm->config.stdout_write(vm, "function '");
+      vm->config.stdout_write(vm, closure->fn->name);
+      vm->config.stdout_write(vm, "()' doesn't have a docstring.\n");
     }
   }
 }
@@ -649,14 +649,14 @@ DEF(corePrint,
 
   // If the host application doesn't provide any write function, discard the
   // output.
-  if (vm->config.write_fn == NULL) return;
+  if (vm->config.stdout_write == NULL) return;
 
   for (int i = 1; i <= ARGC; i++) {
-    if (i != 1) vm->config.write_fn(vm, " ");
-    vm->config.write_fn(vm, toString(vm, ARG(i))->data);
+    if (i != 1) vm->config.stdout_write(vm, " ");
+    vm->config.stdout_write(vm, toString(vm, ARG(i))->data);
   }
 
-  vm->config.write_fn(vm, "\n");
+  vm->config.stdout_write(vm, "\n");
 }
 
 DEF(coreInput,
@@ -670,13 +670,13 @@ DEF(coreInput,
   }
 
   // If the host application doesn't provide any write function, return.
-  if (vm->config.read_fn == NULL) return;
+  if (vm->config.stdin_read == NULL) return;
 
   if (argc == 1) {
-    vm->config.write_fn(vm, toString(vm, ARG(1))->data);
+    vm->config.stdout_write(vm, toString(vm, ARG(1))->data);
   }
 
-  PkStringPtr result = vm->config.read_fn(vm);
+  PkStringPtr result = vm->config.stdin_read(vm);
   String* line = newString(vm, result.string);
   if (result.on_done) result.on_done(vm, result);
   RET(VAR_OBJ(line));
@@ -920,7 +920,7 @@ DEF(stdLangWrite,
 
   // If the host application doesn't provide any write function, discard the
   // output.
-  if (vm->config.write_fn == NULL) return;
+  if (vm->config.stdout_write == NULL) return;
 
   String* str; //< Will be cleaned by garbage collector;
 
@@ -933,7 +933,7 @@ DEF(stdLangWrite,
       str = toString(vm, arg);
     }
 
-    vm->config.write_fn(vm, str->data);
+    vm->config.stdout_write(vm, str->data);
   }
 }
 

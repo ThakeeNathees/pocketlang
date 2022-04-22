@@ -27,12 +27,14 @@ PkConfiguration pkNewConfiguration(void) {
   PkConfiguration config;
   config.realloc_fn = defaultRealloc;
 
-  config.error_fn = NULL;
-  config.write_fn = NULL;
-  config.read_fn = NULL;
+  config.stdout_write = NULL;
+  config.stderr_write = NULL;
+  config.stdin_read = NULL;
 
   config.load_script_fn = NULL;
   config.resolve_path_fn = NULL;
+
+  config.use_ansi_color = false;
   config.user_data = NULL;
 
   return config;
@@ -674,25 +676,15 @@ static void closeUpvalues(Fiber* fiber, Var* top) {
 
     fiber->open_upvalues = upvalue->next;
   }
-
 }
 
 static void reportError(PKVM* vm) {
   ASSERT(VM_HAS_ERROR(vm), "runtimeError() should be called after an error.");
+
   // TODO: pass the error to the caller of the fiber.
 
-  // Print the Error message and stack trace.
-  if (vm->config.error_fn == NULL) return;
-  Fiber* fiber = vm->fiber;
-  vm->config.error_fn(vm, PK_ERROR_RUNTIME, NULL, -1, fiber->error->data);
-  for (int i = fiber->frame_count - 1; i >= 0; i--) {
-    CallFrame* frame = &fiber->frames[i];
-    const Function* fn = frame->closure->fn;
-    ASSERT(!fn->is_native, OOPS);
-    int line = fn->fn->oplines.data[frame->ip - fn->fn->opcodes.data - 1];
-    vm->config.error_fn(vm, PK_ERROR_STACKTRACE, fn->owner->path->data, line,
-                        fn->name);
-  }
+  if (vm->config.stderr_write == NULL) return;
+  reportRuntimeError(vm, vm->fiber);
 }
 
 /******************************************************************************
@@ -1701,11 +1693,11 @@ L_do_call:
 
     OPCODE(REPL_PRINT):
     {
-      if (vm->config.write_fn != NULL) {
+      if (vm->config.stdout_write != NULL) {
         Var tmp = PEEK(-1);
         if (!IS_NULL(tmp)) {
-          vm->config.write_fn(vm, toRepr(vm, tmp)->data);
-          vm->config.write_fn(vm, "\n");
+          vm->config.stdout_write(vm, toRepr(vm, tmp)->data);
+          vm->config.stdout_write(vm, "\n");
         }
       }
       DISPATCH();

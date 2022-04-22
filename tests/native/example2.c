@@ -96,7 +96,7 @@ void stdoutCallback(PKVM* vm, const char* text) {
 int main(int argc, char** argv) {
 
   PkConfiguration config = pkNewConfiguration();
-  config.write_fn = stdoutCallback;
+  config.stdout_write = stdoutCallback;
 
   PKVM* vm = pkNewVM(&config);
   registerVector(vm);

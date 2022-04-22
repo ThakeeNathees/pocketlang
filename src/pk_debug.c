@@ -11,6 +11,209 @@
 #include "pk_value.h"
 #include "pk_vm.h"
 
+// FIXME:
+// Refactor this. Maybe move to a module, Rgb values are hardcoded ?!
+// Should check stderr/stdout etc.
+static void _printRed(PKVM* vm, const char* msg) {
+  if (vm->config.use_ansi_color) {
+    vm->config.stderr_write(vm, "\033[38;2;220;100;100m");
+    vm->config.stderr_write(vm, msg);
+    vm->config.stderr_write(vm, "\033[0m");
+  } else {
+    vm->config.stderr_write(vm, msg);
+  }
+}
+
+void reportCompileTimeError(PKVM* vm, const char* path, int line,
+                            const char* source, const char* at, int length,
+                            const char* fmt, va_list args) {
+
+  pkWriteFn writefn = vm->config.stderr_write;
+  if (writefn == NULL) return;
+
+  pkByteBuffer buff;
+  pkByteBufferInit(&buff);
+  {
+    // Initial size set to 512. Will grow if needed.
+    pkByteBufferReserve(&buff, vm, 512);
+
+    buff.count = 0;
+    writefn(vm, path);
+    writefn(vm, ":");
+    snprintf((char*)buff.data, buff.capacity, "%d", line);
+    writefn(vm, (char*)buff.data);
+    _printRed(vm, " error: ");
+
+    // Print the error message.
+    buff.count = 0;
+    int size = vsnprintf(NULL, 0, fmt, args) + 1;
+    ASSERT(size >= 0, "vnsprintf() failed.");
+    pkByteBufferReserve(&buff, vm, size);
+    vsnprintf((char*)buff.data, size, fmt, args);
+    writefn(vm, (char*)buff.data);
+    writefn(vm, "\n");
+
+    // Print the lines. (TODO: Optimize it).
+
+    int start = line - 2; // First line.
+    if (start < 1) start = 1;
+    int end = start + 5; // Exclisive last line.
+
+    int line_number_width = 5;
+
+    int curr_line = line;
+    const char* c = at;
+
+    // Get the first character of the [start] line.
+    if (c != source) {
+      do {
+        c--;
+        if (*c == '\n') curr_line--;
+        if (c == source) break;
+      } while (curr_line >= start);
+    }
+
+    curr_line = start;
+    if (c != source) {
+      ASSERT(*c == '\n', OOPS);
+      c++; // Enter the line.
+    }
+
+    // Print each lines.
+    while (curr_line < end) {
+
+      buff.count = 0;
+      snprintf((char*)buff.data, buff.capacity,
+               "%*d", line_number_width, curr_line);
+      writefn(vm, (char*)buff.data);
+      writefn(vm, " | ");
+
+      if (curr_line != line) {
+        // Run to the line end.
+        const char* line_start = c;
+        while (*c != '\0' && *c != '\n') c++;
+
+        buff.count = 0;
+        pkByteBufferAddString(&buff, vm, line_start,
+                              (uint32_t)(c - line_start));
+        pkByteBufferWrite(&buff, vm, '\0');
+        writefn(vm, (char*)buff.data);
+        writefn(vm, "\n");
+
+      } else {
+
+        const char* line_start = c;
+
+        // Print line till error.
+        buff.count = 0;
+        pkByteBufferAddString(&buff, vm, line_start,
+                              (uint32_t)(at - line_start));
+        pkByteBufferWrite(&buff, vm, '\0');
+        writefn(vm, (char*)buff.data);
+
+        // Print error token - if the error token is a new line ignore it.
+        if (*at != '\n') {
+          buff.count = 0;
+          pkByteBufferAddString(&buff, vm, at, length);
+          pkByteBufferWrite(&buff, vm, '\0');
+          _printRed(vm, (char*)buff.data);
+
+          // Run to the line end. Note that tk.length is not reliable and
+          // sometimes longer than the actual string which will cause a
+          // buffer overflow.
+          const char* tail_start = at;
+          for (int i = 0; i < length; i++) {
+            if (*tail_start == '\0') break;
+            tail_start++;
+          }
+
+          c = tail_start;
+          while (*c != '\0' && *c != '\n') c++;
+
+          // Print rest of the line.
+          if (c != tail_start) {
+            buff.count = 0;
+            pkByteBufferAddString(&buff, vm, tail_start,
+                                  (uint32_t)(c - tail_start));
+            pkByteBufferWrite(&buff, vm, '\0');
+            writefn(vm, (char*)buff.data);
+          }
+        } else {
+          c = at; // Run 'c' to the end of the line.
+        }
+        writefn(vm, "\n");
+
+        // White space before error token.
+        buff.count = 0;
+        pkByteBufferFill(&buff, vm, ' ', line_number_width);
+        pkByteBufferAddString(&buff, vm, " | ", 3);
+
+        for (const char* c2 = line_start; c2 < at; c2++) {
+          char white_space = (*c2 == '\t') ? '\t' : ' ';
+          pkByteBufferWrite(&buff, vm, white_space);
+        }
+
+        pkByteBufferWrite(&buff, vm, '\0');
+        writefn(vm, (char*)buff.data);
+
+        // Error token underline.
+        buff.count = 0;
+        pkByteBufferFill(&buff, vm, '~', (uint32_t)(length ? length : 1));
+        pkByteBufferWrite(&buff, vm, '\0');
+        _printRed(vm, (char*)buff.data);
+        writefn(vm, "\n");
+
+      }
+
+      if (*c == '\0') break;
+      curr_line++; c++;
+    }
+  }
+  pkByteBufferClear(&buff, vm);
+}
+
+void reportRuntimeError(PKVM* vm, Fiber* fiber) {
+
+  pkWriteFn writefn = vm->config.stderr_write;
+  if (writefn == NULL) return;
+
+  // Error message.
+  _printRed(vm, "Error: ");
+  writefn(vm, fiber->error->data);
+  writefn(vm, "\n");
+
+  // Stack trace.
+  for (int i = fiber->frame_count - 1; i >= 0; i--) {
+    CallFrame* frame = &fiber->frames[i];
+    const Function* fn = frame->closure->fn;
+    ASSERT(!fn->is_native, OOPS);
+    int line = fn->fn->oplines.data[frame->ip - fn->fn->opcodes.data - 1];
+
+    if (fn->owner->path == NULL) {
+
+      writefn(vm, "  [at:");
+      char buff[STR_INT_BUFF_SIZE];
+      sprintf(buff, "%2d", line);
+      writefn(vm, buff);
+      writefn(vm, "] ");
+      writefn(vm, fn->name);
+      writefn(vm, "()\n");
+
+    } else {
+      writefn(vm, "  ");
+      writefn(vm, fn->name);
+      writefn(vm, "() [");
+      writefn(vm, fn->owner->path->data);
+      writefn(vm, ":");
+      char buff[STR_INT_BUFF_SIZE];
+      sprintf(buff, "%d", line);
+      writefn(vm, buff);
+      writefn(vm, "]\n");
+    }
+
+  }
+}
+
 // Opcode names array.
 static const char* op_names[] = {
   #define OPCODE(name, params, stack) #name,
@@ -19,20 +222,20 @@ static const char* op_names[] = {
 };
 
 static void dumpValue(PKVM* vm, Var value) {
-  if (!vm->config.write_fn) return;
+  if (!vm->config.stdout_write) return;
   String* repr = toRepr(vm, value);
-  vm->config.write_fn(vm, repr->data);
+  vm->config.stdout_write(vm, repr->data);
   // String repr will be garbage collected - No need to clean.
 }
 
 void dumpFunctionCode(PKVM* vm, Function* func) {
 
-  if (!vm->config.write_fn) return;
+  if (!vm->config.stdout_write) return;
 
 #define _INDENTATION "  "
 #define _INT_WIDTH 5 // Width of the integer string to print.
 
-#define PRINT(str) vm->config.write_fn(vm, str)
+#define PRINT(str) vm->config.stdout_write(vm, str)
 #define NEWLINE() PRINT("\n")
 
 #define _PRINT_INT(value, width)                                     \

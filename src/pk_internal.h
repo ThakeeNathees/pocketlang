@@ -36,6 +36,8 @@
 #elif defined(__clang__)
   #pragma clang diagnostic ignored "-Wint-to-pointer-cast"
   #pragma clang diagnostic ignored "-Wunused-parameter"
+#elif defined(_MSC_VER)
+  #pragma warning(disable:26812)
 #endif
 
 /*****************************************************************************/
