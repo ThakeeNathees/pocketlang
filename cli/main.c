@@ -21,32 +21,15 @@ void onResultDone(PKVM* vm, PkStringPtr result) {
   }
 }
 
-void errorFunction(PKVM* vm, PkErrorType type, const char* file, int line,
-                   const char* message) {
-
-  VmUserData* ud = (VmUserData*)pkGetUserData(vm);
-  bool repl = (ud) ? ud->repl_mode : false;
-
-  if (type == PK_ERROR_COMPILE) {
-
-    if (repl) fprintf(stderr, "Error: %s\n", message);
-    else fprintf(stderr, "Error: %s\n       at \"%s\":%i\n",
-                 message, file, line);
-
-  } else if (type == PK_ERROR_RUNTIME) {
-    fprintf(stderr, "Error: %s\n", message);
-
-  } else if (type == PK_ERROR_STACKTRACE) {
-    if (repl) fprintf(stderr, "  %s() [line:%i]\n", message, line);
-    else fprintf(stderr, "  %s() [\"%s\":%i]\n", message, file, line);
-  }
+void stderrWrite(PKVM* vm, const char* text) {
+  fprintf(stderr, "%s", text);
 }
 
-void writeFunction(PKVM* vm, const char* text) {
+void stdoutWrite(PKVM* vm, const char* text) {
   fprintf(stdout, "%s", text);
 }
 
-PkStringPtr readFunction(PKVM* vm) {
+PkStringPtr stdinRead(PKVM* vm) {
   PkStringPtr result;
   result.string = read_line(NULL);
   result.on_done = onResultDone;
@@ -110,10 +93,14 @@ PkStringPtr loadScript(PKVM* vm, const char* path) {
 
   // Read source to buffer.
   char* buff = (char*)malloc((size_t)(file_size) + 1);
+
   // Using read instead of file_size is because "\r\n" is read as '\n' in
   // windows.
-  size_t read = fread(buff, sizeof(char), file_size, file);
-  buff[read] = '\0';
+  if (buff != NULL) {
+    size_t read = fread(buff, sizeof(char), file_size, file);
+    buff[read] = '\0';
+  }
+
   fclose(file);
 
   result.string = buff;
@@ -122,15 +109,37 @@ PkStringPtr loadScript(PKVM* vm, const char* path) {
   return result;
 }
 
+// FIXME:
+// Included for isatty(). This should be moved to somewhere. and I'm not sure
+// about the portability of these headers. and isatty() function.
+#ifdef _WIN32
+  #include <Windows.h>
+  #include <io.h>
+#else
+  #include <unistd.h>
+#endif
+
 // Create new pocket VM and set it's configuration.
 static PKVM* intializePocketVM() {
+
   PkConfiguration config = pkNewConfiguration();
-  config.error_fn = errorFunction;
-  config.write_fn = writeFunction;
-  config.read_fn = readFunction;
+  config.stderr_write = stderrWrite;
+  config.stdout_write = stdoutWrite;
+  config.stdin_read = stdinRead;
 
   config.load_script_fn = loadScript;
   config.resolve_path_fn = resolvePath;
+
+// FIXME:
+  if (!!isatty(fileno(stderr))) {
+#ifdef _WIN32
+    DWORD outmode = 0;
+    HANDLE handle = GetStdHandle(STD_ERROR_HANDLE);
+    GetConsoleMode(handle, &outmode);
+    SetConsoleMode(handle, outmode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+#endif
+    config.use_ansi_color = true;
+  }
 
   return pkNewVM(&config);
 }

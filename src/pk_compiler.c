@@ -297,12 +297,8 @@ typedef struct sForwardName {
   // The function where the name is used, and the instruction is belongs to.
   Fn* func;
 
-  // The name string's pointer in the source.
-  const char* name;
-  int length;
-
-  // Line number of the name used (required for error message).
-  int line;
+  // Name token that was lexed for this name.
+  Token tkname;
 
 } ForwardName;
 
@@ -412,8 +408,14 @@ typedef struct sParser {
 
   bool repl_mode;
   bool parsing_class;
-  bool has_errors;
   bool need_more_lines; //< True if we need more lines in REPL mode.
+
+  // [has_errors] is for all kinds of errors, If it's set we don't terminate
+  // the compilation since we can cascade more errors by continuing. But
+  // [has_syntax_error] will set to true if we encounter one and this will
+  // terminatie the compilation.
+  bool has_syntax_error;
+  bool has_errors;
 
 } Parser;
 
@@ -509,7 +511,10 @@ static void parserInit(Parser* parser, PKVM* vm, Compiler* compiler,
   parser->current_char = parser->source;
   parser->current_line = 1;
 
+  parser->previous.type = TK_ERROR;
+  parser->current.type = TK_ERROR;
   parser->next.type = TK_ERROR;
+
   parser->next.start = NULL;
   parser->next.length = 0;
   parser->next.line = 1;
@@ -524,6 +529,7 @@ static void parserInit(Parser* parser, PKVM* vm, Compiler* compiler,
   parser->repl_mode = !!(compiler->options && compiler->options->repl_mode);
   parser->parsing_class = false;
   parser->has_errors = false;
+  parser->has_syntax_error = false;
   parser->need_more_lines = false;
 }
 
@@ -543,7 +549,14 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
   compiler->new_local = false;
   compiler->is_last_call = false;
 
-  parserInit(&compiler->parser, vm, compiler, source, module->path->data);
+  const char* source_path = "@??";
+  if (module->path != NULL) {
+    source_path = module->path->data;
+  } else if (options->repl_mode) {
+    source_path = "@REPL";
+  }
+
+  parserInit(&compiler->parser, vm, compiler, source, source_path);
 
   // Cache the required built functions.
   compiler->bifn_list_join = findBuiltinFunction(vm, "list_join", 9);
@@ -555,15 +568,13 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
 /*****************************************************************************/
 
 // Internal error report function for lexing and parsing.
-static void reportError(Parser* parser, const char* file, int line,
+static void reportError(Parser* parser, Token tk,
                         const char* fmt, va_list args) {
 
-  // On REPL mode only the first error is reported.
-  if (parser->repl_mode && parser->has_errors) {
-    return;
-  }
-
   parser->has_errors = true;
+
+  PKVM* vm = parser->vm;
+  if (vm->config.stderr_write == NULL) return;
 
   // If the source is incomplete we're not printing an error message,
   // instead return PK_RESULT_UNEXPECTED_EOF to the host.
@@ -572,51 +583,47 @@ static void reportError(Parser* parser, const char* file, int line,
     return;
   }
 
-  if (parser->vm->config.error_fn == NULL) return;
+  reportCompileTimeError(vm, parser->file_path, tk.line, parser->source,
+                         tk.start, tk.length, fmt, args);
 
-  // TODO: fix the buffer size. A non terminated large string could cause this
-  // crash.
-
-  char message[ERROR_MESSAGE_SIZE];
-  int length = vsnprintf(message, sizeof(message), fmt, args);
-  __ASSERT(length >= 0, "Error message buffer failed at vsnprintf().");
-  parser->vm->config.error_fn(parser->vm, PK_ERROR_COMPILE,
-                              file, line, message);
-}
-
-// Error caused at the middle of lexing (and TK_ERROR will be lexed instead).
-static void lexError(Parser* parser, const char* fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  reportError(parser, parser->file_path, parser->current_line, fmt, args);
-  va_end(args);
 }
 
 // Error caused when parsing. The associated token assumed to be last consumed
 // which is [parser->previous].
-static void parseError(Compiler* compiler, const char* fmt, ...) {
+static void syntaxError(Compiler* compiler, Token tk, const char* fmt, ...) {
+  Parser* parser = &compiler->parser;
 
-  Token* token = &(compiler->parser.previous);
+  // Only one syntax error is reported.
+  if (parser->has_syntax_error) return;
 
-  // Lex errors would reported earlier by lexError and lexed a TK_ERROR token.
-  if (token->type == TK_ERROR) return;
+  parser->has_syntax_error = true;
+  va_list args;
+  va_start(args, fmt);
+  reportError(parser, tk, fmt, args);
+  va_end(args);
+}
+
+static void semanticError(Compiler* compiler, Token tk, const char* fmt, ...) {
+  Parser* parser = &compiler->parser;
+
+  // If the parser has synax errors, semantic errors are not reported.
+  if (parser->has_syntax_error) return;
 
   va_list args;
   va_start(args, fmt);
-  reportError(&(compiler->parser), compiler->parser.file_path,
-              token->line, fmt, args);
+  reportError(parser, tk, fmt, args);
   va_end(args);
 }
 
 // Error caused when trying to resolve forward names (maybe more in the
 // future), Which will be called once after compiling the module and thus we
 // need to pass the line number the error originated from.
-static void resolveError(Compiler* compiler, int line, const char* fmt, ...) {
+static void resolveError(Compiler* compiler, Token tk, const char* fmt, ...) {
+  Parser* parser = &compiler->parser;
+
   va_list args;
   va_start(args, fmt);
-  reportError(&(compiler->parser),
-              compiler->parser.file_path,
-              line, fmt, args);
+  reportError(parser, tk, fmt, args);
   va_end(args);
 }
 
@@ -625,8 +632,8 @@ static void resolveError(Compiler* compiler, int line, const char* fmt, ...) {
 static void checkMaxConstantsReached(Compiler* compiler, int index) {
   ASSERT(index >= 0, OOPS);
   if (index >= MAX_CONSTANTS) {
-    parseError(compiler, "A module should contain at most %d "
-      "unique constants.", MAX_CONSTANTS);
+    semanticError(compiler, compiler->parser.previous,
+        "A module should contain at most %d unique constants.", MAX_CONSTANTS);
   }
 }
 
@@ -636,6 +643,7 @@ static void checkMaxConstantsReached(Compiler* compiler, int index) {
 
 // Forward declaration of lexer methods.
 
+static Token makeErrToken(Parser* parser);
 static char peekChar(Parser* parser);
 static char peekNextChar(Parser* parser);
 static char eatChar(Parser* parser);
@@ -643,7 +651,9 @@ static void setNextValueToken(Parser* parser, TokenType type, Var value);
 static void setNextToken(Parser* parser, TokenType type);
 static bool matchChar(Parser* parser, char c);
 
-static void eatString(Parser* parser, bool single_quote) {
+static void eatString(Compiler* compiler, bool single_quote) {
+  Parser* parser = &compiler->parser;
+
   pkByteBuffer buff;
   pkByteBufferInit(&buff);
 
@@ -658,7 +668,8 @@ static void eatString(Parser* parser, bool single_quote) {
     if (c == quote) break;
 
     if (c == '\0') {
-      lexError(parser, "Non terminated string.");
+      syntaxError(compiler, makeErrToken(parser), "Non terminated string.");
+      return;
 
       // Null byte is required by TK_EOF.
       parser->current_char--;
@@ -678,7 +689,9 @@ static void eatString(Parser* parser, bool single_quote) {
 
         } else { // Name Interpolation.
           if (!utilIsName(c)) {
-            lexError(parser, "Expected '{' or identifier after '$'.");
+            syntaxError(compiler, makeErrToken(parser),
+                        "Expected '{' or identifier after '$'.");
+            return;
 
           } else { // Name interpolation (ie. "Hello $name!").
 
@@ -695,8 +708,9 @@ static void eatString(Parser* parser, bool single_quote) {
         }
 
       } else {
-        lexError(parser, "Maximum interpolation level reached (can only "
-                 "interpolate upto depth %d).", MAX_STR_INTERP_DEPTH);
+        semanticError(compiler, makeErrToken(parser),
+                     "Maximum interpolation level reached (can only "
+                     "interpolate upto depth %d).", MAX_STR_INTERP_DEPTH);
       }
       break;
     }
@@ -714,8 +728,9 @@ static void eatString(Parser* parser, bool single_quote) {
         case '$':  pkByteBufferWrite(&buff, parser->vm, '$'); break;
 
         default:
-          lexError(parser, "Error: invalid escape character");
-          break;
+          syntaxError(compiler, makeErrToken(parser),
+                      "Invalid escape character.");
+          return;
       }
     } else {
       pkByteBufferWrite(&buff, parser->vm, c);
@@ -776,7 +791,8 @@ static void eatName(Parser* parser) {
 }
 
 // Complete lexing a number literal.
-static void eatNumber(Parser* parser) {
+static void eatNumber(Compiler* compiler) {
+  Parser* parser = &compiler->parser;
 
 #define IS_HEX_CHAR(c)            \
   (('0' <= (c) && (c) <= '9')  || \
@@ -794,7 +810,8 @@ static void eatNumber(Parser* parser) {
     uint64_t bin = 0;
     c = peekChar(parser);
     if (!IS_BIN_CHAR(c)) {
-      lexError(parser, "Invalid binary literal.");
+      syntaxError(compiler, makeErrToken(parser), "Invalid binary literal.");
+      return;
 
     } else {
       do {
@@ -806,7 +823,8 @@ static void eatNumber(Parser* parser) {
         // Check the length of the binary literal.
         int length = (int)(parser->current_char - parser->token_start);
         if (length > STR_BIN_BUFF_SIZE - 2) { // -2: '-\0' 0b is in both side.
-          lexError(parser, "Binary literal is too long.");
+          semanticError(compiler, makeErrToken(parser),
+                        "Binary literal is too long.");
           break;
         }
 
@@ -825,7 +843,8 @@ static void eatNumber(Parser* parser) {
 
     // The first digit should be either hex digit.
     if (!IS_HEX_CHAR(c)) {
-      lexError(parser, "Invalid hex literal.");
+      syntaxError(compiler, makeErrToken(parser), "Invalid hex literal.");
+      return;
 
     } else {
       do {
@@ -837,7 +856,8 @@ static void eatNumber(Parser* parser) {
         // Check the length of the binary literal.
         int length = (int)(parser->current_char - parser->token_start);
         if (length > STR_HEX_BUFF_SIZE - 2) { // -2: '-\0' 0x is in both side.
-          lexError(parser, "Hex literal is too long.");
+          semanticError(compiler, makeErrToken(parser),
+                        "Hex literal is too long.");
           break;
         }
 
@@ -872,7 +892,8 @@ static void eatNumber(Parser* parser) {
       }
 
       if (!utilIsDigit(peekChar(parser))) {
-        lexError(parser, "Invalid number literal.");
+        syntaxError(compiler, makeErrToken(parser), "Invalid number literal.");
+        return;
 
       } else { // Eat the exponent.
         while (utilIsDigit(peekChar(parser))) eatChar(parser);
@@ -884,7 +905,8 @@ static void eatNumber(Parser* parser) {
     if (errno == ERANGE) {
       const char* start = parser->token_start;
       int len = (int)(parser->current_char - start);
-      lexError(parser, "Number literal is too large (%.*s).", len, start);
+      semanticError(compiler, makeErrToken(parser),
+                    "Number literal is too large (%.*s).", len, start);
       value = VAR_NUM(0);
     }
   }
@@ -923,6 +945,16 @@ static void setNextTwoCharToken(Parser* parser, char c, TokenType one,
   }
 }
 
+// Returns an error token from the current position for reporting error.
+static Token makeErrToken(Parser* parser) {
+  Token tk;
+  tk.type = TK_ERROR;
+  tk.start = parser->token_start;
+  tk.length = (int)(parser->current_char - parser->token_start);
+  tk.line = parser->current_line;
+  return tk;
+}
+
 // Initialize the next token as the type.
 static void setNextToken(Parser* parser, TokenType type) {
   Token* next = &parser->next;
@@ -939,7 +971,9 @@ static void setNextValueToken(Parser* parser, TokenType type, Var value) {
 }
 
 // Lex the next token and set it as the next token.
-static void lexToken(Parser* parser) {
+static void lexToken(Compiler* compiler) {
+  Parser* parser = &compiler->parser;
+
   parser->previous = parser->current;
   parser->current = parser->next;
 
@@ -957,7 +991,7 @@ static void lexToken(Parser* parser) {
     if (parser->si_name_end != NULL) {
       if (parser->current_char == parser->si_name_end) {
         parser->si_name_end = NULL;
-        eatString(parser, parser->si_name_quote == '\'');
+        eatString(compiler, parser->si_name_quote == '\'');
         return;
       } else {
         ASSERT(parser->current_char < parser->si_name_end, OOPS);
@@ -987,7 +1021,7 @@ static void lexToken(Parser* parser) {
 
             char quote = parser->si_quote[parser->si_depth - 1];
             parser->si_depth--; //< Exit the depth.
-            eatString(parser, quote == '\'');
+            eatString(compiler, quote == '\'');
             return;
 
           } else { // Decrease the open brace at the current depth.
@@ -1043,7 +1077,8 @@ static void lexToken(Parser* parser) {
           setNextToken(parser, TK_DOTDOT); // '..'
         } else if (utilIsDigit(peekChar(parser))) {
           eatChar(parser);   // Consume the decimal point.
-          eatNumber(parser); // Consume the rest of the number
+          eatNumber(compiler); // Consume the rest of the number
+          if (parser->has_syntax_error) return;
         } else {
           setNextToken(parser, TK_DOT);    // '.'
         }
@@ -1103,33 +1138,37 @@ static void lexToken(Parser* parser) {
         setNextTwoCharToken(parser, '=', TK_FSLASH, TK_DIVEQ);
         return;
 
-      case '"': eatString(parser, false); return;
+      case '"': eatString(compiler, false); return;
 
-      case '\'': eatString(parser, true); return;
+      case '\'': eatString(compiler, true); return;
 
       default: {
 
         if (utilIsDigit(c)) {
-          eatNumber(parser);
+          eatNumber(compiler);
+          if (parser->has_syntax_error) return;
 
         } else if (utilIsName(c)) {
           eatName(parser);
 
         } else {
-          if (c >= 32 && c <= 126) {
-            lexError(parser, "Invalid character '%c'", c);
-          } else {
-            lexError(parser, "Invalid byte 0x%x", (uint8_t)c);
-          }
           setNextToken(parser, TK_ERROR);
+
+          if (c >= 32 && c <= 126) {
+            syntaxError(compiler, parser->next,
+                        "Invalid character '%c'", c);
+          } else {
+            syntaxError(compiler, parser->next,
+                        "Invalid byte 0x%x", (uint8_t)c);
+          }
         }
         return;
       }
     }
   }
 
+  parser->token_start = parser->current_char;
   setNextToken(parser, TK_EOF);
-  parser->next.start = parser->current_char;
 }
 
 /*****************************************************************************/
@@ -1145,7 +1184,10 @@ static TokenType peek(Compiler* compiler) {
 // and return true otherwise return false.
 static bool match(Compiler* compiler, TokenType expected) {
   if (peek(compiler) != expected) return false;
-  lexToken(&(compiler->parser));
+
+  lexToken(compiler);
+  if (compiler->parser.has_syntax_error) return false;
+
   return true;
 }
 
@@ -1154,15 +1196,13 @@ static bool match(Compiler* compiler, TokenType expected) {
 static void consume(Compiler* compiler, TokenType expected,
                     const char* err_msg) {
 
-  lexToken(&(compiler->parser));
-  if (compiler->parser.previous.type != expected) {
-    parseError(compiler, "%s", err_msg);
+  lexToken(compiler);
+  if (compiler->parser.has_syntax_error) return;
 
-    // If the next token is expected discard the current to minimize
-    // cascaded errors and continue parsing.
-    if (peek(compiler) == expected) {
-      lexToken(&(compiler->parser));
-    }
+  Token *prev = &compiler->parser.previous;
+  if (prev->type != expected) {
+    syntaxError(compiler, *prev, "%s", err_msg);
+    return;
   }
 }
 
@@ -1172,8 +1212,10 @@ static bool matchLine(Compiler* compiler) {
   bool consumed = false;
 
   if (peek(compiler) == TK_LINE) {
-    while (peek(compiler) == TK_LINE)
-      lexToken(&(compiler->parser));
+    while (peek(compiler) == TK_LINE) {
+      lexToken(compiler);
+      if (compiler->parser.has_syntax_error) return false;
+    }
     consumed = true;
   }
 
@@ -1213,7 +1255,9 @@ static bool matchEndStatement(Compiler* compiler) {
 // Consume semi collon, multiple new lines or peek 'end' keyword.
 static void consumeEndStatement(Compiler* compiler) {
   if (!matchEndStatement(compiler)) {
-    parseError(compiler, "Expected statement end with '\\n' or ';'.");
+    syntaxError(compiler, compiler->parser.current,
+                "Expected statement end with '\\n' or ';'.");
+    return;
   }
 }
 
@@ -1234,7 +1278,8 @@ static void consumeStartBlock(Compiler* compiler, TokenType delimiter) {
     const char* msg;
     if (delimiter == TK_DO) msg = "Expected enter block with newline or 'do'.";
     else msg = "Expected enter block with newline or 'then'.";
-    parseError(compiler, msg);
+    syntaxError(compiler, compiler->parser.previous, msg);
+    return;
   }
 }
 
@@ -1313,8 +1358,8 @@ static int addUpvalue(Compiler* compiler, Func* func,
   }
 
   if (func->ptr->upvalue_count == MAX_UPVALUES) {
-    parseError(compiler, "A function cannot capture more thatn %d upvalues.",
-               MAX_UPVALUES);
+    semanticError(compiler, compiler->parser.previous,
+            "A function cannot capture more thatn %d upvalues.", MAX_UPVALUES);
     return -1;
   }
 
@@ -1455,7 +1500,7 @@ static int compilerAddConstant(Compiler* compiler, Var value);
 static int compilerAddVariable(Compiler* compiler, const char* name,
                                uint32_t length, int line);
 static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
-                               const char* name, int length, int line);
+                               Token* tkname);
 static void compilerChangeStack(Compiler* compiler, int num);
 
 // Forward declaration of grammar functions.
@@ -1587,8 +1632,12 @@ static void emitPushName(Compiler* compiler, NameDefnType type, int index) {
   ASSERT(index >= 0, OOPS);
 
   switch (type) {
-    case NAME_NOT_DEFINED:
+    case NAME_NOT_DEFINED: {
+      if (compiler->parser.has_errors) {
+        return;
+      }
       UNREACHABLE();
+    }
 
     case NAME_LOCAL_VAR:
       if (index < 9) { //< 0..8 locals have single opcode.
@@ -1629,8 +1678,10 @@ static void emitStoreName(Compiler* compiler, NameDefnType type, int index) {
   switch (type) {
     case NAME_NOT_DEFINED:
     case NAME_BUILTIN_FN:
-    case NAME_BUILTIN_TY:
+    case NAME_BUILTIN_TY: {
+      if (compiler->parser.has_errors) return;
       UNREACHABLE();
+    }
 
     case NAME_LOCAL_VAR:
       if (index < 9) { //< 0..8 locals have single opcode.
@@ -1722,9 +1773,11 @@ static void exprFunction(Compiler* compiler) {
 
 static void exprName(Compiler* compiler) {
 
-  const char* start = compiler->parser.previous.start;
-  int length = compiler->parser.previous.length;
-  int line = compiler->parser.previous.line;
+  Token tkname = compiler->parser.previous;
+
+  const char* start = tkname.start;
+  int length = tkname.length;
+  int line = tkname.line;
   NameSearchResult result = compilerSearchName(compiler, start, length);
 
   if (compiler->l_value && matchAssignment(compiler)) {
@@ -1767,8 +1820,14 @@ static void exprName(Compiler* compiler) {
       compileExpression(compiler);
 
     } else { // name += / -= / *= ... = (expr);
+
       if (result.type == NAME_NOT_DEFINED) {
-        parseError(compiler, "Name '%.*s' is not defined.", length, start);
+
+        // TODO:
+        // Add to forward names. Create result.type as NAME_FORWARD
+        // and use emitPushName, emitStoreName for here and bellow.
+        semanticError(compiler, tkname,
+                      "Name '%.*s' is not defined.", length, start);
       }
 
       // Push the named value.
@@ -1806,11 +1865,12 @@ static void exprName(Compiler* compiler) {
     // a local depth.
     if (result.type == NAME_NOT_DEFINED) {
       if (compiler->scope_depth == DEPTH_GLOBAL) {
-        parseError(compiler, "Name '%.*s' is not defined.", length, start);
+        semanticError(compiler, tkname,
+                      "Name '%.*s' is not defined.", length, start);
       } else {
         emitOpcode(compiler, OP_PUSH_GLOBAL);
         int index = emitByte(compiler, 0xff);
-        compilerAddForward(compiler, index, _FN, start, length, line);
+        compilerAddForward(compiler, index, _FN, &tkname);
       }
     } else {
       emitPushName(compiler, result.type, result.index);
@@ -2066,19 +2126,24 @@ static void exprSelf(Compiler* compiler) {
   // inside a method.
 
   if (!compiler->parser.parsing_class) {
-    parseError(compiler, "Invalid use of 'self'.");
+    semanticError(compiler, compiler->parser.previous,
+                  "Invalid use of 'self'.");
   } else {
     // FIXME:
-    parseError(compiler, "TODO: Closures cannot capture 'self' for now.");
+    semanticError(compiler, compiler->parser.previous,
+                  "TODO: Closures cannot capture 'self' for now.");
   }
 }
 
 static void parsePrecedence(Compiler* compiler, Precedence precedence) {
-  lexToken(&(compiler->parser));
+  lexToken(compiler);
+  if (compiler->parser.has_syntax_error) return;
+
   GrammarFn prefix = getRule(compiler->parser.previous.type)->prefix;
 
   if (prefix == NULL) {
-    parseError(compiler, "Expected an expression.");
+    syntaxError(compiler, compiler->parser.previous,
+                "Expected an expression.");
     return;
   }
 
@@ -2092,7 +2157,8 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
   compiler->is_last_call = false;
 
   while (getRule(compiler->parser.current.type)->precedence >= precedence) {
-    lexToken(&(compiler->parser));
+    lexToken(compiler);
+    if (compiler->parser.has_syntax_error) return;
 
     TokenType op = compiler->parser.previous.type;
     GrammarFn infix = getRule(op)->infix;
@@ -2131,8 +2197,8 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
     }
   }
   if (max_vars_reached) {
-    parseError(compiler, "A module should contain at most %d %s.",
-               MAX_VARIABLES, var_type);
+    semanticError(compiler, compiler->parser.previous,
+            "A module should contain at most %d %s.", MAX_VARIABLES, var_type);
     return -1;
   }
 
@@ -2156,10 +2222,10 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
 }
 
 static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
-                               const char* name, int length, int line) {
+                               Token* tkname) {
   if (compiler->parser.forwards_count == MAX_FORWARD_NAMES) {
-    parseError(compiler, "A module should contain at most %d implicit forward "
-               "function declarations.", MAX_FORWARD_NAMES);
+    semanticError(compiler, *tkname, "A module should contain at most %d "
+                 "implicit forward function declarations.", MAX_FORWARD_NAMES);
     return;
   }
 
@@ -2167,9 +2233,7 @@ static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
                            compiler->parser.forwards_count++];
   forward->instruction = instruction;
   forward->func = fn;
-  forward->name = name;
-  forward->length = length;
-  forward->line = line;
+  forward->tkname = *tkname;
 }
 
 // Add a literal constant to module literals and return it's index.
@@ -2376,18 +2440,21 @@ static int compileClass(Compiler* compiler) {
   vmPushTempRef(_vm, &cls->_super); // cls.
   compiler->parser.parsing_class = true;
 
-  // Check count exceeded.
   checkMaxConstantsReached(compiler, cls_index);
 
   skipNewLines(compiler);
-  while (!match(compiler, TK_END)) {
+  while (!match(compiler, TK_END) && !match(compiler, TK_EOF)) {
     // At the top level the stack size should be 0, before and after compiling
     // a top level statement, since there aren't any locals at the top level.
     ASSERT(compiler->parser.has_errors ||
            compiler->func->stack_size == 0, OOPS);
 
     consume(compiler, TK_DEF, "Expected method definition.");
+    if (compiler->parser.has_syntax_error) break;
+
     int fn_index = compileFunction(compiler, FUNC_METHOD);
+    if (compiler->parser.has_syntax_error) break;
+
     Var fn_var = compiler->module->constants.data[fn_index];
     ASSERT(IS_OBJ_TYPE(fn_var, OBJ_FUNC), OOPS);
 
@@ -2410,6 +2477,7 @@ static int compileClass(Compiler* compiler) {
            compiler->func->stack_size == 0, OOPS);
 
     skipNewLines(compiler);
+    if (compiler->parser.has_syntax_error) break;
   }
 
   compiler->parser.parsing_class = false;
@@ -2437,6 +2505,7 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   int fn_index;
   Function* func = newFunction(compiler->parser.vm, name, name_length,
                                compiler->module, false, NULL, &fn_index);
+
   checkMaxConstantsReached(compiler, fn_index);
 
   if (fn_type != FUNC_LITERAL) {
@@ -2482,7 +2551,8 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
         }
       }
       if (predefined) {
-        parseError(compiler, "Multiple definition of a parameter.");
+        semanticError(compiler, compiler->parser.previous,
+                      "Multiple definition of a parameter.");
       }
 
       compilerAddVariable(compiler, param_name, param_len,
@@ -2585,8 +2655,10 @@ static Module* importFile(Compiler* compiler, const char* path) {
   }
 
   if (resolved.string == NULL) {
-    parseError(compiler, "Cannot resolve path '%s' from '%s'", path,
-               compiler->module->path->data);
+    semanticError(compiler, compiler->parser.previous,
+      "Cannot resolve path '%s' from '%s'", path,
+      compiler->module->path->data);
+    return NULL;
   }
 
   // Create new string for the resolved path. And free the resolved path.
@@ -2611,15 +2683,17 @@ static Module* importFile(Compiler* compiler, const char* path) {
   // The script not exists in the VM, make sure we have the script loading
   // api function.
   if (vm->config.load_script_fn == NULL) {
-    parseError(compiler, "Cannot import. The hosting application haven't "
-               "registered the script loading API");
+    semanticError(compiler, compiler->parser.previous,
+                  "Cannot import. The hosting application haven't  registered "
+                  "the script loading API");
     return NULL;
   }
 
   // Load the script at the path.
   PkStringPtr source = vm->config.load_script_fn(vm, path_->data);
   if (source.string == NULL) {
-    parseError(compiler, "Error loading script at \"%s\"", path_->data);
+    semanticError(compiler, compiler->parser.previous,
+                  "Error loading script at \"%s\"", path_->data);
     return NULL;
   }
 
@@ -2656,8 +2730,8 @@ static Module* importFile(Compiler* compiler, const char* path) {
   if (source.on_done != NULL) source.on_done(vm, source);
 
   if (result != PK_RESULT_SUCCESS) {
-    parseError(compiler, "Compilation of imported script '%s' failed",
-               path_->data);
+    semanticError(compiler, compiler->parser.previous,
+                  "Compilation of imported script '%s' failed", path_->data);
   }
 
   return module;
@@ -2677,7 +2751,8 @@ static Module* importCoreLib(Compiler* compiler, const char* name_start,
 
   Module* imported = vmGetModule(compiler->parser.vm, module_name);
   if (imported == NULL) {
-    parseError(compiler, "No module named '%s' exists.", module_name->data);
+    semanticError(compiler, compiler->parser.previous,
+                  "No module named '%s' exists.", module_name->data);
     return NULL;
   }
 
@@ -2707,7 +2782,8 @@ static inline Module* compilerImport(Compiler* compiler) {
   }
 
   // Invalid token after import/from keyword.
-  parseError(compiler, "Expected a module name or path to import.");
+  syntaxError(compiler, compiler->parser.previous,
+              "Expected a module name or path to import.");
   return NULL;
 }
 
@@ -2725,6 +2801,7 @@ static int compilerImportName(Compiler* compiler, int line,
       return compilerAddVariable(compiler, name, length, line);
 
     case NAME_LOCAL_VAR:
+    case NAME_UPVALUE:
       UNREACHABLE();
 
     case NAME_GLOBAL_VAR:
@@ -2735,7 +2812,9 @@ static int compilerImportName(Compiler* compiler, int line,
     // should pass) and allow imported entries to have the same name of
     // builtin functions.
     case NAME_BUILTIN_FN:
-      parseError(compiler, "Name '%.*s' already exists.", length, name);
+    case NAME_BUILTIN_TY:
+      semanticError(compiler, compiler->parser.previous,
+                    "Name '%.*s' already exists.", length, name);
       return -1;
   }
 
@@ -3061,7 +3140,8 @@ static void compileStatement(Compiler* compiler) {
 
   if (match(compiler, TK_BREAK)) {
     if (compiler->loop == NULL) {
-      parseError(compiler, "Cannot use 'break' outside a loop.");
+      syntaxError(compiler, compiler->parser.previous,
+                  "Cannot use 'break' outside a loop.");
       return;
     }
 
@@ -3078,7 +3158,8 @@ static void compileStatement(Compiler* compiler) {
 
   } else if (match(compiler, TK_CONTINUE)) {
     if (compiler->loop == NULL) {
-      parseError(compiler, "Cannot use 'continue' outside a loop.");
+      syntaxError(compiler, compiler->parser.previous,
+                  "Cannot use 'continue' outside a loop.");
       return;
     }
 
@@ -3091,7 +3172,8 @@ static void compileStatement(Compiler* compiler) {
   } else if (match(compiler, TK_RETURN)) {
 
     if (compiler->scope_depth == DEPTH_GLOBAL) {
-      parseError(compiler, "Invalid 'return' outside a function.");
+      syntaxError(compiler, compiler->parser.previous,
+                  "Invalid 'return' outside a function.");
       return;
     }
 
@@ -3109,7 +3191,8 @@ static void compileStatement(Compiler* compiler) {
     } else {
 
       if (compiler->func->type == FUNC_CONSTRUCTOR) {
-        parseError(compiler, "Cannor 'return' a value from constructor.");
+        syntaxError(compiler, compiler->parser.previous,
+                    "Cannor 'return' a value from constructor.");
       }
 
       compileExpression(compiler); //< Return value is at stack top.
@@ -3180,8 +3263,8 @@ static void compileTopLevelStatement(Compiler* compiler) {
     compileRegularImport(compiler);
 
   } else if (match(compiler, TK_MODULE)) {
-    parseError(compiler, "Module name must be the first statement "
-                          "of the script.");
+    syntaxError(compiler, compiler->parser.previous,
+                "Module name must be the first statement of the script.");
 
   } else {
     compileStatement(compiler);
@@ -3195,6 +3278,8 @@ static void compileTopLevelStatement(Compiler* compiler) {
 
 PkResult compile(PKVM* vm, Module* module, const char* source,
                  const PkCompileOptions* options) {
+
+  ASSERT(module != NULL, OOPS);
 
   // Skip utf8 BOM if there is any.
   if (strncmp(source, "\xEF\xBB\xBF", 3) == 0) source += 3;
@@ -3213,6 +3298,7 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
   // the native api function (pkNewModule() that'll return a module without a
   // main function) so just create and add the function here.
   if (module->body == NULL) moduleAddMain(vm, module);
+  ASSERT(module->body != NULL, OOPS);
 
   // If we're compiling for a module that was already compiled (when running
   // REPL or evaluating an expression) we don't need the old main anymore.
@@ -3228,8 +3314,8 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
   compilerPushFunc(compiler, &curr_fn, module->body->fn, FUNC_MAIN);
 
   // Lex initial tokens. current <-- next.
-  lexToken(&(compiler->parser));
-  lexToken(&(compiler->parser));
+  lexToken(compiler);
+  lexToken(compiler);
   skipNewLines(compiler);
 
   if (match(compiler, TK_MODULE)) {
@@ -3238,7 +3324,8 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
     // application module attribute might already set. In that case make it
     // Compile error.
     if (module->name != NULL) {
-      parseError(compiler, "Module name already defined.");
+      syntaxError(compiler, compiler->parser.previous,
+                  "Module name already defined.");
 
     } else {
       consume(compiler, TK_NAME, "Expected a name for the module.");
@@ -3249,7 +3336,7 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
     }
   }
 
-  while (!match(compiler, TK_EOF)) {
+  while (!match(compiler, TK_EOF) && !compiler->parser.has_syntax_error) {
     compileTopLevelStatement(compiler);
     skipNewLines(compiler);
   }
@@ -3257,20 +3344,23 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
   emitFunctionEnd(compiler);
 
   // Resolve forward names (function names that are used before defined).
-  for (int i = 0; i < compiler->parser.forwards_count; i++) {
-    ForwardName* forward = &compiler->parser.forwards[i];
-    const char* name = forward->name;
-    int length = forward->length;
-    int index = moduleGetGlobalIndex(compiler->module, name, (uint32_t)length);
-    if (index != -1) {
-      patchForward(compiler, forward->func, forward->instruction, index);
-    } else {
-      // need_more_lines is only true for unexpected EOF errors. For syntax
-      // errors it'll be false by now but. Here it's a semantic errors, so
-      // we're overriding it to false.
-      compiler->parser.need_more_lines = false;
-      resolveError(compiler, forward->line, "Name '%.*s' is not defined.",
-                   length, name);
+  if (!compiler->parser.has_syntax_error) {
+    for (int i = 0; i < compiler->parser.forwards_count; i++) {
+      ForwardName* forward = &compiler->parser.forwards[i];
+      const char* name = forward->tkname.start;
+      int length = forward->tkname.length;
+      int index = moduleGetGlobalIndex(compiler->module, name,
+                                       (uint32_t)length);
+      if (index != -1) {
+        patchForward(compiler, forward->func, forward->instruction, index);
+      } else {
+        // need_more_lines is only true for unexpected EOF errors. For syntax
+        // errors it'll be false by now but. Here it's a semantic errors, so
+        // we're overriding it to false.
+        compiler->parser.need_more_lines = false;
+        resolveError(compiler, forward->tkname, "Name '%.*s' is not defined.",
+                     length, name);
+      }
     }
   }
 
@@ -3296,11 +3386,20 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
   return PK_RESULT_SUCCESS;
 }
 
+// FIXME:
+// move this to pk_core or create new pk_public.c to implement all
+// public functions.
 PkResult pkCompileModule(PKVM* vm, PkHandle* module_handle, PkStringPtr source,
                          const PkCompileOptions* options) {
-  __ASSERT(module_handle != NULL, "Argument module was NULL.");
-  __ASSERT(IS_OBJ_TYPE(module_handle->value, OBJ_MODULE),
+
+  ASSERT(source.string != NULL, OOPS);
+
+  // FIXME:
+  // CHECK_NULL, CHECK_TYPE marcros can be use after this function is moved.
+  ASSERT(module_handle != NULL, "Argument module was NULL.");
+  ASSERT(IS_OBJ_TYPE(module_handle->value, OBJ_MODULE),
            "Given handle is not a module.");
+
   Module* module = (Module*)AS_OBJ(module_handle->value);
 
   PkResult result = compile(vm, module, source.string, options);

@@ -18,6 +18,16 @@
 
 #include "modules/common.h"
 
+#if defined(__GNUC__)
+  #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
+  #pragma GCC diagnostic ignored "-Wunused-parameter"
+#elif defined(__clang__)
+  #pragma clang diagnostic ignored "-Wint-to-pointer-cast"
+  #pragma clang diagnostic ignored "-Wunused-parameter"
+#elif defined(_MSC_VER)
+  #pragma warning(disable:26812)
+#endif
+
 #define CLI_NOTICE                                                            \
   "PocketLang " PK_VERSION_STRING " (https://github.com/ThakeeNathees/pocketlang/)\n" \
   "Copyright (c) 2020 - 2021 ThakeeNathees\n"                                 \

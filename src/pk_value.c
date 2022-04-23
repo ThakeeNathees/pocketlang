@@ -1630,6 +1630,8 @@ bool toBool(Var v) {
     case OBJ_RANGE: // [[FALLTHROUGH]]
     case OBJ_MODULE:
     case OBJ_FUNC:
+    case OBJ_CLOSURE:
+    case OBJ_UPVALUE:
     case OBJ_FIBER:
     case OBJ_CLASS:
     case OBJ_INST:

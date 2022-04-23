@@ -10,21 +10,13 @@
 mergeInto(LibraryManager.library, {
   /** js_func_name : function() {...} */
 
-  js_errorPrint : function(type, line, message) {
-    var err_text = ''
-    const msg = AsciiToString(message);
-    if (type == 0 /*PK_ERROR_COMPILE*/) {
-      err_text = `[Error at:${line}] ${msg}`;
-    } else if (type == 1 /*PK_ERROR_RUNTIME*/) {
-      err_text = `Error: ${msg}`;
-    } else if (type == 2 /*PK_ERROR_STACKTRACE*/) {
-      err_text = `  [at:${line}] ${msg}`;
-    }
-
+  js_errorPrint : function(message) {
     var out = document.getElementById("code-output");
     // To Indicate error (should be removed before each run request).
     out.classList.add("has-error");
-    out.innerHTML += `<span class="error-line">${err_text}</span>\n`;
+
+    let msg = AsciiToString(message);
+    out.innerHTML += `<span class="error-line">${msg}</span>`;
   },
 
   js_writeFunction : function(message) {

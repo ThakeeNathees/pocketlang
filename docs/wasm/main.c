@@ -8,14 +8,13 @@
 #include <string.h>
 
 // IO api functions.
-extern void js_errorPrint(int type, int line, const char* message);
+extern void js_errorPrint(const char* message);
 extern void js_writeFunction(const char* message);
 
-void errorPrint(PKVM* vm, PkErrorType type, const char* file, int line,
-                const char* message) {
+void errorPrint(PKVM* vm, const char* message) {
   // No need to pass the file (since there is only script that'll ever run on
   // the browser.
-  js_errorPrint((int)type, line, message);
+  js_errorPrint(message);
 }
 
 void writeFunction(PKVM* vm, const char* text) {
@@ -26,16 +25,39 @@ EMSCRIPTEN_KEEPALIVE
 int runSource(const char* source) {
 
   PkConfiguration config = pkNewConfiguration();
-  config.error_fn = errorPrint;
-  config.write_fn = writeFunction;
+  config.stderr_write = errorPrint;
+  config.stdout_write = writeFunction;
   config.load_script_fn = NULL;
   config.resolve_path_fn = NULL;
 
   PKVM* vm = pkNewVM(&config);
 
-  PkStringPtr src = { source, NULL, NULL };
-  PkStringPtr module = { "@(TRY)", NULL, NULL };
-  PkResult result = pkInterpretSource(vm, src, module, NULL);
+  // FIXME:
+  // The bellow blocks of code can be simplified with
+  //
+  //    PkResult result = pkInterpretSource(vm, src, path, NULL);
+  //
+  // But the path is printed on the error messages as "@(TRY)"
+  // If we create a module and compile it, then it won't have a
+  // path and the error message is simplified. This behavior needs
+  // to be changed in the error report function.
+
+  PkResult result;
+
+  PkHandle* module = pkNewModule(vm, "@(TRY)");
+  do {
+    PkStringPtr src = { .string = source };
+    result = pkCompileModule(vm, module, src, NULL);
+    if (result != PK_RESULT_SUCCESS) break;
+
+    PkHandle* _main = pkModuleGetMainFunction(vm, module);
+    PkHandle* fiber = pkNewFiber(vm, _main);
+    result = pkRunFiber(vm, fiber, 0, NULL);
+    pkReleaseHandle(vm, _main);
+    pkReleaseHandle(vm, fiber);
+
+  } while (false);
+  pkReleaseHandle(vm, module);
 
   pkFreeVM(vm);
 

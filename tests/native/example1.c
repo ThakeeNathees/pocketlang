@@ -48,7 +48,7 @@ int main(int argc, char** argv) {
 
   // Pocket VM configuration.
   PkConfiguration config = pkNewConfiguration();
-  config.write_fn = stdoutCallback;
+  config.stdout_write = stdoutCallback;
 
   // Create a new pocket VM.
   PKVM* vm = pkNewVM(&config);

@@ -105,7 +105,7 @@ typedef void (*pkErrorFn) (PKVM* vm, PkErrorType type,
                            const char* file, int line,
                            const char* message);
 
-// A function callback to write [text] to stdout.
+// Function callback to write [text] to stdout or stderr.
 typedef void (*pkWriteFn) (PKVM* vm, const char* text);
 
 // A function callback to read a line from stdin. The returned string shouldn't
@@ -159,14 +159,6 @@ enum PkVarType {
   PK_INSTANCE,
 };
 
-// Type of the error message that pocketlang will provide with the pkErrorFn
-// callback.
-enum PkErrorType {
-  PK_ERROR_COMPILE = 0, // Compile time errors.
-  PK_ERROR_RUNTIME,     // Runtime error message.
-  PK_ERROR_STACKTRACE,  // One entry of a runtime error stack.
-};
-
 // Result that pocketlang will return after a compilation or running a script
 // or a function or evaluating an expression.
 enum PkResult {
@@ -203,12 +195,15 @@ struct PkConfiguration {
   // pointer is NULL it defaults to the VM's realloc(), free() wrappers.
   pkReallocFn realloc_fn;
 
-  pkErrorFn error_fn;
-  pkWriteFn write_fn;
-  pkReadFn read_fn;
+  pkWriteFn stderr_write;
+  pkWriteFn stdout_write;
+  pkReadFn stdin_read;
 
   pkResolvePathFn resolve_path_fn;
   pkLoadScriptFn load_script_fn;
+
+  // If true stderr calls will use ansi color codes.
+  bool use_ansi_color;
 
   // User defined data associated with VM.
   void* user_data;
