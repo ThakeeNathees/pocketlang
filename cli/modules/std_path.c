@@ -94,7 +94,7 @@ static inline size_t pathAbs(const char* path, char* buff, size_t buff_size) {
 
 DEF(_pathSetStyleUnix, "") {
   bool value;
-  if (!pkGetArgBool(vm, 1, &value)) return;
+  if (!pkValidateSlotBool(vm, 1, &value)) return;
   cwk_path_set_style((value) ? CWK_STYLE_UNIX : CWK_STYLE_WINDOWS);
 }
 
@@ -103,22 +103,22 @@ DEF(_pathGetCWD, "") {
   if (get_cwd(cwd, sizeof(cwd)) == NULL) {
     // TODO: Handle error.
   }
-  pkReturnString(vm, cwd);
+  pkSetSlotString(vm, 0, cwd);
 }
 
 DEF(_pathAbspath, "") {
   const char* path;
-  if (!pkGetArgString(vm, 1, &path, NULL)) return;
+  if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
   char abspath[FILENAME_MAX];
-  size_t len = pathAbs(path, abspath, sizeof(abspath));
-  pkReturnStringLength(vm, abspath, len);
+  uint32_t len = (uint32_t) pathAbs(path, abspath, sizeof(abspath));
+  pkSetSlotStringLength(vm, 0, abspath, len);
 }
 
 DEF(_pathRelpath, "") {
   const char* from, * path;
-  if (!pkGetArgString(vm, 1, &from, NULL)) return;
-  if (!pkGetArgString(vm, 2, &path, NULL)) return;
+  if (!pkValidateSlotString(vm, 1, &from, NULL)) return;
+  if (!pkValidateSlotString(vm, 2, &path, NULL)) return;
 
   char abs_from[FILENAME_MAX];
   pathAbs(from, abs_from, sizeof(abs_from));
@@ -127,9 +127,9 @@ DEF(_pathRelpath, "") {
   pathAbs(path, abs_path, sizeof(abs_path));
 
   char result[FILENAME_MAX];
-  size_t len = cwk_path_get_relative(abs_from, abs_path,
-    result, sizeof(result));
-  pkReturnStringLength(vm, result, len);
+  uint32_t len = (uint32_t) cwk_path_get_relative(abs_from, abs_path,
+                                                  result, sizeof(result));
+  pkSetSlotStringLength(vm, 0, result, len);
 }
 
 DEF(_pathJoin, "") {
@@ -143,79 +143,80 @@ DEF(_pathJoin, "") {
   }
 
   for (int i = 0; i < argc; i++) {
-    pkGetArgString(vm, i + 1, &paths[i], NULL);
+    pkValidateSlotString(vm, i + 1, &paths[i], NULL);
   }
   paths[argc] = NULL;
 
   char result[FILENAME_MAX];
-  size_t len = cwk_path_join_multiple(paths, result, sizeof(result));
-  pkReturnStringLength(vm, result, len);
+  uint32_t len = (uint32_t) cwk_path_join_multiple(paths, result,
+                                                   sizeof(result));
+  pkSetSlotStringLength(vm, 0, result, len);
 }
 
 DEF(_pathNormalize, "") {
   const char* path;
-  if (!pkGetArgString(vm, 1, &path, NULL)) return;
+  if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
   char result[FILENAME_MAX];
-  size_t len = cwk_path_normalize(path, result, sizeof(result));
-  pkReturnStringLength(vm, result, len);
+  uint32_t len = (uint32_t) cwk_path_normalize(path, result, sizeof(result));
+  pkSetSlotStringLength(vm, 0, result, len);
 }
 
 DEF(_pathBaseName, "") {
   const char* path;
-  if (!pkGetArgString(vm, 1, &path, NULL)) return;
+  if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
   const char* base_name;
   size_t length;
   cwk_path_get_basename(path, &base_name, &length);
-  pkReturnString(vm, base_name);
+  pkSetSlotStringLength(vm, 0, base_name, (uint32_t)length);
 }
 
 DEF(_pathDirName, "") {
   const char* path;
-  if (!pkGetArgString(vm, 1, &path, NULL)) return;
+  if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
   size_t length;
   cwk_path_get_dirname(path, &length);
-  pkReturnStringLength(vm, path, length);
+  pkSetSlotStringLength(vm, 0, path, (uint32_t)length);
 }
 
 DEF(_pathIsPathAbs, "") {
   const char* path;
-  if (!pkGetArgString(vm, 1, &path, NULL)) return;
+  if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
-  pkReturnBool(vm, cwk_path_is_absolute(path));
+  pkSetSlotBool(vm, 0, cwk_path_is_absolute(path));
 }
 
 DEF(_pathGetExtension, "") {
   const char* path;
-  if (!pkGetArgString(vm, 1, &path, NULL)) return;
+  if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
   const char* ext;
   size_t length;
   if (cwk_path_get_extension(path, &ext, &length)) {
-    pkReturnStringLength(vm, ext, length);
+    pkSetSlotStringLength(vm, 0, ext, (uint32_t)length);
   } else {
-    pkReturnStringLength(vm, NULL, 0);
+    pkSetSlotStringLength(vm, 0, NULL, 0);
   }
 }
 
 DEF(_pathExists, "") {
   const char* path;
-  if (!pkGetArgString(vm, 1, &path, NULL)) return;
-  pkReturnBool(vm, pathIsExists(path));
+  if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
+  pkSetSlotBool(vm, 0, pathIsExists(path));
 }
 
 DEF(_pathIsFile, "") {
   const char* path;
-  if (!pkGetArgString(vm, 1, &path, NULL)) return;
-  pkReturnBool(vm, pathIsFileExists(path));
+  if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
+  pkSetSlotBool(vm, 0, pathIsFileExists(path));
 }
 
 DEF(_pathIsDir, "") {
   const char* path;
-  if (!pkGetArgString(vm, 1, &path, NULL)) return;
-  pkReturnBool(vm, pathIsDirectoryExists(path));
+  if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
+  pkSetSlotBool(vm, 0, pathIsDirectoryExists(path));
 }
 
 void registerModulePath(PKVM* vm) {

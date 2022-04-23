@@ -24,12 +24,12 @@ static void cFunction(PKVM* vm) {
   
   // Get the parameter from pocket VM.
   double a;
-  if (!pkGetArgNumber(vm, 1, &a)) return;
+  if (!pkValidateSlotNumber(vm, 1, &a)) return;
   
   printf("[C] a = %f\n", a);
   
   // Return value to the pocket VM.
-  pkReturnNumber(vm, 3.14);
+  pkSetSlotNumber(vm, 0, 3.14);
 }
 
 /*****************************************************************************/

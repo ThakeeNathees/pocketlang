@@ -13,6 +13,17 @@
 // Initialize core language, builtin function and core libs.
 void initializeCore(PKVM* vm);
 
+// Create a new module with the given [name] and returns as a Module*.
+// This is function is a wrapper around `newModule()` function to create
+// native modules for pocket core and public native api.
+Module* newModuleInternal(PKVM* vm, const char* name);
+
+// Adds a function to the module with the give properties and add the function
+// to the module's globals variables.
+void moduleAddFunctionInternal(PKVM* vm, Module* module,
+                               const char* name, pkNativeFn fptr,
+                               int arity, const char* docstring);
+
 /*****************************************************************************/
 /* OPERATORS                                                                 */
 /*****************************************************************************/

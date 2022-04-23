@@ -131,6 +131,8 @@ static PKVM* intializePocketVM() {
   config.resolve_path_fn = resolvePath;
 
 // FIXME:
+// Refactor and make it portable. Maybe custom is_tty() function?.
+// Windows isatty depricated -- use _isatty.
   if (!!isatty(fileno(stderr))) {
 #ifdef _WIN32
     DWORD outmode = 0;

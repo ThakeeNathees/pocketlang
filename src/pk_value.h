@@ -455,6 +455,11 @@ struct Fiber {
   // The stack pointer (%rsp) pointing to the stack top.
   Var* sp;
 
+  // Heap allocated array of call frames will grow as needed.
+  CallFrame* frames;
+  int frame_capacity; //< Capacity of the frames array.
+  int frame_count; //< Number of frame entry in frames.
+
   // All the open upvalues will form a linked list in the fiber and the
   // upvalues are sorted in the same order their locals in the stack. The
   // bellow pointer is the head of those upvalues near the stack top.
@@ -472,11 +477,6 @@ struct Fiber {
   // script method, and will be captured by the next allocated callframe
   // and reset to VAR_UNDEFINED.
   Var self;
-
-  // Heap allocated array of call frames will grow as needed.
-  CallFrame* frames;
-  int frame_capacity; //< Capacity of the frames array.
-  int frame_count; //< Number of frame entry in frames.
 
   // Caller of this fiber if it has one, NULL otherwise.
   Fiber* caller;

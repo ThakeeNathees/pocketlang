@@ -7,7 +7,6 @@
 #ifndef PK_COMPILER_H
 #define PK_COMPILER_H
 
-#include "pk_internal.h"
 #include "pk_value.h"
 
 typedef enum {

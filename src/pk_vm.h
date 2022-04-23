@@ -8,8 +8,7 @@
 #define PK_VM_H
 
 #include "pk_compiler.h"
-#include "pk_internal.h"
-#include "pk_value.h"
+#include "pk_core.h"
 
 // The maximum number of temporary object reference to protect them from being
 // garbage collected.
@@ -140,6 +139,10 @@ void* vmRealloc(PKVM* vm, void* memory, size_t old_size, size_t new_size);
 // Create and return a new handle for the [value].
 PkHandle* vmNewHandle(PKVM* vm, Var value);
 
+// If the stack size is less than [size], the stack will grow to keep more
+// values on it.
+void vmEnsureStackSize(PKVM* vm, int size);
+
 // Trigger garbage collection. This is an implementation of mark and sweep
 // garbage collection (https://en.wikipedia.org/wiki/Tracing_garbage_collection).
 //
@@ -213,5 +216,9 @@ bool vmSwitchFiber(PKVM* vm, Fiber* fiber, Var* value);
 // Yield from the current fiber. If the [value] isn't NULL it'll set it as the
 // yield value.
 void vmYieldFiber(PKVM* vm, Var* value);
+
+// Runs the [fiber] if it's at yielded state, this will resume the execution
+// till the next yield or return statement, and return result.
+PkResult vmRunFiber(PKVM* vm, Fiber* fiber);
 
 #endif // PK_VM_H
