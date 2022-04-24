@@ -7,8 +7,6 @@
 #include "pk_debug.h"
 
 #include <stdio.h>
-#include "pk_core.h"
-#include "pk_value.h"
 #include "pk_vm.h"
 
 // FIXME:

@@ -69,12 +69,6 @@ typedef struct PKVM PKVM;
 // till it's released with pkReleaseHandle().
 typedef struct PkHandle PkHandle;
 
-// A temproary pointer to the pocketlang variable. This pointer is acquired
-// from the pocketlang's current stack frame and the pointer will become
-// dangling once the stack frame is popped. If you want to keep the value
-// alive use `pkNewHandle()`.
-typedef void* PkVar;
-
 typedef enum PkVarType PkVarType;
 typedef enum PkErrorType PkErrorType;
 typedef enum PkResult PkResult;
@@ -228,12 +222,12 @@ struct PkCompileOptions {
 // Create a new PkConfiguration with the default values and return it.
 // Override those default configuration to adopt to another hosting
 // application.
-PK_PUBLIC PkConfiguration pkNewConfiguration(void);
+PK_PUBLIC PkConfiguration pkNewConfiguration();
 
 // Create a new pkCompilerOptions with the default values and return it.
 // Override those default configuration to adopt to another hosting
 // application.
-PK_PUBLIC PkCompileOptions pkNewCompilerOptions(void);
+PK_PUBLIC PkCompileOptions pkNewCompilerOptions();
 
 // Allocate, initialize and returns a new VM.
 PK_PUBLIC PKVM* pkNewVM(PkConfiguration* config);
@@ -247,29 +241,17 @@ PK_PUBLIC void pkSetUserData(PKVM* vm, void* user_data);
 // Returns the associated user data.
 PK_PUBLIC void* pkGetUserData(const PKVM* vm);
 
-// Create a new handle for the [value]. This is useful to keep the [value]
-// alive once it acquired from the stack. **DO NOT** use the [value] once
-// creating a new handle for it instead get the value from the handle by
-// using pkGetHandleValue() function (otherwise the [value] would become a
-// dangling pointer once it's stack frame is popped).
-PK_PUBLIC PkHandle* pkNewHandle(PKVM* vm, PkVar value);
-
-// Return the PkVar pointer in the handle, the returned pointer will be valid
-// till the handle is released.
-PK_PUBLIC PkVar pkGetHandleValue(const PkHandle* handle);
-
 // Release the handle and allow its value to be garbage collected. Always call
 // this for every handles before freeing the VM.
 PK_PUBLIC void pkReleaseHandle(PKVM* vm, PkHandle* handle);
 
-// Add a global [value] to the given module.
-PK_PUBLIC void pkModuleAddGlobal(PKVM* vm, PkHandle* module,
-                                 const char* name, PkHandle* value);
+// Add a new module named [name] to the [vm]. Note that the module shouldn't
+// already existed, otherwise an assertion will fail to indicate that.
+PK_PUBLIC PkHandle* pkNewModule(PKVM* vm, const char* name);
 
-// Returns the global value with the [name] in the given [module], if the name
-// not exists in the globals of the module, it'll return NULL.
-PK_PUBLIC PkHandle* pkModuleGetGlobal(PKVM* vm, PkHandle* module,
-                                      const char* name);
+// Register the module to the PKVM's modules map, once after it can be
+// imported in other modules.
+PK_PUBLIC void pkRegisterModule(PKVM* vm, PkHandle* module);
 
 // Add a native function to the given module. If [arity] is -1 that means
 // the function has variadic parameters and use pkGetArgc() to get the argc.
@@ -283,14 +265,6 @@ PK_PUBLIC void pkModuleAddFunction(PKVM* vm, PkHandle* module,
 // it's statements are wrapped around an implicit main function.
 PK_PUBLIC PkHandle* pkModuleGetMainFunction(PKVM* vm, PkHandle* module);
 
-// Add a new module named [name] to the [vm]. Note that the module shouldn't
-// already existed, otherwise an assertion will fail to indicate that.
-PK_PUBLIC PkHandle* pkNewModule(PKVM* vm, const char* name);
-
-// Register the module to the PKVM's modules map, once after it can be
-// imported in other modules.
-PK_PUBLIC void pkRegisterModule(PKVM* vm, PkHandle* module);
-
 // Create a new class on the [module] with the [name] and return it.
 // If the [base_class] is NULL by default it'll set to "Object" class.
 PK_PUBLIC PkHandle* pkNewClass(PKVM* vm, const char* name,
@@ -303,9 +277,6 @@ PK_PUBLIC PkHandle* pkNewClass(PKVM* vm, const char* name,
 PK_PUBLIC void pkClassAddMethod(PKVM* vm, PkHandle* cls,
                                 const char* name,
                                 pkNativeFn fptr, int arity);
-
-// Create and return a new fiber around the function [fn].
-PK_PUBLIC PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn);
 
 // Compile the [module] with the provided [source]. Set the compiler options
 // with the the [options] argument or set to NULL for default options.
@@ -322,6 +293,13 @@ PK_PUBLIC PkResult pkInterpretSource(PKVM* vm,
                                      PkStringPtr path,
                                      const PkCompileOptions* options);
 
+// FIXME:
+// Remove pkNewFiber and pkRunFiber functions and add interface to run closure
+// with pkRunClosure or pkRunFunction.
+
+// Create and return a new fiber around the function [fn].
+PK_PUBLIC PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn);
+
 // Runs the fiber's function with the provided arguments (param [arc] is the
 // argument count and [argv] are the values). It'll returns it's run status
 // result (success or failure) if you need the yielded or returned value use
@@ -330,13 +308,8 @@ PK_PUBLIC PkResult pkInterpretSource(PKVM* vm,
 PK_PUBLIC PkResult pkRunFiber(PKVM* vm, PkHandle* fiber,
                               int argc, PkHandle** argv);
 
-// Resume a yielded fiber with an optional [value]. (could be set to NULL)
-// It'll returns it's run status result (success or failure) if you need the
-// yielded or returned value use the pkFiberGetReturnValue() function.
-PK_PUBLIC PkResult pkResumeFiber(PKVM* vm, PkHandle* fiber, PkVar value);
-
 /*****************************************************************************/
-/* NATIVE FUNCTION API                                                       */
+/* NATIVE / RUNTIME FUNCTION API                                             */
 /*****************************************************************************/
 
 // Set a runtime error to VM.
@@ -348,10 +321,6 @@ PK_PUBLIC void pkSetRuntimeError(PKVM* vm, const char* message);
 // Returns native [self] of the current method as a void*.
 PK_PUBLIC void* pkGetSelf(const PKVM* vm);
 
-// Return the type of the [value] this will help to get the type of the
-// variable that was extracted from pkGetArg() earlier.
-PK_PUBLIC PkVarType pkGetValueType(const PkVar value);
-
 // Return the current functions argument count. This is needed for functions
 // registered with -1 argument count (which means variadic arguments).
 PK_PUBLIC int pkGetArgc(const PKVM* vm);
@@ -361,70 +330,72 @@ PK_PUBLIC int pkGetArgc(const PKVM* vm);
 // that min <= max, and pocketlang won't validate this in release binary.
 PK_PUBLIC bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max);
 
-// Return the [arg] th argument as a PkVar. This pointer will only be
-// valid till the current function ends, because it points to the var at the
-// stack and it'll popped when the current call frame ended. Use handles to
-// keep the var alive even after that.
-PK_PUBLIC PkVar pkGetArg(const PKVM* vm, int arg);
+// SLOTS DOCS 
 
-// The functions below are used to extract the function arguments from the
-// stack as a type. They will first validate the argument's type and set a
-// runtime error if it's not and return false. Otherwise it'll set the [value]
-// with the extracted value.
-// 
-// NOTE: The arguments are 1 based (to get the first argument use 1 not 0).
-//       Only use arg index 0 to get the value of attribute setter call.
+// Helper function to check if the argument at the [arg] slot is Boolean and
+// if not set a runtime error.
+PK_PUBLIC bool pkValidateSlotBool(PKVM* vm, int arg, bool* value);
 
-PK_PUBLIC bool pkGetArgBool(PKVM* vm, int arg, bool* value);
-PK_PUBLIC bool pkGetArgNumber(PKVM* vm, int arg, double* value);
-PK_PUBLIC bool pkGetArgString(PKVM* vm, int arg,
-                              const char** value, uint32_t* length);
-PK_PUBLIC bool pkGetArgValue(PKVM* vm, int arg, PkVarType type, PkVar* value);
+// Helper function to check if the argument at the [arg] slot is Number and
+// if not set a runtime error.
+PK_PUBLIC bool pkValidateSlotNumber(PKVM* vm, int arg, double* value);
 
-// The functions follow are used to set the return value of the current native
-// function's. Don't use it outside a registered native function.
+// Helper function to check if the argument at the [arg] slot is String and
+// if not set a runtime error.
+PK_PUBLIC bool pkValidateSlotString(PKVM* vm, int arg,
+                                    const char** value, uint32_t* length);
 
-PK_PUBLIC void pkReturnNull(PKVM* vm);
-PK_PUBLIC void pkReturnBool(PKVM* vm, bool value);
-PK_PUBLIC void pkReturnNumber(PKVM* vm, double value);
-PK_PUBLIC void pkReturnString(PKVM* vm, const char* value);
-PK_PUBLIC void pkReturnStringLength(PKVM* vm, const char* value, size_t len);
-PK_PUBLIC void pkReturnValue(PKVM* vm, PkVar value);
-PK_PUBLIC void pkReturnHandle(PKVM* vm, PkHandle* handle);
+// Make sure the fiber has [count] number of slots to work with (including the
+// arguments).
+PK_PUBLIC void pkReserveSlots(PKVM* vm, int count);
 
-// Returns the cstring pointer of the given string. Make sure if the [value] is
-// a string before calling this function, otherwise it'll fail an assertion.
-PK_PUBLIC const char* pkStringGetData(const PkVar value);
+// Returns the available number of slots to work with. It has at least the
+// number argument the function is registered plus one for return value.
+PK_PUBLIC int pkGetSlotsCount(PKVM* vm);
 
-// Returns the return value or if it's yielded, the yielded value of the fiber
-// as PkVar, this value lives on stack and will die (popped) once the fiber
-// resumed use handle to keep it alive.
-PK_PUBLIC PkVar pkFiberGetReturnValue(const PkHandle* fiber);
+// Returns the type of the variable at the [index] slot.
+PK_PUBLIC PkVarType pkGetSlotType(PKVM* vm, int index);
 
-// Returns true if the fiber is finished it's execution and cannot be resumed
-// anymore.
-PK_PUBLIC bool pkFiberIsDone(const PkHandle* fiber);
+// Returns boolean value at the [index] slot. If the value at the [index]
+// is not a boolean it'll be casted (only for booleans).
+PK_PUBLIC bool pkGetSlotBool(PKVM* vm, int index);
 
-/*****************************************************************************/
-/* POCKETLANG TYPE FUNCTIONS                                                 */
-/*****************************************************************************/
+// Returns number value at the [index] slot. If the value at the [index]
+// is not a boolean, an assertion will fail.
+PK_PUBLIC double pkGetSlotNumber(PKVM* vm, int index);
 
-// The functions below will allocate a new object and return's it's value
-// wrapped around a handler.
+// Returns the string at the [index] slot. The returned pointer is only valid
+// inside the native function that called this. Afterwards it may garbage
+// collected and become demangled. If the [length] is not NULL the length of
+// the string will be written.
+PK_PUBLIC const char* pkGetSlotString(PKVM* vm, int index, uint32_t* length);
 
-PK_PUBLIC PkHandle* pkNewString(PKVM* vm, const char* value);
-PK_PUBLIC PkHandle* pkNewStringLength(PKVM* vm, const char* value, size_t len);
-PK_PUBLIC PkHandle* pkNewList(PKVM* vm);
-PK_PUBLIC PkHandle* pkNewMap(PKVM* vm);
+// Capture the variable at the [index] slot and return its handle. As long as
+// the handle is not released with `pkReleaseHandle()` the variable won't be
+// garbage collected.
+PK_PUBLIC PkHandle* pkGetSlotHandle(PKVM* vm, int index);
 
-// TODO: Create a primitive (non garbage collected) variable buffer (or a
-// fixed size array) to store them and make the handle points to the variable
-// in that buffer, this will prevent us from invoking an allocation call for
-// each time we want to pass a primitive type.
+// Set the [index] slot value as pocketlang null.
+PK_PUBLIC void pkSetSlotNull(PKVM* vm, int index);
 
-//PK_PUBLIC PkVar pkPushNull(PKVM* vm);
-//PK_PUBLIC PkVar pkPushBool(PKVM* vm, bool value);
-//PK_PUBLIC PkVar pkPushNumber(PKVM* vm, double value);
+// Set the [index] slot boolean value as the given [value].
+PK_PUBLIC void pkSetSlotBool(PKVM* vm, int index, bool value);
+
+// Set the [index] slot numeric value as the given [value].
+PK_PUBLIC void pkSetSlotNumber(PKVM* vm, int index, double value);
+
+// Create a new String copying the [value] and set it to [index] slot.
+PK_PUBLIC void pkSetSlotString(PKVM* vm, int index, const char* value);
+
+// Create a new String copying the [value] and set it to [index] slot. Unlike
+// the above function it'll copy only the spicified length.
+PK_PUBLIC void pkSetSlotStringLength(PKVM* vm, int index,
+                                     const char* value, uint32_t length);
+
+// Set the [index] slot's value as the given [handle]. The function won't
+// reclaim the ownership of the handle and you can still use it till
+// it's released by yourself.
+PK_PUBLIC void PkSetSlotHandle(PKVM* vm, int index, PkHandle* handle);
 
 #ifdef __cplusplus
 } // extern "C"

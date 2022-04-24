@@ -3386,27 +3386,6 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
   return PK_RESULT_SUCCESS;
 }
 
-// FIXME:
-// move this to pk_core or create new pk_public.c to implement all
-// public functions.
-PkResult pkCompileModule(PKVM* vm, PkHandle* module_handle, PkStringPtr source,
-                         const PkCompileOptions* options) {
-
-  ASSERT(source.string != NULL, OOPS);
-
-  // FIXME:
-  // CHECK_NULL, CHECK_TYPE marcros can be use after this function is moved.
-  ASSERT(module_handle != NULL, "Argument module was NULL.");
-  ASSERT(IS_OBJ_TYPE(module_handle->value, OBJ_MODULE),
-           "Given handle is not a module.");
-
-  Module* module = (Module*)AS_OBJ(module_handle->value);
-
-  PkResult result = compile(vm, module, source.string, options);
-  if (source.on_done) source.on_done(vm, source);
-  return result;
-}
-
 void compilerMarkObjects(PKVM* vm, Compiler* compiler) {
 
   // Mark the module which is currently being compiled.

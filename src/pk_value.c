@@ -12,73 +12,6 @@
 #include "pk_utils.h"
 #include "pk_vm.h"
 
-/*****************************************************************************/
-/* VAR PUBLIC API                                                            */
-/*****************************************************************************/
-
-PkVarType pkGetValueType(const PkVar value) {
-  __ASSERT(value != NULL, "Given value was NULL.");
-  const Var value_ = *(const Var*)(value);
-
-  if (IS_NULL(value_)) return PK_NULL;
-  if (IS_BOOL(value_)) return PK_BOOL;
-  if (IS_NUM(value_))  return PK_NUMBER;
-
-  ASSERT(IS_OBJ(*(const Var*)(value)),
-         "Invalid var pointer (Might be a dangling pointer).");
-
-  const Object* obj = AS_OBJ(value_);
-  return getObjPkVarType(obj->type);
-
-}
-
-PkHandle* pkNewString(PKVM* vm, const char* value) {
-  String* str = newString(vm, value);
-  vmPushTempRef(vm, &str->_super); // str
-  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(str));
-  vmPopTempRef(vm); // str
-  return handle;
-}
-
-PkHandle* pkNewStringLength(PKVM* vm, const char* value, size_t len) {
-  String* str = newStringLength(vm, value, (uint32_t)len);
-  vmPushTempRef(vm, &str->_super); // str
-  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(str));
-  vmPopTempRef(vm); // str
-  return handle;
-}
-
-PkHandle* pkNewList(PKVM* vm) {
-  List* list = newList(vm, MIN_CAPACITY);
-  vmPushTempRef(vm, &list->_super); // list
-  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(list));
-  vmPopTempRef(vm); // list
-  return handle;
-}
-
-PkHandle* pkNewMap(PKVM* vm) {
-  Map* map = newMap(vm);
-  vmPushTempRef(vm, &map->_super); // map
-  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(map));
-  vmPopTempRef(vm); // map
-  return handle;
-}
-
-PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn) {
-  __ASSERT(IS_OBJ_TYPE(fn->value, OBJ_CLOSURE),
-           "Handle should be of type function.");
-
-  Fiber* fiber = newFiber(vm, (Closure*)AS_OBJ(fn->value));
-  vmPushTempRef(vm, &fiber->_super); // fiber
-  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(fiber));
-  vmPopTempRef(vm); // fiber
-  return handle;
-}
-
-/*****************************************************************************/
-/* VAR INTERNALS                                                             */
-/*****************************************************************************/
-
 // The maximum percentage of the map entries that can be filled before the map
 // is grown. A lower percentage reduce collision which makes looks up faster
 // but take more memory.
@@ -269,6 +202,8 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
 
       markObject(vm, &fiber->caller->_super);
       markObject(vm, &fiber->error->_super);
+
+      markValue(vm, fiber->self);
 
     } break;
 

@@ -62,13 +62,13 @@ DEF(_fileOpen, "") {
   if (!pkCheckArgcRange(vm, argc, 1, 2)) return;
 
   const char* path;
-  if (!pkGetArgString(vm, 1, &path, NULL)) return;
+  if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
   const char* mode_str = "r";
   FileAccessMode mode = FMODE_READ;
 
   if (argc == 2) {
-    if (!pkGetArgString(vm, 2, &mode_str, NULL)) return;
+    if (!pkValidateSlotString(vm, 2, &mode_str, NULL)) return;
 
     // Check if the mode string is valid, and update the mode value.
     do {
@@ -123,7 +123,7 @@ DEF(_fileRead, "") {
   // TODO: this is temporary.
   char buff[2048];
   fread((void*)buff, sizeof(char), sizeof(buff), file->fp);
-  pkReturnString(vm, (const char*)buff);
+  pkSetSlotString(vm, 0, (const char*)buff);
 }
 
 DEF(_fileWrite, "") {
@@ -133,7 +133,7 @@ DEF(_fileWrite, "") {
 
   File* file = (File*)pkGetSelf(vm);
   const char* text; uint32_t length;
-  if (!pkGetArgString(vm, 1, &text, &length)) return;
+  if (!pkValidateSlotString(vm, 1, &text, &length)) return;
 
   if (file->closed) {
     pkSetRuntimeError(vm, "Cannot write to a closed file.");

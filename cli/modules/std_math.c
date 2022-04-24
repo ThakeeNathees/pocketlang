@@ -19,53 +19,53 @@ DEF(stdMathFloor,
   "floor(value:num) -> num\n") {
 
   double num;
-  if (!pkGetArgNumber(vm, 1, &num)) return;
-  pkReturnNumber(vm, floor(num));
+  if (!pkValidateSlotNumber(vm, 1, &num)) return;
+  pkSetSlotNumber(vm, 0, floor(num));
 }
 
 DEF(stdMathCeil,
   "ceil(value:num) -> num\n") {
 
   double num;
-  if (!pkGetArgNumber(vm, 1, &num)) return;
-  pkReturnNumber(vm, ceil(num));
+  if (!pkValidateSlotNumber(vm, 1, &num)) return;
+  pkSetSlotNumber(vm, 0, ceil(num));
 }
 
 DEF(stdMathPow,
   "pow(value:num) -> num\n") {
 
   double num, ex;
-  if (!pkGetArgNumber(vm, 1, &num)) return;
-  if (!pkGetArgNumber(vm, 2, &ex)) return;
-  pkReturnNumber(vm, pow(num, ex));
+  if (!pkValidateSlotNumber(vm, 1, &num)) return;
+  if (!pkValidateSlotNumber(vm, 2, &ex)) return;
+  pkSetSlotNumber(vm, 0, pow(num, ex));
 }
 
 DEF(stdMathSqrt,
   "sqrt(value:num) -> num\n") {
 
   double num;
-  if (!pkGetArgNumber(vm, 1, &num)) return;
-  pkReturnNumber(vm, sqrt(num));
+  if (!pkValidateSlotNumber(vm, 1, &num)) return;
+  pkSetSlotNumber(vm, 0, sqrt(num));
 }
 
 DEF(stdMathAbs,
   "abs(value:num) -> num\n") {
 
   double num;
-  if (!pkGetArgNumber(vm, 1, &num)) return;
+  if (!pkValidateSlotNumber(vm, 1, &num)) return;
   if (num < 0) num = -num;
-  pkReturnNumber(vm, num);
+  pkSetSlotNumber(vm, 0, num);
 }
 
 DEF(stdMathSign,
   "sign(value:num) -> num\n") {
 
   double num;
-  if (!pkGetArgNumber(vm, 1, &num)) return;
+  if (!pkValidateSlotNumber(vm, 1, &num)) return;
   if (num < 0) num = -1;
   else if (num > 0) num = +1;
   else num = 0;
-  pkReturnNumber(vm, num);
+  pkSetSlotNumber(vm, 0, num);
 }
 
 DEF(stdMathSine,
@@ -74,8 +74,8 @@ DEF(stdMathSine,
   "in radians.") {
 
   double rad;
-  if (!pkGetArgNumber(vm, 1, &rad)) return;
-  pkReturnNumber(vm, sin(rad));
+  if (!pkValidateSlotNumber(vm, 1, &rad)) return;
+  pkSetSlotNumber(vm, 0, sin(rad));
 }
 
 DEF(stdMathCosine,
@@ -84,8 +84,8 @@ DEF(stdMathCosine,
   "in radians.") {
 
   double rad;
-  if (!pkGetArgNumber(vm, 1, &rad)) return;
-  pkReturnNumber(vm, cos(rad));
+  if (!pkValidateSlotNumber(vm, 1, &rad)) return;
+  pkSetSlotNumber(vm, 0, cos(rad));
 }
 
 DEF(stdMathTangent,
@@ -94,8 +94,8 @@ DEF(stdMathTangent,
   "in radians.") {
 
   double rad;
-  if (!pkGetArgNumber(vm, 1, &rad)) return;
-  pkReturnNumber(vm, tan(rad));
+  if (!pkValidateSlotNumber(vm, 1, &rad)) return;
+  pkSetSlotNumber(vm, 0, tan(rad));
 }
 
 DEF(stdMathSinh,
@@ -103,8 +103,8 @@ DEF(stdMathSinh,
   "Return the hyperbolic sine value of the argument [val].") {
 
   double val;
-  if (!pkGetArgNumber(vm, 1, &val)) return;
-  pkReturnNumber(vm, sinh(val));
+  if (!pkValidateSlotNumber(vm, 1, &val)) return;
+  pkSetSlotNumber(vm, 0, sinh(val));
 }
 
 DEF(stdMathCosh,
@@ -112,8 +112,8 @@ DEF(stdMathCosh,
   "Return the hyperbolic cosine value of the argument [val].") {
 
   double val;
-  if (!pkGetArgNumber(vm, 1, &val)) return;
-  pkReturnNumber(vm, cosh(val));
+  if (!pkValidateSlotNumber(vm, 1, &val)) return;
+  pkSetSlotNumber(vm, 0, cosh(val));
 }
 
 DEF(stdMathTanh,
@@ -121,8 +121,8 @@ DEF(stdMathTanh,
   "Return the hyperbolic tangent value of the argument [val].") {
 
   double val;
-  if (!pkGetArgNumber(vm, 1, &val)) return;
-  pkReturnNumber(vm, tanh(val));
+  if (!pkValidateSlotNumber(vm, 1, &val)) return;
+  pkSetSlotNumber(vm, 0, tanh(val));
 }
 
 DEF(stdMathArcSine,
@@ -131,13 +131,13 @@ DEF(stdMathArcSine,
   "expressed in radians.") {
 
   double num;
-  if (!pkGetArgNumber(vm, 1, &num)) return;
+  if (!pkValidateSlotNumber(vm, 1, &num)) return;
 
   if (num < -1 || 1 < num) {
     pkSetRuntimeError(vm, "Argument should be between -1 and +1");
   }
 
-  pkReturnNumber(vm, asin(num));
+  pkSetSlotNumber(vm, 0, asin(num));
 }
 
 DEF(stdMathArcCosine,
@@ -146,13 +146,13 @@ DEF(stdMathArcCosine,
   "an angle expressed in radians.") {
 
   double num;
-  if (!pkGetArgNumber(vm, 1, &num)) return;
+  if (!pkValidateSlotNumber(vm, 1, &num)) return;
 
   if (num < -1 || 1 < num) {
     pkSetRuntimeError(vm, "Argument should be between -1 and +1");
   }
 
-  pkReturnNumber(vm, acos(num));
+  pkSetSlotNumber(vm, 0, acos(num));
 }
 
 DEF(stdMathArcTangent,
@@ -161,8 +161,8 @@ DEF(stdMathArcTangent,
   "an angle expressed in radians.") {
 
   double num;
-  if (!pkGetArgNumber(vm, 1, &num)) return;
-  pkReturnNumber(vm, atan(num));
+  if (!pkValidateSlotNumber(vm, 1, &num)) return;
+  pkSetSlotNumber(vm, 0, atan(num));
 }
 
 DEF(stdMathLog10,
@@ -170,8 +170,8 @@ DEF(stdMathLog10,
   "Return the logarithm to base 10 of argument [value]") {
 
   double num;
-  if (!pkGetArgNumber(vm, 1, &num)) return;
-  pkReturnNumber(vm, log10(num));
+  if (!pkValidateSlotNumber(vm, 1, &num)) return;
+  pkSetSlotNumber(vm, 0, log10(num));
 }
 
 DEF(stdMathRound,
@@ -179,8 +179,8 @@ DEF(stdMathRound,
   "Round to nearest integer, away from zero and return the number.") {
 
   double num;
-  if (!pkGetArgNumber(vm, 1, &num)) return;
-  pkReturnNumber(vm, round(num));
+  if (!pkValidateSlotNumber(vm, 1, &num)) return;
+  pkSetSlotNumber(vm, 0, round(num));
 }
 
 void registerModuleMath(PKVM* vm) {

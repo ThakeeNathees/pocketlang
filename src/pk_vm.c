@@ -7,204 +7,8 @@
 #include "pk_vm.h"
 
 #include <math.h>
-#include "pk_core.h"
 #include "pk_utils.h"
 #include "pk_debug.h"
-
-/*****************************************************************************/
-/* VM PUBLIC API                                                             */
-/*****************************************************************************/
-
-// The default allocator that will be used to initialize the vm's configuration
-// if the host doesn't provided any allocators for us.
-static void* defaultRealloc(void* memory, size_t new_size, void* user_data);
-
-// Runs the [fiber] if it's at yielded state, this will resume the execution
-// till the next yield or return statement, and return result.
-static PkResult runFiber(PKVM* vm, Fiber* fiber);
-
-PkConfiguration pkNewConfiguration(void) {
-  PkConfiguration config;
-  config.realloc_fn = defaultRealloc;
-
-  config.stdout_write = NULL;
-  config.stderr_write = NULL;
-  config.stdin_read = NULL;
-
-  config.load_script_fn = NULL;
-  config.resolve_path_fn = NULL;
-
-  config.use_ansi_color = false;
-  config.user_data = NULL;
-
-  return config;
-}
-
-PkCompileOptions pkNewCompilerOptions(void) {
-  PkCompileOptions options;
-  options.debug = false;
-  options.repl_mode = false;
-  return options;
-}
-
-PKVM* pkNewVM(PkConfiguration* config) {
-
-  PkConfiguration default_config = pkNewConfiguration();
-
-  if (config == NULL) config = &default_config;
-
-  PKVM* vm = (PKVM*)config->realloc_fn(NULL, sizeof(PKVM), config->user_data);
-  memset(vm, 0, sizeof(PKVM));
-
-  vm->config = *config;
-  vm->working_set_count = 0;
-  vm->working_set_capacity = MIN_CAPACITY;
-  vm->working_set = (Object**)vm->config.realloc_fn(
-                       NULL, sizeof(Object*) * vm->working_set_capacity, NULL);
-  vm->next_gc = INITIAL_GC_SIZE;
-  vm->min_heap_size = MIN_HEAP_SIZE;
-  vm->heap_fill_percent = HEAP_FILL_PERCENT;
-
-  vm->modules = newMap(vm);
-  vm->builtins_count = 0;
-
-  // This is necessary to prevent garbage collection skip the entry in this
-  // array while we're building it.
-  for (int i = 0; i < PK_INSTANCE; i++) {
-    vm->builtin_classes[i] = NULL;
-  }
-
-  initializeCore(vm);
-  return vm;
-}
-
-void pkFreeVM(PKVM* vm) {
-
-  Object* obj = vm->first;
-  while (obj != NULL) {
-    Object* next = obj->next;
-    freeObject(vm, obj);
-    obj = next;
-  }
-
-  vm->working_set = (Object**)vm->config.realloc_fn(
-    vm->working_set, 0, vm->config.user_data);
-
-  // Tell the host application that it forget to release all of it's handles
-  // before freeing the VM.
-  __ASSERT(vm->handles == NULL, "Not all handles were released.");
-
-  DEALLOCATE(vm, vm);
-}
-
-void* pkGetUserData(const PKVM* vm) {
-  return vm->config.user_data;
-}
-
-void pkSetUserData(PKVM* vm, void* user_data) {
-  vm->config.user_data = user_data;
-}
-
-PkHandle* pkNewHandle(PKVM* vm, PkVar value) {
-  return vmNewHandle(vm, *((Var*)value));
-}
-
-PkVar pkGetHandleValue(const PkHandle* handle) {
-  return (PkVar)&handle->value;
-}
-
-void pkReleaseHandle(PKVM* vm, PkHandle* handle) {
-  __ASSERT(handle != NULL, "Given handle was NULL.");
-
-  // If the handle is the head of the vm's handle chain set it to the next one.
-  if (handle == vm->handles) {
-    vm->handles = handle->next;
-  }
-
-  // Remove the handle from the chain by connecting the both ends together.
-  if (handle->next) handle->next->prev = handle->prev;
-  if (handle->prev) handle->prev->next = handle->next;
-
-  // Free the handle.
-  DEALLOCATE(vm, handle);
-}
-
-// This function is responsible to call on_done function if it's done with the
-// provided string pointers.
-PkResult pkInterpretSource(PKVM* vm, PkStringPtr source, PkStringPtr path,
-                           const PkCompileOptions* options) {
-
-  String* path_ = newString(vm, path.string);
-  if (path.on_done) path.on_done(vm, path);
-  vmPushTempRef(vm, &path_->_super); // path_
-
-  // FIXME:
-  // Should I clean the module if it already exists before compiling it?
-
-  // Load a new module to the vm's modules cache.
-  Module* module = vmGetModule(vm, path_);
-  if (module == NULL) {
-    module = newModule(vm);
-    module->path = path_;
-    vmPushTempRef(vm, &module->_super); // module.
-    vmRegisterModule(vm, module, path_);
-    vmPopTempRef(vm); // module.
-  }
-  vmPopTempRef(vm); // path_
-
-  // Compile the source.
-  PkResult result = compile(vm, module, source.string, options);
-  if (source.on_done) source.on_done(vm, source);
-  if (result != PK_RESULT_SUCCESS) return result;
-
-  // Set module initialized to true before the execution ends to prevent cyclic
-  // inclusion cause a crash.
-  module->initialized = true;
-
-  return runFiber(vm, newFiber(vm, module->body));
-}
-
-PkResult pkRunFiber(PKVM* vm, PkHandle* fiber,
-                    int argc, PkHandle** argv) {
-  __ASSERT(fiber != NULL, "Handle fiber was NULL.");
-  Var fb = fiber->value;
-  __ASSERT(IS_OBJ_TYPE(fb, OBJ_FIBER), "Given handle is not a fiber.");
-  Fiber* _fiber = (Fiber*)AS_OBJ(fb);
-
-  Var* args[MAX_ARGC];
-  for (int i = 0; i < argc; i++) {
-    args[i] = &(argv[i]->value);
-  }
-
-  if (!vmPrepareFiber(vm, _fiber, argc, args)) {
-    return PK_RESULT_RUNTIME_ERROR;
-  }
-
-  ASSERT(_fiber->frame_count == 1, OOPS);
-  return runFiber(vm, _fiber);
-}
-
-PkResult pkResumeFiber(PKVM* vm, PkHandle* fiber, PkVar value) {
-  __ASSERT(fiber != NULL, "Handle fiber was NULL.");
-  Var fb = fiber->value;
-  __ASSERT(IS_OBJ_TYPE(fb, OBJ_FIBER), "Given handle is not a fiber.");
-  Fiber* _fiber = (Fiber*)AS_OBJ(fb);
-
-  if (!vmSwitchFiber(vm, _fiber, (Var*)value)) {
-    return PK_RESULT_RUNTIME_ERROR;
-  }
-
-  return runFiber(vm, _fiber);
-}
-
-void pkSetRuntimeError(PKVM* vm, const char* message) {
-  __ASSERT(vm->fiber != NULL, "This function can only be called at runtime.");
-  VM_SET_ERROR(vm, newString(vm, message));
-}
-
-/*****************************************************************************/
-/* SHARED FUNCTIONS                                                          */
-/*****************************************************************************/
 
 PkHandle* vmNewHandle(PKVM* vm, Var value) {
   PkHandle* handle = (PkHandle*)ALLOCATE(vm, PkHandle);
@@ -449,16 +253,6 @@ void vmYieldFiber(PKVM* vm, Var* value) {
 /* VM INTERNALS                                                              */
 /*****************************************************************************/
 
-// The default allocator that will be used to initialize the vm's configuration
-// if the host doesn't provided any allocators for us.
-static void* defaultRealloc(void* memory, size_t new_size, void* user_data) {
-  if (new_size == 0) {
-    free(memory);
-    return NULL;
-  }
-  return realloc(memory, new_size);
-}
-
 // FIXME:
 // We're assuming that the module should be available at the VM's modules cache
 // which is added by the compilation pahse, but we cannot rely on the
@@ -486,9 +280,11 @@ static inline Var importModule(PKVM* vm, String* key) {
   return VAR_NULL;
 }
 
-static inline void growStack(PKVM* vm, int size) {
+void vmEnsureStackSize(PKVM* vm, int size) {
+
   Fiber* fiber = vm->fiber;
-  ASSERT(fiber->stack_size <= size, OOPS);
+  if (fiber->stack_size > size) return;
+
   int new_size = utilPowerOf2Ceil(size);
 
   Var* old_rbp = fiber->stack; //< Old stack base pointer.
@@ -546,7 +342,7 @@ static inline void pushCallFrame(PKVM* vm, const Closure* closure, Var* rbp) {
   // Grow the stack if needed.
   int needed = (closure->fn->fn->stack_size +
                 (int)(vm->fiber->sp - vm->fiber->stack));
-  if (vm->fiber->stack_size <= needed) growStack(vm, needed);
+  vmEnsureStackSize(vm, needed);
 
   CallFrame* frame = vm->fiber->frames + vm->fiber->frame_count++;
   frame->rbp = rbp;
@@ -589,7 +385,7 @@ static inline void reuseCallFrame(PKVM* vm, const Closure* closure) {
   // Grow the stack if needed (least probably).
   int needed = (closure->fn->fn->stack_size +
                 (int)(vm->fiber->sp - vm->fiber->stack));
-  if (vm->fiber->stack_size <= needed) growStack(vm, needed);
+  vmEnsureStackSize(vm, needed);
 }
 
 // Capture the [local] into an upvalue and return it. If the upvalue already
@@ -691,7 +487,7 @@ static void reportError(PKVM* vm) {
  * RUNTIME                                                                    *
  *****************************************************************************/
 
-static PkResult runFiber(PKVM* vm, Fiber* fiber_) {
+PkResult vmRunFiber(PKVM* vm, Fiber* fiber_) {
 
   // Set the fiber as the vm's current fiber (another root object) to prevent
   // it from garbage collection and get the reference from native functions.
