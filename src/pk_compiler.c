@@ -2443,7 +2443,14 @@ static int compileClass(Compiler* compiler) {
   checkMaxConstantsReached(compiler, cls_index);
 
   skipNewLines(compiler);
-  while (!match(compiler, TK_END) && !match(compiler, TK_EOF)) {
+  while (!match(compiler, TK_END)) {
+
+    if (match(compiler, TK_EOF)) {
+      syntaxError(compiler, compiler->parser.previous,
+                  "Unexpected EOF while parsing class.");
+      break;
+    }
+
     // At the top level the stack size should be 0, before and after compiling
     // a top level statement, since there aren't any locals at the top level.
     ASSERT(compiler->parser.has_errors ||

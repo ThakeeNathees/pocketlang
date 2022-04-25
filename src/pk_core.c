@@ -664,7 +664,7 @@ static void _ctorNull(PKVM* vm) {
 }
 
 static void _ctorBool(PKVM* vm) {
-  RET(toBool(ARG(1)));
+  RET(VAR_BOOL(toBool(ARG(1))));
 }
 
 static void _ctorNumber(PKVM* vm) {
