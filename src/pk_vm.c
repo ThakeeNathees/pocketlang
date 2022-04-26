@@ -799,6 +799,37 @@ L_vm_main_loop:
       DISPATCH();
     }
 
+    OPCODE(PUSH_CLASS):
+    {
+      uint16_t index = READ_SHORT();
+      ASSERT_INDEX(index, module->constants.count);
+      ASSERT(IS_OBJ_TYPE(module->constants.data[index], OBJ_CLASS), OOPS);
+      PUSH(module->constants.data[index]);
+      DISPATCH();
+    }
+
+    OPCODE(BIND_METHOD):
+    {
+      ASSERT(IS_OBJ_TYPE(PEEK(-1), OBJ_CLOSURE), OOPS);
+      ASSERT(IS_OBJ_TYPE(PEEK(-2), OBJ_CLASS), OOPS);
+
+      Closure* method = (Closure*)AS_OBJ(PEEK(-1));
+      Class* cls = (Class*)AS_OBJ(PEEK(-2));
+
+      // FIXME: literal string "_inint".
+      if (strcmp(method->fn->name, "_init") == 0) {
+        cls->ctor = method;
+      } else {
+        // TODO: The method buffer should be ordered with it's name and
+        // inserted in a way to preserve the order to implement binary search
+        // to find a method.
+        pkClosureBufferWrite(&cls->methods, vm, method);
+      }
+
+      DROP();
+      DISPATCH();
+    }
+
     OPCODE(CLOSE_UPVALUE):
     {
       closeUpvalues(fiber, fiber->sp - 1);
