@@ -120,6 +120,7 @@ typedef enum {
 
   TK_NULL,       // null
   TK_IN,         // in
+  TK_IS,         // is
   TK_AND,        // and
   TK_OR,         // or
   TK_NOT,        // not / !
@@ -183,6 +184,7 @@ static _Keyword _keywords[] = {
   { "end",      3, TK_END      },
   { "null",     4, TK_NULL     },
   { "in",       2, TK_IN       },
+  { "is",       2, TK_IS       },
   { "and",      3, TK_AND      },
   { "or",       2, TK_OR       },
   { "not",      3, TK_NOT      },
@@ -1592,6 +1594,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_END        */   NO_RULE,
   /* TK_NULL       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_IN         */ { NULL,          exprBinaryOp,     PREC_TEST },
+  /* TK_IS         */ { NULL,          exprBinaryOp,     PREC_TEST },
   /* TK_AND        */ { NULL,          exprAnd,          PREC_LOGICAL_AND },
   /* TK_OR         */ { NULL,          exprOr,           PREC_LOGICAL_OR },
   /* TK_NOT        */ { exprUnaryOp,   NULL,             PREC_UNARY },
@@ -1936,6 +1939,7 @@ static void exprBinaryOp(Compiler* compiler) {
     case TK_SRIGHT:  emitOpcode(compiler, OP_BIT_RSHIFT); break;
     case TK_SLEFT:   emitOpcode(compiler, OP_BIT_LSHIFT); break;
     case TK_IN:      emitOpcode(compiler, OP_IN);         break;
+    case TK_IS:      emitOpcode(compiler, OP_IS);         break;
     default:
       UNREACHABLE();
   }
@@ -2442,11 +2446,21 @@ static int compileClass(Compiler* compiler) {
 
   checkMaxConstantsReached(compiler, cls_index);
 
-  emitOpcode(compiler, OP_PUSH_CLASS);
+  if (match(compiler, TK_IS)) {
+    consume(compiler, TK_NAME, "Expected a class name to inherit.");
+    if (!compiler->parser.has_syntax_error) {
+      exprName(compiler); // Push the super class on the stack.
+    }
+  } else {
+    // Implicitly inherit from 'Object' class.
+    emitPushValue(compiler, NAME_BUILTIN_TY, (int)PK_OBJECT);
+  }
+
+  emitOpcode(compiler, OP_CREATE_CLASS);
   emitShort(compiler, cls_index);
 
   skipNewLines(compiler);
-  while (!match(compiler, TK_END)) {
+  while (!compiler->parser.has_syntax_error && !match(compiler, TK_END)) {
 
     if (match(compiler, TK_EOF)) {
       syntaxError(compiler, compiler->parser.previous,
@@ -2471,7 +2485,6 @@ static int compileClass(Compiler* compiler) {
            compiler->func->stack_size == 1, OOPS);
 
     skipNewLines(compiler);
-    if (compiler->parser.has_syntax_error) break;
   }
 
   int global_index = compilerAddVariable(compiler, name, name_len, name_line);

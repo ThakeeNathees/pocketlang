@@ -799,12 +799,30 @@ L_vm_main_loop:
       DISPATCH();
     }
 
-    OPCODE(PUSH_CLASS):
+    OPCODE(CREATE_CLASS):
     {
+      Var cls = POP();
+      if (!IS_OBJ_TYPE(cls, OBJ_CLASS)) {
+        RUNTIME_ERROR(newString(vm, "Cannot inherit a non class object."));
+      }
+
+      Class* base = (Class*)AS_OBJ(cls);
+
+      // All Builtin type class except for Object are "final" ie. cannot be
+      // inherited from.
+      if (base->class_of != PK_INSTANCE && base->class_of != PK_OBJECT) {
+        RUNTIME_ERROR(stringFormat(vm, "$ type cannot be inherited.",
+                      getPkVarTypeName(base->class_of)));
+      }
+
       uint16_t index = READ_SHORT();
       ASSERT_INDEX(index, module->constants.count);
       ASSERT(IS_OBJ_TYPE(module->constants.data[index], OBJ_CLASS), OOPS);
-      PUSH(module->constants.data[index]);
+
+      Class* drived = (Class*)AS_OBJ(module->constants.data[index]);
+      drived->super_class = base;
+
+      PUSH(VAR_OBJ(drived));
       DISPATCH();
     }
 
@@ -916,6 +934,10 @@ L_do_call:
         CHECK_ERROR();
 
         closure = (const Closure*)(cls)->ctor;
+        while (closure == NULL && cls != NULL) {
+          cls = cls->super_class;
+          closure = cls->ctor;
+        }
 
         // No constructor is defined on the class. Just return self.
         if (closure == NULL) {
@@ -1514,6 +1536,17 @@ L_do_call:
       bool contains = varContains(vm, elem, container);
       DROP(); DROP(); // container, elem
       PUSH(VAR_BOOL(contains));
+      CHECK_ERROR();
+      DISPATCH();
+    }
+
+    OPCODE(IS):
+    {
+      // Don't pop yet, we need the reference for gc.
+      Var type = PEEK(-1), inst = PEEK(-2);
+      bool is = varIsType(vm, inst, type);
+      DROP(); DROP(); // container, elem
+      PUSH(VAR_BOOL(is));
       CHECK_ERROR();
       DISPATCH();
     }

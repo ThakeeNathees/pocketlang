@@ -472,7 +472,7 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         break;
       }
 
-      case OP_PUSH_CLASS:
+      case OP_CREATE_CLASS:
       {
         int index = READ_SHORT();
         ASSERT_INDEX((uint32_t)index, func->owner->constants.count);
@@ -609,6 +609,7 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_GTEQ:
       case OP_RANGE:
       case OP_IN:
+      case OP_IS:
       case OP_REPL_PRINT:
       case OP_END:
         NO_ARGS();

@@ -1148,6 +1148,23 @@ bool varContains(PKVM* vm, Var elem, Var container) {
   return VAR_NULL;
 }
 
+bool varIsType(PKVM* vm, Var inst, Var type) {
+  if (!IS_OBJ_TYPE(type, OBJ_CLASS)) {
+    VM_SET_ERROR(vm, newString(vm, "Right operand must be a class."));
+    return VAR_NULL;
+  }
+
+  Class* cls = (Class*)AS_OBJ(type);
+  Class* cls_inst = getClass(vm, inst);
+
+  do {
+    if (cls_inst == cls) return true;
+    cls_inst = cls_inst->super_class;
+  } while (cls_inst != NULL);
+
+  return false;
+}
+
 Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
 #define ERR_NO_ATTRIB(vm, on, attrib)                                         \

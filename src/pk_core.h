@@ -62,8 +62,12 @@ Var varBitNot(PKVM* vm, Var v);               // Returns ~v.
 bool varGreater(Var v1, Var v2); // Returns v1 > v2.
 bool varLesser(Var v1, Var v2);  // Returns v1 < v2.
 
-// Returns [elem] in [container].
+// Returns [elem] in [container]. Sets an error if the [container] is not an
+// iterable.
 bool varContains(PKVM* vm, Var elem, Var container);
+
+// Returns [inst] is [type]. Sets an error if the [type] is not a class.
+bool varIsType(PKVM* vm, Var inst, Var type);
 
 // Returns the attribute named [attrib] on the variable [on].
 Var varGetAttrib(PKVM* vm, Var on, String* attrib);
