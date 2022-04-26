@@ -111,6 +111,14 @@ OPCODE(STORE_UPVALUE, 1, 0)
 // params: 2 byte index.
 OPCODE(PUSH_CLOSURE, 2, 1)
 
+// Push a class at the constant pool with the index of the two bytes argument.
+// params: 2 byte index.
+OPCODE(PUSH_CLASS, 2, 1)
+
+// At the stack top, a closure and a class should be there. Add the method to
+// the class and pop it.
+OPCODE(BIND_METHOD, 0, -1)
+
 // Close the upvalue for the local at the stack top and pop it.
 OPCODE(CLOSE_UPVALUE, 0, -1)
 

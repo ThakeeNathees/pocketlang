@@ -407,10 +407,17 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_STORE_GLOBAL:
       {
         int index = READ_BYTE();
+        ASSERT_INDEX(index, (int)func->owner->global_names.count);
+        int name_index = func->owner->global_names.data[index];
+        ASSERT_INDEX(name_index, (int)func->owner->constants.count);
+
+        Var name = func->owner->constants.data[name_index];
+        ASSERT(IS_OBJ_TYPE(name, OBJ_STRING), OOPS);
+
         // Prints: %5d '%s'\n
         PRINT_INT(index);
         PRINT(" '");
-        PRINT(func->owner->name->data);
+        PRINT(((String*)AS_OBJ(name))->data);
         PRINT("'\n");
         break;
       }
@@ -465,6 +472,22 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         break;
       }
 
+      case OP_PUSH_CLASS:
+      {
+        int index = READ_SHORT();
+        ASSERT_INDEX((uint32_t)index, func->owner->constants.count);
+        Var value = func->owner->constants.data[index];
+        ASSERT(IS_OBJ_TYPE(value, OBJ_CLASS), OOPS);
+
+        // Prints: %5d [val]\n
+        PRINT_INT(index);
+        PRINT(" ");
+        dumpValue(vm, value);
+        NEWLINE();
+        break;
+      }
+
+      case OP_BIND_METHOD:
       case OP_CLOSE_UPVALUE:
       case OP_POP:
         NO_ARGS();

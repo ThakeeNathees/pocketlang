@@ -1505,7 +1505,7 @@ static void compilerChangeStack(Compiler* compiler, int num);
 
 // Forward declaration of grammar functions.
 static void parsePrecedence(Compiler* compiler, Precedence precedence);
-static int compileFunction(Compiler* compiler, FuncType fn_type);
+static void compileFunction(Compiler* compiler, FuncType fn_type);
 static void compileExpression(Compiler* compiler);
 
 static void exprLiteral(Compiler* compiler);
@@ -1627,8 +1627,8 @@ static void emitStoreGlobal(Compiler* compiler, int index) {
   emitByte(compiler, index);
 }
 
-// Emit opcode to push the named value at the [index] in it's array.
-static void emitPushName(Compiler* compiler, NameDefnType type, int index) {
+// Emit opcode to push the value of [type] at the [index] in it's array.
+static void emitPushValue(Compiler* compiler, NameDefnType type, int index) {
   ASSERT(index >= 0, OOPS);
 
   switch (type) {
@@ -1670,9 +1670,9 @@ static void emitPushName(Compiler* compiler, NameDefnType type, int index) {
   }
 }
 
-// Emit opcode to store the stack top value to the named value at the [index]
-// in it's array.
-static void emitStoreName(Compiler* compiler, NameDefnType type, int index) {
+// Emit opcode to store the stack top value to the named value to the [type]
+// at the [index] in it's array.
+static void emitStoreValue(Compiler* compiler, NameDefnType type, int index) {
   ASSERT(index >= 0, OOPS);
 
   switch (type) {
@@ -1831,7 +1831,7 @@ static void exprName(Compiler* compiler) {
       }
 
       // Push the named value.
-      emitPushName(compiler, name_type, index);
+      emitPushValue(compiler, name_type, index);
 
       // Compile the RHS of the assigned operation.
       compileExpression(compiler);
@@ -1854,7 +1854,7 @@ static void exprName(Compiler* compiler) {
     } else {
       // The assigned value or the result of the operator will be at the top of
       // the stack by now. Store it.
-      emitStoreName(compiler, name_type, index);
+      emitStoreValue(compiler, name_type, index);
     }
 
   } else { // Just the name and no assignment followed by.
@@ -1873,7 +1873,7 @@ static void exprName(Compiler* compiler) {
         compilerAddForward(compiler, index, _FN, &tkname);
       }
     } else {
-      emitPushName(compiler, result.type, result.index);
+      emitPushValue(compiler, result.type, result.index);
     }
   }
 
@@ -2442,6 +2442,9 @@ static int compileClass(Compiler* compiler) {
 
   checkMaxConstantsReached(compiler, cls_index);
 
+  emitOpcode(compiler, OP_PUSH_CLASS);
+  emitShort(compiler, cls_index);
+
   skipNewLines(compiler);
   while (!match(compiler, TK_END)) {
 
@@ -2451,41 +2454,29 @@ static int compileClass(Compiler* compiler) {
       break;
     }
 
-    // At the top level the stack size should be 0, before and after compiling
-    // a top level statement, since there aren't any locals at the top level.
+    // At the top level the stack size should be 1 -- the class, before and
+    // after compiling the class.
     ASSERT(compiler->parser.has_errors ||
-           compiler->func->stack_size == 0, OOPS);
+           compiler->func->stack_size == 1, OOPS);
 
     consume(compiler, TK_DEF, "Expected method definition.");
     if (compiler->parser.has_syntax_error) break;
 
-    int fn_index = compileFunction(compiler, FUNC_METHOD);
+    compileFunction(compiler, FUNC_METHOD);
     if (compiler->parser.has_syntax_error) break;
 
-    Var fn_var = compiler->module->constants.data[fn_index];
-    ASSERT(IS_OBJ_TYPE(fn_var, OBJ_FUNC), OOPS);
-
-    // TODO: check if the constructor or method already exists and report
-    // error. Make sure the error report line match the name token's line.
-
-    Closure* method = newClosure(_vm, (Function*)AS_OBJ(fn_var));
-    if (strcmp(method->fn->name, "_init") == 0) {
-      cls->ctor = method;
-
-    } else {
-      vmPushTempRef(_vm, &method->_super); // method.
-      pkClosureBufferWrite(&cls->methods, _vm, method);
-      vmPopTempRef(_vm); // method.
-    }
-
-    // At the top level the stack size should be 0, before and after compiling
-    // a top level statement, since there aren't any locals at the top level.
+    // At the top level the stack size should be 1 -- the class, before and
+    // after compiling the class.
     ASSERT(compiler->parser.has_errors ||
-           compiler->func->stack_size == 0, OOPS);
+           compiler->func->stack_size == 1, OOPS);
 
     skipNewLines(compiler);
     if (compiler->parser.has_syntax_error) break;
   }
+
+  int global_index = compilerAddVariable(compiler, name, name_len, name_line);
+  emitStoreValue(compiler, NAME_GLOBAL_VAR, global_index);
+  emitOpcode(compiler, OP_POP); // Pop the class.
 
   compiler->parser.parsing_class = false;
   vmPopTempRef(_vm); // cls.
@@ -2493,8 +2484,11 @@ static int compileClass(Compiler* compiler) {
   return cls_index;
 }
 
-// Compile a function and return it's index in the module's function buffer.
-static int compileFunction(Compiler* compiler, FuncType fn_type) {
+// Compile a function, if it's a literal function after this call a closure of
+// the function will be at the stack top, toplevel functions will be assigned
+// to a global variable and popped, and methods will be bind to the class and
+// popped.
+static void compileFunction(Compiler* compiler, FuncType fn_type) {
 
   const char* name;
   int name_length;
@@ -2515,15 +2509,14 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
 
   checkMaxConstantsReached(compiler, fn_index);
 
-  if (fn_type != FUNC_LITERAL) {
+  // Only to be used by the toplevle function to define itself on the globals
+  // of the module.
+  int global_index = -1;
+
+  if (fn_type == FUNC_TOPLEVEL) {
     ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
     int name_line = compiler->parser.previous.line;
-    int g_index = compilerAddVariable(compiler, name, name_length, name_line);
-
-    vmPushTempRef(compiler->parser.vm, &func->_super); // func.
-    Closure* closure = newClosure(compiler->parser.vm, func);
-    moduleSetGlobal(compiler->module, g_index, VAR_OBJ(closure));
-    vmPopTempRef(compiler->parser.vm); // func.
+    global_index = compilerAddVariable(compiler, name, name_length, name_line);
   }
 
   if (fn_type == FUNC_METHOD && strncmp(name, "_init", name_length) == 0) {
@@ -2597,18 +2590,23 @@ static int compileFunction(Compiler* compiler, FuncType fn_type) {
   // function of this function, and the bellow emit calls will write to the
   // outer function. If it's a literal function, we need to push a closure
   // of it on the stack.
-  if (fn_type == FUNC_LITERAL) {
-    emitOpcode(compiler, OP_PUSH_CLOSURE);
-    emitShort(compiler, fn_index);
+  emitOpcode(compiler, OP_PUSH_CLOSURE);
+  emitShort(compiler, fn_index);
 
-    // Capture the upvalues when the closure is created.
-    for (int i = 0; i < curr_fn.ptr->upvalue_count; i++) {
-      emitByte(compiler, (curr_fn.upvalues[i].is_immediate) ? 1 : 0);
-      emitByte(compiler, curr_fn.upvalues[i].index);
-    }
+  // Capture the upvalues when the closure is created.
+  for (int i = 0; i < curr_fn.ptr->upvalue_count; i++) {
+    emitByte(compiler, (curr_fn.upvalues[i].is_immediate) ? 1 : 0);
+    emitByte(compiler, curr_fn.upvalues[i].index);
   }
 
-  return fn_index;
+  if (fn_type == FUNC_TOPLEVEL) {
+    emitStoreValue(compiler, NAME_GLOBAL_VAR, global_index);
+    emitOpcode(compiler, OP_POP);
+
+  } else if (fn_type == FUNC_METHOD || fn_type == FUNC_CONSTRUCTOR) {
+    // Bind opcode will also pop the method so, we shouldn't do it here.
+    emitOpcode(compiler, OP_BIND_METHOD);
+  }
 }
 
 // Finish a block body.
@@ -3381,6 +3379,7 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
 
 #if DUMP_BYTECODE
   dumpFunctionCode(compiler->parser.vm, module->body->fn);
+  DEBUG_BREAK();
 #endif
 
   // Return the compilation result.
