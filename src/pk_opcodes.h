@@ -111,9 +111,11 @@ OPCODE(STORE_UPVALUE, 1, 0)
 // params: 2 byte index.
 OPCODE(PUSH_CLOSURE, 2, 1)
 
-// Push a class at the constant pool with the index of the two bytes argument.
+// Pop the stack top, which expected to be the super class of the next class
+// to be created and push that class from the constant pool with the index of
+// the two bytes argument.
 // params: 2 byte index.
-OPCODE(PUSH_CLASS, 2, 1)
+OPCODE(CREATE_CLASS, 2, 0)
 
 // At the stack top, a closure and a class should be there. Add the method to
 // the class and pop it.
@@ -248,6 +250,7 @@ OPCODE(GTEQ, 0, -1)
 
 OPCODE(RANGE, 0, -1) //< Pop 2 integer make range push.
 OPCODE(IN, 0, -1)
+OPCODE(IS, 0, -1)
 
 // Print the repr string of the value at the stack top, used in REPL mode.
 // This will not pop the value.
