@@ -51,10 +51,8 @@ int runSource(const char* source) {
     if (result != PK_RESULT_SUCCESS) break;
 
     PkHandle* _main = pkModuleGetMainFunction(vm, module);
-    PkHandle* fiber = pkNewFiber(vm, _main);
-    result = pkRunFiber(vm, fiber, 0, NULL);
+    result = pkRunFunction(vm, _main, 0, -1, -1);
     pkReleaseHandle(vm, _main);
-    pkReleaseHandle(vm, fiber);
 
   } while (false);
   pkReleaseHandle(vm, module);

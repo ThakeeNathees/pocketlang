@@ -293,20 +293,13 @@ PK_PUBLIC PkResult pkInterpretSource(PKVM* vm,
                                      PkStringPtr path,
                                      const PkCompileOptions* options);
 
-// FIXME:
-// Remove pkNewFiber and pkRunFiber functions and add interface to run closure
-// with pkRunClosure or pkRunFunction.
-
-// Create and return a new fiber around the function [fn].
-PK_PUBLIC PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn);
-
-// Runs the fiber's function with the provided arguments (param [arc] is the
-// argument count and [argv] are the values). It'll returns it's run status
-// result (success or failure) if you need the yielded or returned value use
-// the pkFiberGetReturnValue() function, and use pkFiberIsDone() function to
-// check if the fiber can be resumed with pkFiberResume() function.
-PK_PUBLIC PkResult pkRunFiber(PKVM* vm, PkHandle* fiber,
-                              int argc, PkHandle** argv);
+// Run a function with [argc] arguments and their values are stored at the VM's
+// slots starting at index [argv_slot] till the next [argc] consequent slots.
+// If [argc] is 0 [argv_slot] value will be ignored.
+// To store the return value set [ret_slot] to a valid slot index, if it's
+// negative the return value will be ignored.
+PK_PUBLIC PkResult pkRunFunction(PKVM* vm, PkHandle* fn,
+                                 int argc, int argv_slot, int ret_slot);
 
 /*****************************************************************************/
 /* NATIVE / RUNTIME FUNCTION API                                             */

@@ -204,7 +204,7 @@ Module* vmGetModule(PKVM* vm, String* key);
 // Prepare a new fiber for execution with the given arguments. That can be used
 // different fiber_run apis. Return true on success, otherwise it'll set the
 // error to the vm's current fiber (if it has any).
-bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var** argv);
+bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var* argv);
 
 // ((Context switching - resume))
 // Switch the running fiber of the vm from the current fiber to the provided
@@ -220,5 +220,10 @@ void vmYieldFiber(PKVM* vm, Var* value);
 // Runs the [fiber] if it's at yielded state, this will resume the execution
 // till the next yield or return statement, and return result.
 PkResult vmRunFiber(PKVM* vm, Fiber* fiber);
+
+// Runs the script function (if not an assertion will fail) and if the [ret] is
+// not null the return value will be set. [argv] should be the first argument
+// pointer following the rest of the arguments in an array.
+PkResult vmRunFunction(PKVM* vm, Closure* fn, int argc, Var* argv, Var* ret);
 
 #endif // PK_VM_H

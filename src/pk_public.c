@@ -22,6 +22,38 @@
       "Given handle is not of type " #type "."); \
   } while (false)
 
+#define VALIDATE_SLOT_INDEX(index)                                           \
+  do {                                                                       \
+    ASSERT(index >= 0, "Slot index was negative.");                          \
+    ASSERT(index < pkGetSlotsCount(vm),                                      \
+      "Slot index is too large. Did you forget to call pkReserveSlots()?."); \
+  } while (false)
+
+// ARGC won't be the real arity if any slots allocated before calling argument
+// validation calling this first is the callers responsibility.
+#define VALIDATE_ARGC(arg) \
+  ASSERT(arg > 0 && arg <= ARGC, "Invalid argument index.")
+
+#define CHECK_RUNTIME()                                     \
+  do {                                                      \
+    ASSERT(vm->fiber != NULL,                               \
+           "This function can only be called at runtime."); \
+  } while (false)
+
+// A convenient macro to get the nth (1 based) argument of the current
+// function.
+#define ARG(n) (vm->fiber->ret[n])
+
+// Nth slot is same as Nth argument, It'll also work if we allocate more
+// slots but the caller should ensure the index.
+#define SLOT(n) ARG(n)
+
+// This will work.
+#define SET_SLOT(n, val) SLOT(n) = (val);
+
+// Evaluates to the current function's argument count.
+#define ARGC ((int)(vm->fiber->sp - vm->fiber->ret) - 1)
+
 // The default allocator that will be used to initialize the PKVM's
 // configuration if the host doesn't provided any allocators for us.
 static void* defaultRealloc(void* memory, size_t new_size, void* _);
@@ -257,76 +289,41 @@ PkResult pkInterpretSource(PKVM* vm, PkStringPtr source, PkStringPtr path,
   // inclusion cause a crash.
   module->initialized = true;
 
-  return vmRunFiber(vm, newFiber(vm, module->body));
+  Fiber* fiber = newFiber(vm, module->body);
+  vmPushTempRef(vm, &fiber->_super); // fiber.
+  vmPrepareFiber(vm, fiber, 0, NULL /* TODO: get argv from user. */);
+  vmPopTempRef(vm); // fiber.
+
+  return vmRunFiber(vm, fiber);
 }
 
-PkHandle* pkNewFiber(PKVM* vm, PkHandle* fn) {
+PK_PUBLIC PkResult pkRunFunction(PKVM* vm, PkHandle* fn,
+                                 int argc, int argv_slot, int ret_slot) {
   CHECK_HANDLE_TYPE(fn, OBJ_CLOSURE);
+  Closure* closure = (Closure*)AS_OBJ(fn->value);
 
-  Fiber* fiber = newFiber(vm, (Closure*)AS_OBJ(fn->value));
-  vmPushTempRef(vm, &fiber->_super); // fiber
-  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(fiber));
-  vmPopTempRef(vm); // fiber
-  return handle;
-}
+  ASSERT(argc >= 0, "argc cannot be negative.");
+  Var* argv = NULL;
 
-PkResult pkRunFiber(PKVM* vm, PkHandle* fiber,
-                    int argc, PkHandle** argv) {
-  __ASSERT(fiber != NULL, "Handle fiber was NULL.");
-  Var fb = fiber->value;
-  __ASSERT(IS_OBJ_TYPE(fb, OBJ_FIBER), "Given handle is not a fiber.");
-  Fiber* _fiber = (Fiber*)AS_OBJ(fb);
-
-  Var* args[MAX_ARGC];
-  for (int i = 0; i < argc; i++) {
-    args[i] = &(argv[i]->value);
+  if (argc != 0) {
+    for (int i = 0; i < argc; i++) {
+      VALIDATE_SLOT_INDEX(argv_slot + i);
+    }
+    argv = &SLOT(argv_slot);
   }
 
-  if (!vmPrepareFiber(vm, _fiber, argc, args)) {
-    return PK_RESULT_RUNTIME_ERROR;
+  Var* ret = NULL;
+  if (ret_slot >= 0) {
+    VALIDATE_SLOT_INDEX(ret_slot);
+    ret = &SLOT(ret_slot);
   }
 
-  ASSERT(_fiber->frame_count == 1, OOPS);
-  return vmRunFiber(vm, _fiber);
-}
-
-// TODO: Get resume argument.
-PkResult pkResumeFiber(PKVM* vm, PkHandle* fiber) {
-  __ASSERT(fiber != NULL, "Handle fiber was NULL.");
-  Var fb = fiber->value;
-  __ASSERT(IS_OBJ_TYPE(fb, OBJ_FIBER), "Given handle is not a fiber.");
-  Fiber* _fiber = (Fiber*)AS_OBJ(fb);
-
-  if (!vmSwitchFiber(vm, _fiber, NULL /* TODO: argument */)) {
-    return PK_RESULT_RUNTIME_ERROR;
-  }
-
-  return vmRunFiber(vm, _fiber);
+  return vmRunFunction(vm, closure, argc, argv, ret);
 }
 
 /*****************************************************************************/
 /* RUNTIME                                                                   */
 /*****************************************************************************/
-
-#define CHECK_RUNTIME()                                     \
-  do {                                                      \
-    ASSERT(vm->fiber != NULL,                               \
-           "This function can only be called at runtime."); \
-  } while (false)
-
-// A convenient macro to get the nth (1 based) argument of the current
-// function.
-#define ARG(n) (vm->fiber->ret[n])
-
-// Nth slot is same as Nth argument, It'll also work if we allocate more
-// slots but the caller should ensure the index.
-#define SLOT(n) ARG(n)
-
-// This will work.
-#define SET_SLOT(n, val) SLOT(n) = (val);
-
-// Evaluates to the current function's argument count.
-#define ARGC ((int)(vm->fiber->sp - vm->fiber->ret) - 1)
 
 void pkSetRuntimeError(PKVM* vm, const char* message) {
   CHECK_RUNTIME();
@@ -364,18 +361,6 @@ bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max) {
 
   return true;
 }
-
-#define VALIDATE_SLOT_INDEX(index)                                           \
-  do {                                                                       \
-    ASSERT(index >= 0, "Slot index was negative.");                          \
-    ASSERT(index < pkGetSlotsCount(vm),                                      \
-      "Slot index is too large. Did you forget to call pkReserveSlots()?."); \
-  } while (false)
-
-// ARGC won't be the real arity if any slots allocated before calling argument
-// validation calling this first is the callers responsibility.
-#define VALIDATE_ARGC(arg) \
-  ASSERT(arg > 0 && arg <= ARGC, "Invalid argument index.")
 
 // Set error for incompatible type provided as an argument. (TODO: got type).
 #define ERR_INVALID_ARG_TYPE(ty_name)                                  \

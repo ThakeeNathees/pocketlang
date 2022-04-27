@@ -466,9 +466,9 @@ struct Fiber {
   Upvalue* open_upvalues;
 
   // The stack base pointer of the current frame. It'll be updated before
-  // calling a native function. (`fiber->ret` === `curr_call_frame->rbp`). And
-  // also updated if the stack is reallocated (that's when it's about to get
-  // overflowed.
+  // calling a native function. (`fiber->ret` === `curr_call_frame->rbp`).
+  // Return value of the callee fiber will be passed and return value of the
+  // the function that started the fiber will also be set.
   Var* ret;
 
   // The self pointer to of the current method. It'll be updated before
