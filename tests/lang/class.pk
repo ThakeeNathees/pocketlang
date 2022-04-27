@@ -28,6 +28,19 @@ print("v2 = ${v2.to_string()}")
 v3 = v1.add(v2); assert(v3.x == 4 and v3.y == 6)
 print("v3 = ${v3.to_string()}")
 
+
+## Default constructor crash (issue #213)
+class A
+end
+a = A()
+print(a)
+
+class B is A
+end
+
+b = B()
+assert((b is B) and (b is A))
+
 ###############################################################################
 ## INHERITANCE
 ###############################################################################
