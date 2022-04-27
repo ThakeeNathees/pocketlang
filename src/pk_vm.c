@@ -934,8 +934,9 @@ L_do_call:
         CHECK_ERROR();
 
         closure = (const Closure*)(cls)->ctor;
-        while (closure == NULL && cls != NULL) {
+        while (closure == NULL) {
           cls = cls->super_class;
+          if (cls == NULL) break;
           closure = cls->ctor;
         }
 
