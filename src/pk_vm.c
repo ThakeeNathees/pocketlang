@@ -147,7 +147,7 @@ void vmCollectGarbage(PKVM* vm) {
     return false;                                  \
   } while (false)
 
-bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var** argv) {
+bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var* argv) {
   ASSERT(fiber->closure->fn->arity >= -1,
          OOPS " (Forget to initialize arity.)");
 
@@ -172,7 +172,7 @@ bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var** argv) {
   }
 
   ASSERT(fiber->stack != NULL && fiber->sp == fiber->stack + 1, OOPS);
-  ASSERT(fiber->ret + 1 == fiber->sp, OOPS);
+  ASSERT(fiber->ret == fiber->stack, OOPS);
 
   // Pass the function arguments.
 
@@ -185,13 +185,9 @@ bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var** argv) {
   // ARG1 is fiber, function arguments are ARG(2), ARG(3), ... ARG(argc).
   // And ret[0] is the return value, parameters starts at ret[1], ...
   for (int i = 0; i < argc; i++) {
-    fiber->ret[1 + i] = *argv[i]; // +1: ret[0] is return value.
+    fiber->ret[1 + i] = *(argv + i); // +1: ret[0] is return value.
   }
   fiber->sp += argc; // Parameters.
-
-  // Set the new fiber as the vm's fiber.
-  fiber->caller = vm->fiber;
-  vm->fiber = fiber;
 
   // On success return true.
   return true;
@@ -247,6 +243,26 @@ void vmYieldFiber(PKVM* vm, Var* value) {
   vm->fiber->caller = NULL;
   vm->fiber->state = FIBER_YIELDED;
   vm->fiber = caller;
+}
+
+PkResult vmRunFunction(PKVM* vm, Closure* fn, int argc, Var* argv, Var* ret) {
+  ASSERT(argc >= 0, "argc cannot be negative.");
+  ASSERT(argc == 0 || argv != NULL, "argv was NULL when argc > 0.");
+
+  Fiber* fiber = newFiber(vm, fn);
+  vmPushTempRef(vm, &fiber->_super); // fiber.
+  vmPrepareFiber(vm, fiber, argc, argv);
+  vmPopTempRef(vm); // fiber.
+
+  Fiber* last = vm->fiber;
+  if (last != NULL) vmPushTempRef(vm, &last->_super); // last.
+  PkResult result = vmRunFiber(vm, fiber);
+  if (last != NULL) vmPopTempRef(vm); // last.
+  vm->fiber = last;
+
+  if (ret != NULL) *ret = *fiber->ret;
+
+  return result;
 }
 
 /*****************************************************************************/
@@ -489,8 +505,10 @@ static void reportError(PKVM* vm) {
 
 PkResult vmRunFiber(PKVM* vm, Fiber* fiber_) {
 
-  // Set the fiber as the vm's current fiber (another root object) to prevent
+  // Set the fiber as the VM's current fiber (another root object) to prevent
   // it from garbage collection and get the reference from native functions.
+  // If this is being called when running another fiber, that'll be garbage
+  // collected, if protected with vmPushTempRef() by the caller otherwise.
   vm->fiber = fiber_;
 
   ASSERT(fiber_->state == FIBER_NEW || fiber_->state == FIBER_YIELDED, OOPS);
@@ -1204,12 +1222,12 @@ L_do_call:
         // value on the stack.
         //fiber->sp = fiber->stack; ??
 
-        FIBER_SWITCH_BACK();
-
-        if (fiber == NULL) {
+        if (fiber->caller == NULL) {
+          *fiber->ret = ret_value;
           return PK_RESULT_SUCCESS;
 
         } else {
+          FIBER_SWITCH_BACK();
           *fiber->ret = ret_value;
         }
 

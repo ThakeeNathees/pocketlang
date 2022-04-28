@@ -734,15 +734,12 @@ DEF(_fiberRun,
   ASSERT(IS_OBJ_TYPE(SELF, OBJ_FIBER), OOPS);
   Fiber* self = (Fiber*)AS_OBJ(SELF);
 
-  // Buffer of argument to call vmPrepareFiber().
-  Var* args[MAX_ARGC];
-
-  for (int i = 0; i < ARGC; i++) {
-    args[i] = &ARG(i + 1);
-  }
-
-  // Switch fiber and start execution.
-  if (vmPrepareFiber(vm, self, ARGC, args)) {
+  // Switch fiber and start execution. New fibers are marked as running in
+  // either it's stats running with vmRunFiber() or here -- inserting a
+  // fiber over a running (callee) fiber.
+  if (vmPrepareFiber(vm, self, ARGC, &ARG(1))) {
+    self->caller = vm->fiber;
+    vm->fiber = self;
     self->state = FIBER_RUNNING;
   }
 }
