@@ -154,6 +154,81 @@ void initializeCore(PKVM* vm) {
 }
 
 /*****************************************************************************/
+/* INTERNAL FUNCTIONS                                                        */
+/*****************************************************************************/
+
+// Returns the string value of the variable, a wrapper of toString() function
+// but for instances it'll try to calll "_to_string" function and on error
+// it'll return NULL.
+static inline String* _varToString(PKVM* vm, Var self) {
+  if (IS_OBJ_TYPE(self, OBJ_INST)) {
+
+    // The closure is retrieved from [self] thus, it doesn't need to be push
+    // on the VM's temp references (since [self] should already be protected
+    // from GC).
+    Closure* closure = NULL;
+
+    String* name = newString(vm, LITS__str); // TODO: static vm string?.
+    vmPushTempRef(vm, &name->_super); // method.
+    bool has_method = hasMethod(vm, self, name, &closure);
+    vmPopTempRef(vm); // method.
+
+    if (has_method) {
+      Var ret = VAR_NULL;
+      PkResult result = vmCallMethod(vm, self, closure, 0, NULL, &ret);
+      if (result != PK_RESULT_SUCCESS) return NULL;
+
+      if (!IS_OBJ_TYPE(ret, OBJ_STRING)) {
+        VM_SET_ERROR(vm, newString(vm, "method " LITS__str " returned "
+                                       "non-string type."));
+        return NULL;
+      }
+
+      return (String*)AS_OBJ(ret);
+    }
+
+    // If we reached here, it doesn't have a to string override. just
+    // "fall throught" and call 'toString()' bellow.
+  }
+
+  return toString(vm, self);
+}
+
+// Calls a unary operator overload method. If the method does not exists it'll
+// return false, otherwise it'll call the method and return true. If any error
+// occures it'll set an error.
+static inline bool _callUnaryOpMethod(PKVM* vm, Var self,
+                                      const char* method_name, Var* ret) {
+  Closure* closure = NULL;
+  String* name = newString(vm, method_name);
+  vmPushTempRef(vm, &name->_super); // method.
+  bool has_method = hasMethod(vm, self, name, &closure);
+  vmPopTempRef(vm); // method.
+
+  if (!has_method) return false;
+
+  vmCallMethod(vm, self, closure, 0, NULL, ret);
+  return true;
+}
+
+// Calls a binary operator overload method. If the method does not exists it'll
+// return false, otherwise it'll call the method and return true. If any error
+// occures it'll set an error.
+static inline bool _callBinaryOpMethod(PKVM* vm, Var self, Var other,
+                                      const char* method_name, Var* ret) {
+  Closure* closure = NULL;
+  String* name = newString(vm, method_name);
+  vmPushTempRef(vm, &name->_super); // method.
+  bool has_method = hasMethod(vm, self, name, &closure);
+  vmPopTempRef(vm); // method.
+
+  if (!has_method) return false;
+
+  vmCallMethod(vm, self, closure, 1, &other, ret);
+  return true;
+}
+
+/*****************************************************************************/
 /* CORE BUILTIN FUNCTIONS                                                    */
 /*****************************************************************************/
 
@@ -215,13 +290,16 @@ DEF(coreAssert,
 
     if (argc == 2) {
       if (AS_OBJ(ARG(2))->type != OBJ_STRING) {
-        msg = toString(vm, ARG(2));
+        msg = _varToString(vm, ARG(2));
+        if (msg == NULL) return; //< Error at _to_string override.
+
       } else {
         msg = (String*)AS_OBJ(ARG(2));
       }
-      vmPushTempRef(vm, &msg->_super);
+
+      vmPushTempRef(vm, &msg->_super); // msg.
       VM_SET_ERROR(vm, stringFormat(vm, "Assertion failed: '@'.", msg));
-      vmPopTempRef(vm);
+      vmPopTempRef(vm); // msg.
     } else {
       VM_SET_ERROR(vm, newString(vm, "Assertion failed."));
     }
@@ -302,10 +380,12 @@ DEF(coreYield,
 }
 
 DEF(coreToString,
-  "to_string(value:var) -> string\n"
+  "str(value:var) -> string\n"
   "Returns the string representation of the value.") {
 
-  RET(VAR_OBJ(toString(vm, ARG(1))));
+  String* str = _varToString(vm, ARG(1));
+  if (str == NULL) RET(VAR_NULL);
+  RET(VAR_OBJ(str));
 }
 
 DEF(coreChr,
@@ -348,7 +428,9 @@ DEF(corePrint,
 
   for (int i = 1; i <= ARGC; i++) {
     if (i != 1) vm->config.stdout_write(vm, " ");
-    vm->config.stdout_write(vm, toString(vm, ARG(i))->data);
+    String* str = _varToString(vm, ARG(i));
+    if (str == NULL) RET(VAR_NULL);
+    vm->config.stdout_write(vm, str->data);
   }
 
   vm->config.stdout_write(vm, "\n");
@@ -368,7 +450,9 @@ DEF(coreInput,
   if (vm->config.stdin_read == NULL) return;
 
   if (argc == 1) {
-    vm->config.stdout_write(vm, toString(vm, ARG(1))->data);
+    String* str = _varToString(vm, ARG(1));
+    if (str == NULL) RET(VAR_NULL);
+    vm->config.stdout_write(vm, str->data);
   }
 
   PkStringPtr result = vm->config.stdin_read(vm);
@@ -452,9 +536,10 @@ DEF(coreListJoin,
   pkByteBufferInit(&buff);
 
   for (uint32_t i = 0; i < list->elements.count; i++) {
-    String* elem = toString(vm, list->elements.data[i]);
-    vmPushTempRef(vm, &elem->_super); // elem
-    pkByteBufferAddString(&buff, vm, elem->data, elem->length);
+    String* str = _varToString(vm, list->elements.data[i]);
+    if (str == NULL) RET(VAR_NULL);
+    vmPushTempRef(vm, &str->_super); // elem
+    pkByteBufferAddString(&buff, vm, str->data, str->length);
     vmPopTempRef(vm); // elem
   }
 
@@ -500,7 +585,7 @@ static void initializeBuiltinFunctions(PKVM* vm) {
   INITIALIZE_BUILTIN_FN("bin",       coreBin,      1);
   INITIALIZE_BUILTIN_FN("hex",       coreHex,      1);
   INITIALIZE_BUILTIN_FN("yield",     coreYield,   -1);
-  INITIALIZE_BUILTIN_FN("to_string", coreToString, 1);
+  INITIALIZE_BUILTIN_FN("str",       coreToString, 1);
   INITIALIZE_BUILTIN_FN("chr",       coreChr,      1);
   INITIALIZE_BUILTIN_FN("ord",       coreOrd,      1);
   INITIALIZE_BUILTIN_FN("print",     corePrint,   -1);
@@ -625,7 +710,8 @@ DEF(stdLangWrite,
     if (IS_OBJ_TYPE(arg, OBJ_STRING)) {
       str = (String*)AS_OBJ(arg);
     } else {
-      str = toString(vm, arg);
+      str = _varToString(vm, ARG(1));
+      if (str == NULL) RET(VAR_NULL);
     }
 
     vm->config.stdout_write(vm, str->data);
@@ -679,7 +765,9 @@ static void _ctorString(PKVM* vm) {
     RET(VAR_OBJ(newStringLength(vm, NULL, 0)));
     return;
   }
-  RET(VAR_OBJ(toString(vm, ARG(1))));
+  String* str = _varToString(vm, ARG(1));
+  if (str == NULL) RET(VAR_NULL);
+  RET(VAR_OBJ(str));
 }
 
 static void _ctorList(PKVM* vm) {
@@ -880,229 +968,271 @@ Class* getClass(PKVM* vm, Var instance) {
   return inst->cls;
 }
 
-Var getMethod(PKVM* vm, Var self, String* name, bool* is_method) {
-
+bool hasMethod(PKVM* vm, Var self, String* name, Closure** _method) {
   Class* cls = getClass(vm, self);
   ASSERT(cls != NULL, OOPS);
 
   Class* cls_ = cls;
   do {
     for (int i = 0; i < (int)cls_->methods.count; i++) {
-      Closure* method = cls_->methods.data[i];
-      if (IS_CSTR_EQ(name, method->fn->name, name->length)) {
-        if (is_method) *is_method = true;
-        return VAR_OBJ(method);
+      Closure* method_ = cls_->methods.data[i];
+      if (IS_CSTR_EQ(name, method_->fn->name, name->length)) {
+        if (_method) *_method = method_;
+        return true;
       }
     }
     cls_ = cls_->super_class;
   } while (cls_ != NULL);
+
+  return false;
+}
+
+Var getMethod(PKVM* vm, Var self, String* name, bool* is_method) {
+
+  Closure* method;
+  if (hasMethod(vm, self, name, &method)) {
+    if (is_method) *is_method = true;
+    return VAR_OBJ(method);
+  }
 
   // If the attribute not found it'll set an error.
   if (is_method) *is_method = false;
   return varGetAttrib(vm, self, name);
 }
 
-#define UNSUPPORTED_OPERAND_TYPES(op)                                  \
-  VM_SET_ERROR(vm, stringFormat(vm, "Unsupported operand types for "   \
+#define UNSUPPORTED_UNARY_OP(op)                                   \
+  VM_SET_ERROR(vm, stringFormat(vm, "Unsupported operand ($) for " \
+               "unary operator " op ".", varTypeName(v)))
+
+#define UNSUPPORTED_BINARY_OP(op)                                    \
+  VM_SET_ERROR(vm, stringFormat(vm, "Unsupported operand types for " \
     "operator '" op "' $ and $", varTypeName(v1), varTypeName(v2)))
 
 #define RIGHT_OPERAND "Right operand"
 
-Var varAdd(PKVM* vm, Var v1, Var v2) {
-  double d1, d2;
+#define CHECK_NUMERIC_OP(op)                                \
+  do {                                                      \
+    double n1, n2;                                          \
+    if (isNumeric(v1, &n1)) {                               \
+      if (validateNumeric(vm, v2, &n2, RIGHT_OPERAND)) {    \
+        return VAR_NUM(n1 op n2);                           \
+      }                                                     \
+      return VAR_NULL;                                      \
+    }                                                       \
+  } while (false)
 
-  if (isNumeric(v1, &d1)) {
-    if (validateNumeric(vm, v2, &d2, RIGHT_OPERAND)) {
-      return VAR_NUM(d1 + d2);
-    }
-    return VAR_NULL;
-  }
+#define CHECK_BITWISE_OP(op)                                \
+  do {                                                      \
+    int64_t i1, i2;                                         \
+    if (isInteger(v1, &i1)) {                               \
+      if (validateInteger(vm, v2, &i2, RIGHT_OPERAND)) {    \
+        return VAR_NUM((double)(i1 op i2));                 \
+      }                                                     \
+      return VAR_NULL;                                      \
+    }                                                       \
+  } while (false)
 
-  if (IS_OBJ(v1) && IS_OBJ(v2)) {
-    Object *o1 = AS_OBJ(v1), *o2 = AS_OBJ(v2);
+#define CHECK_INST_UNARY_OP(name)                           \
+  do {                                                      \
+    if (IS_OBJ_TYPE(v, OBJ_INST)) {                         \
+      Var result;                                           \
+      if (_callUnaryOpMethod(vm, v, name, &result)) {       \
+        return result;                                      \
+      }                                                     \
+    }                                                       \
+  } while (false)
+
+#define CHECK_INST_BINARY_OP(name)                          \
+  do {                                                      \
+    if (IS_OBJ_TYPE(v1, OBJ_INST)) {                        \
+      Var result;                                           \
+      if (inplace) {                                        \
+        if (_callBinaryOpMethod(vm, v1, v2, name "=", &result)) { \
+          return result;                                    \
+        }                                                   \
+      }                                                     \
+      if (_callBinaryOpMethod(vm, v1, v2, name, &result)) { \
+        return result;                                      \
+      }                                                     \
+    }                                                       \
+  } while(false)
+
+Var varPositive(PKVM* vm, Var v) {
+  double n; if (isNumeric(v, &n)) return v;
+  CHECK_INST_UNARY_OP("+self");
+  UNSUPPORTED_UNARY_OP("unary +");
+  return VAR_NULL;
+}
+
+Var varNegative(PKVM* vm, Var v) {
+  double n; if (isNumeric(v, &n)) return VAR_NUM(-AS_NUM(v));
+  CHECK_INST_UNARY_OP("-self");
+  UNSUPPORTED_UNARY_OP("unary -");
+  return VAR_NULL;
+}
+
+Var varNot(PKVM* vm, Var v) {
+  CHECK_INST_UNARY_OP("!self");
+  return VAR_BOOL(!toBool(v));
+}
+
+Var varBitNot(PKVM* vm, Var v) {
+  int64_t i;
+  if (isInteger(v, &i)) return VAR_NUM((double)(~i));
+  CHECK_INST_UNARY_OP("~self");
+  UNSUPPORTED_UNARY_OP("unary ~");
+  return VAR_NULL;
+}
+
+Var varAdd(PKVM* vm, Var v1, Var v2, bool inplace) {
+
+  CHECK_NUMERIC_OP(+);
+
+  if (IS_OBJ(v1)) {
+    Object *o1 = AS_OBJ(v1);
     switch (o1->type) {
 
-      case OBJ_STRING:
-      {
+      case OBJ_STRING: {
+        if (!IS_OBJ(v2)) break;
+        Object* o2 = AS_OBJ(v2);
         if (o2->type == OBJ_STRING) {
           return VAR_OBJ(stringJoin(vm, (String*)o1, (String*)o2));
         }
       } break;
 
-      case OBJ_LIST:
-      {
+      case OBJ_LIST: {
+        if (!IS_OBJ(v2)) break;
+        Object* o2 = AS_OBJ(v2);
         if (o2->type == OBJ_LIST) {
-          return VAR_OBJ(listJoin(vm, (List*)o1, (List*)o2));
+          if (inplace) {
+            pkVarBufferConcat(&((List*)o1)->elements, vm,
+                              &((List*)o2)->elements);
+            return v1;
+          } else {
+            return VAR_OBJ(listAdd(vm, (List*)o1, (List*)o2));
+          }
         }
       } break;
     }
   }
-
-  UNSUPPORTED_OPERAND_TYPES("+");
+  CHECK_INST_BINARY_OP("+");
+  UNSUPPORTED_BINARY_OP("+");
   return VAR_NULL;
 }
 
-Var varSubtract(PKVM* vm, Var v1, Var v2) {
-  double d1, d2;
-
-  if (isNumeric(v1, &d1)) {
-    if (validateNumeric(vm, v2, &d2, RIGHT_OPERAND)) {
-      return VAR_NUM(d1 - d2);
-    }
-    return VAR_NULL;
-  }
-
-  UNSUPPORTED_OPERAND_TYPES("-");
-  return VAR_NULL;
-}
-
-Var varMultiply(PKVM* vm, Var v1, Var v2) {
-  double d1, d2;
-
-  if (isNumeric(v1, &d1)) {
-    if (validateNumeric(vm, v2, &d2, RIGHT_OPERAND)) {
-      return VAR_NUM(d1 * d2);
-    }
-    return VAR_NULL;
-  }
-
-  UNSUPPORTED_OPERAND_TYPES("*");
-  return VAR_NULL;
-}
-
-Var varDivide(PKVM* vm, Var v1, Var v2) {
-  double d1, d2;
-
-  if (isNumeric(v1, &d1)) {
-    if (validateNumeric(vm, v2, &d2, RIGHT_OPERAND)) {
-      return VAR_NUM(d1 / d2);
-    }
-    return VAR_NULL;
-  }
-
-  UNSUPPORTED_OPERAND_TYPES("/");
-  return VAR_NULL;
-}
-
-Var varModulo(PKVM* vm, Var v1, Var v2) {
-  double d1, d2;
-
-  if (isNumeric(v1, &d1)) {
-    if (validateNumeric(vm, v2, &d2, RIGHT_OPERAND)) {
-      return VAR_NUM(fmod(d1, d2));
+Var varModulo(PKVM* vm, Var v1, Var v2, bool inplace) {
+  double n1, n2;
+  if (isNumeric(v1, &n1)) {
+    if (validateNumeric(vm, v2, &n2, RIGHT_OPERAND)) {
+      return VAR_NUM(fmod(n1, n2));
     }
     return VAR_NULL;
   }
 
   if (IS_OBJ_TYPE(v1, OBJ_STRING)) {
-    //const String* str = (const String*)AS_OBJ(v1);
     TODO; // "fmt" % v2.
   }
 
-  UNSUPPORTED_OPERAND_TYPES("%");
+  CHECK_INST_BINARY_OP("%");
+  UNSUPPORTED_BINARY_OP("%");
   return VAR_NULL;
 }
 
-Var varBitAnd(PKVM* vm, Var v1, Var v2) {
-  int64_t i1, i2;
+// TODO: the bellow function definitions can be written as macros.
 
-  if (isInteger(v1, &i1)) {
-    if (validateInteger(vm, v2, &i2, RIGHT_OPERAND)) {
-      return VAR_NUM((double)(i1 & i2));
-    }
-    return VAR_NULL;
-  }
-
-  UNSUPPORTED_OPERAND_TYPES("&");
+Var varSubtract(PKVM* vm, Var v1, Var v2, bool inplace) {
+  CHECK_NUMERIC_OP(-);
+  CHECK_INST_BINARY_OP("-");
+  UNSUPPORTED_BINARY_OP("-");
   return VAR_NULL;
 }
 
-Var varBitOr(PKVM* vm, Var v1, Var v2) {
-  int64_t i1, i2;
-
-  if (isInteger(v1, &i1)) {
-    if (validateInteger(vm, v2, &i2, RIGHT_OPERAND)) {
-      return VAR_NUM((double)(i1 | i2));
-    }
-    return VAR_NULL;
-  }
-
-  UNSUPPORTED_OPERAND_TYPES("|");
+Var varMultiply(PKVM* vm, Var v1, Var v2, bool inplace) {
+  CHECK_NUMERIC_OP(*);
+  CHECK_INST_BINARY_OP("*");
+  UNSUPPORTED_BINARY_OP("*");
   return VAR_NULL;
 }
 
-Var varBitXor(PKVM* vm, Var v1, Var v2) {
-  int64_t i1, i2;
-
-  if (isInteger(v1, &i1)) {
-    if (validateInteger(vm, v2, &i2, RIGHT_OPERAND)) {
-      return VAR_NUM((double)(i1 ^ i2));
-    }
-    return VAR_NULL;
-  }
-
-  UNSUPPORTED_OPERAND_TYPES("^");
+Var varDivide(PKVM* vm, Var v1, Var v2, bool inplace) {
+  CHECK_NUMERIC_OP(/);
+  CHECK_INST_BINARY_OP("/");
+  UNSUPPORTED_BINARY_OP("/");
   return VAR_NULL;
 }
 
-Var varBitLshift(PKVM* vm, Var v1, Var v2) {
-  int64_t i1, i2;
-
-  if (isInteger(v1, &i1)) {
-    if (validateInteger(vm, v2, &i2, RIGHT_OPERAND)) {
-      return VAR_NUM((double)(i1 << i2));
-    }
-    return VAR_NULL;
-  }
-
-  UNSUPPORTED_OPERAND_TYPES("<<");
+Var varBitAnd(PKVM* vm, Var v1, Var v2, bool inplace) {
+  CHECK_BITWISE_OP(&);
+  CHECK_INST_BINARY_OP("&");
+  UNSUPPORTED_BINARY_OP("&");
   return VAR_NULL;
 }
 
-Var varBitRshift(PKVM* vm, Var v1, Var v2) {
-  int64_t i1, i2;
-
-  if (isInteger(v1, &i1)) {
-    if (validateInteger(vm, v2, &i2, RIGHT_OPERAND)) {
-      return VAR_NUM((double)(i1 >> i2));
-    }
-    return VAR_NULL;
-  }
-
-  UNSUPPORTED_OPERAND_TYPES(">>");
+Var varBitOr(PKVM* vm, Var v1, Var v2, bool inplace) {
+  CHECK_BITWISE_OP(|);
+  CHECK_INST_BINARY_OP("|");
+  UNSUPPORTED_BINARY_OP("|");
   return VAR_NULL;
 }
 
-Var varBitNot(PKVM* vm, Var v) {
-  int64_t i;
-  if (!validateInteger(vm, v, &i, "Unary operand")) return VAR_NULL;
-  return VAR_NUM((double)(~i));
+Var varBitXor(PKVM* vm, Var v1, Var v2, bool inplace) {
+  CHECK_BITWISE_OP(^);
+  CHECK_INST_BINARY_OP("^");
+  UNSUPPORTED_BINARY_OP("^");
+  return VAR_NULL;
 }
 
-bool varGreater(Var v1, Var v2) {
-  double d1, d2;
-
-  if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
-    return d1 > d2;
-  }
-
-  TODO;
-  return false;
+Var varBitLshift(PKVM* vm, Var v1, Var v2, bool inplace) {
+  CHECK_BITWISE_OP(<<);
+  CHECK_INST_BINARY_OP("<<");
+  UNSUPPORTED_BINARY_OP("<<");
+  return VAR_NULL;
 }
 
-bool varLesser(Var v1, Var v2) {
-  double d1, d2;
+Var varBitRshift(PKVM* vm, Var v1, Var v2, bool inplace) {
+  CHECK_BITWISE_OP(>>);
+  CHECK_INST_BINARY_OP(">>");
+  UNSUPPORTED_BINARY_OP(">>");
+  return VAR_NULL;
+}
 
-  if (isNumeric(v1, &d1) && isNumeric(v2, &d2)) {
-    return d1 < d2;
+Var varEqals(PKVM* vm, Var v1, Var v2) {
+  const bool inplace = false;
+  CHECK_INST_BINARY_OP("==");
+  return VAR_BOOL(isValuesEqual(v1, v2));
+}
+
+Var varGreater(PKVM* vm, Var v1, Var v2) {
+  CHECK_NUMERIC_OP(>);
+  const bool inplace = false;
+  CHECK_INST_BINARY_OP(">");
+  UNSUPPORTED_BINARY_OP(">");
+  return VAR_NULL;
+}
+
+Var varLesser(PKVM* vm, Var v1, Var v2) {
+  CHECK_NUMERIC_OP(<);
+  const bool inplace = false;
+  CHECK_INST_BINARY_OP("<");
+  UNSUPPORTED_BINARY_OP("<");
+  return VAR_NULL;
+}
+
+Var varOpRange(PKVM* vm, Var v1, Var v2) {
+  if (IS_NUM(v1) && IS_NUM(v2)) {
+    return VAR_OBJ(newRange(vm, AS_NUM(v1), AS_NUM(v2)));
   }
-
-  TODO;
-  return false;
+  const bool inplace = false;
+  CHECK_INST_BINARY_OP("..");
+  UNSUPPORTED_BINARY_OP("..");
+  return VAR_NULL;
 }
 
 #undef RIGHT_OPERAND
-#undef UNSUPPORTED_OPERAND_TYPES
+#undef CHECK_NUMERIC_OP
+#undef CHECK_BITWISE_OP
+#undef UNSUPPORTED_UNARY_OP
+#undef UNSUPPORTED_BINARY_OP
 
 bool varContains(PKVM* vm, Var elem, Var container) {
   if (!IS_OBJ(container)) {
@@ -1139,6 +1269,13 @@ bool varContains(PKVM* vm, Var elem, Var container) {
       return !IS_UNDEF(mapGet(map, elem));
     } break;
   }
+
+#define v1 container
+#define v2 elem
+  const bool inplace = false;
+  CHECK_INST_BINARY_OP("in");
+#undef v1
+#undef v2
 
   VM_SET_ERROR(vm, stringFormat(vm, "Argument of type $ is not iterable.",
                varTypeName(container)));
@@ -1276,10 +1413,28 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
       break;
 
     case OBJ_INST: {
-      Var value;
-      if (instGetAttrib(vm, (Instance*)obj, attrib, &value)) {
-        return value;
+      Instance* inst = (Instance*)obj;
+      Var value = VAR_NULL;
+
+      if (inst->native != NULL) {
+
+        Closure* getter;
+        // TODO: static vm string?
+        String* getter_name = newString(vm, GETTER_NAME);
+        vmPushTempRef(vm, &getter_name->_super); // getter_name.
+        bool has_getter = hasMethod(vm, on, getter_name, &getter);
+        vmPopTempRef(vm); // getter_name.
+
+        if (has_getter) {
+          Var attrib_name = VAR_OBJ(attrib);
+          vmCallMethod(vm, on, getter, 1, &attrib_name, &value);
+          return value; // If any error occure, it was already set.
+        }
       }
+
+      value = mapGet(inst->attribs, VAR_OBJ(attrib));
+      if (!IS_UNDEF(value)) return value;
+
     } break;
   }
 
@@ -1371,16 +1526,32 @@ do {                                                                          \
       return;
 
     case OBJ_INST: {
-      if (!instSetAttrib(vm, (Instance*)obj, attrib, value)) {
-        // If we has error by now, that means the set value type is
-        // incompatible. No need for us to set an other error, just return.
-        if (VM_HAS_ERROR(vm)) return;
-        ERR_NO_ATTRIB(vm, on, attrib);
+
+      Instance* inst = (Instance*)obj;
+      if (inst->native != NULL) {
+        Closure* setter;
+        // TODO: static vm string?
+        String* setter_name = newString(vm, SETTER_NAME);
+        vmPushTempRef(vm, &setter_name->_super); // setter_name.
+        bool has_setter = hasMethod(vm, VAR_OBJ(inst), setter_name, &setter);
+        vmPopTempRef(vm); // setter_name.
+
+        if (has_setter) {
+
+          // FIXME:
+          // Once we retreive values from directly the stack we can pass the
+          // args pointer, pointing in the VM stack, instead of creating a temp
+          // array as bellow.
+          Var args[2] = { VAR_OBJ(attrib), value };
+
+          vmCallMethod(vm, VAR_OBJ(inst), setter, 2, args, NULL);
+          return; // If any error occure, it was already set.
+        }
       }
 
-      // If we reached here, that means the attribute exists and we have
-      // updated the value.
+      mapSet(vm, inst->attribs, VAR_OBJ(attrib), value);
       return;
+
     } break;
   }
 
@@ -1429,14 +1600,15 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
       Var value = mapGet((Map*)obj, key);
       if (IS_UNDEF(value)) {
 
-        String* key_str = toString(vm, key);
-        vmPushTempRef(vm, &key_str->_super);
         if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
-          VM_SET_ERROR(vm, stringFormat(vm, "Invalid key '@'.", key_str));
+          VM_SET_ERROR(vm, stringFormat(vm, "Unhashable key '$'.",
+                                        varTypeName(key)));
         } else {
-          VM_SET_ERROR(vm, stringFormat(vm, "Key '@' not exists", key_str));
+          String* key_repr = toRepr(vm, key);
+          vmPushTempRef(vm, &key_repr->_super); // key_repr.
+          VM_SET_ERROR(vm, stringFormat(vm, "Key '@' not exists", key_repr));
+          vmPopTempRef(vm); // key_repr.
         }
-        vmPopTempRef(vm);
         return VAR_NULL;
       }
       return value;

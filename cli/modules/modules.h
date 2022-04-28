@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <string.h>
 
+void registerModuleDummy(PKVM* vm);
 void registerModuleIO(PKVM* vm);
 void registerModulePath(PKVM* vm);
 void registerModuleMath(PKVM* vm);
@@ -21,6 +22,7 @@ void registerModuleMath(PKVM* vm);
 // Registers all the cli modules.
 #define REGISTER_ALL_MODULES(vm) \
   do {                           \
+    registerModuleDummy(vm);     \
     registerModuleIO(vm);        \
     registerModulePath(vm);      \
     registerModuleMath(vm);      \

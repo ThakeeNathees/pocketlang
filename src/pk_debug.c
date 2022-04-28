@@ -269,11 +269,17 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
   uint32_t* lines = func->fn->oplines.data;
   uint32_t line = 1, last_line = 0;
 
+  // Either path or name should be valid to a module.
+  ASSERT(func->owner->path != NULL || func->owner->name != NULL, OOPS);
+  const char* path = (func->owner->path)
+                       ? func->owner->path->data
+                       : func->owner->name->data;
+
   // This will print: Instruction Dump of function 'fn' "path.pk"\n
   PRINT("Instruction Dump of function ");
   PRINT(func->name);
   PRINT(" ");
-  PRINT(func->owner->path->data);
+  PRINT(path);
   NEWLINE();
 
   while (i < func->fn->opcodes.count) {
@@ -588,9 +594,11 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         NO_ARGS();
         break;
 
+      case OP_POSITIVE:
       case OP_NEGATIVE:
       case OP_NOT:
       case OP_BIT_NOT:
+
       case OP_ADD:
       case OP_SUBTRACT:
       case OP_MULTIPLY:
@@ -601,6 +609,17 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_BIT_XOR:
       case OP_BIT_LSHIFT:
       case OP_BIT_RSHIFT:
+      {
+        uint8_t inplace = READ_BYTE();
+        if (inplace == 1) {
+          PRINT("(inplace)\n");
+        } else {
+          PRINT("\n");
+          ASSERT(inplace == 0, "inplace should be either 0 or 1");
+        }
+        break;
+      }
+
       case OP_EQEQ:
       case OP_NOTEQ:
       case OP_LT:

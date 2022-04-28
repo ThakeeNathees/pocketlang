@@ -27,6 +27,11 @@ l1 = [1] + []; assert(l1.length == 1); assert(l1[0] == 1)
 l2 = l1 + [1,2,3]; assert(l2.length == 4); assert(l2 == [1,1,2,3])
 l3 = l2 + l1 + l2; assert(l3 == [1,1,2,3,1,1,1,2,3])
 
+## list references are shared.
+l1 = [1];l2 = l1;l1 += [2]
+assert(l2[1] == 2)
+assert(l1 == l2)
+
 ## in tests.
 assert(!('abc' in 'a'))
 assert(42 in [12, 42, 3.14])
@@ -35,7 +40,7 @@ assert('key' in {'key':'value'})
 assert(!('foo' in {'bar':'baz'}))
 
 ## Builtin functions tests.
-assert(to_string(42) == '42')
+assert(str(42) == '42')
 
 ## FIXME: add hash function.
 ##h1 = math.hash("testing"); h2 = math.hash("test" + "ing")
@@ -57,13 +62,13 @@ assert((a and b) == null)
 assert((b or a) == [1, 2, 3])
 assert((a or b) == b or a)
 
-## Recursive to_string list/map
+## Recursive str list/map
 l = [1]
 list_append(l, l)
-assert(to_string(l) == '[1, [...]]')
+assert(str(l) == '[1, [...]]')
 m = {}
 m['m'] = m
-assert(to_string(m) == '{"m":{...}}')
+assert(str(m) == '{"m":{...}}')
 
 # Bitwise operation tests
 assert(0b1010 | 0b0101 == 0b1111)

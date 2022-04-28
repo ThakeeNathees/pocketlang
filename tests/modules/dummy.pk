@@ -1,0 +1,23 @@
+
+## TODO: this dummy module is just to test different aspects of the
+## native module interface and will be removed once it become stable
+## and we have enough tests on other native interfaces.
+
+from dummy import Dummy
+
+d = Dummy()
+print(d)
+
+assert(d.val == 0) ## @getter
+d.val = 3.14       ## @setter
+assert(d.val == 3.14)
+
+assert(d == 3.14) ## == overload
+assert(d > 3)     ## > overload
+assert(d >= 3)    ## > overload
+assert(d >= 3.14) ## > and == overload
+
+assert(d.a_method(12, 34) == 408) ## method
+
+# If we got here, that means all test were passed.
+print('All TESTS PASSED')

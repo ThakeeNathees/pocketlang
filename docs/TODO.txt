@@ -1,12 +1,6 @@
 
 // Language features.
-- Closure (literal function are would become closure).
 - Utf8 support.
-- Method
-  Reference: CPython
-  See: https://github.com/python/cpython/blob/6db2db91b96aaa1270c200ec931a2250fe2799c7/Python/ceval.c#L4344-L4380
-  Note: consider dynamic attribute for instances like python and make the variables defined at the class level
-        are static.
 - Make assert a keyword and disable it on release build.
 
 // To implement.
