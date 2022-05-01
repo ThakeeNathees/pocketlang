@@ -3,7 +3,11 @@
 ::  Distributed Under The MIT License
 
 @echo off
-Pushd "%~dp0"
+Pushd %cd%
+cd %~dp0
+
+:: Root directory of the project
+set pocket_root=%~dp0..\
 
 :: ----------------------------------------------------------------------------
 ::                      PARSE COMMAND LINE ARGS
@@ -90,7 +94,7 @@ set addnl_linkflags=/SUBSYSTEM:CONSOLE
 set addnl_cdefines=/D_CRT_SECURE_NO_WARNINGS
 
 :: Relative root dir from a single intermediate dir.
-set root_dir=..\..\..\
+
 
 if "%debug_build%"=="false" (
 
@@ -100,11 +104,11 @@ if "%debug_build%"=="false" (
   exit /b 1
   
 	set cflags=%cflags% -O2 -MD
-	set target_dir=build\release\
+	set target_dir=%pocket_root%build\Release\
 ) else (
 	set cflags=%cflags% -MDd -ZI
 	set addnl_cdefines=%addnl_cdefines% /DDEBUG
-	set target_dir=build\debug\
+	set target_dir=%pocket_root%build\Debug\
 )
 
 if "%shared_lib%"=="true" (
@@ -112,43 +116,48 @@ if "%shared_lib%"=="true" (
 )
 
 :: Make intermediate folders.	
-if not exist %target_dir%src\ md %target_dir%src\
-if not exist %target_dir%cli\ md %target_dir%cli\
-if not exist %target_dir%bin\ md %target_dir%bin\
+if not exist %target_dir%bin\ mkdir %target_dir%bin\
+if not exist %target_dir%lib\ mkdir %target_dir%lib\
+if not exist %target_dir%obj\pocket mkdir %target_dir%obj\pocket\
+if not exist %target_dir%obj\cli\ mkdir %target_dir%obj\cli\
 
 :: ----------------------------------------------------------------------------
 ::                              COMPILE
 :: ----------------------------------------------------------------------------
 :COMPILE
 
-:: Go inside src\ build all src files.
-cd %target_dir%src\
-cl /nologo /c %addnl_cdefines% %addnl_cflags% %root_dir%src\*.c
+cd %target_dir%obj\pocket
+
+cl /nologo /c %addnl_cdefines% %addnl_cflags% %pocket_root%src\*.c
 if errorlevel 1 goto :FAIL
 
 :: If compiling shared lib, jump pass the lib/cli binaries.
 if "%shared_lib%"=="true" (
-  set pklib=..\bin\pocket-dll.lib
+  set pklib=%target_dir%bin\pocket.lib
 ) else (
-  set pklib=..\bin\pocket.lib
+  set pklib=%target_dir%lib\pocket.lib
 )
 
 :: If compiling shared lib, jump pass the lib/cli binaries.
 if "%shared_lib%"=="true" goto :SHARED
 lib /nologo %addnl_linkflags% /OUT:%pklib% *.obj
 goto :SRC_END
+
 :SHARED
-link /nologo /dll /out:..\bin\pocket.dll /implib:%pklib% *.obj
+link /nologo /dll /out:%target_dir%bin\pocket.dll /implib:%pklib% *.obj
+
 :SRC_END
 if errorlevel 1 goto :FAIL
 
-:: Go inside cli\ from src\ build all cli files.
-cd ..\cli\
-cl /nologo /c %addnl_cdefines% %addnl_cflags% /I%root_dir%src\include\ %root_dir%cli\*.c
+cd %target_dir%obj\cli
+
+cl /nologo /c %addnl_cdefines% %addnl_cflags% /I%pocket_root%src\include\ %pocket_root%cli\*.c
 if errorlevel 1 goto :FAIL
 
+cd %target_dir%bin\
+
 :: Compile the cli executable.
-cl /nologo %addnl_cdefines% *.obj %pklib% /Fe..\bin\pocket.exe
+cl /nologo %addnl_cdefines% %target_dir%obj\cli\*.obj %pklib% /Fe%target_dir%bin\pocket.exe
 if errorlevel 1 goto :FAIL
 
 :: Navigate to the build directory.
@@ -162,8 +171,8 @@ goto :SUCCESS
 
 :CLEAN
 
-if exist "build/debug" rmdir /S /Q "build/debug"
-if exist "build/release" rmdir /S /Q "build/release"
+if exist "%pocket_root%build/Debug" rmdir /S /Q "%pocket_root%build/Debug"
+if exist "%pocket_root%build/Release" rmdir /S /Q "%pocket_root%build/Release"
 
 echo.
 echo Files were cleaned.
@@ -179,9 +188,10 @@ echo Compilation Success
 goto :END
 
 :FAIL
+popd
+endlocal
 echo Build failed. See the error messages.
 exit /b 1
-goto :END
 
 :END
 popd

@@ -6,7 +6,7 @@
 .DS_Store
 build/
 
-tests/benchmarks/report.html
+scripts/report.html
 docs/build/
 docs/static/wasm/
 
