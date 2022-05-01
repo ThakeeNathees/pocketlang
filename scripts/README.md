@@ -13,7 +13,7 @@ can download it your self at https://premake.github.io/download.
 python3 download_premake.py
 ```
 
-It will download and place the `premake.exe` (in windows) binary next to
+It will download and place the `premake5.exe` (in windows) binary next to
 it, next run the following command to generate Visual studio solution files.
 
 ```

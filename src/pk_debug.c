@@ -512,6 +512,7 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
         break;
       }
 
+      case OP_SUPER_CALL:
       case OP_METHOD_CALL:
       {
         int argc = READ_BYTE();
