@@ -8,11 +8,17 @@ import subprocess, platform
 from shutil import which
 from os.path import join, abspath, dirname, relpath, exists
 
-## The absolute path of this file, when run as a script.
-## This file is not intended to be included in other files at the moment.
+## Absolute path of this file's directory.
 THIS_PATH = abspath(dirname(__file__))
 
-## A list of benchmark directories, relative to THIS_PATH
+## Output debug cli executable's directory.
+POCKET_BINARY_DIR = abspath(join(THIS_PATH, "../build/Release/bin/"))
+
+## Pocket lang root directory. All the listed paths bellow are relative to
+## the BENCHMARKS_DIR.
+BENCHMARKS_DIR = abspath(join(THIS_PATH, "../tests/benchmarks"))
+
+## A list of benchmark directories, relative to BENCHMARKS_DIR
 BENCHMARKS = (
   "factors",
   "fib",
@@ -34,23 +40,6 @@ INTERPRETERS = {
   #'javascript' : ('node',    '.js'),
 }
 
-## Map from systems to the relative pocket binary path.
-SYSTEM_TO_POCKET_PATH = {
-  "current" : {
-    "Windows": "..\\..\\build\\release\\bin\\pocket.exe",
-    "Linux"  : "../../build/release/pocket",
-    "Darwin" : "../../build/release/pocket",
-  },
-
-  ## This maps the older version of pocket in the system path, to compare
-  ## pocketlang with it's older version.
-  "older" : {
-    "Windows": "..\\..\\build\\release\\bin\\pocket_older.exe",
-    "Linux"  : "../../build/release/pocket_older",
-    "Darwin" : "../../build/release/pocket_older",
-  }
-}
-
 ## The html template to display the report.
 HTML_TEMPLATE = "template.html"
 
@@ -63,7 +52,7 @@ def main():
     print_title(benchmark.title())
     for lang in INTERPRETERS:
       interp, ext = INTERPRETERS[lang]
-      source = abspath(join(THIS_PATH, benchmark, benchmark + ext))
+      source = abspath(join(BENCHMARKS_DIR, benchmark, benchmark + ext))
       if not exists(source): continue
       print(" %-10s : "%lang, end=''); sys.stdout.flush()
       result = subprocess.run([interp, source],
@@ -78,27 +67,32 @@ def main():
 
   display_results(results)
 
+## This will return the path of the pocket binary (on different platforms).
+## The debug version of it for enabling the assertions.
+def get_pocket_binary(name, fail):
+  system = platform.system()
+  if system not in ("Windows", "Linux", "Darwin"):
+    error_exit("Unsupported platform")
+  binary = join(POCKET_BINARY_DIR, name)
+  if system == "Windows": binary += ".exe"
+  if not exists(binary):
+    if fail: error_exit(f"Pocket interpreter not found at: '{binary}'")
+    else: return None
+  return binary
+
 ## Set the pocketlang path for the current system to the compiled output.
 def update_interpreters():
-  system = platform.system()
-  if system not in SYSTEM_TO_POCKET_PATH['current']:
-    print("Unsupported platform %s" % system)
-    sys.exit(1)
+  pocket = get_pocket_binary("pocket", True)
+  pocket_older = get_pocket_binary("pocket_older", False)
 
   global INTERPRETERS
-  pocket = abspath(join(THIS_PATH, SYSTEM_TO_POCKET_PATH['current'][system]))
-  pocket_older = abspath(join(THIS_PATH, SYSTEM_TO_POCKET_PATH['older'][system]))
-  if not exists(pocket):
-    print(f"{colmsg('Error', COL_RED)}: " +
-          "Pocket interpreter not found at: '%s'" % pocket)
-    sys.exit(1)
   INTERPRETERS['pocketlang'] = (pocket, '.pk')
 
   ## Add if older version of pocketlang if exists.
-  if exists(pocket_older):
+  if pocket_older is not None:
     INTERPRETERS['pk-older'] = (pocket_older, '.pk')
 
-  if 'python' in INTERPRETERS and system == "Windows":
+  if 'python' in INTERPRETERS and platform.system() == "Windows":
     INTERPRETERS['python'] = ('python', '.py')
   
   missing = []
@@ -241,6 +235,11 @@ def print_title(title):
   print(" %s " % title)
   _print_sep()
 
+## prints an error message to stderr and exit immediately.
+def error_exit(msg):
+  print("Error:", msg, file=sys.stderr)
+  sys.exit(1)
+  
 ## Simple color logger --------------------------------------------------------
 ## https://stackoverflow.com/a/70599663/10846399
 

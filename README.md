@@ -3,9 +3,9 @@
 <img src="https://user-images.githubusercontent.com/41085900/161365989-f3fd47bb-7ea7-4114-8e9b-2224e1193079.png" width="500" >
 </p>
 
-**Pocketlang** is a small (~3000 semicolons) and [fast](https://github.com/ThakeeNathees/pocketlang#performance)
-functional language written in C. It's syntactically similar to Ruby and it can
-be learned [within 15 minutes](https://thakeenathees.github.io/pocketlang/docs/v0.1.0/Reference/Cheat-Sheet.html).
+**Pocketlang** is a lightweight (~3000 semicolons) and [fast](https://github.com/ThakeeNathees/pocketlang#performance)
+object oriented, embeddable scripting language written in C. It has a ruby
+flavoured python syntax, that can be learned [within 15 minutes](https://thakeenathees.github.io/pocketlang/docs/v0.1.0/Reference/Cheat-Sheet.html).
 Including the compiler, bytecode VM and runtime, it's a standalone executable
 with zero external dependencies just as it's self descriptive name. The pocketlang
 VM can be embedded in another hosting program very easily.
@@ -85,7 +85,7 @@ from [msys2](https://www.msys2.org/) or [cygwin](https://www.cygwin.com/).
 
 #### Windows batch script
 ```
-build
+scripts\build.bat
 ```
 You don't have to run the script from a Visual Studio .NET developer command prompt, It'll search
 for the MSVS installation path and setup the build environment.
@@ -98,7 +98,10 @@ for the MSVS installation path and setup the build environment.
 4. Add `src/include` to include path.
 5. Compile.
 
-If you weren't able to compile it, please report us by [opening an issue](https://github.com/ThakeeNathees/pocketlang/issues/new).
+Visual studio project files can be generated with the premake, see
+[scripts/README](https://github.com/ThakeeNathees/pocketlang/scripts/README.md)
+for more information. If you weren't able to compile it, please report
+us by [opening an issue](https://github.com/ThakeeNathees/pocketlang/issues/new).
 
 
 ## References

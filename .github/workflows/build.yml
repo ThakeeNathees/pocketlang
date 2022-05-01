@@ -8,9 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Run check.py script.
+      - name: Run static checks.
         run: |
-          python3 tests/check.py
+          python3 scripts/static_check.py
   
   ## Compile and run test on linux.
   linux-build:
@@ -22,7 +22,7 @@ jobs:
           make all
       - name: Run tests.
         run: |
-          python3 tests/tests.py
+          python3 scripts/run_tests.py
 
   ## Compile and run tests on windows.
   windows-build:
@@ -31,10 +31,10 @@ jobs:
       - uses: actions/checkout@v2      
       - name: Run build batch script.
         run: |
-          cmd /c build.bat
+          cmd /c scripts\build.bat
       - name: Run tests.
         run: |
-          python3 tests/tests.py
+          python3 scripts/run_tests.py
 
   ## Compile and run tests on macos.
   macos-build:
@@ -46,6 +46,6 @@ jobs:
           make all
       - name: Run tests.
         run: |
-          python3 tests/tests.py
+          python3 scripts/run_tests.py
 
 

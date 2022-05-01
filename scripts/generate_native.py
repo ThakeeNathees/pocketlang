@@ -3,6 +3,9 @@
 ## Copyright (c) 2021-2022 Pocketlang Contributors
 ## Distributed Under The MIT License
 
+raise Exception("The paths of the files should be fixed "
+      "after this script is moved to scripts/ directory.")
+
 import re, os
 from os.path import (join, exists, abspath,
                      relpath, dirname)

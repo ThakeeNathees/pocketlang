@@ -10,15 +10,15 @@ import os, sys, re
 from os import listdir
 from os.path import join, abspath, dirname, relpath, normpath
 
-## The absolute path of this file, when run as a script.
-## This file is not intended to be included in other files at the moment.
-THIS_PATH = abspath(dirname(__file__))
+## Pocket lang root directory. All the listed paths bellow are relative to
+## the root path.
+ROOT_PATH = abspath(join(dirname(__file__), ".."))
 
 ## A list of source files, to check if the fnv1a hash values match it's
 ## corresponding cstring in the CASE_ATTRIB(name, hash) macro calls.
 HASH_CHECK_LIST = [
-  "../src/pk_core.c",
-  "../src/pk_value.c",
+  "src/pk_core.c",
+  "src/pk_value.c",
 ]
 
 ## A list of extension to perform static checks, of all the files in the
@@ -31,19 +31,19 @@ ALLOW_LONG_LINES = ('http://', 'https://', '<script ', '<link ', '<svg ')
 
 ## A list of files that are allowed to be longer than 79 characters.
 ALLOW_LONG_FILES = (
-  "../cli/native.py",
-  "../cli/modules/pknative.gen.c",
+  "cli/native.py",
+  "cli/modules/pknative.gen.c",
 )
 
 ## A list of directory, contains C source files to perform static checks.
 ## This will include all files with extension from CHECK_EXTENTIONS.
 SOURCE_DIRS = [
-  "../src/",
-  "../cli/",
-  "../cli/modules/",
+  "src/",
+  "cli/",
+  "cli/modules/",
 
-  "../docs/",
-  "../docs/wasm/",
+  "docs/",
+  "docs/wasm/",
 ]
 
 ## This global variable will be set to true if any check failed.
@@ -52,12 +52,12 @@ checks_failed = False
 ## Converts a list of relative paths from the working directory
 ## to a list of relative paths from this file's absolute directory.
 def to_abs_paths(sources):
-  return map(lambda s: os.path.join(THIS_PATH, s), sources)
+  return map(lambda s: os.path.join(ROOT_PATH, s), sources)
 
 ## Converts the path from absolute path to relative path from the
 ## toplelve of the project.
 def to_rel_path(path):
-  return relpath(path, join(THIS_PATH, '..'))
+  return relpath(path, ROOT_PATH)
   
 def main():
   check_fnv1_hash(to_abs_paths(HASH_CHECK_LIST))
@@ -126,7 +126,7 @@ def check_static(dirs):
               break
           for ignore in ALLOW_LONG_FILES:
             ## TODO: the bellow normpath(join()) should be calcuated once.
-            if curr_file == normpath(join(THIS_PATH, ignore)):
+            if curr_file == normpath(join(ROOT_PATH, ignore)):
               skip = True
               break
           if skip: continue

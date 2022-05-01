@@ -5,15 +5,18 @@
 
 import os, sys, platform
 import subprocess, json, re
-from os.path import join, abspath, dirname, relpath
+from os.path import (join, abspath, dirname,
+                     relpath, exists)
 
 ## TODO: Re-write this in doctest (https://github.com/onqtam/doctest)
 
-## The absolute path of this file, when run as a script.
-## This file is not intended to be included in other files at the moment.
-THIS_PATH = abspath(dirname(__file__))
+## Pocket lang root directory.
+ROOT_PATH = abspath(join(dirname(__file__), ".."))
 
-## All the test files.
+## Output debug cli executable path relative to root.
+POCKET_BINARY = "build/Debug/bin/pocket"
+
+## All the test files, relative to root/tests/ directory.
 TEST_SUITE = {
   "Unit Tests": (
     "lang/basics.pk",
@@ -49,13 +52,6 @@ TEST_SUITE = {
   ),
 }
 
-## Map from systems to the relative binary path
-SYSTEM_TO_BINARY_PATH = {
-  "Windows": "..\\build\\debug\\bin\\pocket.exe",
-  "Linux": "../build/debug/pocket",
-  "Darwin": "../build/debug/pocket",
-}
-
 ## This global variable will be set to true if any test failed.
 tests_failed = False
 
@@ -71,7 +67,7 @@ def run_all_tests():
   for suite in TEST_SUITE:
     print_title(suite)
     for test in TEST_SUITE[suite]:
-      path = join(THIS_PATH, test)
+      path = join(ROOT_PATH, "tests", test)
       run_test_file(pocket, test, path)
 
 def run_test_file(pocket, test, path):
@@ -94,14 +90,13 @@ def run_test_file(pocket, test, path):
 ## The debug version of it for enabling the assertions.
 def get_pocket_binary():
   system = platform.system()
-  if system not in SYSTEM_TO_BINARY_PATH:
-    error_exit("Unsupported platform %s" % system)
-
-  pocket = abspath(join(THIS_PATH, SYSTEM_TO_BINARY_PATH[system]))
-  if not os.path.exists(pocket):
-    error_exit("Pocket interpreter not found at: '%s'" % pocket)
-
-  return pocket
+  if system not in ("Windows", "Linux", "Darwin"):
+    error_exit("Unsupported platform")
+  binary = join(ROOT_PATH, POCKET_BINARY)
+  if system == "Windows": binary += ".exe"
+  if not exists(binary):
+    error_exit(f"Pocket interpreter not found at: '{binary}'")
+  return binary
 
 def run_command(command):
   return subprocess.run(command,
@@ -136,8 +131,7 @@ def print_success(msg):
   for line in msg.splitlines():
     print(COLORS['GREEN'] + line + COLORS['END'])
 
-## prints an error message to stderr and exit
-## immediately.
+## prints an error message to stderr and exit immediately.
 def error_exit(msg):
   print("Error:", msg, file=sys.stderr)
   sys.exit(1)
