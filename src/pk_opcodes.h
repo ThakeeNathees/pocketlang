@@ -224,22 +224,24 @@ OPCODE(GET_SUBSCRIPT_KEEP, 0, 1)
 OPCODE(SET_SUBSCRIPT, 0, -2)
 
 // Pop unary operand and push value.
+OPCODE(POSITIVE, 0, 0) //< Negative number value.
 OPCODE(NEGATIVE, 0, 0) //< Negative number value.
 OPCODE(NOT, 0, 0)      //< boolean not.
 OPCODE(BIT_NOT, 0, 0)  //< bitwise not.
 
 // Pop binary operands and push value.
-OPCODE(ADD, 0, -1)
-OPCODE(SUBTRACT, 0, -1)
-OPCODE(MULTIPLY, 0, -1)
-OPCODE(DIVIDE, 0, -1)
-OPCODE(MOD, 0, -1)
+// for parameter 1 byte is boolean inplace?.
+OPCODE(ADD, 1, -1)
+OPCODE(SUBTRACT, 1, -1)
+OPCODE(MULTIPLY, 1, -1)
+OPCODE(DIVIDE, 1, -1)
+OPCODE(MOD, 1, -1)
 
-OPCODE(BIT_AND, 0, -1)
-OPCODE(BIT_OR, 0, -1)
-OPCODE(BIT_XOR, 0, -1)
-OPCODE(BIT_LSHIFT, 0, -1)
-OPCODE(BIT_RSHIFT, 0, -1)
+OPCODE(BIT_AND, 1, -1)
+OPCODE(BIT_OR, 1, -1)
+OPCODE(BIT_XOR, 1, -1)
+OPCODE(BIT_LSHIFT, 1, -1)
+OPCODE(BIT_RSHIFT, 1, -1)
 
 OPCODE(EQEQ, 0, -1)
 OPCODE(NOTEQ, 0, -1)

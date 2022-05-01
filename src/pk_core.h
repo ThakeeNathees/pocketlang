@@ -10,6 +10,35 @@
 #include "pk_internal.h"
 #include "pk_value.h"
 
+// Literal strings used in various places in pocketlang. For now these are
+// defined as macros so that it'll be easier in the future to refactor or
+// restructre. The names of the macros are begin with LIST_ and the string.
+#define LITS__init      "_init"
+#define LITS__str       "_str"
+
+// Functions, methods, classes and  other names which are intrenal / special to
+// pocketlang are starts with the following character (ex: @main, @literalFn).
+// When importing all (*) from a module, if the name of an entry starts with
+// this character it'll be skipped.
+#define SPECIAL_NAME_CHAR '@'
+
+// Name of the implicit function for a module. When a module is parsed all of
+// it's statements are wrapped around an implicit function with this name.
+#define IMPLICIT_MAIN_NAME "@main"
+
+// Name of a literal function. All literal function will have the same name but
+// they're uniquely identified by their index in the script's function buffer.
+#define LITERAL_FN_NAME "@func"
+
+// Name of a constructor function.
+#define CTOR_NAME LITS__init
+
+// Getter/Setter method names used by the native instance to get/ set value.
+// Script instance's values doesn't support methods but they use vanila
+// '.attrib', '.attrib=' operators.
+#define GETTER_NAME "@getter"
+#define SETTER_NAME "@setter"
+
 // Initialize core language, builtin function and core libs.
 void initializeCore(PKVM* vm);
 
@@ -46,21 +75,33 @@ Class* getClass(PKVM* vm, Var instance);
 // If the method / attribute not found, it'll set a runtime error on the VM.
 Var getMethod(PKVM* vm, Var self, String* name, bool* is_method);
 
-Var varAdd(PKVM* vm, Var v1, Var v2);         // Returns v1 + v2.
-Var varSubtract(PKVM* vm, Var v1, Var v2);    // Returns v1 - v2.
-Var varMultiply(PKVM* vm, Var v1, Var v2);    // Returns v1 * v2.
-Var varDivide(PKVM* vm, Var v1, Var v2);      // Returns v1 / v2.
-Var varModulo(PKVM* vm, Var v1, Var v2);      // Returns v1 % v2.
+// Unlike getMethod this will not set error and will not try to get attribute
+// with the same name. It'll return true if the method exists on [self], false
+// otherwise and if the [method] argument is not NULL, method will be set.
+bool hasMethod(PKVM* vm, Var self, String* name, Closure** method);
 
-Var varBitAnd(PKVM* vm, Var v1, Var v2);      // Returns v1 & v2.
-Var varBitOr(PKVM* vm, Var v1, Var v2);       // Returns v1 | v2.
-Var varBitXor(PKVM* vm, Var v1, Var v2);      // Returns v1 ^ v2.
-Var varBitLshift(PKVM* vm, Var v1, Var v2);   // Returns v1 << v2.
-Var varBitRshift(PKVM* vm, Var v1, Var v2);   // Returns v1 >> v2.
-Var varBitNot(PKVM* vm, Var v);               // Returns ~v.
+Var varPositive(PKVM* vm, Var v); // Returns +v.
+Var varNegative(PKVM* vm, Var v); // Returns -v.
+Var varNot(PKVM* vm, Var v);      // Returns !v.
+Var varBitNot(PKVM* vm, Var v);   // Returns ~v.
 
-bool varGreater(Var v1, Var v2); // Returns v1 > v2.
-bool varLesser(Var v1, Var v2);  // Returns v1 < v2.
+Var varAdd(PKVM* vm, Var v1, Var v2, bool inplace);       // Returns v1 + v2.
+Var varSubtract(PKVM* vm, Var v1, Var v2, bool inplace);  // Returns v1 - v2.
+Var varMultiply(PKVM* vm, Var v1, Var v2, bool inplace);  // Returns v1 * v2.
+Var varDivide(PKVM* vm, Var v1, Var v2, bool inplace);    // Returns v1 / v2.
+Var varModulo(PKVM* vm, Var v1, Var v2, bool inplace);    // Returns v1 % v2.
+
+Var varBitAnd(PKVM* vm, Var v1, Var v2, bool inplace);    // Returns v1 & v2.
+Var varBitOr(PKVM* vm, Var v1, Var v2, bool inplace);     // Returns v1 | v2.
+Var varBitXor(PKVM* vm, Var v1, Var v2, bool inplace);    // Returns v1 ^ v2.
+Var varBitLshift(PKVM* vm, Var v1, Var v2, bool inplace); // Returns v1 << v2.
+Var varBitRshift(PKVM* vm, Var v1, Var v2, bool inplace); // Returns v1 >> v2.
+
+Var varEqals(PKVM* vm, Var v1, Var v2);       // Returns v1 == v2.
+Var varGreater(PKVM* vm, Var v1, Var v2);     // Returns v1 > v2.
+Var varLesser(PKVM* vm, Var v1, Var v2);      // Returns v1 < v2.
+
+Var varOpRange(PKVM* vm, Var v1, Var v2);     // Returns v1 .. v2.
 
 // Returns [elem] in [container]. Sets an error if the [container] is not an
 // iterable.

@@ -221,9 +221,16 @@ void vmYieldFiber(PKVM* vm, Var* value);
 // till the next yield or return statement, and return result.
 PkResult vmRunFiber(PKVM* vm, Fiber* fiber);
 
-// Runs the script function (if not an assertion will fail) and if the [ret] is
-// not null the return value will be set. [argv] should be the first argument
-// pointer following the rest of the arguments in an array.
+// Runs the function and if the [ret] is not NULL the return value will be set.
+// [argv] should be the first argument pointer following the rest of the
+// arguments in an array.
 PkResult vmRunFunction(PKVM* vm, Closure* fn, int argc, Var* argv, Var* ret);
+
+// Call the method on the [self], (witch has retrieved by the getMethod()
+// function) and if the [ret] is not NULL, the return value will be set.
+// [argv] should be the first argument pointer following the rest of the
+// arguments in an array.
+PkResult vmCallMethod(PKVM* vm, Var self, Closure* fn,
+                      int argc, Var* argv, Var* ret);
 
 #endif // PK_VM_H

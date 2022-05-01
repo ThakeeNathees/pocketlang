@@ -207,10 +207,16 @@ void pkClassAddMethod(PKVM* vm, PkHandle* cls,
   CHECK_ARG_NULL(fptr);
   CHECK_HANDLE_TYPE(cls, OBJ_CLASS);
 
+  // TODO:
+  // Check if the method name is valid, and validate argc for special
+  // methods (like "@getter", "@call", "+", "-", etc).
+
   Class* class_ = (Class*)AS_OBJ(cls->value);
 
   Function* fn = newFunction(vm, name, (int)strlen(name),
                              class_->owner, true, NULL, NULL);
+  fn->arity = arity;
+  fn->native = fptr;
 
   // No need to push the function to temp references of the VM
   // since it's written to the constant pool of the module and the module
@@ -218,8 +224,7 @@ void pkClassAddMethod(PKVM* vm, PkHandle* cls,
 
   Closure* method = newClosure(vm, fn);
 
-  // FIXME: name "_init" is literal everywhere.
-  if (strcmp(name, "_init") == 0) {
+  if (strcmp(name, CTOR_NAME) == 0) {
     class_->ctor = method;
 
   } else {
@@ -344,6 +349,7 @@ int pkGetArgc(const PKVM* vm) {
 }
 
 bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max) {
+  CHECK_RUNTIME();
   ASSERT(min <= max, "invalid argc range (min > max).");
 
   if (argc < min) {

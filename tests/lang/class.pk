@@ -1,49 +1,25 @@
 
-class Vec2
-  def _init(x, y)
-    self.x = x
-    self.y = y
-  end
+###############################################################################
+## Basics
+###############################################################################
 
-  def add(other)
-    return Vec2(self.x + other.x,
-                self.y + other.y)
-  end
-
-  ## Note that operator overloading / friend functions
-  ## haven't implemented at this point (to_string won't actually
-  ## override it).
-  def to_string
-    return "[${self.x}, ${self.y}]"
-  end
-
-end
-
-v1 = Vec2(1, 2); assert(v1.x == 1 and v1.y == 2)
-print("v1 = ${v1.to_string()}")
-
-v2 = Vec2(3, 4); assert(v2.x == 3 and v2.y == 4)
-print("v2 = ${v2.to_string()}")
-
-v3 = v1.add(v2); assert(v3.x == 4 and v3.y == 6)
-print("v3 = ${v3.to_string()}")
-
-
-## Default constructor crash (issue #213)
-class A
-end
-a = A()
-print(a)
-
-class B is A
-end
-
-b = B()
-assert((b is B) and (b is A))
+## TODO: write some tests here.
 
 ###############################################################################
 ## INHERITANCE
 ###############################################################################
+
+class A
+end
+
+class B is A
+end
+
+a = A()
+print(a)
+
+b = B()
+assert((b is B) and (b is A))
 
 class Shape
   def display()
@@ -95,6 +71,126 @@ assert(s is Rectangle)
 assert(s is Shape)
 assert(s.area() == 16)
 
+###############################################################################
+## OPERATOR OVERLOADING
+###############################################################################
+
+class Vec2
+  def _init(x, y)
+    self.x = x; self.y = y
+  end
+  def _str
+    return "<${self.x}, ${self.y}>"
+  end
+  def +(other)
+    return Vec2(self.x + other.x,
+                self.y + other.y)
+  end
+  def +=(other)
+    self.x += other.x
+    self.y += other.y
+    return self
+  end
+  def ==(other)
+    return self.x == other.x and self.y == other.y
+  end
+end
+
+v1 = Vec2(1, 2); assert(v1.x == 1 and v1.y == 2)
+print("v1 = $v1")
+
+assert(str(v1) == "<1, 2>")
+
+v2 = Vec2(3, 4); assert(v2.x == 3 and v2.y == 4)
+print("v2 = $v2")
+
+v3 = v1 + v2
+print("v3 = $v3")
+
+assert(v1 == Vec2(1, 2))
+
+v1 += v2
+assert(v1 == v3)
+
+class Path
+  def _init(path)
+    self.path = path
+  end
+  def /(other)
+    if other is String
+      return Path(self.path + "/" + other)
+    else if other is Path
+      return Path(self.path + "/" + other.path)
+    else
+      assert(false, "Invalid type")
+    end
+  end
+  def _str
+    return self.path
+  end
+end
+
+local = Path("/usr/local")
+pocket = Path("bin/pocket")
+print('local/pocket = "${local/pocket}"')
+assert(str(local/pocket) == "/usr/local/bin/pocket")
+assert(str(local/"lib") == "/usr/local/lib")
+
+class N
+  def _init(val)
+    self.val = val
+  end
+  def _str()
+    return "N(${self.val})"
+  end
+  def +(other)
+    return N(self.val + other.val)
+  end
+  def +=(other)
+    self.val += other.val
+    return self
+  end
+  def %=(num)
+    self.val %= num
+    return self
+  end
+  def ==(other)
+    return self.val == other.val
+  end
+  def <<(num)
+    self.val *= 10
+    self.val += num
+    return self
+  end
+  def >>(other)
+    other.val = self.val % 10
+    self.val = (self.val - other.val) / 10
+  end
+  
+  def !self()
+    self.val -= 1
+    return self.val + 1
+  end
+end
+
+n1 = N(12)
+n2 = N(23)
+assert(n1 + n2 == N(n1.val + n2.val))
+n1 %= 5
+assert(n1.val == 2)
+
+n3 = N(4) << 8 << 3 << 6
+assert(n3 == N(4836))
+
+n4 = N(0)
+n3 >> n4; assert(n4.val == 6)
+n3 >> n4; assert(n4.val == 3)
+n3 >> n4; assert(n4.val == 8)
+n3 >> n4; assert(n4.val == 4)
+
+n5 = N(3)
+assert(!n5 == 3)
+assert(!n5 == 2)
+assert(!n5 == 1)
+
 print('ALL TESTS PASSED')
-
-

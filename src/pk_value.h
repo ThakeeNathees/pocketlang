@@ -665,7 +665,7 @@ void listInsert(PKVM* vm, List* self, uint32_t index, Var value);
 Var listRemoveAt(PKVM* vm, List* self, uint32_t index);
 
 // Create a new list by joining the 2 given list and return the result.
-List* listJoin(PKVM* vm, List* l1, List* l2);
+List* listAdd(PKVM* vm, List* l1, List* l2);
 
 // Returns the value for the [key] in the map. If key not exists return
 // VAR_UNDEFINED.
@@ -717,16 +717,6 @@ void moduleSetGlobal(Module* module, int index, Var value);
 // false. Note that the body of the module should be NULL before calling this
 // function.
 void moduleAddMain(PKVM* vm, Module* module);
-
-// Get the attribut from the instance and set it [value]. On success return
-// true, if the attribute not exists it'll return false but won't set an error.
-bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value);
-
-// Set the attribute to the instance and return true on success, if the
-// attribute doesn't exists it'll return false but if the [value] type is
-// incompatible, this will set an error to the VM, which you can check with
-// VM_HAS_ERROR() macro function.
-bool instSetAttrib(PKVM* vm, Instance* inst, String* attrib, Var value);
 
 // Release all the object owned by the [self] including itself.
 void freeObject(PKVM* vm, Object* self);

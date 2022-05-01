@@ -173,14 +173,9 @@ bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var* argv) {
 
   ASSERT(fiber->stack != NULL && fiber->sp == fiber->stack + 1, OOPS);
   ASSERT(fiber->ret == fiber->stack, OOPS);
+  ASSERT((fiber->stack + fiber->stack_size) - fiber->sp >= argc, OOPS);
 
   // Pass the function arguments.
-
-  // Assert we have the first frame (to push the arguments). And assert we have
-  // enough stack space for parameters.
-  ASSERT(fiber->frame_count == 1, OOPS);
-  ASSERT(fiber->frames[0].rbp == fiber->ret, OOPS);
-  ASSERT((fiber->stack + fiber->stack_size) - fiber->sp >= argc, OOPS);
 
   // ARG1 is fiber, function arguments are ARG(2), ARG(3), ... ARG(argc).
   // And ret[0] is the return value, parameters starts at ret[1], ...
@@ -188,6 +183,18 @@ bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var* argv) {
     fiber->ret[1 + i] = *(argv + i); // +1: ret[0] is return value.
   }
   fiber->sp += argc; // Parameters.
+
+  // Native functions doesn't own a stack frame so, we're done here.
+  if (fiber->closure->fn->is_native) return true;
+
+  // Assert we have the first frame (to push the arguments). And assert we have
+  // enough stack space for parameters.
+  ASSERT(fiber->frame_count == 1, OOPS);
+  ASSERT(fiber->frames[0].rbp == fiber->ret, OOPS);
+
+  // Capture self.
+  fiber->frames[0].self = fiber->self;
+  fiber->self = VAR_UNDEFINED;
 
   // On success return true.
   return true;
@@ -245,24 +252,52 @@ void vmYieldFiber(PKVM* vm, Var* value) {
   vm->fiber = caller;
 }
 
-PkResult vmRunFunction(PKVM* vm, Closure* fn, int argc, Var* argv, Var* ret) {
+PkResult vmCallMethod(PKVM* vm, Var self, Closure* fn,
+                      int argc, Var* argv, Var* ret) {
   ASSERT(argc >= 0, "argc cannot be negative.");
   ASSERT(argc == 0 || argv != NULL, "argv was NULL when argc > 0.");
 
   Fiber* fiber = newFiber(vm, fn);
+  fiber->self = self;
   vmPushTempRef(vm, &fiber->_super); // fiber.
-  vmPrepareFiber(vm, fiber, argc, argv);
+  bool success = vmPrepareFiber(vm, fiber, argc, argv);
   vmPopTempRef(vm); // fiber.
+  if (!success) return PK_RESULT_RUNTIME_ERROR;
+
+  PkResult result;
 
   Fiber* last = vm->fiber;
   if (last != NULL) vmPushTempRef(vm, &last->_super); // last.
-  PkResult result = vmRunFiber(vm, fiber);
+  {
+    if (fiber->closure->fn->is_native) {
+
+      ASSERT(fiber->closure->fn->native != NULL, "Native function was NULL");
+      vm->fiber = fiber;
+      fiber->closure->fn->native(vm);
+      if (VM_HAS_ERROR(vm)) {
+        if (last != NULL) last->error = vm->fiber->error;
+        result = PK_RESULT_RUNTIME_ERROR;
+      } else {
+        result = PK_RESULT_SUCCESS;
+      }
+
+    } else {
+      result = vmRunFiber(vm, fiber);
+    }
+  }
   if (last != NULL) vmPopTempRef(vm); // last.
   vm->fiber = last;
 
   if (ret != NULL) *ret = *fiber->ret;
 
   return result;
+}
+
+PkResult vmRunFunction(PKVM* vm, Closure* fn, int argc, Var* argv, Var* ret) {
+
+  // Calling functions and methods are the same, except for the methods have
+  // self defined, and for functions it'll be VAR_UNDEFINED.
+  return vmCallMethod(vm, VAR_UNDEFINED, fn, argc, argv, ret);
 }
 
 /*****************************************************************************/
@@ -612,7 +647,7 @@ L_vm_main_loop:
     DEBUG_BREAK();              \
   } while (false)
 
-#if DUMP_STACK
+#if DUMP_STACK && defined(DEBUG)
   _DUMP_STACK();
 #endif
 #undef _DUMP_STACK
@@ -852,8 +887,7 @@ L_vm_main_loop:
       Closure* method = (Closure*)AS_OBJ(PEEK(-1));
       Class* cls = (Class*)AS_OBJ(PEEK(-2));
 
-      // FIXME: literal string "_inint".
-      if (strcmp(method->fn->name, "_init") == 0) {
+      if (strcmp(method->fn->name, CTOR_NAME) == 0) {
         cls->ctor = method;
       } else {
         // TODO: The method buffer should be ordered with it's name and
@@ -1318,30 +1352,48 @@ L_do_call:
       DISPATCH();
     }
 
+    OPCODE(POSITIVE):
+    {
+      // Don't pop yet, we need the reference for gc.
+      Var self = PEEK(-1);
+      Var result = varPositive(vm, self);
+      DROP(); // self
+      PUSH(result);
+
+      CHECK_ERROR();
+      DISPATCH();
+    }
+
     OPCODE(NEGATIVE):
     {
-      Var num = POP();
-      if (!IS_NUM(num)) {
-        RUNTIME_ERROR(newString(vm, "Can not negate a non numeric value."));
-      }
-      PUSH(VAR_NUM(-AS_NUM(num)));
+      // Don't pop yet, we need the reference for gc.
+      Var self = PEEK(-1);
+      Var result = varNegative(vm, self);
+      DROP(); // self
+      PUSH(result);
+
+      CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(NOT):
     {
-      Var val = POP();
-      PUSH(VAR_BOOL(!toBool(val)));
+      // Don't pop yet, we need the reference for gc.
+      Var self = PEEK(-1);
+      Var result = varNot(vm, self);
+      DROP(); // self
+      PUSH(result);
+
+      CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(BIT_NOT):
     {
       // Don't pop yet, we need the reference for gc.
-      Var val = PEEK(-1);
-
-      Var result = varBitNot(vm, val);
-      DROP(); // val
+      Var self = PEEK(-1);
+      Var result = varBitNot(vm, self);
+      DROP(); // self
       PUSH(result);
 
       CHECK_ERROR();
@@ -1355,7 +1407,8 @@ L_do_call:
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-      Var result = varAdd(vm, l, r);
+      uint8_t inplace = READ_BYTE(); ASSERT(inplace <= 1, OOPS);
+      Var result = varAdd(vm, l, r, inplace);
       DROP(); DROP(); // r, l
       PUSH(result);
 
@@ -1367,7 +1420,8 @@ L_do_call:
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-      Var result = varSubtract(vm, l, r);
+      uint8_t inplace = READ_BYTE(); ASSERT(inplace <= 1, OOPS);
+      Var result = varSubtract(vm, l, r, inplace);
       DROP(); DROP(); // r, l
       PUSH(result);
 
@@ -1379,7 +1433,8 @@ L_do_call:
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-      Var result = varMultiply(vm, l, r);
+      uint8_t inplace = READ_BYTE(); ASSERT(inplace <= 1, OOPS);
+      Var result = varMultiply(vm, l, r, inplace);
       DROP(); DROP(); // r, l
       PUSH(result);
 
@@ -1391,7 +1446,8 @@ L_do_call:
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-      Var result = varDivide(vm, l, r);
+      uint8_t inplace = READ_BYTE(); ASSERT(inplace <= 1, OOPS);
+      Var result = varDivide(vm, l, r, inplace);
       DROP(); DROP(); // r, l
       PUSH(result);
 
@@ -1403,7 +1459,8 @@ L_do_call:
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-      Var result = varModulo(vm, l, r);
+      uint8_t inplace = READ_BYTE(); ASSERT(inplace <= 1, OOPS);
+      Var result = varModulo(vm, l, r, inplace);
       DROP(); DROP(); // r, l
       PUSH(result);
 
@@ -1415,7 +1472,8 @@ L_do_call:
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-      Var result = varBitAnd(vm, l, r);
+      uint8_t inplace = READ_BYTE(); ASSERT(inplace <= 1, OOPS);
+      Var result = varBitAnd(vm, l, r, inplace);
       DROP(); DROP(); // r, l
       PUSH(result);
 
@@ -1427,8 +1485,8 @@ L_do_call:
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-
-      Var result = varBitOr(vm, l, r);
+      uint8_t inplace = READ_BYTE(); ASSERT(inplace <= 1, OOPS);
+      Var result = varBitOr(vm, l, r, inplace);
       DROP(); DROP(); // r, l
       PUSH(result);
 
@@ -1440,8 +1498,8 @@ L_do_call:
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-
-      Var result = varBitXor(vm, l, r);
+      uint8_t inplace = READ_BYTE(); ASSERT(inplace <= 1, OOPS);
+      Var result = varBitXor(vm, l, r, inplace);
       DROP(); DROP(); // r, l
       PUSH(result);
 
@@ -1453,8 +1511,8 @@ L_do_call:
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-
-      Var result = varBitLshift(vm, l, r);
+      uint8_t inplace = READ_BYTE(); ASSERT(inplace <= 1, OOPS);
+      Var result = varBitLshift(vm, l, r, inplace);
       DROP(); DROP(); // r, l
       PUSH(result);
 
@@ -1466,8 +1524,8 @@ L_do_call:
     {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
-
-      Var result = varBitRshift(vm, l, r);
+      uint8_t inplace = READ_BYTE(); ASSERT(inplace <= 1, OOPS);
+      Var result = varBitRshift(vm, l, r, inplace);
       DROP(); DROP(); // r, l
       PUSH(result);
 
@@ -1477,74 +1535,89 @@ L_do_call:
 
     OPCODE(EQEQ):
     {
-      Var r = POP(), l = POP();
-      PUSH(VAR_BOOL(isValuesEqual(l, r)));
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+      Var result = varEqals(vm, l, r);
+      DROP(); DROP(); // r, l
+      PUSH(result);
+      CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(NOTEQ):
     {
-      Var r = POP(), l = POP();
-      PUSH(VAR_BOOL(!isValuesEqual(l, r)));
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+      Var result = varEqals(vm, l, r);
+      DROP(); DROP(); // r, l
+      PUSH(VAR_BOOL(!toBool(result)));
+      CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(LT):
     {
-      Var r = POP(), l = POP();
-      PUSH(VAR_BOOL(varLesser(l, r)));
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+      Var result = varLesser(vm, l, r);
+      DROP(); DROP(); // r, l
+      PUSH(result);
       CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(LTEQ):
     {
-      Var r = POP(), l = POP();
-      bool lteq = varLesser(l, r);
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+
+      Var result = varLesser(vm, l, r);
+      CHECK_ERROR();
+      bool lteq = toBool(result);
+
+      if (!lteq) result = varEqals(vm, l, r);
       CHECK_ERROR();
 
-      if (!lteq) {
-        lteq = isValuesEqual(l, r);
-        CHECK_ERROR();
-      }
-
-      PUSH(VAR_BOOL(lteq));
+      DROP(); DROP(); // r, l
+      PUSH(result);
       DISPATCH();
     }
 
     OPCODE(GT):
     {
-      Var r = POP(), l = POP();
-      PUSH(VAR_BOOL(varGreater(l, r)));
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+      Var result = varGreater(vm, l, r);
+      DROP(); DROP(); // r, l
+      PUSH(result);
       CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(GTEQ):
     {
-      Var r = POP(), l = POP();
-      bool gteq = varGreater(l, r);
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+      Var result = varGreater(vm, l, r);
+      CHECK_ERROR();
+      bool gteq = toBool(result);
+
+      if (!gteq) result = varEqals(vm, l, r);
       CHECK_ERROR();
 
-      if (!gteq) {
-        gteq = isValuesEqual(l, r);
-        CHECK_ERROR();
-      }
-
-      PUSH(VAR_BOOL(gteq));
+      DROP(); DROP(); // r, l
+      PUSH(result);
       DISPATCH();
     }
 
     OPCODE(RANGE):
     {
-      Var to = PEEK(-1);   // Don't pop yet, we need the reference for gc.
-      Var from = PEEK(-2); // Don't pop yet, we need the reference for gc.
-      if (!IS_NUM(from) || !IS_NUM(to)) {
-        RUNTIME_ERROR(newString(vm, "Range arguments must be number."));
-      }
-      DROP(); // to
-      DROP(); // from
-      PUSH(VAR_OBJ(newRange(vm, AS_NUM(from), AS_NUM(to))));
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+      Var result = varOpRange(vm, l, r);
+      DROP(); DROP(); // r, l
+      PUSH(result);
+      CHECK_ERROR();
       DISPATCH();
     }
 

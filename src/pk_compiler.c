@@ -1559,7 +1559,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_PIPE       */ { NULL,          exprBinaryOp,     PREC_BITWISE_OR },
   /* TK_CARET      */ { NULL,          exprBinaryOp,     PREC_BITWISE_XOR },
   /* TK_ARROW      */   NO_RULE,
-  /* TK_PLUS       */ { NULL,          exprBinaryOp,     PREC_TERM },
+  /* TK_PLUS       */ { exprUnaryOp,   exprBinaryOp,     PREC_TERM },
   /* TK_MINUS      */ { exprUnaryOp,   exprBinaryOp,     PREC_TERM },
   /* TK_STAR       */ { NULL,          exprBinaryOp,     PREC_FACTOR },
   /* TK_FSLASH     */ { NULL,          exprBinaryOp,     PREC_FACTOR },
@@ -1920,26 +1920,32 @@ static void exprBinaryOp(Compiler* compiler) {
   skipNewLines(compiler);
   parsePrecedence(compiler, (Precedence)(getRule(op)->precedence + 1));
 
+  // Emits the opcode and 0 (means false) as inplace operation.
+#define EMIT_BINARY_OP_INPLACE(opcode)\
+  do { emitOpcode(compiler, opcode); emitByte(compiler, 0); } while (false)
+
   switch (op) {
-    case TK_DOTDOT:  emitOpcode(compiler, OP_RANGE);      break;
-    case TK_PERCENT: emitOpcode(compiler, OP_MOD);        break;
-    case TK_AMP:     emitOpcode(compiler, OP_BIT_AND);    break;
-    case TK_PIPE:    emitOpcode(compiler, OP_BIT_OR);     break;
-    case TK_CARET:   emitOpcode(compiler, OP_BIT_XOR);    break;
-    case TK_PLUS:    emitOpcode(compiler, OP_ADD);        break;
-    case TK_MINUS:   emitOpcode(compiler, OP_SUBTRACT);   break;
-    case TK_STAR:    emitOpcode(compiler, OP_MULTIPLY);   break;
-    case TK_FSLASH:  emitOpcode(compiler, OP_DIVIDE);     break;
-    case TK_GT:      emitOpcode(compiler, OP_GT);         break;
-    case TK_LT:      emitOpcode(compiler, OP_LT);         break;
-    case TK_EQEQ:    emitOpcode(compiler, OP_EQEQ);       break;
-    case TK_NOTEQ:   emitOpcode(compiler, OP_NOTEQ);      break;
-    case TK_GTEQ:    emitOpcode(compiler, OP_GTEQ);       break;
-    case TK_LTEQ:    emitOpcode(compiler, OP_LTEQ);       break;
-    case TK_SRIGHT:  emitOpcode(compiler, OP_BIT_RSHIFT); break;
-    case TK_SLEFT:   emitOpcode(compiler, OP_BIT_LSHIFT); break;
-    case TK_IN:      emitOpcode(compiler, OP_IN);         break;
-    case TK_IS:      emitOpcode(compiler, OP_IS);         break;
+    case TK_DOTDOT:  emitOpcode(compiler, OP_RANGE);        break;
+    case TK_PERCENT: EMIT_BINARY_OP_INPLACE(OP_MOD);        break;
+    case TK_PLUS:    EMIT_BINARY_OP_INPLACE(OP_ADD);        break;
+    case TK_MINUS:   EMIT_BINARY_OP_INPLACE(OP_SUBTRACT);   break;
+    case TK_STAR:    EMIT_BINARY_OP_INPLACE(OP_MULTIPLY);   break;
+    case TK_FSLASH:  EMIT_BINARY_OP_INPLACE(OP_DIVIDE);     break;
+    case TK_AMP:     EMIT_BINARY_OP_INPLACE(OP_BIT_AND);    break;
+    case TK_PIPE:    EMIT_BINARY_OP_INPLACE(OP_BIT_OR);     break;
+    case TK_CARET:   EMIT_BINARY_OP_INPLACE(OP_BIT_XOR);    break;
+    case TK_SRIGHT:  EMIT_BINARY_OP_INPLACE(OP_BIT_RSHIFT); break;
+    case TK_SLEFT:   EMIT_BINARY_OP_INPLACE(OP_BIT_LSHIFT); break;
+#undef EMIT_BINARY_OP_INPLACE
+
+    case TK_GT:      emitOpcode(compiler, OP_GT);    break;
+    case TK_LT:      emitOpcode(compiler, OP_LT);    break;
+    case TK_EQEQ:    emitOpcode(compiler, OP_EQEQ);  break;
+    case TK_NOTEQ:   emitOpcode(compiler, OP_NOTEQ); break;
+    case TK_GTEQ:    emitOpcode(compiler, OP_GTEQ);  break;
+    case TK_LTEQ:    emitOpcode(compiler, OP_LTEQ);  break;
+    case TK_IN:      emitOpcode(compiler, OP_IN);    break;
+    case TK_IS:      emitOpcode(compiler, OP_IS);    break;
     default:
       UNREACHABLE();
   }
@@ -1952,6 +1958,7 @@ static void exprUnaryOp(Compiler* compiler) {
 
   switch (op) {
     case TK_TILD:  emitOpcode(compiler, OP_BIT_NOT); break;
+    case TK_PLUS:  emitOpcode(compiler, OP_POSITIVE); break;
     case TK_MINUS: emitOpcode(compiler, OP_NEGATIVE); break;
     case TK_NOT:   emitOpcode(compiler, OP_NOT); break;
     default:
@@ -2361,20 +2368,25 @@ static void emitLoopJump(Compiler* compiler) {
 }
 
 static void emitAssignedOp(Compiler* compiler, TokenType assignment) {
+  // Emits the opcode and 1 (means true) as inplace operation.
+#define EMIT_BINARY_OP_INPLACE(opcode)\
+  do { emitOpcode(compiler, opcode); emitByte(compiler, 1); } while (false)
+
   switch (assignment) {
-    case TK_PLUSEQ:   emitOpcode(compiler, OP_ADD);        break;
-    case TK_MINUSEQ:  emitOpcode(compiler, OP_SUBTRACT);   break;
-    case TK_STAREQ:   emitOpcode(compiler, OP_MULTIPLY);   break;
-    case TK_DIVEQ:    emitOpcode(compiler, OP_DIVIDE);     break;
-    case TK_MODEQ:    emitOpcode(compiler, OP_MOD);        break;
-    case TK_ANDEQ:    emitOpcode(compiler, OP_BIT_AND);    break;
-    case TK_OREQ:     emitOpcode(compiler, OP_BIT_OR);     break;
-    case TK_XOREQ:    emitOpcode(compiler, OP_BIT_XOR);    break;
-    case TK_SRIGHTEQ: emitOpcode(compiler, OP_BIT_RSHIFT); break;
-    case TK_SLEFTEQ:  emitOpcode(compiler, OP_BIT_LSHIFT); break;
+    case TK_PLUSEQ:   EMIT_BINARY_OP_INPLACE(OP_ADD);        break;
+    case TK_MINUSEQ:  EMIT_BINARY_OP_INPLACE(OP_SUBTRACT);   break;
+    case TK_STAREQ:   EMIT_BINARY_OP_INPLACE(OP_MULTIPLY);   break;
+    case TK_DIVEQ:    EMIT_BINARY_OP_INPLACE(OP_DIVIDE);     break;
+    case TK_MODEQ:    EMIT_BINARY_OP_INPLACE(OP_MOD);        break;
+    case TK_ANDEQ:    EMIT_BINARY_OP_INPLACE(OP_BIT_AND);    break;
+    case TK_OREQ:     EMIT_BINARY_OP_INPLACE(OP_BIT_OR);     break;
+    case TK_XOREQ:    EMIT_BINARY_OP_INPLACE(OP_BIT_XOR);    break;
+    case TK_SRIGHTEQ: EMIT_BINARY_OP_INPLACE(OP_BIT_RSHIFT); break;
+    case TK_SLEFTEQ:  EMIT_BINARY_OP_INPLACE(OP_BIT_LSHIFT); break;
     default:
       UNREACHABLE();
       break;
+#undef EMIT_BINARY_OP_INPLACE
   }
 }
 
@@ -2497,6 +2509,67 @@ static int compileClass(Compiler* compiler) {
   return cls_index;
 }
 
+// Match operator mathod definition. This will match the operator overloading
+// method syntax of ruby.
+static bool matchOperatorMethod(Compiler* compiler,
+                                const char** name, int* length, int* argc) {
+  ASSERT((name != NULL) && (length != NULL) && (argc != NULL), OOPS);
+#define _RET(_name, _argc)                       \
+  do {                                           \
+    *name = _name; *length = (int)strlen(_name); \
+    *argc = _argc;                               \
+    return true;                                 \
+  } while (false)
+
+  if (match(compiler, TK_PLUS)) {
+    if (match(compiler, TK_SELF)) _RET("+self", 0);
+    else _RET("+", 1);
+  }
+  if (match(compiler, TK_MINUS)) {
+    if (match(compiler, TK_SELF)) _RET("-self", 0);
+    else _RET("-", 1);
+  }
+  if (match(compiler, TK_TILD)){
+    if (match(compiler, TK_SELF)) _RET("~self", 0);
+    syntaxError(compiler, compiler->parser.previous,
+                "Expected keyword self for unary operator definition.");
+    return false;
+  }
+  if (match(compiler, TK_NOT)) {
+    if (match(compiler, TK_SELF)) _RET("!self", 0);
+    syntaxError(compiler, compiler->parser.previous,
+                "Expected keyword self for unary operator definition.");
+    return false;
+  }
+
+  if (match(compiler, TK_PLUSEQ))    _RET("+=",  1);
+  if (match(compiler, TK_MINUSEQ))   _RET("-=",  1);
+  if (match(compiler, TK_STAR))      _RET("*",   1);
+  if (match(compiler, TK_STAREQ))    _RET("*=",  1);
+  if (match(compiler, TK_FSLASH))    _RET("/",   1);
+  if (match(compiler, TK_DIVEQ))     _RET("/=",  1);
+  if (match(compiler, TK_PERCENT))   _RET("%",   1);
+  if (match(compiler, TK_MODEQ))     _RET("%=",  1);
+  if (match(compiler, TK_AMP))       _RET("&",   1);
+  if (match(compiler, TK_ANDEQ))     _RET("&=",  1);
+  if (match(compiler, TK_PIPE))      _RET("|",   1);
+  if (match(compiler, TK_OREQ))      _RET("|=",  1);
+  if (match(compiler, TK_CARET))     _RET("^",   1);
+  if (match(compiler, TK_XOREQ))     _RET("^=",  1);
+  if (match(compiler, TK_SLEFT))     _RET("<<",  1);
+  if (match(compiler, TK_SLEFTEQ))   _RET("<<=", 1);
+  if (match(compiler, TK_SRIGHT))    _RET(">>",  1);
+  if (match(compiler, TK_SRIGHTEQ))  _RET(">>=", 1);
+  if (match(compiler, TK_EQEQ))      _RET("==",  1);
+  if (match(compiler, TK_GT))        _RET(">",   1);
+  if (match(compiler, TK_LT))        _RET("<",   1);
+  if (match(compiler, TK_DOTDOT))    _RET("..",  1);
+  if (match(compiler, TK_IN))        _RET("in",  1);
+
+  return false;
+#undef _RET
+}
+
 // Compile a function, if it's a literal function after this call a closure of
 // the function will be at the stack top, toplevel functions will be assigned
 // to a global variable and popped, and methods will be bind to the class and
@@ -2506,15 +2579,31 @@ static void compileFunction(Compiler* compiler, FuncType fn_type) {
   const char* name;
   int name_length;
 
+  // If it's an operator method the bellow value will set to a positive value
+  // (the argc of the method) it requires to throw a compile time error.
+  int operator_argc = -2;
+
   if (fn_type != FUNC_LITERAL) {
-    consume(compiler, TK_NAME, "Expected a function name.");
-    name = compiler->parser.previous.start;
-    name_length = compiler->parser.previous.length;
+
+    if (match(compiler, TK_NAME)) {
+      name = compiler->parser.previous.start;
+      name_length = compiler->parser.previous.length;
+
+    } else if (fn_type == FUNC_METHOD &&
+      matchOperatorMethod(compiler, &name, &name_length, &operator_argc)) {
+
+    // Check if any error has been set by operator definition.
+    } else if (!compiler->parser.has_syntax_error) {
+      syntaxError(compiler, compiler->parser.previous,
+                  "Expected a function name.");
+    }
 
   } else {
     name = LITERAL_FN_NAME;
     name_length = (int)strlen(name);
   }
+
+  if (compiler->parser.has_syntax_error) return;
 
   int fn_index;
   Function* func = newFunction(compiler->parser.vm, name, name_length,
@@ -2532,7 +2621,7 @@ static void compileFunction(Compiler* compiler, FuncType fn_type) {
     global_index = compilerAddVariable(compiler, name, name_length, name_line);
   }
 
-  if (fn_type == FUNC_METHOD && strncmp(name, "_init", name_length) == 0) {
+  if (fn_type == FUNC_METHOD && strncmp(name, CTOR_NAME, name_length) == 0) {
     fn_type = FUNC_CONSTRUCTOR;
   }
 
@@ -2574,6 +2663,11 @@ static void compileFunction(Compiler* compiler, FuncType fn_type) {
     } while (match(compiler, TK_COMMA));
 
     consume(compiler, TK_RPARAN, "Expected ')' after parameter list.");
+  }
+
+  if (operator_argc >= 0 && argc != operator_argc) {
+    semanticError(compiler, compiler->parser.previous,
+                  "Expected exactly %d parameters.", operator_argc);
   }
 
   func->arity = argc;

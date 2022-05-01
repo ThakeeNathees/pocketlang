@@ -389,6 +389,8 @@ Upvalue* newUpvalue(PKVM* vm, Var* value) {
 }
 
 Fiber* newFiber(PKVM* vm, Closure* closure) {
+  ASSERT(closure->fn->arity >= -1, OOPS);
+
   Fiber* fiber = ALLOCATE(vm, Fiber);
 
   // Not sure why this memset is needed here. If it doesn't then remove it.
@@ -404,6 +406,10 @@ Fiber* newFiber(PKVM* vm, Closure* closure) {
     // there won't be any locals or temps (which are belongs to the
     // native "C" stack).
     int stack_size = utilPowerOf2Ceil(closure->fn->arity + 1);
+
+    // We need at least 1 stack slot for the return value.
+    if (stack_size == 0) stack_size++;
+
     fiber->stack = ALLOCATE_ARRAY(vm, Var, stack_size);
     fiber->stack_size = stack_size;
     fiber->ret = fiber->stack;
@@ -697,7 +703,7 @@ Var listRemoveAt(PKVM* vm, List* self, uint32_t index) {
   return removed;
 }
 
-List* listJoin(PKVM* vm, List* l1, List* l2) {
+List* listAdd(PKVM* vm, List* l1, List* l2) {
 
   // Optimize end case.
   if (l1->elements.count == 0) return l2;
@@ -706,10 +712,10 @@ List* listJoin(PKVM* vm, List* l1, List* l2) {
   uint32_t size = l1->elements.count + l2->elements.count;
   List* list = newList(vm, size);
 
-  vmPushTempRef(vm, &list->_super);
+  vmPushTempRef(vm, &list->_super); // list.
   pkVarBufferConcat(&list->elements, vm, &l1->elements);
   pkVarBufferConcat(&list->elements, vm, &l2->elements);
-  vmPopTempRef(vm);
+  vmPopTempRef(vm); // list.
 
   return list;
 }
@@ -1080,38 +1086,6 @@ void moduleAddMain(PKVM* vm, Module* module) {
                   VAR_OBJ(module->body));
 }
 
-bool instGetAttrib(PKVM* vm, Instance* inst, String* attrib, Var* value) {
-  ASSERT((inst != NULL) && (attrib != NULL) && (value != NULL), OOPS);
-
-  if (inst->native != NULL) {
-    TODO;
-  }
-
-  Var value_ = mapGet(inst->attribs, VAR_OBJ(attrib));
-  if (IS_UNDEF(value_)) return false;
-
-  *value = value_;
-  return true;
-}
-
-bool instSetAttrib(PKVM* vm, Instance* inst, String* attrib, Var value) {
-  ASSERT((inst != NULL) && (attrib != NULL), OOPS);
-
-  if (inst->native != NULL) {
-    // Try setting the attribute from the native interface, and if success, we
-    // should return. otherwise the code will "fall through" and set on it's
-    // dynamic attributes map.
-    TODO;
-
-    // FIXME:
-    // Only return true if attribute have been set.
-    return true;
-  }
-
-  mapSet(vm, inst->attribs, VAR_OBJ(attrib), value);
-  return true;
-}
-
 /*****************************************************************************/
 /* UTILITY FUNCTIONS                                                         */
 /*****************************************************************************/
@@ -1221,6 +1195,11 @@ bool isValuesSame(Var v1, Var v2) {
 
 bool isValuesEqual(Var v1, Var v2) {
   if (isValuesSame(v1, v2)) return true;
+
+  // +0 and -0 have different bit value representations.
+  if (IS_NUM(v1) && IS_NUM(v2)) {
+    return AS_NUM(v1) == AS_NUM(v2);
+  }
 
   // If we reach here only heap allocated objects could be compared.
   if (!IS_OBJ(v1) || !IS_OBJ(v2)) return false;

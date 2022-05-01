@@ -13,6 +13,7 @@
 /* STD MODULE SOURCES                                                        */
 /*****************************************************************************/
 
+#include "modules/std_dummy.c"
 #include "modules/std_io.c"
 #include "modules/std_path.c"
 #include "modules/std_math.c"
