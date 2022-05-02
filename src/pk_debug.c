@@ -170,6 +170,43 @@ void reportCompileTimeError(PKVM* vm, const char* path, int line,
   pkByteBufferClear(&buff, vm);
 }
 
+static void _reportStackFrame(PKVM* vm, CallFrame* frame) {
+  pkWriteFn writefn = vm->config.stderr_write;
+  const Function* fn = frame->closure->fn;
+  ASSERT(!fn->is_native, OOPS);
+
+  // After fetching the instruction the ip will be inceased so we're
+  // reducing it by 1. But stack overflows are occure before executing
+  // any instruction of that function, so the instruction_index possibly
+  // be -1 (set it to zero in that case).
+  int instruction_index = frame->ip - fn->fn->opcodes.data - 1;
+  if (instruction_index == -1) instruction_index++;
+
+  int line = fn->fn->oplines.data[instruction_index];
+
+  if (fn->owner->path == NULL) {
+
+    writefn(vm, "  [at:");
+    char buff[STR_INT_BUFF_SIZE];
+    sprintf(buff, "%2d", line);
+    writefn(vm, buff);
+    writefn(vm, "] ");
+    writefn(vm, fn->name);
+    writefn(vm, "()\n");
+
+  } else {
+    writefn(vm, "  ");
+    writefn(vm, fn->name);
+    writefn(vm, "() [");
+    writefn(vm, fn->owner->path->data);
+    writefn(vm, ":");
+    char buff[STR_INT_BUFF_SIZE];
+    sprintf(buff, "%d", line);
+    writefn(vm, buff);
+    writefn(vm, "]\n");
+  }
+}
+
 void reportRuntimeError(PKVM* vm, Fiber* fiber) {
 
   pkWriteFn writefn = vm->config.stderr_write;
@@ -180,36 +217,36 @@ void reportRuntimeError(PKVM* vm, Fiber* fiber) {
   writefn(vm, fiber->error->data);
   writefn(vm, "\n");
 
-  // Stack trace.
-  for (int i = fiber->frame_count - 1; i >= 0; i--) {
-    CallFrame* frame = &fiber->frames[i];
-    const Function* fn = frame->closure->fn;
-    ASSERT(!fn->is_native, OOPS);
-    int line = fn->fn->oplines.data[frame->ip - fn->fn->opcodes.data - 1];
+  // If the stack frames are greater than 2 * max_dump_frames + 1,
+  // we're only print the first [max_dump_frames] and last [max_dump_frames]
+  // lines.
+  int max_dump_frames = 10;
 
-    if (fn->owner->path == NULL) {
-
-      writefn(vm, "  [at:");
-      char buff[STR_INT_BUFF_SIZE];
-      sprintf(buff, "%2d", line);
-      writefn(vm, buff);
-      writefn(vm, "] ");
-      writefn(vm, fn->name);
-      writefn(vm, "()\n");
-
-    } else {
-      writefn(vm, "  ");
-      writefn(vm, fn->name);
-      writefn(vm, "() [");
-      writefn(vm, fn->owner->path->data);
-      writefn(vm, ":");
-      char buff[STR_INT_BUFF_SIZE];
-      sprintf(buff, "%d", line);
-      writefn(vm, buff);
-      writefn(vm, "]\n");
+  if (fiber->frame_count > 2 * max_dump_frames) {
+    for (int i =  0; i < max_dump_frames; i++) {
+      CallFrame* frame = &fiber->frames[fiber->frame_count - 1 - i];
+      _reportStackFrame(vm, frame);
     }
 
+    int skipped_count = fiber->frame_count - max_dump_frames * 2;
+    writefn(vm, "  ...  skipping ");
+    char buff[STR_INT_BUFF_SIZE];
+    sprintf(buff, "%d", skipped_count);
+    writefn(vm, buff);
+    writefn(vm, " stack frames\n");
+
+    for (int i = max_dump_frames; i >= 0; i--) {
+      CallFrame* frame = &fiber->frames[i];
+      _reportStackFrame(vm, frame);
+    }
+
+  } else {
+    for (int i = fiber->frame_count - 1; i >= 0; i--) {
+      CallFrame* frame = &fiber->frames[i];
+      _reportStackFrame(vm, frame);
+    }
   }
+
 }
 
 // Opcode names array.

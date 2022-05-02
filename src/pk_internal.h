@@ -54,6 +54,11 @@
 // header for more information on Nan-tagging.
 #define VAR_NAN_TAGGING 1
 
+// The maximum size of the pocketlang stack. This value is arbitrary. currently
+// it's 800 KB. Change this to any value upto 2147483647 (signed integer max)
+// if you want.
+#define MAX_STACK_SIZE 1024 * 800
+
 // The maximum number of argument a pocketlang function supported to call. This
 // value is arbitrary and feel free to change it. (Just used this limit for an
 // internal buffer to store values before calling a new fiber).
