@@ -333,8 +333,13 @@ static inline Var importModule(PKVM* vm, String* key) {
 
 void vmEnsureStackSize(PKVM* vm, int size) {
 
+  if (size >= (MAX_STACK_SIZE / sizeof(Var))) {
+    VM_SET_ERROR(vm, newString(vm, "Maximum stack limit reached."));
+    return;
+  }
+
   Fiber* fiber = vm->fiber;
-  if (fiber->stack_size > size) return;
+  if (fiber->stack_size >= size) return;
 
   int new_size = utilPowerOf2Ceil(size);
 
@@ -378,8 +383,11 @@ void vmEnsureStackSize(PKVM* vm, int size) {
   }
 }
 
-static inline void pushCallFrame(PKVM* vm, const Closure* closure, Var* rbp) {
+// The return address for the next call frame (rbp) has to be set to the
+// fiber's ret (fiber->ret == next rbp).
+static inline void pushCallFrame(PKVM* vm, const Closure* closure) {
   ASSERT(!closure->fn->is_native, OOPS);
+  ASSERT(vm->fiber->ret != NULL, OOPS);
 
   // Grow the stack frame if needed.
   if (vm->fiber->frame_count + 1 > vm->fiber->frame_capacity) {
@@ -391,12 +399,12 @@ static inline void pushCallFrame(PKVM* vm, const Closure* closure, Var* rbp) {
   }
 
   // Grow the stack if needed.
-  int needed = (closure->fn->fn->stack_size +
-                (int)(vm->fiber->sp - vm->fiber->stack));
+  int current_stack_slots = (int)(vm->fiber->sp - vm->fiber->stack) + 1;
+  int needed = closure->fn->fn->stack_size + current_stack_slots;
   vmEnsureStackSize(vm, needed);
 
   CallFrame* frame = vm->fiber->frames + vm->fiber->frame_count++;
-  frame->rbp = rbp;
+  frame->rbp = vm->fiber->ret;
   frame->closure = closure;
   frame->ip = closure->fn->fn->opcodes.data;
 
@@ -927,6 +935,8 @@ L_vm_main_loop:
 
         ASSERT(imported->body != NULL, OOPS);
 
+        UPDATE_FRAME(); //< Update the current frame's ip.
+
         // Note that we're setting the main function's return address to the
         // module itself (for every other function we'll push a null at the rbp
         // before calling them and it'll be returned without modified if the
@@ -934,11 +944,11 @@ L_vm_main_loop:
         // body of the module, so the main function will return what's at the
         // rbp without modifying it. So at the end of the main function the
         // stack top would be the module itself.
-        Var* module_ret = fiber->sp - 1;
+        fiber->ret = fiber->sp - 1;
+        pushCallFrame(vm, imported->body);
 
-        UPDATE_FRAME(); //< Update the current frame's ip.
-        pushCallFrame(vm, imported->body, module_ret);
         LOAD_FRAME();  //< Load the top frame to vm's execution variables.
+        CHECK_ERROR(); //< Stack overflow.
       }
 
       DISPATCH();
@@ -1076,8 +1086,9 @@ L_do_call:
                  (instruction == OP_SUPER_CALL), OOPS);
 
           UPDATE_FRAME(); //< Update the current frame's ip.
-          pushCallFrame(vm, closure, fiber->ret);
+          pushCallFrame(vm, closure);
           LOAD_FRAME();  //< Load the top frame to vm's execution variables.
+          CHECK_ERROR(); //< Stack overflow.
         }
       }
 
