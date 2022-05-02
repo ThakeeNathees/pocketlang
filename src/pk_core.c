@@ -968,21 +968,31 @@ Class* getClass(PKVM* vm, Var instance) {
   return inst->cls;
 }
 
-bool hasMethod(PKVM* vm, Var self, String* name, Closure** _method) {
-  Class* cls = getClass(vm, self);
-  ASSERT(cls != NULL, OOPS);
-
+// Returns a method on a class (it'll walk up the inheritance tree to search
+// and if the method not found, it'll return NULL.
+static inline Closure* clsGetMethod(Class* cls, String* name) {
   Class* cls_ = cls;
   do {
     for (int i = 0; i < (int)cls_->methods.count; i++) {
       Closure* method_ = cls_->methods.data[i];
       if (IS_CSTR_EQ(name, method_->fn->name, name->length)) {
-        if (_method) *_method = method_;
-        return true;
+        return method_;
       }
     }
     cls_ = cls_->super_class;
   } while (cls_ != NULL);
+  return NULL;
+}
+
+bool hasMethod(PKVM* vm, Var self, String* name, Closure** _method) {
+  Class* cls = getClass(vm, self);
+  ASSERT(cls != NULL, OOPS);
+
+  Closure* method_ = clsGetMethod(cls, name);
+  if (method_ != NULL) {
+    *_method = method_;
+    return true;
+  }
 
   return false;
 }
@@ -998,6 +1008,22 @@ Var getMethod(PKVM* vm, Var self, String* name, bool* is_method) {
   // If the attribute not found it'll set an error.
   if (is_method) *is_method = false;
   return varGetAttrib(vm, self, name);
+}
+
+Closure* getSuperMethod(PKVM* vm, Var self, String* name) {
+  Class* super = getClass(vm, self)->super_class;
+  if (super == NULL) {
+    VM_SET_ERROR(vm, stringFormat(vm, "'$' object has no parent class.", \
+                 varTypeName(self)));
+    return NULL;
+  };
+
+  Closure* method = clsGetMethod(super, name);
+  if (method == NULL) {
+    VM_SET_ERROR(vm, stringFormat(vm, "'@' class has no method named '@'.", \
+                 super->name, name));
+  }
+  return method;
 }
 
 #define UNSUPPORTED_UNARY_OP(op)                                   \

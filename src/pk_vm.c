@@ -889,12 +889,9 @@ L_vm_main_loop:
 
       if (strcmp(method->fn->name, CTOR_NAME) == 0) {
         cls->ctor = method;
-      } else {
-        // TODO: The method buffer should be ordered with it's name and
-        // inserted in a way to preserve the order to implement binary search
-        // to find a method.
-        pkClosureBufferWrite(&cls->methods, vm, method);
       }
+
+      pkClosureBufferWrite(&cls->methods, vm, method);
 
       DROP();
       DISPATCH();
@@ -952,14 +949,28 @@ L_vm_main_loop:
       Var callable;
       const Closure* closure;
 
+      uint16_t index; //< To get the method name.
+      String* name; //< The method name.
+
+    OPCODE(SUPER_CALL):
+        argc = READ_BYTE();
+        fiber->ret = (fiber->sp - argc - 1);
+        fiber->self = *fiber->ret; //< Self for the next call.
+        index = READ_SHORT();
+        name = moduleGetStringAt(module, (int)index);
+        Closure* super_method = getSuperMethod(vm, fiber->self, name);
+        CHECK_ERROR(); // Will return if super_method is NULL.
+        callable = VAR_OBJ(super_method);
+      goto L_do_call;
+
     OPCODE(METHOD_CALL):
       argc = READ_BYTE();
       fiber->ret = (fiber->sp - argc - 1);
       fiber->self = *fiber->ret; //< Self for the next call.
 
-      uint16_t index = READ_SHORT();
+      index = READ_SHORT();
+      name = moduleGetStringAt(module, (int)index);
       bool is_method;
-      String* name = moduleGetStringAt(module, (int)index);
       callable = getMethod(vm, fiber->self, name, &is_method);
       CHECK_ERROR();
       goto L_do_call;
@@ -1055,16 +1066,18 @@ L_do_call:
 
       } else {
 
-        if (instruction == OP_CALL || instruction == OP_METHOD_CALL) {
+        if (instruction == OP_TAIL_CALL) {
+          reuseCallFrame(vm, closure);
+          LOAD_FRAME();  //< Re-load the frame to vm's execution variables.
+
+        } else {
+          ASSERT((instruction == OP_CALL) ||
+                 (instruction == OP_METHOD_CALL) ||
+                 (instruction == OP_SUPER_CALL), OOPS);
+
           UPDATE_FRAME(); //< Update the current frame's ip.
           pushCallFrame(vm, closure, fiber->ret);
           LOAD_FRAME();  //< Load the top frame to vm's execution variables.
-
-        } else {
-          ASSERT(instruction == OP_TAIL_CALL, OOPS);
-
-          reuseCallFrame(vm, closure);
-          LOAD_FRAME();  //< Re-load the frame to vm's execution variables.
         }
       }
 

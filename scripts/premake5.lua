@@ -68,13 +68,3 @@ project "pocket_cli"
           cli_dir .. "**.h" }
   includedirs ({ src_dir .. "include/" })
   links { "pocket_static" }
-
-  
-  
-
-
-
-
-
-
-

@@ -133,7 +133,14 @@ OPCODE(POP, 0, -1)
 // params: 2 byte name index.
 OPCODE(IMPORT, 2, 1)
 
-// Call a method on the variable at the stack top. See opcode CALL for detail.
+// Call a super class's method on the variable at (stack_top - argc).
+// See opcode CALL for detail.
+// params: 2 bytes method name index in the constant pool.
+//         1 byte argc.
+OPCODE(SUPER_CALL, 3, -0) //< Stack size will be calculated at compile time.
+
+// Call a method on the variable at (stack_top - argc). See opcode CALL for
+// detail.
 // params: 2 bytes method name index in the constant pool.
 //         1 byte argc.
 OPCODE(METHOD_CALL, 3, -0) //< Stack size will be calculated at compile time.

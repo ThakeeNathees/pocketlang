@@ -127,7 +127,7 @@ typedef enum {
   TK_TRUE,       // true
   TK_FALSE,      // false
   TK_SELF,       // self
-  // TODO: TK_SUPER
+  TK_SUPER,      // super
 
   TK_DO,         // do
   TK_THEN,       // then
@@ -191,6 +191,7 @@ static _Keyword _keywords[] = {
   { "true",     4, TK_TRUE     },
   { "false",    5, TK_FALSE    },
   { "self",     4, TK_SELF     },
+  { "super",    5, TK_SUPER    },
   { "do",       2, TK_DO       },
   { "then",     4, TK_THEN     },
   { "while",    5, TK_WHILE    },
@@ -1533,6 +1534,7 @@ static void exprSubscript(Compiler* compiler);
 static void exprValue(Compiler* compiler);
 
 static void exprSelf(Compiler* compiler);
+static void exprSuper(Compiler* compiler);
 
 #define NO_RULE { NULL,          NULL,          PREC_NONE }
 #define NO_INFIX PREC_NONE
@@ -1600,7 +1602,8 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_NOT        */ { exprUnaryOp,   NULL,             PREC_UNARY },
   /* TK_TRUE       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_FALSE      */ { exprValue,     NULL,             NO_INFIX },
-  /* TK_FALSE      */ { exprSelf,      NULL,             NO_INFIX },
+  /* TK_SELF       */ { exprSelf,      NULL,             NO_INFIX },
+  /* TK_SUPER      */ { exprSuper,     NULL,             NO_INFIX },
   /* TK_DO         */   NO_RULE,
   /* TK_THEN       */   NO_RULE,
   /* TK_WHILE      */   NO_RULE,
@@ -2020,7 +2023,9 @@ static void exprMap(Compiler* compiler) {
 // is OP_METHOD_CALL the [method] should refer a string in the module's
 // constant pool, otherwise it's ignored.
 static void _compileCall(Compiler* compiler, Opcode call_type, int method) {
-  ASSERT((call_type == OP_CALL) || (call_type == OP_METHOD_CALL), OOPS);
+  ASSERT((call_type == OP_CALL) ||
+         (call_type == OP_METHOD_CALL) ||
+         (call_type == OP_SUPER_CALL), OOPS);
 
   // Compile parameters.
   int argc = 0;
@@ -2038,7 +2043,7 @@ static void _compileCall(Compiler* compiler, Opcode call_type, int method) {
 
   emitByte(compiler, argc);
 
-  if (call_type == OP_METHOD_CALL) {
+  if ((call_type == OP_METHOD_CALL) || (call_type == OP_SUPER_CALL)) {
     ASSERT_INDEX(method, (int)compiler->module->constants.count);
     emitShort(compiler, method);
   }
@@ -2144,6 +2149,42 @@ static void exprSelf(Compiler* compiler) {
     semanticError(compiler, compiler->parser.previous,
                   "TODO: Closures cannot capture 'self' for now.");
   }
+}
+
+static void exprSuper(Compiler* compiler) {
+
+  if (compiler->func->type != FUNC_CONSTRUCTOR &&
+      compiler->func->type != FUNC_METHOD) {
+    semanticError(compiler, compiler->parser.previous,
+                  "Invalid use of 'super'.");
+    return;
+  }
+
+  ASSERT(compiler->func->ptr != NULL, OOPS);
+
+  int index = 0;
+  const char* name = compiler->func->ptr->name;
+  int name_length = -1;
+
+  if (!match(compiler, TK_LPARAN)) { // super.method().
+    consume(compiler, TK_DOT, "Invalid use of 'super'.");
+
+    consume(compiler, TK_NAME, "Expected a method name after 'super'.");
+    name = compiler->parser.previous.start;
+    name_length = compiler->parser.previous.length;
+
+    consume(compiler, TK_LPARAN, "Expected symbol '('.");
+
+  } else { // super().
+    name_length = (int)strlen(name);
+  }
+
+  if (compiler->parser.has_syntax_error) return;
+
+  emitOpcode(compiler, OP_PUSH_SELF);
+  moduleAddString(compiler->module, compiler->parser.vm,
+                  name, name_length, &index);
+  _compileCall(compiler, OP_SUPER_CALL, index);
 }
 
 static void parsePrecedence(Compiler* compiler, Precedence precedence) {

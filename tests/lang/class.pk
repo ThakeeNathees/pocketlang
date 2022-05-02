@@ -193,4 +193,44 @@ assert(!n5 == 3)
 assert(!n5 == 2)
 assert(!n5 == 1)
 
+###############################################################################
+## SUPER CLASS METHOD
+###############################################################################
+
+class A
+  def _init()
+    print("A init")
+  end
+  def foo()
+    print("A foo")
+    ret = self.bar()
+    assert(ret == "B.bar")
+    return "A.foo"
+  end
+  def bar()
+    print("A bar")
+    return "A.bar"
+  end
+end
+
+class B is A
+  def _init()
+    super()
+    print("B init")
+  end  
+  def foo()
+    print("B foo")
+    ret = super()
+    assert(ret == "A.foo")
+    return super.bar()
+  end
+  def bar()
+    print("B bar")
+    return "B.bar"
+  end
+end
+
+b = B()
+assert(b.foo() == "A.bar")
+
 print('ALL TESTS PASSED')
