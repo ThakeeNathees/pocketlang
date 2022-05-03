@@ -50,6 +50,10 @@
 // Dump the stack values and the globals.
 #define DUMP_STACK 0
 
+// Trace memory allocations. Enable this and redirect the trace dump to a file
+// and run the script leak_detect.py to check for memory leaks.
+#define TRACE_MEMORY 0
+
 // Nan-Tagging could be disable for debugging/portability purposes. See "var.h"
 // header for more information on Nan-tagging.
 #define VAR_NAN_TAGGING 1
@@ -79,20 +83,30 @@
 
 // Allocate object of [type] using the vmRealloc function.
 #define ALLOCATE(vm, type) \
-    ((type*)vmRealloc(vm, NULL, 0, sizeof(type)))
+  ((type*)vmRealloc(vm, NULL, 0, sizeof(type)))
 
 // Allocate object of [type] which has a dynamic tail array of type [tail_type]
 // with [count] entries.
 #define ALLOCATE_DYNAMIC(vm, type, count, tail_type) \
-    ((type*)vmRealloc(vm, NULL, 0, sizeof(type) + sizeof(tail_type) * (count)))
+  ((type*)vmRealloc(vm, NULL, 0, sizeof(type) + sizeof(tail_type) * (count)))
 
 // Allocate [count] amount of object of [type] array.
 #define ALLOCATE_ARRAY(vm, type, count) \
-    ((type*)vmRealloc(vm, NULL, 0, sizeof(type) * (count)))
+  ((type*)vmRealloc(vm, NULL, 0, sizeof(type) * (count)))
 
 // Deallocate a pointer allocated by vmRealloc before.
-#define DEALLOCATE(vm, pointer) \
-    vmRealloc(vm, pointer, 0, 0)
+#define DEALLOCATE(vm, pointer, type) \
+  vmRealloc(vm, pointer, sizeof(type), 0)
+
+// Deallocate object of [type] which has a dynamic tail array of type
+// [tail_type] with [count] entries.
+#define DEALLOCATE_DYNAMIC(vm, pointer, type, count, tail_type) \
+  ((type*)vmRealloc(vm, pointer,                                \
+    sizeof(type) + sizeof(tail_type) * (count), 0))
+
+// Deallocate [count] amount of object of [type] array.
+#define DEALLOCATE_ARRAY(vm, pointer, type, count) \
+  ((type*)vmRealloc(vm, pointer, sizeof(type) * (count), 0))
 
 /*****************************************************************************/
 /* REUSABLE INTERNAL MACROS                                                  */
