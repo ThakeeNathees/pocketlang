@@ -70,11 +70,10 @@ typedef struct PKVM PKVM;
 typedef struct PkHandle PkHandle;
 
 typedef enum PkVarType PkVarType;
-typedef enum PkErrorType PkErrorType;
-typedef enum PkResult PkResult;
-typedef struct PkStringPtr PkStringPtr;
-typedef struct PkConfiguration PkConfiguration;
-typedef struct PkCompileOptions PkCompileOptions;
+typedef enum PkResult PkResult; //< _2rf_: Remove unexp EOF.
+typedef struct PkStringPtr PkStringPtr; //< _2rf_
+typedef struct PkConfiguration PkConfiguration; //< _2rf_
+typedef struct PkCompileOptions PkCompileOptions; //< _2rf_
 
 // C function pointer which is callable from pocketLang by native module
 // functions.
@@ -92,23 +91,22 @@ typedef void (*pkNativeFn)(PKVM* vm);
 //   function will return NULL.
 typedef void* (*pkReallocFn)(void* memory, size_t new_size, void* user_data);
 
-// Error callback function pointer. For runtime error it'll call first with
-// PK_ERROR_RUNTIME followed by multiple callbacks with PK_ERROR_STACKTRACE.
-// The error messages should be written to stderr.
-typedef void (*pkErrorFn) (PKVM* vm, PkErrorType type,
-                           const char* file, int line,
-                           const char* message);
-
 // Function callback to write [text] to stdout or stderr.
 typedef void (*pkWriteFn) (PKVM* vm, const char* text);
 
 // A function callback to read a line from stdin. The returned string shouldn't
-// contain a line ending (\n or \r\n).
-typedef PkStringPtr (*pkReadFn) (PKVM* vm);
+// contain a line ending (\n or \r\n). The returned string **must** be
+// allocated with pkAllocString() and the VM will claim the ownership of the
+// string.
+typedef char* (*pkReadFn) (PKVM* vm);
 
+// _2rf_: Remove this.
+//
 // A function callback symbol for clean/free the pkStringResult.
 typedef void (*pkResultDoneFn) (PKVM* vm, PkStringPtr result);
 
+// _2rf_: Remove the duplicate (migration).
+//
 // A function callback to resolve the import script name from the [from] path
 // to an absolute (or relative to the cwd). This is required to solve same
 // script imported with different relative path. Set the string attribute to
@@ -116,10 +114,19 @@ typedef void (*pkResultDoneFn) (PKVM* vm, PkStringPtr result);
 typedef PkStringPtr (*pkResolvePathFn) (PKVM* vm, const char* from,
                                         const char* path);
 
+// A function callback to resolve the import script name from the [from]
+// path to an absolute (or relative to the cwd). This is required to solve
+// same script imported with different relative path. Return NULL to indicate
+// failure to resolve. Otherwise the string **must** be allocated with
+// pkAllocString() and the VM will claim the ownership of the string.
+typedef char* (*pkResolvePathFn_2rf_) (PKVM* vm, const char* from,
+                                       const char* path);
+
 // Load and return the script. Called by the compiler to fetch initial source
-// code and source for import statements. Set the string attribute to NULL
-// to indicate if it's failed to load the script.
-typedef PkStringPtr (*pkLoadScriptFn) (PKVM* vm, const char* path);
+// code and source for import statements. Return NULL to indicate failure to
+// load. Otherwise the string **must** be allocated with pkAllocString() and
+// the VM will claim the ownership of the string.
+typedef char* (*pkLoadScriptFn) (PKVM* vm, const char* path);
 
 // A function callback to allocate and return a new instance of the registered
 // class. Which will be called when the instance is constructed. The returned/
@@ -240,6 +247,16 @@ PK_PUBLIC void pkSetUserData(PKVM* vm, void* user_data);
 
 // Returns the associated user data.
 PK_PUBLIC void* pkGetUserData(const PKVM* vm);
+
+// Allocate memory with [size] and return it. This function should be called 
+// when the host application want to send strings to the PKVM that are claimed
+// by the VM once allocated.
+PK_PUBLIC char* pkAllocString(PKVM* vm, size_t size);
+
+// Complementary function to pkAllocString. This should not be called if the
+// string is returned to the VM. Since PKVM will claim the ownership and
+// deallocate the string itself.
+PK_PUBLIC void pkDeAllocString(PKVM* vm, char* ptr);
 
 // Release the handle and allow its value to be garbage collected. Always call
 // this for every handles before freeing the VM.

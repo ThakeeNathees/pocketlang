@@ -8,6 +8,9 @@
 
 #include "include/pocketlang.h"
 
+#include <stddef.h>
+#include <stdio.h>
+
 #include "pk_core.h"
 #include "pk_value.h"
 #include "pk_vm.h"
@@ -58,15 +61,33 @@
 // configuration if the host doesn't provided any allocators for us.
 static void* defaultRealloc(void* memory, size_t new_size, void* _);
 
+static void stderrWrite(PKVM* vm, const char* text);
+static void stdoutWrite(PKVM* vm, const char* text);
+static char* stdinRead(PKVM* vm);
+static char* loadScript(PKVM* vm, const char* path);
+
+char* pkAllocString(PKVM* vm, size_t size) {
+  ASSERT(vm->config.realloc_fn != NULL, "PKVM's allocator was NULL.");
+  return (char*) vm->config.realloc_fn(NULL, size, vm->config.user_data);
+}
+
+#define STR_TO_RAWSTR(str) \
+  (_RawString*) ((((uint8_t*) (str)) - offsetof(_RawString, ptr)))
+
+void pkDeAllocString(PKVM* vm, char* str) {
+  ASSERT(vm->config.realloc_fn != NULL, "PKVM's allocator was NULL.");
+  vm->config.realloc_fn(str, 0, vm->config.user_data);
+}
+
 PkConfiguration pkNewConfiguration() {
   PkConfiguration config;
   config.realloc_fn = defaultRealloc;
 
-  config.stdout_write = NULL;
-  config.stderr_write = NULL;
-  config.stdin_read = NULL;
+  config.stdout_write = stdoutWrite;
+  config.stderr_write = stderrWrite;
+  config.stdin_read = stdinRead;
 
-  config.load_script_fn = NULL;
+  config.load_script_fn = loadScript;
   config.resolve_path_fn = NULL;
 
   config.use_ansi_color = false;
@@ -541,4 +562,64 @@ static void* defaultRealloc(void* memory, size_t new_size, void* _) {
     return NULL;
   }
   return realloc(memory, new_size);
+}
+
+static void stderrWrite(PKVM* vm, const char* text) {
+  fprintf(stderr, "%s", text);
+}
+
+static void stdoutWrite(PKVM* vm, const char* text) {
+  fprintf(stdout, "%s", text);
+}
+
+static char* stdinRead(PKVM* vm) {
+
+  pkByteBuffer buff;
+  pkByteBufferInit(&buff);
+  char c;
+  do {
+    c = (char)fgetc(stdin);
+    if (c == '\n') break;
+    pkByteBufferWrite(&buff, vm, (uint8_t)c);
+  } while (c != EOF);
+  pkByteBufferWrite(&buff, vm, '\0');
+
+  // FIXME:
+  // Not sure if this is proper or even safer way to do this, but for now we're
+  // casting the internal allocated struct (_RawString) to realloc the string.
+  char* str = pkAllocString(vm, buff.count);
+  memcpy(str, buff.data, buff.count);
+  return str;
+}
+
+static char* loadScript(PKVM* vm, const char* path) {
+
+  // FIXME:
+  // This is temproary to migrate native interface here and simplify.
+  // Fix the function body and implement it properly.
+
+  // Open the file. In windows ftell isn't reliable since it'll read \r\n as
+  // a single character in read mode ("r") thus we need to get the file size
+  // by opening it as a binary file first and reopen it to read the text.
+  FILE* file = fopen(path, "rb");
+  if (file == NULL) return NULL;
+
+  // Get the source length.
+  fseek(file, 0, SEEK_END);
+  long file_size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+  fclose(file);
+
+  file = fopen(path, "r");
+
+  char* str = pkAllocString(vm, file_size);
+  ASSERT(str != NULL, "PKVM string allocation failed.");
+
+  // Using read instead of file_size is because "\r\n" is read as '\n' in
+  // windows.
+  size_t read = fread(str, sizeof(char), file_size, file);
+  str[read] = '\0';
+  fclose(file);
+
+  return str;
 }

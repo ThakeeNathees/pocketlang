@@ -442,7 +442,7 @@ DEF(coreInput,
   "an optional argument [msg] and prints it before reading.") {
 
   int argc = ARGC;
-  if (argc != 1 && argc != 2) {
+  if (argc > 1) { // input() or input(msg)
     RET_ERR(newString(vm, "Invalid argument count."));
   }
 
@@ -455,9 +455,9 @@ DEF(coreInput,
     vm->config.stdout_write(vm, str->data);
   }
 
-  PkStringPtr result = vm->config.stdin_read(vm);
-  String* line = newString(vm, result.string);
-  if (result.on_done) result.on_done(vm, result);
+  char* str = vm->config.stdin_read(vm);
+  String* line = newString(vm, str);
+  if (str != NULL) pkDeAllocString(vm, str);
   RET(VAR_OBJ(line));
 }
 

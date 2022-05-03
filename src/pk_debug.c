@@ -179,7 +179,7 @@ static void _reportStackFrame(PKVM* vm, CallFrame* frame) {
   // reducing it by 1. But stack overflows are occure before executing
   // any instruction of that function, so the instruction_index possibly
   // be -1 (set it to zero in that case).
-  int instruction_index = frame->ip - fn->fn->opcodes.data - 1;
+  int instruction_index = (int) (frame->ip - fn->fn->opcodes.data - 1);
   if (instruction_index == -1) instruction_index++;
 
   int line = fn->fn->oplines.data[instruction_index];

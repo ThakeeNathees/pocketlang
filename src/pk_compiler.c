@@ -2796,6 +2796,7 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
 // path) and return it as a module pointer. And it'll emit opcodes to push
 // that module to the stack.
 static Module* importFile(Compiler* compiler, const char* path) {
+  ASSERT(path != NULL, OOPS);
   ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
   PKVM* vm = compiler->parser.vm;
@@ -2803,8 +2804,12 @@ static Module* importFile(Compiler* compiler, const char* path) {
   // Resolve the path.
   PkStringPtr resolved = { path, NULL, NULL };
   if (vm->config.resolve_path_fn != NULL) {
-    resolved = vm->config.resolve_path_fn(vm, compiler->module->path->data,
-                                          path);
+
+    // FIXME: REPL mode mdule doesn't have a path, So we're using "." as it's
+    // path this needs to be handled properly.
+    const char* from = ".";
+    if (compiler->module->path != NULL) from = compiler->module->path->data;
+    resolved = vm->config.resolve_path_fn(vm, from, path);
   }
 
   if (resolved.string == NULL) {
@@ -2843,8 +2848,8 @@ static Module* importFile(Compiler* compiler, const char* path) {
   }
 
   // Load the script at the path.
-  PkStringPtr source = vm->config.load_script_fn(vm, path_->data);
-  if (source.string == NULL) {
+  char* _source = vm->config.load_script_fn(vm, path_->data);
+  if (_source == NULL) {
     semanticError(compiler, compiler->parser.previous,
                   "Error loading script at \"%s\"", path_->data);
     return NULL;
@@ -2879,8 +2884,9 @@ static Module* importFile(Compiler* compiler, const char* path) {
   options.repl_mode = false;
 
   // Compile the source to the module and clean the source.
-  PkResult result = compile(vm, module, source.string, &options);
-  if (source.on_done != NULL) source.on_done(vm, source);
+
+  PkResult result = compile(vm, module, _source, &options);
+  pkDeAllocString(vm, _source);
 
   if (result != PK_RESULT_SUCCESS) {
     semanticError(compiler, compiler->parser.previous,

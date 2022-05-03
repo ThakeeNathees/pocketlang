@@ -11,7 +11,6 @@
 // FIXME: Everything below here is temporary and for testing.
 
 int repl(PKVM* vm, const PkCompileOptions* options);
-const char* read_line(uint32_t* length);
 
 // ---------------------------------------
 
@@ -19,22 +18,6 @@ void onResultDone(PKVM* vm, PkStringPtr result) {
   if ((bool)result.user_data) {
     free((void*)result.string);
   }
-}
-
-void stderrWrite(PKVM* vm, const char* text) {
-  fprintf(stderr, "%s", text);
-}
-
-void stdoutWrite(PKVM* vm, const char* text) {
-  fprintf(stdout, "%s", text);
-}
-
-PkStringPtr stdinRead(PKVM* vm) {
-  PkStringPtr result;
-  result.string = read_line(NULL);
-  result.on_done = onResultDone;
-  result.user_data = (void*)true;
-  return result;
 }
 
 PkStringPtr resolvePath(PKVM* vm, const char* from, const char* path) {
@@ -71,6 +54,40 @@ PkStringPtr resolvePath(PKVM* vm, const char* from, const char* path) {
   }
 
   return result;
+}
+
+char* resolvePath_2rf_(PKVM* vm, const char* from, const char* path) {
+
+  size_t from_dir_len;
+  pathGetDirName(from, &from_dir_len);
+
+  // FIXME:
+  // Should handle paths with size of more than FILENAME_MAX incase caller
+  // gave us an invalid path.
+
+  if (from_dir_len == 0 || pathIsAbsolute(path)) {
+    size_t path_size = strlen(path) + 1; // +1 for \0.
+
+    char* resolved = pkAllocString(vm, path_size);
+    pathNormalize(path, resolved, path_size);
+    return resolved;
+
+  } else {
+    char from_dir[FILENAME_MAX];
+    strncpy(from_dir, from, from_dir_len);
+    from_dir[from_dir_len] = '\0';
+
+    char fullpath[FILENAME_MAX];
+    size_t path_size = pathJoin(from_dir, path, fullpath, sizeof(fullpath));
+    path_size++; // +1 for \0.
+
+    char* resolved = pkAllocString(vm, path_size);
+    pathNormalize(fullpath, resolved, path_size);
+    return resolved;
+  }
+
+  UNREACHABLE();
+  return NULL;
 }
 
 PkStringPtr loadScript(PKVM* vm, const char* path) {
@@ -123,11 +140,6 @@ PkStringPtr loadScript(PKVM* vm, const char* path) {
 static PKVM* intializePocketVM() {
 
   PkConfiguration config = pkNewConfiguration();
-  config.stderr_write = stderrWrite;
-  config.stdout_write = stdoutWrite;
-  config.stdin_read = stdinRead;
-
-  config.load_script_fn = loadScript;
   config.resolve_path_fn = resolvePath;
 
 // FIXME:
