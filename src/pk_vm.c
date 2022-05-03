@@ -22,8 +22,6 @@ PkHandle* vmNewHandle(PKVM* vm, Var value) {
 
 void* vmRealloc(PKVM* vm, void* memory, size_t old_size, size_t new_size) {
 
-  // TODO: Debug trace allocations here.
-
   // Track the total allocated memory of the VM to trigger the GC.
   // if vmRealloc is called for freeing, the old_size would be 0 since
   // deallocated bytes are traced by garbage collector.
@@ -33,7 +31,39 @@ void* vmRealloc(PKVM* vm, void* memory, size_t old_size, size_t new_size) {
     vmCollectGarbage(vm);
   }
 
+#if TRACE_MEMORY
+
+  void* ptr = vm->config.realloc_fn(memory, new_size, vm->config.user_data);
+  do {
+    // Deallocation of the VM itself cannot be traced.
+    if (memory == vm) break;
+    if (memory == NULL && new_size == 0) { //< Just nothing.
+      ASSERT(old_size == 0, OOPS);
+      break;
+    }
+
+    if (old_size == 0 && new_size > 0) { // New allocation.
+        ASSERT(memory == NULL, OOPS);
+        printf("[memory trace] malloc  : %p = %+li bytes\n",
+               ptr, (long) new_size);
+      } else if (new_size == 0) { // Free.
+        ASSERT(memory != NULL && old_size != 0, OOPS);
+        printf("[memory trace] free    : %p = -%li bytes\n",
+               memory, (long) old_size);
+      } else { // Realloc.
+        ASSERT(old_size != 0 && new_size != 0 && memory != NULL, OOPS);
+        printf("[memory trace] realloc : %p -> %p = %+li -> %+li bytes\n",
+               memory, ptr, (long) (old_size), (long) (new_size));
+      }
+
+  } while (false);
+
+  return ptr;
+
+#else
   return vm->config.realloc_fn(memory, new_size, vm->config.user_data);
+#endif
+
 }
 
 void vmPushTempRef(PKVM* vm, Object* obj) {

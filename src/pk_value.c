@@ -847,7 +847,7 @@ static void _mapResize(PKVM* vm, Map* self, uint32_t capacity) {
     _mapInsertEntry(self, old_entries[i].key, old_entries[i].value);
   }
 
-  DEALLOCATE(vm, old_entries);
+  DEALLOCATE_ARRAY(vm, old_entries, MapEntry, old_capacity);
 }
 
 Var mapGet(Map* self, Var key) {
@@ -871,7 +871,7 @@ void mapSet(PKVM* vm, Map* self, Var key, Var value) {
 }
 
 void mapClear(PKVM* vm, Map* self) {
-  DEALLOCATE(vm, self->entries);
+  DEALLOCATE_ARRAY(vm, self->entries, MapEntry, self->capacity);
   self->entries = NULL;
   self->capacity = 0;
   self->count = 0;
@@ -930,60 +930,87 @@ void freeObject(PKVM* vm, Object* self) {
   // will won't be freed here instead they haven't marked at all, and will be
   // removed at the sweeping phase of the garbage collection.
   switch (self->type) {
-    case OBJ_STRING:
-      break;
+    case OBJ_STRING: {
+      String* str = (String*) self;
+      DEALLOCATE_DYNAMIC(vm, str, String, str->capacity, char);
+      return;
+    };
 
-    case OBJ_LIST:
+    case OBJ_LIST: {
       pkVarBufferClear(&(((List*)self)->elements), vm);
-      break;
+      DEALLOCATE(vm, self, List);
+      return;
+    }
 
-    case OBJ_MAP:
-      DEALLOCATE(vm, ((Map*)self)->entries);
-      break;
+    case OBJ_MAP: {
+      Map* map = (Map*)self;
+      DEALLOCATE_ARRAY(vm, map->entries, MapEntry, map->capacity);
+      DEALLOCATE(vm, self, Map);
+      return;
+    }
 
-    case OBJ_RANGE:
-      break;
+    case OBJ_RANGE: {
+      DEALLOCATE(vm, self, Range);
+      return;
+    }
 
     case OBJ_MODULE: {
       Module* module = (Module*)self;
       pkVarBufferClear(&module->globals, vm);
       pkUintBufferClear(&module->global_names, vm);
       pkVarBufferClear(&module->constants, vm);
-    } break;
+      DEALLOCATE(vm, self, Module);
+      return;
+    }
 
     case OBJ_FUNC: {
       Function* func = (Function*)self;
       if (!func->is_native) {
         pkByteBufferClear(&func->fn->opcodes, vm);
         pkUintBufferClear(&func->fn->oplines, vm);
-        DEALLOCATE(vm, func->fn);
+        DEALLOCATE(vm, func->fn, Fn);
       }
-    } break;
+      DEALLOCATE(vm, self, Function);
+      return;
+    };
 
-    case OBJ_CLOSURE:
-    case OBJ_UPVALUE:
-    break;
+    case OBJ_CLOSURE: {
+      DEALLOCATE_DYNAMIC(vm, self, Closure,
+        ((Closure*)self)->fn->upvalue_count, Upvalue*);
+      return;
+    }
+
+    case OBJ_UPVALUE: {
+      DEALLOCATE(vm, self, Upvalue);
+      return;
+    }
 
     case OBJ_FIBER: {
       Fiber* fiber = (Fiber*)self;
-      DEALLOCATE(vm, fiber->stack);
-      DEALLOCATE(vm, fiber->frames);
-    } break;
+      DEALLOCATE_ARRAY(vm, fiber->stack, Var, fiber->stack_size);
+      DEALLOCATE_ARRAY(vm, fiber->frames, CallFrame, fiber->frame_capacity);
+      DEALLOCATE(vm, fiber, Fiber);
+      return;
+    }
 
     case OBJ_CLASS: {
       Class* cls = (Class*)self;
       pkClosureBufferClear(&cls->methods, vm);
-    } break;
+      DEALLOCATE(vm, cls, Class);
+      return;
+    }
 
     case OBJ_INST: {
       Instance* inst = (Instance*)self;
       if (inst->cls->delete_fn != NULL) {
         inst->cls->delete_fn(inst->native);
       }
-    } break;
+      DEALLOCATE(vm, inst, Instance);
+      return;
+    }
   }
 
-  DEALLOCATE(vm, self);
+  UNREACHABLE();
 }
 
 uint32_t moduleAddConstant(PKVM* vm, Module* module, Var value) {

@@ -129,7 +129,7 @@ void pkFreeVM(PKVM* vm) {
   // before freeing the VM.
   ASSERT(vm->handles == NULL, "Not all handles were released.");
 
-  DEALLOCATE(vm, vm);
+  DEALLOCATE(vm, vm, PKVM);
 }
 
 void* pkGetUserData(const PKVM* vm) {
@@ -247,7 +247,7 @@ void pkReleaseHandle(PKVM* vm, PkHandle* handle) {
   if (handle->prev) handle->prev->next = handle->next;
 
   // Free the handle.
-  DEALLOCATE(vm, handle);
+  DEALLOCATE(vm, handle, PkHandle);
 }
 
 PkResult pkCompileModule(PKVM* vm, PkHandle* module_handle, PkStringPtr source,
