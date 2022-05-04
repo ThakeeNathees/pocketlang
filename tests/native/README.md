@@ -15,6 +15,11 @@ integrate pocket VM with your application
 
 ----
 
+#### `example0.c` - Contains how to run simple pocket script
+```
+gcc example0.c -o example0 ../../src/*.c -I../../src/include -lm
+```
+
 #### `example1.c` - Contains how to pass values between pocket VM and C
 ```
 gcc example1.c -o example1 ../../src/*.c -I../../src/include -lm

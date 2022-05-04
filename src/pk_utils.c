@@ -19,6 +19,10 @@ int utilPowerOf2Ceil(int n) {
   return n;
 }
 
+bool utilIsSpace(char c) {
+  return (c == ' ' || c == '\t' || c == '\n' || c == '\v');
+}
+
 // Function implementation, see utils.h for description.
 bool utilIsName(char c) {
   return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || (c == '_');

@@ -57,13 +57,9 @@ void registerModuleMath(PKVM* vm);
 // can be used for cli's internals we're defining such functions here and they
 // will be imported in the cli.
 
-bool pathIsAbsolute(const char* path);
-
-void pathGetDirName(const char* path, size_t* length);
-
-size_t pathNormalize(const char* path, char* buff, size_t buff_size);
-
-size_t pathJoin(const char* from, const char* path, char* buffer,
-                size_t buff_size);
+// The pocketlang's import statement path resolving function. This
+// implementation is required by pockelang from it's hosting application
+// inorder to use the import statements.
+char* pathResolveImport(PKVM * vm, const char* from, const char* path);
 
 #endif // MODULES_H

@@ -7,11 +7,15 @@
 #ifndef PK_UTILS_H
 #define PK_UTILS_H
 
-#include "pk_internal.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 // Returns the smallest power of two that is equal to or greater than [n].
 // Source : https://github.com/wren-lang/wren/blob/main/src/vm/wren_utils.h#L119
 int utilPowerOf2Ceil(int n);
+
+// Returns true if c in [ ' ', '\t', '\n', '\v' ]
+bool utilIsSpace(char c);
 
 // Returns true if `c` is [A-Za-z_].
 bool utilIsName(char c);
@@ -34,14 +38,9 @@ uint32_t utilHashNumber(double num);
 // Generate a has code for [string].
 uint32_t utilHashString(const char* string);
 
-#endif // PK_UTILS_H
-
 /****************************************************************************
  * UTF8                                                                     *
  ****************************************************************************/
-
-#ifndef UTF8_H
-#define UTF8_H
 
 /** @file
  * A tiny UTF-8 utility library.
@@ -66,7 +65,6 @@ uint32_t utilHashString(const char* string);
  * is called the leading byte and the rest of the bytes of the character is
  * called continuation bytes.
  *
- * <pre>
  * example:
  *                  v-- leading byte   v-- continuation byte => 2 bytes
  *             é =  11000011           10101001
@@ -74,15 +72,8 @@ uint32_t utilHashString(const char* string);
  *                  110 means 2 bytes  10 means continuation
  *
  * (note that the character é is 8 bit long with ANSI encoding)
- * </pre>
  *
- * USAGE:
- *     // define implementation only a single *.c source file like this
- *     #define UTF8_IMPLEMENT
- *     #include "utf8.h"
 */
-
-#include <stdint.h>
 
 // Returns the number of bytes the the [value] would take to encode. returns 0
 // if the value is invalid utf8 representation.
@@ -121,4 +112,4 @@ int utf8_encodeValue(int value, uint8_t* bytes);
 // value.
 int utf8_decodeBytes(uint8_t* bytes, int* value);
 
-#endif // UTF8_H
+#endif // PK_UTILS_H

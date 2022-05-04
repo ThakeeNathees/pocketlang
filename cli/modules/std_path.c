@@ -6,6 +6,11 @@
 
 #include "modules.h"
 
+// FIXME:
+// In windows MinGw support most of the posix libraries. So we only need to
+// check if it's MSVC (and tcc in windows) or not for posix headers and
+// Refactor the bellow macro includes.
+
 #include "thirdparty/cwalk/cwalk.h"
 #if defined(_WIN32) && (defined(_MSC_VER) || defined(__TINYC__))
   #include "thirdparty/dirent/dirent.h"
@@ -22,35 +27,89 @@
   #define get_cwd getcwd
 #endif
 
+// The maximum path size that pocketlang's default import system supports
+// including the null terminator. To be able to support more characters
+// override the functions from the host application. Since this is very much
+// platform specific we're defining a more general limit.
+// See: https://insanecoding.blogspot.com/2007/11/pathmax-simply-isnt.html
+#define MAX_PATH_LEN 4096
+
 // The cstring pointer buffer size used in path.join(p1, p2, ...). Tune this
 // value as needed.
 #define MAX_JOIN_PATHS 8
+
+static inline size_t pathAbs(const char* path, char* buff, size_t buff_size);
+static inline bool pathIsFileExists(const char* path);
 
 /*****************************************************************************/
 /* PATH SHARED FUNCTIONS                                                     */
 /*****************************************************************************/
 
-bool pathIsAbsolute(const char* path) {
-  return cwk_path_is_absolute(path);
-}
+// Implementation of pocketlang import path resolving function.
+char* pathResolveImport(PKVM* vm, const char* from, const char* path) {
 
-void pathGetDirName(const char* path, size_t* length) {
-  cwk_path_get_dirname(path, length);
-}
+  // Buffers to store intermediate path results.
+  char buff1[FILENAME_MAX];
+  char buff2[FILENAME_MAX];
 
-size_t pathNormalize(const char* path, char* buff, size_t buff_size) {
-  return cwk_path_normalize(path, buff, buff_size);
-}
+  // If the path is absolute, Just normalize and return it.
+  if (cwk_path_is_absolute(path)) {
+    // buff1 = normalized path. +1 for null terminator.
+    size_t size = cwk_path_normalize(path, buff1, sizeof(buff1)) + 1;
 
-size_t pathJoin(const char* path_a, const char* path_b, char* buffer,
-  size_t buff_size) {
-  return cwk_path_join(path_a, path_b, buffer, buff_size);
+    char* ret = pkAllocString(vm, size);
+    memcpy(ret, buff1, size);
+    return ret;
+  }
+
+  if (from == NULL) { //< [path] is relative to cwd.
+
+    // buff1 = absolute path of [path].
+    pathAbs(path, buff1, sizeof(buff1));
+
+    // buff2 = normalized path. +1 for null terminator.
+    size_t size = cwk_path_normalize(buff1, buff2, sizeof(buff2)) + 1;
+
+    char* ret = pkAllocString(vm, size);
+    memcpy(ret, buff2, size);
+    return ret;
+  }
+
+  // Import statements doesn't support absolute paths.
+  ASSERT(cwk_path_is_absolute(from), "From path should be absolute.");
+
+  // From is a path of a script. Try relative to that script.
+  {
+    size_t from_dir_length = 0;
+    cwk_path_get_dirname(from, &from_dir_length);
+    if (from_dir_length == 0) return NULL;
+
+    // buff1 = from directory.
+    strncpy(buff1, from, sizeof(buff1));
+    buff1[from_dir_length] = '\0';
+
+    // buff2 = absolute joined path.
+    cwk_path_join(buff1, path, buff2, sizeof(buff2));
+
+    // buff1 = normalized absolute path. +1 for null terminator
+    size_t size = cwk_path_normalize(buff2, buff1, sizeof(buff1)) + 1;
+
+    if (pathIsFileExists(buff1)) {
+      char* ret = pkAllocString(vm, size);
+      memcpy(ret, buff1, size);
+      return ret;
+    }
+  }
+
+  // Cannot resolve the path. Return NULL to indicate failure.
+  return NULL;
 }
 
 /*****************************************************************************/
 /* PATH INTERNAL FUNCTIONS                                                   */
 /*****************************************************************************/
 
+// FIXME: refactor (ref: https://stackoverflow.com/a/230068/10846399)
 static inline bool pathIsFileExists(const char* path) {
   FILE* file = fopen(path, "r");
   if (file != NULL) {
@@ -79,7 +138,7 @@ static inline bool pathIsExists(const char* path) {
 
 static inline size_t pathAbs(const char* path, char* buff, size_t buff_size) {
 
-  char cwd[FILENAME_MAX];
+  char cwd[MAX_PATH_LEN];
 
   if (get_cwd(cwd, sizeof(cwd)) == NULL) {
     // TODO: handle error.
@@ -99,7 +158,7 @@ DEF(_pathSetStyleUnix, "") {
 }
 
 DEF(_pathGetCWD, "") {
-  char cwd[FILENAME_MAX];
+  char cwd[MAX_PATH_LEN];
   if (get_cwd(cwd, sizeof(cwd)) == NULL) {
     // TODO: Handle error.
   }
@@ -110,7 +169,7 @@ DEF(_pathAbspath, "") {
   const char* path;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
-  char abspath[FILENAME_MAX];
+  char abspath[MAX_PATH_LEN];
   uint32_t len = (uint32_t) pathAbs(path, abspath, sizeof(abspath));
   pkSetSlotStringLength(vm, 0, abspath, len);
 }
@@ -120,13 +179,13 @@ DEF(_pathRelpath, "") {
   if (!pkValidateSlotString(vm, 1, &from, NULL)) return;
   if (!pkValidateSlotString(vm, 2, &path, NULL)) return;
 
-  char abs_from[FILENAME_MAX];
+  char abs_from[MAX_PATH_LEN];
   pathAbs(from, abs_from, sizeof(abs_from));
 
-  char abs_path[FILENAME_MAX];
+  char abs_path[MAX_PATH_LEN];
   pathAbs(path, abs_path, sizeof(abs_path));
 
-  char result[FILENAME_MAX];
+  char result[MAX_PATH_LEN];
   uint32_t len = (uint32_t) cwk_path_get_relative(abs_from, abs_path,
                                                   result, sizeof(result));
   pkSetSlotStringLength(vm, 0, result, len);
@@ -147,7 +206,7 @@ DEF(_pathJoin, "") {
   }
   paths[argc] = NULL;
 
-  char result[FILENAME_MAX];
+  char result[MAX_PATH_LEN];
   uint32_t len = (uint32_t) cwk_path_join_multiple(paths, result,
                                                    sizeof(result));
   pkSetSlotStringLength(vm, 0, result, len);
@@ -157,7 +216,7 @@ DEF(_pathNormalize, "") {
   const char* path;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
-  char result[FILENAME_MAX];
+  char result[MAX_PATH_LEN];
   uint32_t len = (uint32_t) cwk_path_normalize(path, result, sizeof(result));
   pkSetSlotStringLength(vm, 0, result, len);
 }
