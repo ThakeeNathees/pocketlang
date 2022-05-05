@@ -70,11 +70,8 @@ typedef struct PKVM PKVM;
 typedef struct PkHandle PkHandle;
 
 typedef enum PkVarType PkVarType;
-typedef enum PkErrorType PkErrorType;
 typedef enum PkResult PkResult;
-typedef struct PkStringPtr PkStringPtr;
 typedef struct PkConfiguration PkConfiguration;
-typedef struct PkCompileOptions PkCompileOptions;
 
 // C function pointer which is callable from pocketLang by native module
 // functions.
@@ -92,34 +89,28 @@ typedef void (*pkNativeFn)(PKVM* vm);
 //   function will return NULL.
 typedef void* (*pkReallocFn)(void* memory, size_t new_size, void* user_data);
 
-// Error callback function pointer. For runtime error it'll call first with
-// PK_ERROR_RUNTIME followed by multiple callbacks with PK_ERROR_STACKTRACE.
-// The error messages should be written to stderr.
-typedef void (*pkErrorFn) (PKVM* vm, PkErrorType type,
-                           const char* file, int line,
-                           const char* message);
-
 // Function callback to write [text] to stdout or stderr.
 typedef void (*pkWriteFn) (PKVM* vm, const char* text);
 
 // A function callback to read a line from stdin. The returned string shouldn't
-// contain a line ending (\n or \r\n).
-typedef PkStringPtr (*pkReadFn) (PKVM* vm);
-
-// A function callback symbol for clean/free the pkStringResult.
-typedef void (*pkResultDoneFn) (PKVM* vm, PkStringPtr result);
-
-// A function callback to resolve the import script name from the [from] path
-// to an absolute (or relative to the cwd). This is required to solve same
-// script imported with different relative path. Set the string attribute to
-// NULL to indicate if it's failed to resolve.
-typedef PkStringPtr (*pkResolvePathFn) (PKVM* vm, const char* from,
-                                        const char* path);
+// contain a line ending (\n or \r\n). The returned string **must** be
+// allocated with pkAllocString() and the VM will claim the ownership of the
+// string.
+typedef char* (*pkReadFn) (PKVM* vm);
 
 // Load and return the script. Called by the compiler to fetch initial source
-// code and source for import statements. Set the string attribute to NULL
-// to indicate if it's failed to load the script.
-typedef PkStringPtr (*pkLoadScriptFn) (PKVM* vm, const char* path);
+// code and source for import statements. Return NULL to indicate failure to
+// load. Otherwise the string **must** be allocated with pkAllocString() and
+// the VM will claim the ownership of the string.
+typedef char* (*pkLoadScriptFn) (PKVM* vm, const char* path);
+
+// A function callback to resolve the import statement path. [from] path can
+// be either path to a script or NULL if [path] is relative to cwd. The return
+// value should be a normalized absolute path of the [path]. Return NULL to
+// indicate failure to resolve. Othrewise the string **must** be allocated with
+// pkAllocString() and the VM will claim the ownership of the string.
+typedef char* (*pkResolvePathFn) (PKVM* vm, const char* from,
+                                       const char* path);
 
 // A function callback to allocate and return a new instance of the registered
 // class. Which will be called when the instance is constructed. The returned/
@@ -158,29 +149,17 @@ enum PkVarType {
 enum PkResult {
   PK_RESULT_SUCCESS = 0,    // Successfully finished the execution.
 
+  // Note that this result is internal and will not be returned to the host
+  // anymore.
+  //
   // Unexpected EOF while compiling the source. This is another compile time
-  // error that will ONLY be returned if we're compiling with the REPL mode set
-  // in the compile options. We need this specific error to indicate the host
-  // application to add another line to the last input. If REPL is not enabled,
-  // this will be PK_RESULT_COMPILE_ERROR.
+  // error that will ONLY be returned if we're compiling in REPL mode. We need
+  // this specific error to indicate the host application to add another line
+  // to the last input. If REPL is not enabled this will be compile error.
   PK_RESULT_UNEXPECTED_EOF,
 
   PK_RESULT_COMPILE_ERROR,  // Compilation failed.
   PK_RESULT_RUNTIME_ERROR,  // An error occurred at runtime.
-};
-
-// A string pointer wrapper to pass c string between host application and
-// pocket VM. With a on_done() callback to clean it when the pocket VM is done
-// with the string.
-struct PkStringPtr {
-  const char* string;     //< The string result.
-  pkResultDoneFn on_done; //< Called once vm done with the string.
-  void* user_data;        //< User related data.
-
-  // These values are provided by the pocket VM to the host application, you're
-  // not expected to set this when provideing string to the pocket VM.
-  uint32_t length;  //< Length of the string.
-  uint32_t hash;    //< Its 32 bit FNV-1a hash.
 };
 
 struct PkConfiguration {
@@ -203,18 +182,6 @@ struct PkConfiguration {
   void* user_data;
 };
 
-// The options to configure the compilation provided by the command line
-// arguments (or other ways the host application provides).
-struct PkCompileOptions {
-
-  // Compile debug version of the source.
-  bool debug;
-
-  // Set to true if compiling in REPL mode, This will print repr version of
-  // each evaluated non-null values.
-  bool repl_mode;
-};
-
 /*****************************************************************************/
 /* POCKETLANG PUBLIC API                                                     */
 /*****************************************************************************/
@@ -223,11 +190,6 @@ struct PkCompileOptions {
 // Override those default configuration to adopt to another hosting
 // application.
 PK_PUBLIC PkConfiguration pkNewConfiguration();
-
-// Create a new pkCompilerOptions with the default values and return it.
-// Override those default configuration to adopt to another hosting
-// application.
-PK_PUBLIC PkCompileOptions pkNewCompilerOptions();
 
 // Allocate, initialize and returns a new VM.
 PK_PUBLIC PKVM* pkNewVM(PkConfiguration* config);
@@ -240,6 +202,16 @@ PK_PUBLIC void pkSetUserData(PKVM* vm, void* user_data);
 
 // Returns the associated user data.
 PK_PUBLIC void* pkGetUserData(const PKVM* vm);
+
+// Allocate memory with [size] and return it. This function should be called 
+// when the host application want to send strings to the PKVM that are claimed
+// by the VM once the caller returned it.
+PK_PUBLIC char* pkAllocString(PKVM* vm, size_t size);
+
+// Complementary function to pkAllocString. This should not be called if the
+// string is returned to the VM. Since PKVM will claim the ownership and
+// deallocate the string itself.
+PK_PUBLIC void pkDeAllocString(PKVM* vm, char* ptr);
 
 // Release the handle and allow its value to be garbage collected. Always call
 // this for every handles before freeing the VM.
@@ -261,10 +233,6 @@ PK_PUBLIC void pkModuleAddFunction(PKVM* vm, PkHandle* module,
                                    const char* name,
                                    pkNativeFn fptr, int arity);
 
-// Returns the main function of the [module]. When a module is compiled all of
-// it's statements are wrapped around an implicit main function.
-PK_PUBLIC PkHandle* pkModuleGetMainFunction(PKVM* vm, PkHandle* module);
-
 // Create a new class on the [module] with the [name] and return it.
 // If the [base_class] is NULL by default it'll set to "Object" class.
 PK_PUBLIC PkHandle* pkNewClass(PKVM* vm, const char* name,
@@ -278,28 +246,20 @@ PK_PUBLIC void pkClassAddMethod(PKVM* vm, PkHandle* cls,
                                 const char* name,
                                 pkNativeFn fptr, int arity);
 
-// Compile the [module] with the provided [source]. Set the compiler options
-// with the the [options] argument or set to NULL for default options.
-PK_PUBLIC PkResult pkCompileModule(PKVM* vm, PkHandle* module,
-                                   PkStringPtr source,
-                                   const PkCompileOptions* options);
+// Run the source string. The [source] is expected to be valid till this
+// function returns.
+PK_PUBLIC PkResult pkRunString(PKVM* vm, const char* source);
 
-// Interpret the source and return the result. Once it's done with the source
-// and path 'on_done' will be called to clean the string if it's not NULL.
-// Set the compiler options with the the [options] argument or it can be set to
-// NULL for default options.
-PK_PUBLIC PkResult pkInterpretSource(PKVM* vm,
-                                     PkStringPtr source,
-                                     PkStringPtr path,
-                                     const PkCompileOptions* options);
+// Run the file at [path] relative to the current working directory.
+PK_PUBLIC PkResult pkRunFile(PKVM* vm, const char* path);
 
-// Run a function with [argc] arguments and their values are stored at the VM's
-// slots starting at index [argv_slot] till the next [argc] consequent slots.
-// If [argc] is 0 [argv_slot] value will be ignored.
-// To store the return value set [ret_slot] to a valid slot index, if it's
-// negative the return value will be ignored.
-PK_PUBLIC PkResult pkRunFunction(PKVM* vm, PkHandle* fn,
-                                 int argc, int argv_slot, int ret_slot);
+// FIXME:
+// Currently exit function will terminate the process which should exit from
+// the function and return to the caller.
+//
+// Run pocketlang REPL mode. If there isn't any stdin read function defined,
+// or imput function ruturned NULL, it'll immediatly return a runtime error.
+PK_PUBLIC PkResult pkRunREPL(PKVM* vm);
 
 /*****************************************************************************/
 /* NATIVE / RUNTIME FUNCTION API                                             */

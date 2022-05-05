@@ -42,6 +42,11 @@
 // Initialize core language, builtin function and core libs.
 void initializeCore(PKVM* vm);
 
+// Initialize a script module. At the moment it'll define __file__ global
+// as an absolute path of the script. [path] should be the normalized absolute
+// path of the script.
+void initializeScript(PKVM* vm, Module* module);
+
 // Create a new module with the given [name] and returns as a Module*.
 // This is function is a wrapper around `newModule()` function to create
 // native modules for pocket core and public native api.

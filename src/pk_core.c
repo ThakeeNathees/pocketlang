@@ -153,6 +153,16 @@ void initializeCore(PKVM* vm) {
   initializePrimitiveClasses(vm);
 }
 
+void initializeScript(PKVM* vm, Module* module) {
+  ASSERT(module->path != NULL, OOPS);
+  ASSERT(module->path->data[0] != SPECIAL_NAME_CHAR, OOPS);
+
+  // A script's path will always the absolute normalized path (the path
+  // resolving function would do take care of it) which is something that
+  // was added after python 3.9.
+  moduleAddGlobal(vm, module, "__file__", 8, VAR_OBJ(module->path));
+}
+
 /*****************************************************************************/
 /* INTERNAL FUNCTIONS                                                        */
 /*****************************************************************************/
@@ -442,7 +452,7 @@ DEF(coreInput,
   "an optional argument [msg] and prints it before reading.") {
 
   int argc = ARGC;
-  if (argc != 1 && argc != 2) {
+  if (argc > 1) { // input() or input(str).
     RET_ERR(newString(vm, "Invalid argument count."));
   }
 
@@ -455,9 +465,13 @@ DEF(coreInput,
     vm->config.stdout_write(vm, str->data);
   }
 
-  PkStringPtr result = vm->config.stdin_read(vm);
-  String* line = newString(vm, result.string);
-  if (result.on_done) result.on_done(vm, result);
+  char* str = vm->config.stdin_read(vm);
+  if (str == NULL) { //< Input failed !?
+    RET_ERR(newString(vm, "Input function failed."));
+  }
+
+  String* line = newString(vm, str);
+  pkDeAllocString(vm, str);
   RET(VAR_OBJ(line));
 }
 

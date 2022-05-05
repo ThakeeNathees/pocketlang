@@ -9,6 +9,8 @@
 #include "include/pocketlang.h"
 
 #include "pk_core.h"
+#include "pk_compiler.h"
+#include "pk_utils.h"
 #include "pk_value.h"
 #include "pk_vm.h"
 
@@ -58,28 +60,46 @@
 // configuration if the host doesn't provided any allocators for us.
 static void* defaultRealloc(void* memory, size_t new_size, void* _);
 
+static void stderrWrite(PKVM* vm, const char* text);
+static void stdoutWrite(PKVM* vm, const char* text);
+static char* stdinRead(PKVM* vm);
+static char* loadScript(PKVM* vm, const char* path);
+
+char* pkAllocString(PKVM* vm, size_t size) {
+  ASSERT(vm->config.realloc_fn != NULL, "PKVM's allocator was NULL.");
+
+#if TRACE_MEMORY
+  void* ptr = vm->config.realloc_fn(NULL, size, vm->config.user_data);
+  printf("[alloc string] alloc   : %p = %+li bytes\n", ptr, (long) size);
+  return (char*) ptr;
+#else
+  return (char*) vm->config.realloc_fn(NULL, size, vm->config.user_data);
+#endif
+}
+
+void pkDeAllocString(PKVM* vm, char* str) {
+  ASSERT(vm->config.realloc_fn != NULL, "PKVM's allocator was NULL.");
+#if TRACE_MEMORY
+  printf("[alloc string] dealloc : %p\n", str);
+#endif
+  vm->config.realloc_fn(str, 0, vm->config.user_data);
+}
+
 PkConfiguration pkNewConfiguration() {
   PkConfiguration config;
   config.realloc_fn = defaultRealloc;
 
-  config.stdout_write = NULL;
-  config.stderr_write = NULL;
-  config.stdin_read = NULL;
+  config.stdout_write = stdoutWrite;
+  config.stderr_write = stderrWrite;
+  config.stdin_read = stdinRead;
 
-  config.load_script_fn = NULL;
   config.resolve_path_fn = NULL;
+  config.load_script_fn = loadScript;
 
   config.use_ansi_color = false;
   config.user_data = NULL;
 
   return config;
-}
-
-PkCompileOptions pkNewCompilerOptions() {
-  PkCompileOptions options;
-  options.debug = false;
-  options.repl_mode = false;
-  return options;
 }
 
 PKVM* pkNewVM(PkConfiguration* config) {
@@ -163,20 +183,6 @@ void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
                             NULL /*TODO: Public API for function docstring.*/);
 }
 
-PkHandle* pkModuleGetMainFunction(PKVM* vm, PkHandle* module) {
-  CHECK_HANDLE_TYPE(module, OBJ_MODULE);
-
-  Module* _module = (Module*)AS_OBJ(module->value);
-
-  int main_index = moduleGetGlobalIndex(_module, IMPLICIT_MAIN_NAME,
-                                        (uint32_t)strlen(IMPLICIT_MAIN_NAME));
-  if (main_index == -1) return NULL;
-  ASSERT_INDEX(main_index, (int)_module->globals.count);
-  Var main_fn = _module->globals.data[main_index];
-  ASSERT(IS_OBJ_TYPE(main_fn, OBJ_CLOSURE), OOPS);
-  return vmNewHandle(vm, main_fn);
-}
-
 PkHandle* pkNewClass(PKVM* vm, const char* name,
                      PkHandle* base_class, PkHandle* module,
                      pkNewInstanceFn new_fn,
@@ -250,80 +256,230 @@ void pkReleaseHandle(PKVM* vm, PkHandle* handle) {
   DEALLOCATE(vm, handle, PkHandle);
 }
 
-PkResult pkCompileModule(PKVM* vm, PkHandle* module_handle, PkStringPtr source,
-                         const PkCompileOptions* options) {
-  CHECK_ARG_NULL(source.string);
-  CHECK_HANDLE_TYPE(module_handle, OBJ_MODULE);
+PkResult pkRunString(PKVM* vm, const char* source) {
 
-  Module* module = (Module*)AS_OBJ(module_handle->value);
+  PkResult result = PK_RESULT_SUCCESS;
 
-  PkResult result = compile(vm, module, source.string, options);
-  if (source.on_done) source.on_done(vm, source);
+  // Create a temproary module for the source.
+  Module* module = newModule(vm);
+  vmPushTempRef(vm, &module->_super); // module.
+  {
+    module->path = newString(vm, "@(String)");
+    result = compile(vm, module, source, NULL);
+    if (result != PK_RESULT_SUCCESS) return result;
+
+    // Module initialized needs to be set to true just before executing their
+    // main function to avoid cyclic inclusion crash the VM.
+    module->initialized = true;
+
+    Fiber* fiber = newFiber(vm, module->body);
+    vmPushTempRef(vm, &fiber->_super); // fiber.
+    vmPrepareFiber(vm, fiber, 0, NULL);
+    vmPopTempRef(vm); // fiber.
+    result = vmRunFiber(vm, fiber);
+  }
+  vmPopTempRef(vm); // module.
+
   return result;
 }
 
-// This function is responsible to call on_done function if it's done with the
-// provided string pointers.
-PkResult pkInterpretSource(PKVM* vm, PkStringPtr source, PkStringPtr path,
-                           const PkCompileOptions* options) {
+PkResult pkRunFile(PKVM* vm, const char* path) {
 
-  String* path_ = newString(vm, path.string);
-  if (path.on_done) path.on_done(vm, path);
-  vmPushTempRef(vm, &path_->_super); // path_
+  // FIXME(_imp_): path resolve function should always expect a source file
+  // path (ends with .pk) to be consistance with the paths.
 
-  // FIXME:
-  // Should I clean the module if it already exists before compiling it?
+  // Note: The file may have been imported by some other script and cached in
+  // the VM's scripts cache. But we're not using that instead, we'll recompile
+  // the file and update the cache.
 
-  // Load a new module to the vm's modules cache.
-  Module* module = vmGetModule(vm, path_);
-  if (module == NULL) {
-    module = newModule(vm);
-    module->path = path_;
-    vmPushTempRef(vm, &module->_super); // module.
-    vmRegisterModule(vm, module, path_);
-    vmPopTempRef(vm); // module.
+  ASSERT(vm->config.load_script_fn != NULL,
+         "No script loading functions defined.");
+
+  PkResult result = PK_RESULT_SUCCESS;
+  Module* module = NULL;
+
+  // Resolve the path.
+  char* resolved_ = NULL;
+  if (vm->config.resolve_path_fn != NULL) {
+    resolved_ = vm->config.resolve_path_fn(vm, NULL, path);
   }
-  vmPopTempRef(vm); // path_
 
-  // Compile the source.
-  PkResult result = compile(vm, module, source.string, options);
-  if (source.on_done) source.on_done(vm, source);
+  if (resolved_ == NULL) {
+    // FIXME: Error print should be moved and check for ascii color codes.
+    if (vm->config.stderr_write != NULL) {
+      vm->config.stderr_write(vm, "Error finding script at \"");
+      vm->config.stderr_write(vm, path);
+      vm->config.stderr_write(vm, "\"\n");
+    }
+    return PK_RESULT_COMPILE_ERROR;
+  }
+
+  module = newModule(vm);
+  vmPushTempRef(vm, &module->_super); // module.
+  {
+    // Set module path and and deallocate resolved.
+    String* script_path = newString(vm, resolved_);
+    vmPushTempRef(vm, &script_path->_super); // script_path.
+    pkDeAllocString(vm, resolved_);
+    module->path = script_path;
+    vmPopTempRef(vm); // script_path.
+
+    initializeScript(vm, module);
+
+    const char* _path = module->path->data;
+    char* source = vm->config.load_script_fn(vm, _path);
+    if (source == NULL) {
+      result = PK_RESULT_COMPILE_ERROR;
+      // FIXME: Error print should be moved and check for ascii color codes.
+      if (vm->config.stderr_write != NULL) {
+        vm->config.stderr_write(vm, "Error loading script at \"");
+        vm->config.stderr_write(vm, _path);
+        vm->config.stderr_write(vm, "\"\n");
+      }
+    } else {
+      result = compile(vm, module, source, NULL);
+      pkDeAllocString(vm, source);
+    }
+
+    if (result == PK_RESULT_SUCCESS) {
+      vmRegisterModule(vm, module, module->path);
+    }
+  }
+  vmPopTempRef(vm); // module.
+
   if (result != PK_RESULT_SUCCESS) return result;
 
-  // Set module initialized to true before the execution ends to prevent cyclic
-  // inclusion cause a crash.
+  // Module initialized needs to be set to true just before executing their
+  // main function to avoid cyclic inclusion crash the VM.
   module->initialized = true;
-
   Fiber* fiber = newFiber(vm, module->body);
   vmPushTempRef(vm, &fiber->_super); // fiber.
-  vmPrepareFiber(vm, fiber, 0, NULL /* TODO: get argv from user. */);
+  vmPrepareFiber(vm, fiber, 0, NULL);
   vmPopTempRef(vm); // fiber.
-
   return vmRunFiber(vm, fiber);
 }
 
-PK_PUBLIC PkResult pkRunFunction(PKVM* vm, PkHandle* fn,
-                                 int argc, int argv_slot, int ret_slot) {
-  CHECK_HANDLE_TYPE(fn, OBJ_CLOSURE);
-  Closure* closure = (Closure*)AS_OBJ(fn->value);
+// FIXME: this should be moved to somewhere general.
+//
+// Returns true if the string is empty, used to check if the input line is
+// empty to skip compilation of empty string in the bellow repl mode.
+static inline bool isStringEmpty(const char* line) {
+  ASSERT(line != NULL, OOPS);
 
-  ASSERT(argc >= 0, "argc cannot be negative.");
-  Var* argv = NULL;
+  for (const char* c = line; *c != '\0'; c++) {
+    if (!utilIsSpace(*c)) return false;
+  }
+  return true;
+}
 
-  if (argc != 0) {
-    for (int i = 0; i < argc; i++) {
-      VALIDATE_SLOT_INDEX(argv_slot + i);
+// FIXME:
+// this should be moved to somewhere general along with isStringEmpty().
+//
+// This function will get the main function from the module to run it in the
+// repl mode.
+Closure* moduleGetMainFunction(PKVM* vm, Module* module) {
+
+  int main_index = moduleGetGlobalIndex(module, IMPLICIT_MAIN_NAME,
+                                        (uint32_t) strlen(IMPLICIT_MAIN_NAME));
+  if (main_index == -1) return NULL;
+  ASSERT_INDEX(main_index, (int) module->globals.count);
+  Var main_fn = module->globals.data[main_index];
+  ASSERT(IS_OBJ_TYPE(main_fn, OBJ_CLOSURE), OOPS);
+  return (Closure*) AS_OBJ(main_fn);
+}
+
+PkResult pkRunREPL(PKVM* vm) {
+
+  pkWriteFn printfn = vm->config.stdout_write;
+  pkWriteFn printerrfn = vm->config.stderr_write;
+  pkReadFn inputfn = vm->config.stdin_read;
+  PkResult result = PK_RESULT_SUCCESS;
+
+  CompileOptions options = newCompilerOptions();
+  options.repl_mode = true;
+
+  if (inputfn == NULL) {
+    if (printerrfn) printerrfn(vm, "REPL failed to input.");
+    return PK_RESULT_RUNTIME_ERROR;
+  }
+
+  // The main module that'll be used to compile and execute the input source.
+  PkHandle* module = pkNewModule(vm, "@(REPL)");
+  ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE), OOPS);
+  Module* _module = (Module*)AS_OBJ(module->value);
+
+  // A buffer to store multiple lines read from stdin.
+  pkByteBuffer lines;
+  pkByteBufferInit(&lines);
+
+  // Will be set to true if the compilation failed with unexpected EOF to add
+  // more lines to the [lines] buffer.
+  bool need_more_lines = false;
+
+  bool done = false;
+  do {
+
+    const char* listening = (!need_more_lines) ? ">>> " : "... ";
+    printfn(vm, listening);
+
+    // Read a line from stdin and add the line to the lines buffer.
+    char* line = inputfn(vm);
+    if (line == NULL) {
+      if (printerrfn) printerrfn(vm, "REPL failed to input.");
+      result = PK_RESULT_RUNTIME_ERROR;
+      break;
     }
-    argv = &SLOT(argv_slot);
-  }
 
-  Var* ret = NULL;
-  if (ret_slot >= 0) {
-    VALIDATE_SLOT_INDEX(ret_slot);
-    ret = &SLOT(ret_slot);
-  }
+    // If the line contains EOF, REPL should be stopped.
+    size_t line_length = strlen(line);
+    if (line_length >= 1 && *(line + line_length - 1) == EOF) {
+      printfn(vm, "\n");
+      result = PK_RESULT_SUCCESS;
+      pkDeAllocString(vm, line);
+      break;
+    }
 
-  return vmRunFunction(vm, closure, argc, argv, ret);
+    // If the line is empty, we don't have to compile it.
+    if (isStringEmpty(line)) {
+      if (need_more_lines) ASSERT(lines.count != 0, OOPS);
+      pkDeAllocString(vm, line);
+      continue;
+    }
+
+    // Add the line to the lines buffer.
+    if (lines.count != 0) pkByteBufferWrite(&lines, vm, '\n');
+    pkByteBufferAddString(&lines, vm, line, (uint32_t) line_length);
+    pkDeAllocString(vm, line);
+    pkByteBufferWrite(&lines, vm, '\0');
+
+    // Compile the buffer to the module.
+    result = compile(vm, _module, (const char*) lines.data, &options);
+
+    if (result == PK_RESULT_UNEXPECTED_EOF) {
+      ASSERT(lines.count > 0 && lines.data[lines.count - 1] == '\0', OOPS);
+      lines.count -= 1; // Remove the null byte to append a new string.
+      need_more_lines = true;
+      continue;
+    }
+
+    // We're buffering the lines for unexpected EOF, if we reached here that
+    // means it's either successfully compiled or compilation error. Clean the
+    // buffer for the next iteration.
+    need_more_lines = false;
+    pkByteBufferClear(&lines, vm);
+
+    if (result != PK_RESULT_SUCCESS) continue;
+
+    // Compiled source would be the "main" function of the module. Run it.
+    Closure* _main = moduleGetMainFunction(vm, _module);
+    ASSERT(_main != NULL, OOPS);
+    result = vmRunFunction(vm, _main, 0, NULL, NULL);
+
+  } while (!done);
+
+  pkReleaseHandle(vm, module);
+
+  return result;
 }
 
 /*****************************************************************************/
@@ -541,4 +697,54 @@ static void* defaultRealloc(void* memory, size_t new_size, void* _) {
     return NULL;
   }
   return realloc(memory, new_size);
+}
+
+void stderrWrite(PKVM* vm, const char* text) {
+  fprintf(stderr, "%s", text);
+}
+
+void stdoutWrite(PKVM* vm, const char* text) {
+  fprintf(stdout, "%s", text);
+}
+
+static char* stdinRead(PKVM* vm) {
+
+  pkByteBuffer buff;
+  pkByteBufferInit(&buff);
+  char c;
+  do {
+    c = (char)fgetc(stdin);
+    if (c == '\n') break;
+    pkByteBufferWrite(&buff, vm, (uint8_t)c);
+  } while (c != EOF);
+  pkByteBufferWrite(&buff, vm, '\0');
+
+  char* str = pkAllocString(vm, buff.count);
+  memcpy(str, buff.data, buff.count);
+  return str;
+}
+
+static char* loadScript(PKVM* vm, const char* path) {
+
+  FILE* file = fopen(path, "r");
+  if (file == NULL) return NULL;
+
+  // Get the source length. In windows the ftell will includes the cariage
+  // return when using ftell with fseek. But that's not an issue since
+  // we'll be allocating more memory than needed for fread().
+  fseek(file, 0, SEEK_END);
+  size_t file_size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  // Allocate string + 1 for the NULL terminator.
+  char* buff = pkAllocString(vm, file_size + 1);
+  ASSERT(buff != NULL, "pkAllocString failed.");
+
+  clearerr(file);
+  size_t read = fread(buff, sizeof(char), file_size, file);
+  ASSERT(read <= file_size, "fread() failed.");
+  buff[read] = '\0';
+  fclose(file);
+
+  return buff;
 }

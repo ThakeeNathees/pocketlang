@@ -11,7 +11,6 @@
 #include <pocketlang.h>
 
 #include <stdlib.h> /* For malloc */
-#include <stdio.h>  /* For printf */
 #include <string.h> /* For strncmp */
 #include <math.h>   /* For sqrt */
 
@@ -36,7 +35,7 @@ static const char* code =
   "  print()                               \n"
   "                                        \n"
   "  v2 = Vec2(5, 6)                       \n"
-  "  v3 = v1.add(v2)                       \n"
+  "  v3 = v1 + v2                          \n"
   "  print('v3        = ${v3}')            \n"
   "  print('v3.x      = ${v3.x}')          \n"
   "  print('v3.y      = ${v3.y}')          \n"
@@ -64,8 +63,36 @@ void _deleteVec(void* vector) {
   free(vector);
 }
 
-// Vec2 'add' method.
-void _vec2Add(PKVM* vm) {
+void _vecGetter(PKVM* vm) {
+  const char* name = pkGetSlotString(vm, 1, NULL);
+  Vector* self = (Vector*)pkGetSelf(vm);
+  if (strcmp("x", name) == 0) {
+    pkSetSlotNumber(vm, 0, self->x);
+    return;
+  } else if (strcmp("y", name) == 0) {
+    pkSetSlotNumber(vm, 0, self->y);
+    return;
+  }
+}
+
+void _vecSetter(PKVM* vm) {
+  const char* name = pkGetSlotString(vm, 1, NULL);
+  Vector* self = (Vector*)pkGetSelf(vm);
+  if (strcmp("x", name) == 0) {
+    double x;
+    if (!pkValidateSlotNumber(vm, 2, &x)) return;
+    self->x = x;
+    return;
+  } else if (strcmp("y", name) == 0) {
+    double y;
+    if (!pkValidateSlotNumber(vm, 2, &y)) return;
+    self->y = y;
+    return;
+  }
+}
+
+// Vec2 '+' operator method.
+void _vecAdd(PKVM* vm) {
   Vector* self = (Vector*)pkGetSelf(vm);
   // FIXME:
   // Temproarly it's not possible to get vector from the args since the native
@@ -78,7 +105,7 @@ void registerVector(PKVM* vm) {
 
   PkHandle* Vec2 = pkNewClass(vm, "Vec2", NULL /*Base Class*/,
                               vector, _newVec, _deleteVec);
-  pkClassAddMethod(vm, Vec2, "add", _vec2Add, 1);
+  pkClassAddMethod(vm, Vec2, "+", _vecAdd, 1);
   pkReleaseHandle(vm, Vec2);
 
   pkRegisterModule(vm, vector);
@@ -89,23 +116,12 @@ void registerVector(PKVM* vm) {
 /* POCKET VM CALLBACKS                                                       */
 /*****************************************************************************/
 
-void stdoutCallback(PKVM* vm, const char* text) {
-  fprintf(stdout, "%s", text);
-}
-
 int main(int argc, char** argv) {
 
-  PkConfiguration config = pkNewConfiguration();
-  config.stdout_write = stdoutCallback;
-
-  PKVM* vm = pkNewVM(&config);
+  PKVM* vm = pkNewVM(NULL);
   registerVector(vm);
-  
-  PkStringPtr source = { .string = code };
-  PkStringPtr path = { .string = "./some/path/" };
-  
-  PkResult result = pkInterpretSource(vm, source, path, NULL/*options*/);
+  pkRunString(vm, code);
   pkFreeVM(vm);
   
-  return result;
+  return 0;
 }

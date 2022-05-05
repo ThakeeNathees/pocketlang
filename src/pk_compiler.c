@@ -442,7 +442,7 @@ struct Compiler {
   //
   Compiler* next_compiler;
 
-  const PkCompileOptions* options; //< To configure the compilation.
+  const CompileOptions* options; //< To configure the compilation.
 
   Module* module;  //< Current module that's being compiled.
   Loop* loop;      //< Current loop the we're parsing.
@@ -537,7 +537,7 @@ static void parserInit(Parser* parser, PKVM* vm, Compiler* compiler,
 }
 
 static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
-                         Module* module, const PkCompileOptions* options) {
+                         Module* module, const CompileOptions* options) {
 
   compiler->next_compiler = NULL;
 
@@ -2800,27 +2800,30 @@ static Module* importFile(Compiler* compiler, const char* path) {
 
   PKVM* vm = compiler->parser.vm;
 
-  // Resolve the path.
-  PkStringPtr resolved = { path, NULL, NULL };
+  // FIXME: REPL mode mdule doesn't have a path, So we're using NULL and the
+  // resolve path function will use cwd to resolve.
+  const char* from = NULL;
+  if (compiler->module->path != NULL) from = compiler->module->path->data;
+
+  char* resolved = NULL;
+
   if (vm->config.resolve_path_fn != NULL) {
-    resolved = vm->config.resolve_path_fn(vm, compiler->module->path->data,
-                                          path);
+    resolved = vm->config.resolve_path_fn(vm, from, path);
   }
 
-  if (resolved.string == NULL) {
+  if (resolved == NULL) {
     semanticError(compiler, compiler->parser.previous,
-      "Cannot resolve path '%s' from '%s'", path,
-      compiler->module->path->data);
+      "Cannot resolve path '%s' from '%s'", path, from);
     return NULL;
   }
 
   // Create new string for the resolved path. And free the resolved path.
   int index = 0;
   String* path_ = moduleAddString(compiler->module, compiler->parser.vm,
-                                      resolved.string,
-                                      (uint32_t)strlen(resolved.string),
-                                      &index);
-  if (resolved.on_done != NULL) resolved.on_done(vm, resolved);
+                                  resolved,
+                                  (uint32_t)strlen(resolved),
+                                  &index);
+  pkDeAllocString(vm, resolved);
 
   // Check if the script already compiled and cached in the PKVM.
   Var entry = mapGet(vm->modules, VAR_OBJ(path_));
@@ -2842,9 +2845,11 @@ static Module* importFile(Compiler* compiler, const char* path) {
     return NULL;
   }
 
-  // Load the script at the path.
-  PkStringPtr source = vm->config.load_script_fn(vm, path_->data);
-  if (source.string == NULL) {
+  // Load the script at the path. Note that if the source is not NULL, it's
+  // our responsibility to deallocate the string with the pkDeallocString()
+  // function.
+  char* source = vm->config.load_script_fn(vm, path_->data);
+  if (source == NULL) {
     semanticError(compiler, compiler->parser.previous,
                   "Error loading script at \"%s\"", path_->data);
     return NULL;
@@ -2854,18 +2859,8 @@ static Module* importFile(Compiler* compiler, const char* path) {
   Module* module = newModule(vm);
   module->path = path_;
   vmPushTempRef(vm, &module->_super); // module.
-  {
-    moduleAddMain(vm, module);
-
-    // Add '__file__' variable with it's path as value. If the path starts with
-    // '@' It's a special file (@(REPL) or @(TRY)) and don't define __file__.
-    if (module->path->data[0] != SPECIAL_NAME_CHAR) {
-      moduleAddGlobal(vm, module, "__file__", 8, VAR_OBJ(module->path));
-    }
-    // TODO: Add ARGV to the module's globals.
-
-    vmRegisterModule(vm, module, path_);
-  }
+  initializeScript(vm, module);
+  vmRegisterModule(vm, module, path_);
   vmPopTempRef(vm); // module.
 
   // Push the compiled script on the stack.
@@ -2874,13 +2869,13 @@ static Module* importFile(Compiler* compiler, const char* path) {
 
   // Even if we're running on repl mode the imported module cannot run on
   // repl mode.
-  PkCompileOptions options = pkNewCompilerOptions();
+  CompileOptions options = newCompilerOptions();
   if (compiler->options) options = *compiler->options;
   options.repl_mode = false;
 
   // Compile the source to the module and clean the source.
-  PkResult result = compile(vm, module, source.string, &options);
-  if (source.on_done != NULL) source.on_done(vm, source);
+  PkResult result = compile(vm, module, source, &options);
+  pkDeAllocString(vm, source);
 
   if (result != PK_RESULT_SUCCESS) {
     semanticError(compiler, compiler->parser.previous,
@@ -3429,8 +3424,15 @@ static void compileTopLevelStatement(Compiler* compiler) {
 
 }
 
+CompileOptions newCompilerOptions() {
+  CompileOptions options;
+  options.debug = false;
+  options.repl_mode = false;
+  return options;
+}
+
 PkResult compile(PKVM* vm, Module* module, const char* source,
-                 const PkCompileOptions* options) {
+                 const CompileOptions* options) {
 
   ASSERT(module != NULL, OOPS);
 

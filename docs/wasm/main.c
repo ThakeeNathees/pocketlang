@@ -31,32 +31,7 @@ int runSource(const char* source) {
   config.resolve_path_fn = NULL;
 
   PKVM* vm = pkNewVM(&config);
-
-  // FIXME:
-  // The bellow blocks of code can be simplified with
-  //
-  //    PkResult result = pkInterpretSource(vm, src, path, NULL);
-  //
-  // But the path is printed on the error messages as "@(TRY)"
-  // If we create a module and compile it, then it won't have a
-  // path and the error message is simplified. This behavior needs
-  // to be changed in the error report function.
-
-  PkResult result;
-
-  PkHandle* module = pkNewModule(vm, "@(TRY)");
-  do {
-    PkStringPtr src = { .string = source };
-    result = pkCompileModule(vm, module, src, NULL);
-    if (result != PK_RESULT_SUCCESS) break;
-
-    PkHandle* _main = pkModuleGetMainFunction(vm, module);
-    result = pkRunFunction(vm, _main, 0, -1, -1);
-    pkReleaseHandle(vm, _main);
-
-  } while (false);
-  pkReleaseHandle(vm, module);
-
+  PkResult result = pkRunString(vm, source);
   pkFreeVM(vm);
 
   return (int)result;

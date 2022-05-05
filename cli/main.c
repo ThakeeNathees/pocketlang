@@ -4,110 +4,23 @@
  *  Distributed Under The MIT License
  */
 
-#include "internal.h"
-#include "modules/modules.h"
-#include "thirdparty/argparse/argparse.h"
+#include <pocketlang.h>
+#include <stdio.h>
 
 // FIXME: Everything below here is temporary and for testing.
 
-int repl(PKVM* vm, const PkCompileOptions* options);
-const char* read_line(uint32_t* length);
+#if defined(__GNUC__)
+  #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
+  #pragma GCC diagnostic ignored "-Wunused-parameter"
+#elif defined(__clang__)
+  #pragma clang diagnostic ignored "-Wint-to-pointer-cast"
+  #pragma clang diagnostic ignored "-Wunused-parameter"
+#elif defined(_MSC_VER)
+  #pragma warning(disable:26812)
+#endif
 
-// ---------------------------------------
-
-void onResultDone(PKVM* vm, PkStringPtr result) {
-  if ((bool)result.user_data) {
-    free((void*)result.string);
-  }
-}
-
-void stderrWrite(PKVM* vm, const char* text) {
-  fprintf(stderr, "%s", text);
-}
-
-void stdoutWrite(PKVM* vm, const char* text) {
-  fprintf(stdout, "%s", text);
-}
-
-PkStringPtr stdinRead(PKVM* vm) {
-  PkStringPtr result;
-  result.string = read_line(NULL);
-  result.on_done = onResultDone;
-  result.user_data = (void*)true;
-  return result;
-}
-
-PkStringPtr resolvePath(PKVM* vm, const char* from, const char* path) {
-  PkStringPtr result;
-  result.on_done = onResultDone;
-
-  size_t from_dir_len;
-  pathGetDirName(from, &from_dir_len);
-
-  // FIXME: Should handle paths with size of more than FILENAME_MAX.
-
-  if (from_dir_len == 0 || pathIsAbsolute(path)) {
-    size_t length = strlen(path);
-
-    char* resolved = (char*)malloc(length + 1);
-    pathNormalize(path, resolved, length + 1);
-
-    result.string = resolved;
-    result.user_data = (void*)true;
-
-  } else {
-    char from_dir[FILENAME_MAX];
-    strncpy(from_dir, from, from_dir_len);
-    from_dir[from_dir_len] = '\0';
-
-    char fullpath[FILENAME_MAX];
-    size_t length = pathJoin(from_dir, path, fullpath, sizeof(fullpath));
-
-    char* resolved = (char*)malloc(length + 1);
-    pathNormalize(fullpath, resolved, length + 1);
-
-    result.string = resolved;
-    result.user_data = (void*)true;
-  }
-
-  return result;
-}
-
-PkStringPtr loadScript(PKVM* vm, const char* path) {
-
-  PkStringPtr result;
-  result.on_done = onResultDone;
-
-  // Open the file.
-  FILE* file = fopen(path, "r");
-  if (file == NULL) {
-    // Setting .string to NULL to indicate the failure of loading the script.
-    result.string = NULL;
-    return result;
-  }
-
-  // Get the source length.
-  fseek(file, 0, SEEK_END);
-  long file_size = ftell(file);
-  fseek(file, 0, SEEK_SET);
-
-  // Read source to buffer.
-  char* buff = (char*)malloc((size_t)(file_size) + 1);
-
-  // Using read instead of file_size is because "\r\n" is read as '\n' in
-  // windows.
-  if (buff != NULL) {
-    size_t read = fread(buff, sizeof(char), file_size, file);
-    buff[read] = '\0';
-  }
-
-  fclose(file);
-
-  result.string = buff;
-  result.user_data = (void*)true;
-
-  return result;
-}
+#include "modules/modules.h"
+#include "thirdparty/argparse/argparse.h"
 
 // FIXME:
 // Included for isatty(). This should be moved to somewhere. and I'm not sure
@@ -115,20 +28,23 @@ PkStringPtr loadScript(PKVM* vm, const char* path) {
 #ifdef _WIN32
   #include <Windows.h>
   #include <io.h>
+  #define isatty _isatty
+  #define fileno _fileno
 #else
   #include <unistd.h>
 #endif
+
+#define CLI_NOTICE                                                            \
+  "PocketLang " PK_VERSION_STRING " (https://github.com/ThakeeNathees/pocketlang/)\n" \
+  "Copyright (c) 2020-2021 ThakeeNathees\n"                                   \
+  "Copyright (c) 2021-2022 Pocketlang Contributors\n"                         \
+  "Free and open source software under the terms of the MIT license.\n"
 
 // Create new pocket VM and set it's configuration.
 static PKVM* intializePocketVM() {
 
   PkConfiguration config = pkNewConfiguration();
-  config.stderr_write = stderrWrite;
-  config.stdout_write = stdoutWrite;
-  config.stdin_read = stdinRead;
-
-  config.load_script_fn = loadScript;
-  config.resolve_path_fn = resolvePath;
+  config.resolve_path_fn = pathResolveImport;
 
 // FIXME:
 // Refactor and make it portable. Maybe custom is_tty() function?.
@@ -195,21 +111,12 @@ int main(int argc, const char** argv) {
 
   // Create and initialize pocket VM.
   PKVM* vm = intializePocketVM();
-  VmUserData user_data;
-  user_data.repl_mode = false;
-  pkSetUserData(vm, &user_data);
 
   REGISTER_ALL_MODULES(vm);
 
-  PkCompileOptions options = pkNewCompilerOptions();
-  options.debug = debug;
-
   if (cmd != NULL) { // pocket -c "print('foo')"
-
-    PkStringPtr source = { cmd, NULL, NULL, 0, 0 };
-    PkStringPtr path = { "@(Source)", NULL, NULL, 0, 0 };
-    PkResult result = pkInterpretSource(vm, source, path, NULL);
-    exitcode = (int)result;
+    PkResult result = pkRunString(vm, cmd);
+    exitcode = (int) result;
 
   } else if (argc == 0) { // Run on REPL mode.
 
@@ -218,22 +125,13 @@ int main(int argc, const char** argv) {
       printf("%s", CLI_NOTICE);
     }
 
-    options.repl_mode = true;
-    exitcode = repl(vm, &options);
+    exitcode = pkRunREPL(vm);
 
   } else { // pocket file.pk ...
 
-    PkStringPtr resolved = resolvePath(vm, ".", argv[0]);
-    PkStringPtr source = loadScript(vm, resolved.string);
-
-    if (source.string != NULL) {
-      PkResult result = pkInterpretSource(vm, source, resolved, &options);
-      exitcode = (int)result;
-    } else {
-      fprintf(stderr, "Error: cannot open file at \"%s\"\n", resolved.string);
-      if (resolved.on_done != NULL) resolved.on_done(vm, resolved);
-      if (source.on_done != NULL) source.on_done(vm, source);
-    }
+    const char* file_path = argv[0];
+    PkResult result = pkRunFile(vm, file_path);
+    exitcode = (int) result;
   }
 
   // Cleanup the VM and exit.
