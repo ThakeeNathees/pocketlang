@@ -1,5 +1,9 @@
 
-from math import *
+## `from math import *` not supported anymore
+
+import math as m
+from math import abs, round, log10,
+                 floor, ceil
 
 assert(ceil(1.1) == floor(2.9))
 
@@ -8,35 +12,35 @@ assert(ceil(1.1) == floor(2.9))
 ## and it'll be fixed soon.
 PI = 3.14159265358979323846
 
-assert(sin(0) == 0)
-assert(sin(PI/2) == 1)
+assert(m.sin(0) == 0)
+assert(m.sin(PI/2) == 1)
 
 threshold = 0.0000000000001
 
-assert(abs(cos(PI/3) - 0.5) < threshold )
-assert(abs(tan(PI/4) - 1.0) < threshold )
+assert(abs(m.cos(PI/3) - 0.5) < threshold )
+assert(abs(m.tan(PI/4) - 1.0) < threshold )
 for i in 0..1000
-  assert(abs(sin(i) / cos(i) - tan(i)) < threshold)
+  assert(abs(m.sin(i) / m.cos(i) - m.tan(i)) < threshold)
 end
 
-assert((cosh(.5) - 1.1276259652063807) < threshold)
-assert((tanh(0.5) - 1.127625965206) < threshold)
+assert((m.cosh(.5) - 1.1276259652063807) < threshold)
+assert((m.tanh(0.5) - 1.127625965206) < threshold)
 for i in 0..100
-  assert(abs(sinh(i) / cosh(i) - tanh(i)) < threshold)
+  assert(abs(m.sinh(i) / m.cosh(i) - m.tanh(i)) < threshold)
 end
 
-assert(abs(acos(PI/4) - 0.5) < 0.35)
-assert(abs(atan(PI/4) - 0.5) < 0.2)
+assert(abs(m.acos(PI/4) - 0.5) < 0.35)
+assert(abs(m.atan(PI/4) - 0.5) < 0.2)
 
-assert((acos(0.5) - 1.1276259652063807) < threshold)
-assert((atan(0.3) - 1.1276259652063807) < threshold)
+assert((m.acos(0.5) - 1.1276259652063807) < threshold)
+assert((m.atan(0.3) - 1.1276259652063807) < threshold)
 
 x = -1; interval = 1000
 for i in 0..interval-1
   x += 2/interval
-  assert(abs(sin(asin(x)) - x) < threshold)
-  assert(abs(cos(acos(x)) - x) < threshold)
-  assert(abs(tan(atan(x)) - x) < threshold)
+  assert(abs(m.sin(m.asin(x)) - x) < threshold)
+  assert(abs(m.cos(m.acos(x)) - x) < threshold)
+  assert(abs(m.tan(m.atan(x)) - x) < threshold)
 end
 
 assert(abs(log10(2) - 0.3010299956639812) < threshold)

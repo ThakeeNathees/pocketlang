@@ -285,9 +285,6 @@ PkResult pkRunString(PKVM* vm, const char* source) {
 
 PkResult pkRunFile(PKVM* vm, const char* path) {
 
-  // FIXME(_imp_): path resolve function should always expect a source file
-  // path (ends with .pk) to be consistance with the paths.
-
   // Note: The file may have been imported by some other script and cached in
   // the VM's scripts cache. But we're not using that instead, we'll recompile
   // the file and update the cache.

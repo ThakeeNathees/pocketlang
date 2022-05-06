@@ -6,40 +6,32 @@ import lang as o, path as p
 from lang import write
 from lang import clock as c
 
-from lang import *
-from path import *
+import basics
+import controlflow as if_test
+from functions import f1, f2 as fn2, f3
 
-import "basics.pk" ## will import all
-import "controlflow.pk" as if_test
-from "functions.pk" import f1, f2 as fn2, f3
-
-## If it has a module name it'll bind to that name.
-import 'import/module.pk'
-assert(module_name.get_module_name() == 'module_name')
-
-## Import everything from the module.
-from 'import/module.pk' import *
-assert(module_name.get_module_name == get_module_name)
-
-## script without module name will import all by default.
-import 'import/all_import.pk'
-assert(all_f1() == 'f1')
-assert(all_f2() == 'f2')
-assert(all_f3() == 'f3')
+import imports.fns
+assert(fns.f1() == 'f1')
+assert(fns.f2() == 'f2')
+assert(fns.f3() == 'f3')
 
 ## Import the script and bound it with a given name.
-import 'import/all_import.pk' as all_import
-assert(all_import.all_f1 == all_f1)
+import imports.fns as fns2
+assert(fns2 == fns)
+assert(fns2.f1 == fns.f1)
 
 ## Test if the imported globals were initialized
-import 'import/globals.pk'
-assert(g_import != null)
-assert(g_import.g_var_1 == 3)
-assert(g_import.g_var_2 == g_import.get_a_value())
+import imports.globals as gbl
+assert(gbl.g_1 == 3)
+assert(gbl.g_2 == gbl.get_a_value())
 
-import 'import/globals2.pk'
-assert(g_val_1 == 100)
-assert(g_val_2 == get_a_value())
+## import "imports/foo/_init.pk::bar"
+from imports.foo import bar
+assert(bar() == "foo.bar")
+
+## Test cyclic import
+import imports.cyclic_a as a
+assert(a.get_b_fn()() == "cyclic b")
 
 # If we got here, that means all test were passed.
 print('All TESTS PASSED')

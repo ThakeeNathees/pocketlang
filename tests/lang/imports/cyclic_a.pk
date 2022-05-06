@@ -1,0 +1,12 @@
+
+print('before cyclic_a')
+import cyclic_b
+print('after  cyclic_a')
+
+def fn_a()
+  return "cyclic a"
+end
+
+def get_b_fn()
+  return cyclic_b.fn_b
+end

@@ -12,19 +12,31 @@
 // Refactor the bellow macro includes.
 
 #include "thirdparty/cwalk/cwalk.h"
-#if defined(_WIN32) && (defined(_MSC_VER) || defined(__TINYC__))
-  #include "thirdparty/dirent/dirent.h"
-#else
-  #include <dirent.h>
-#endif
+
+#include <errno.h>
+#include <sys/stat.h>
 
 #if defined(_WIN32)
   #include <windows.h>
+#endif
+
+#if defined(_MSC_VER) || (defined(_WIN32) && defined(__TINYC__))
+  #include "thirdparty/dirent/dirent.h"
   #include <direct.h>
-  #define get_cwd _getcwd
+  #include <io.h>
+
+  // access() function flag defines for windows.
+  // Reference :https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/access-waccess?view=msvc-170#remarks
+  #define F_OK 0
+  #define W_OK 2
+  #define R_OK 4
+
+  #define access _access
+  #define getcwd _getcwd
+
 #else
+  #include <dirent.h>
   #include <unistd.h>
-  #define get_cwd getcwd
 #endif
 
 // The maximum path size that pocketlang's default import system supports
@@ -39,11 +51,75 @@
 #define MAX_JOIN_PATHS 8
 
 static inline size_t pathAbs(const char* path, char* buff, size_t buff_size);
-static inline bool pathIsFileExists(const char* path);
+static inline bool pathIsFile(const char* path);
+static inline bool pathIsDir(const char* path);
 
 /*****************************************************************************/
 /* PATH SHARED FUNCTIONS                                                     */
 /*****************************************************************************/
+
+// check if path + ext exists. If not return 0, otherwise path + ext will
+// written to the buffer and return the total length.
+//
+// [path] and [buff] should be char array with size of FILENAME_MAX. This
+// function will write path + ext to the buff. If the path exists it'll return
+// true.
+static inline size_t checkImportExists(char* path, const char* ext,
+                                       char* buff) {
+  size_t path_size = strlen(path);
+  size_t ext_size = strlen(ext);
+
+  // If the path size is too large we're bailing out.
+  if (path_size + ext_size + 1 >= FILENAME_MAX) return 0;
+
+  // Now we're safe to use strcpy.
+  strcpy(buff, path);
+  strcpy(buff + path_size, ext);
+
+  if (!pathIsFile(buff)) return 0;
+  return path_size + ext_size;
+}
+
+// Try all import paths by appending pocketlang supported extensions to the
+// path (ex: path + ".pk", path + ".dll", path + ".so", path + "/_init.pk", ...
+// if such a path exists it'll allocate a pocketlang string and return it.
+//
+// Note that [path] and [buff] should be char array with size of FILENAME_MAX.
+// The buffer will be used as a working memory.
+static char* tryImportPaths(PKVM* vm, char* path, char* buff) {
+  size_t path_size = 0;
+
+  // FIXME: review this code.
+  do {
+    if ((path_size = checkImportExists(path, "", buff)) != 0) {
+      break;
+
+    }  else if ((path_size = checkImportExists(path, ".pk", buff)) != 0) {
+      break;
+
+    } else if ((path_size = checkImportExists(path, "/_init.pk", buff)) != 0) {
+      break;
+    }
+  } while (false);
+
+  char* ret = NULL;
+  if (path_size != 0) {
+    ret = pkAllocString(vm, path_size + 1);
+    memcpy(ret, buff, path_size + 1);
+  }
+  return ret;
+}
+
+// replace all the '\\' with '/' to make all the seperator in a path is the
+// same this is only used in import path system to make the path of a module
+// unique (otherwise same path with different seperator makes them different).
+void pathFixWindowsSeperator(char* buff) {
+  ASSERT(buff, OOPS);
+  while (*buff != '\0') {
+    if (*buff == '\\') *buff = '/';
+    buff++;
+  }
+}
 
 // Implementation of pocketlang import path resolving function.
 char* pathResolveImport(PKVM* vm, const char* from, const char* path) {
@@ -52,14 +128,15 @@ char* pathResolveImport(PKVM* vm, const char* from, const char* path) {
   char buff1[FILENAME_MAX];
   char buff2[FILENAME_MAX];
 
-  // If the path is absolute, Just normalize and return it.
+  // If the path is absolute, Just normalize and return it. Resolve path will
+  // only be absolute when the path is provided from the command line.
   if (cwk_path_is_absolute(path)) {
+
     // buff1 = normalized path. +1 for null terminator.
     size_t size = cwk_path_normalize(path, buff1, sizeof(buff1)) + 1;
+    pathFixWindowsSeperator(buff1);
 
-    char* ret = pkAllocString(vm, size);
-    memcpy(ret, buff1, size);
-    return ret;
+    return tryImportPaths(vm, buff1, buff2);
   }
 
   if (from == NULL) { //< [path] is relative to cwd.
@@ -69,10 +146,9 @@ char* pathResolveImport(PKVM* vm, const char* from, const char* path) {
 
     // buff2 = normalized path. +1 for null terminator.
     size_t size = cwk_path_normalize(buff1, buff2, sizeof(buff2)) + 1;
+    pathFixWindowsSeperator(buff2);
 
-    char* ret = pkAllocString(vm, size);
-    memcpy(ret, buff2, size);
-    return ret;
+    return tryImportPaths(vm, buff2, buff1);
   }
 
   // Import statements doesn't support absolute paths.
@@ -93,12 +169,9 @@ char* pathResolveImport(PKVM* vm, const char* from, const char* path) {
 
     // buff1 = normalized absolute path. +1 for null terminator
     size_t size = cwk_path_normalize(buff2, buff1, sizeof(buff1)) + 1;
+    pathFixWindowsSeperator(buff1);
 
-    if (pathIsFileExists(buff1)) {
-      char* ret = pkAllocString(vm, size);
-      memcpy(ret, buff1, size);
-      return ret;
-    }
+    return tryImportPaths(vm, buff1, buff2);
   }
 
   // Cannot resolve the path. Return NULL to indicate failure.
@@ -109,38 +182,27 @@ char* pathResolveImport(PKVM* vm, const char* from, const char* path) {
 /* PATH INTERNAL FUNCTIONS                                                   */
 /*****************************************************************************/
 
-// FIXME: refactor (ref: https://stackoverflow.com/a/230068/10846399)
-static inline bool pathIsFileExists(const char* path) {
-  FILE* file = fopen(path, "r");
-  if (file != NULL) {
-    fclose(file);
-    return true;
-  }
-  return false;
+static inline bool pathIsFile(const char* path) {
+  struct stat path_stat;
+  stat(path, &path_stat);
+  return (path_stat.st_mode & S_IFMT) == S_IFREG;
 }
 
-// Reference: https://stackoverflow.com/a/12510903/10846399
-static inline bool pathIsDirectoryExists(const char* path) {
-  DIR* dir = opendir(path);
-  if (dir) { /* Directory exists. */
-    closedir(dir);
-    return true;
-  } else if (errno == ENOENT) { /* Directory does not exist. */
-  } else { /* opendir() failed for some other reason. */
-  }
-
-  return false;
+static inline bool pathIsDir(const char* path) {
+  struct stat path_stat;
+  stat(path, &path_stat);
+  return (path_stat.st_mode & S_IFMT) == S_IFDIR;
 }
 
 static inline bool pathIsExists(const char* path) {
-  return pathIsFileExists(path) || pathIsDirectoryExists(path);
+  return access(path, F_OK) == 0;
 }
 
 static inline size_t pathAbs(const char* path, char* buff, size_t buff_size) {
 
   char cwd[MAX_PATH_LEN];
 
-  if (get_cwd(cwd, sizeof(cwd)) == NULL) {
+  if (getcwd(cwd, sizeof(cwd)) == NULL) {
     // TODO: handle error.
   }
 
@@ -151,15 +213,9 @@ static inline size_t pathAbs(const char* path, char* buff, size_t buff_size) {
 /* PATH MODULE FUNCTIONS                                                     */
 /*****************************************************************************/
 
-DEF(_pathSetStyleUnix, "") {
-  bool value;
-  if (!pkValidateSlotBool(vm, 1, &value)) return;
-  cwk_path_set_style((value) ? CWK_STYLE_UNIX : CWK_STYLE_WINDOWS);
-}
-
 DEF(_pathGetCWD, "") {
   char cwd[MAX_PATH_LEN];
-  if (get_cwd(cwd, sizeof(cwd)) == NULL) {
+  if (getcwd(cwd, sizeof(cwd)) == NULL) {
     // TODO: Handle error.
   }
   pkSetSlotString(vm, 0, cwd);
@@ -269,19 +325,18 @@ DEF(_pathExists, "") {
 DEF(_pathIsFile, "") {
   const char* path;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
-  pkSetSlotBool(vm, 0, pathIsFileExists(path));
+  pkSetSlotBool(vm, 0, pathIsFile(path));
 }
 
 DEF(_pathIsDir, "") {
   const char* path;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
-  pkSetSlotBool(vm, 0, pathIsDirectoryExists(path));
+  pkSetSlotBool(vm, 0, pathIsDir(path));
 }
 
 void registerModulePath(PKVM* vm) {
   PkHandle* path = pkNewModule(vm, "path");
 
-  pkModuleAddFunction(vm, path, "setunix",   _pathSetStyleUnix, 1);
   pkModuleAddFunction(vm, path, "getcwd",    _pathGetCWD,       0);
   pkModuleAddFunction(vm, path, "abspath",   _pathAbspath,      1);
   pkModuleAddFunction(vm, path, "relpath",   _pathRelpath,      2);

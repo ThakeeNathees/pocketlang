@@ -1,0 +1,12 @@
+
+def f1()
+	return 'f1'
+end
+
+def f2()
+	return 'f2'
+end
+
+def f3()
+	return 'f3'
+end

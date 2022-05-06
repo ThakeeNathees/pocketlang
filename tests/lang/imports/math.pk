@@ -1,0 +1,7 @@
+
+import math ## core math module
+
+## math script sqrt fn.
+def sqrt(n)
+  return ".math sqrt fn"
+end

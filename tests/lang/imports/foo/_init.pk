@@ -1,0 +1,9 @@
+
+## import "../../functions.pk"
+import ^^functions as fns
+
+def bar()
+  assert(fns.f2() == "f2")
+  return "foo.bar"
+end
+

@@ -1,0 +1,13 @@
+
+def one_call()
+  assert(g_2 == null) ## second import cannot run this.
+  return get_a_value()
+end
+
+def get_a_value()  
+  return "foobar"
+end
+
+g_1 = 1 + 2
+g_2 = one_call()
+
