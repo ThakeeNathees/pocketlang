@@ -1,0 +1,12 @@
+
+import .math
+assert(math.sqrt(4) == ".math sqrt fn")
+
+import math
+assert(math.sqrt(4) == 2)
+
+import ^functions as fns
+assert(fns.f1() == "f1")
+
+# If we got here, that means all test were passed.
+print('All TESTS PASSED')

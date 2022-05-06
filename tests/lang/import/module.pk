@@ -1,6 +1,0 @@
-
-module module_name
-
-def get_module_name()
-	return 'module_name'
-end

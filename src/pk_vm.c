@@ -334,31 +334,102 @@ PkResult vmRunFunction(PKVM* vm, Closure* fn, int argc, Var* argv, Var* ret) {
 /* VM INTERNALS                                                              */
 /*****************************************************************************/
 
-// FIXME:
-// We're assuming that the module should be available at the VM's modules cache
-// which is added by the compilation pahse, but we cannot rely on the
-// compilation phase here as it could be a seperate system from the runtime and
-// should throw a runtime error if the module is not present in the modules
-// cache (or try to load).
-// Example: If we may support to store the compiled script as a separate file
-// (like python's ".pyc" or java's ".class" the runtime cannot ensure that the
-// module it import is already cached.
-//
-// Import and return the Module object with the [name] (if it's a scirpt
-// doesn't have a module name, the name would be it's resolved path).
-static inline Var importModule(PKVM* vm, String* key) {
+// Import and return the Module object with the [path] string. If the path
+// starts with with './' or '../' we'll only try relative imports, otherwise
+// we'll search native modules first and then at relative path.
+static inline Var importModule(PKVM* vm, String* from, String* path) {
+  ASSERT((path != NULL) && (path->length > 0), OOPS);
 
-  Var entry = mapGet(vm->modules, VAR_OBJ(key));
-  if (!IS_UNDEF(entry)) {
-    ASSERT(AS_OBJ(entry)->type == OBJ_MODULE, OOPS);
-    return entry;
+  bool is_relative = path->data[0] == '.';
+
+  // If not relative check the [path] in the modules cache with the name
+  // (before resolving the path).
+  if (!is_relative) {
+    // If not relative path we first search in modules cache. It'll find the
+    // native module or the already imported cache of the script.
+    Var entry = mapGet(vm->modules, VAR_OBJ(path));
+    if (!IS_UNDEF(entry)) {
+      ASSERT(AS_OBJ(entry)->type == OBJ_MODULE, OOPS);
+      return entry; // We're done.
+    }
   }
 
-  // FIXME: Should be a runtime error.
-  // Imported modules were resolved at compile time.
-  UNREACHABLE();
+  // If we reached here. It's not a native module (ie. module's absolute path
+  // is required to import and cache).
+  char* _resolved = vm->config.resolve_path_fn(vm,
+                    (from) ? from->data : NULL, path->data);
 
-  return VAR_NULL;
+  if (_resolved == NULL) { // Can't resolve a relative module.
+    pkDeAllocString(vm, _resolved);
+    if (from) {
+      VM_SET_ERROR(vm, stringFormat(vm, "Cannot resolve a relative import "
+                                        "path \"@\" from \"@\".", path, from));
+    } else {
+      VM_SET_ERROR(vm, stringFormat(vm, "Cannot resolve a relative import "
+                                        "path \"@\"", path));
+    }
+    return VAR_NULL;
+  }
+
+  String* resolved = newString(vm, _resolved);
+  pkDeAllocString(vm, _resolved);
+
+  // If the script already imported and cached, return it.
+  Var entry = mapGet(vm->modules, VAR_OBJ(resolved));
+  if (!IS_UNDEF(entry)) {
+    ASSERT(AS_OBJ(entry)->type == OBJ_MODULE, OOPS);
+    return entry; // We're done.
+  }
+
+  // If we've reached here, the script is new. Import compile, and cache it.
+
+  // The script not exists in the VM, make sure we have the script loading
+  // api function.
+  if (vm->config.load_script_fn == NULL) {
+    VM_SET_ERROR(vm, newString(vm, "Cannot import. The hosting application "
+                               "haven't registered the module loading API"));
+    return VAR_NULL;
+  }
+
+  Module* module = NULL;
+
+  vmPushTempRef(vm, &resolved->_super); // resolved.
+  do {
+
+    char* source = vm->config.load_script_fn(vm, resolved->data);
+    if (source == NULL) {
+      VM_SET_ERROR(vm, stringFormat(vm, "Error loading module at \"@\"",
+                                    resolved));
+      break;
+    }
+
+    // Make a new module and to compile it.
+    module = newModule(vm);
+    module->path = resolved;
+    vmPushTempRef(vm, &module->_super); // module.
+    {
+      initializeScript(vm, module);
+      PkResult result = compile(vm, module, source, NULL);
+      pkDeAllocString(vm, source);
+      if (result == PK_RESULT_SUCCESS) {
+        vmRegisterModule(vm, module, resolved);
+      } else {
+        VM_SET_ERROR(vm, stringFormat(vm, "Error compiling module at \"@\"",
+                     resolved));
+        module = NULL; //< set to null to indicate error.
+      }
+    }
+    vmPopTempRef(vm); // module.
+
+  } while (false);
+  vmPopTempRef(vm); // resolved.
+
+  if (module == NULL) {
+    ASSERT(VM_HAS_ERROR(vm), OOPS);
+    return VAR_NULL;
+  }
+
+  return VAR_OBJ(module);
 }
 
 void vmEnsureStackSize(PKVM* vm, int size) {
@@ -952,12 +1023,11 @@ L_vm_main_loop:
       String* name = moduleGetStringAt(module, (int)index);
       ASSERT(name != NULL, OOPS);
 
-      Var _imported = importModule(vm, name);
+      Var _imported = importModule(vm, module->path, name);
+      CHECK_ERROR();
       ASSERT(IS_OBJ_TYPE(_imported, OBJ_MODULE), OOPS);
-      PUSH(_imported);
 
-      // TODO: If the body doesn't have any statements (just the functions).
-      // This initialization call is un-necessary.
+      PUSH(_imported);
 
       Module* imported = (Module*)AS_OBJ(_imported);
       if (!imported->initialized) {

@@ -108,7 +108,6 @@ typedef enum {
   TK_SLEFTEQ,    // <<=
 
   // Keywords.
-  TK_MODULE,     // module
   TK_CLASS,      // class
   TK_FROM,       // from
   TK_IMPORT,     // import
@@ -173,7 +172,6 @@ typedef struct {
 
 // List of keywords mapped into their identifiers.
 static _Keyword _keywords[] = {
-  { "module",   6, TK_MODULE   },
   { "class",    5, TK_CLASS    },
   { "from",     4, TK_FROM     },
   { "import",   6, TK_IMPORT   },
@@ -1585,7 +1583,6 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_SLEFT      */ { NULL,          exprBinaryOp,     PREC_BITWISE_SHIFT },
   /* TK_SRIGHTEQ   */   NO_RULE,
   /* TK_SLEFTEQ    */   NO_RULE,
-  /* TK_MODULE     */   NO_RULE,
   /* TK_CLASS      */   NO_RULE,
   /* TK_FROM       */   NO_RULE,
   /* TK_IMPORT     */   NO_RULE,
@@ -2792,349 +2789,146 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
   compilerExitBlock(compiler);
 }
 
-// Import a file at the given path (first it'll be resolved from the current
-// path) and return it as a module pointer. And it'll emit opcodes to push
-// that module to the stack.
-static Module* importFile(Compiler* compiler, const char* path) {
-  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
+// Parse the module path syntax, emit opcode to load module at that path.
+// and return the module's name token
+//
+//   ex: import foo.bar.baz // => "foo/bar/baz"   => return token 'baz'
+//       import .qux.lex    // => "./qux/lex"     => return token 'lex'
+//       import ^^foo.bar   // => "../../foo/bar" => return token 'bar'
+//
+// The name start pointer and its length will be written to the parameters.
+// For invalid syntax it'll set an error and return an error token.
+static Token compileImportPath(Compiler* compiler) {
 
   PKVM* vm = compiler->parser.vm;
+  pkByteBuffer buff; // A buffer to write the path string.
+  pkByteBufferInit(&buff);
 
-  // FIXME: REPL mode mdule doesn't have a path, So we're using NULL and the
-  // resolve path function will use cwd to resolve.
-  const char* from = NULL;
-  if (compiler->module->path != NULL) from = compiler->module->path->data;
-
-  char* resolved = NULL;
-
-  if (vm->config.resolve_path_fn != NULL) {
-    resolved = vm->config.resolve_path_fn(vm, from, path);
-  }
-
-  if (resolved == NULL) {
-    semanticError(compiler, compiler->parser.previous,
-      "Cannot resolve path '%s' from '%s'", path, from);
-    return NULL;
-  }
-
-  // Create new string for the resolved path. And free the resolved path.
-  int index = 0;
-  String* path_ = moduleAddString(compiler->module, compiler->parser.vm,
-                                  resolved,
-                                  (uint32_t)strlen(resolved),
-                                  &index);
-  pkDeAllocString(vm, resolved);
-
-  // Check if the script already compiled and cached in the PKVM.
-  Var entry = mapGet(vm->modules, VAR_OBJ(path_));
-  if (!IS_UNDEF(entry)) {
-    ASSERT(IS_OBJ_TYPE(entry, OBJ_MODULE), OOPS);
-
-    // Push the compiled script on the stack.
-    emitOpcode(compiler, OP_IMPORT);
-    emitShort(compiler, index);
-    return (Module*)AS_OBJ(entry);
-  }
-
-  // The script not exists in the VM, make sure we have the script loading
-  // api function.
-  if (vm->config.load_script_fn == NULL) {
-    semanticError(compiler, compiler->parser.previous,
-                  "Cannot import. The hosting application haven't  registered "
-                  "the script loading API");
-    return NULL;
-  }
-
-  // Load the script at the path. Note that if the source is not NULL, it's
-  // our responsibility to deallocate the string with the pkDeallocString()
-  // function.
-  char* source = vm->config.load_script_fn(vm, path_->data);
-  if (source == NULL) {
-    semanticError(compiler, compiler->parser.previous,
-                  "Error loading script at \"%s\"", path_->data);
-    return NULL;
-  }
-
-  // Make a new module and to compile it.
-  Module* module = newModule(vm);
-  module->path = path_;
-  vmPushTempRef(vm, &module->_super); // module.
-  initializeScript(vm, module);
-  vmRegisterModule(vm, module, path_);
-  vmPopTempRef(vm); // module.
-
-  // Push the compiled script on the stack.
-  emitOpcode(compiler, OP_IMPORT);
-  emitShort(compiler, index);
-
-  // Even if we're running on repl mode the imported module cannot run on
-  // repl mode.
-  CompileOptions options = newCompilerOptions();
-  if (compiler->options) options = *compiler->options;
-  options.repl_mode = false;
-
-  // Compile the source to the module and clean the source.
-  PkResult result = compile(vm, module, source, &options);
-  pkDeAllocString(vm, source);
-
-  if (result != PK_RESULT_SUCCESS) {
-    semanticError(compiler, compiler->parser.previous,
-                  "Compilation of imported script '%s' failed", path_->data);
-  }
-
-  return module;
-}
-
-// Import the native module from the PKVM's core_libs and it'll emit opcodes
-// to push that module to the stack.
-static Module* importCoreLib(Compiler* compiler, const char* name_start,
-                             int name_length) {
-  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
-
-  // Add the name to the module's name buffer, we need it as a key to the
-  // PKVM's module cache.
-  int index = 0;
-  String* module_name = moduleAddString(compiler->module, compiler->parser.vm,
-                                        name_start, name_length, &index);
-
-  Module* imported = vmGetModule(compiler->parser.vm, module_name);
-  if (imported == NULL) {
-    semanticError(compiler, compiler->parser.previous,
-                  "No module named '%s' exists.", module_name->data);
-    return NULL;
-  }
-
-  // Push the module on the stack.
-  emitOpcode(compiler, OP_IMPORT);
-  emitShort(compiler, index);
-
-  return imported;
-}
-
-// Push the imported module on the stack and return the pointer. It could be
-// either core library or a local import.
-static inline Module* compilerImport(Compiler* compiler) {
-  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
-
-  // Get the module (from native libs or VM's cache or compile new one).
-  // And push it on the stack.
-  if (match(compiler, TK_NAME)) { //< Core library.
-    return importCoreLib(compiler, compiler->parser.previous.start,
-                         compiler->parser.previous.length);
-
-  } else if (match(compiler, TK_STRING)) { //< Local library.
-    Var var_path = compiler->parser.previous.value;
-    ASSERT(IS_OBJ_TYPE(var_path, OBJ_STRING), OOPS);
-    String* path = (String*)AS_OBJ(var_path);
-    return importFile(compiler, path->data);
-  }
-
-  // Invalid token after import/from keyword.
-  syntaxError(compiler, compiler->parser.previous,
-              "Expected a module name or path to import.");
-  return NULL;
-}
-
-// Search for the name, and return it's index in the globals. If it's not
-// exists in the globals it'll add a variable to the globals entry and return.
-// But If the name is predefined function (cannot be modified). It'll set error
-// and return -1.
-static int compilerImportName(Compiler* compiler, int line,
-                              const char* name, uint32_t length) {
-  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
-
-  NameSearchResult result = compilerSearchName(compiler, name, length);
-  switch (result.type) {
-    case NAME_NOT_DEFINED:
-      return compilerAddVariable(compiler, name, length, line);
-
-    case NAME_LOCAL_VAR:
-    case NAME_UPVALUE:
-      UNREACHABLE();
-
-    case NAME_GLOBAL_VAR:
-      return result.index;
-
-    // TODO:
-    // Make it possible to override any name (ie. the syntax `print = 1`
-    // should pass) and allow imported entries to have the same name of
-    // builtin functions.
-    case NAME_BUILTIN_FN:
-    case NAME_BUILTIN_TY:
-      semanticError(compiler, compiler->parser.previous,
-                    "Name '%.*s' already exists.", length, name);
-      return -1;
-  }
-
-  UNREACHABLE();
-  return -1;
-}
-
-// This will called by the compilerImportAll() function to import a single
-// entry from the imported module. (could be a function or global variable).
-static void compilerImportSingleEntry(Compiler* compiler,
-                                      const char* name, uint32_t length) {
-
-  // Special names are begins with '@' (implicit main function, literal
-  // functions etc) skip them.
-  if (name[0] == SPECIAL_NAME_CHAR) return;
-
-  // Line number of the variables which will be bind to the imported symbol.
-  int line = compiler->parser.previous.line;
-
-  // Add the name to the **current** module's name buffer.
-  int name_index = 0;
-  moduleAddString(compiler->module, compiler->parser.vm,
-                  name, length, &name_index);
-
-  // Get the global/function/class from the module.
-  emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
-  emitShort(compiler, name_index);
-
-  int index = compilerImportName(compiler, line, name, length);
-  if (index != -1) emitStoreGlobal(compiler, index);
-  emitOpcode(compiler, OP_POP);
-}
-
-// Import all from the module, which is also would be at the top of the stack
-// before executing the below instructions.
-static void compilerImportAll(Compiler* compiler, Module* module) {
-
-  ASSERT(module != NULL, OOPS);
-  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
-
-  // Import all globals.
-  ASSERT(module->global_names.count == module->globals.count, OOPS);
-  for (uint32_t i = 0; i < module->globals.count; i++) {
-    String* name = moduleGetStringAt(module, module->global_names.data[i]);
-    ASSERT(name != NULL, OOPS);
-    // If a name starts with '_' we treat it as private and not importing.
-    if (name->length >= 1 && name->data[0] == '_') continue;
-    compilerImportSingleEntry(compiler, name->data, name->length);
-  }
-}
-
-// from module import symbol [as alias [, symbol2 [as alias]]]
-static void compileFromImport(Compiler* compiler) {
-  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
-
-  // Import the library and push it on the stack. If the import failed
-  // lib_from would be NULL.
-  Module* lib_from = compilerImport(compiler);
-
-  // At this point the module would be on the stack before executing the next
-  // instruction.
-  consume(compiler, TK_IMPORT, "Expected keyword 'import'.");
-
-  if (match(compiler, TK_STAR)) {
-    // from math import *
-    if (lib_from) compilerImportAll(compiler, lib_from);
+  if (match(compiler, TK_DOT)) {
+    pkByteBufferAddString(&buff, vm, "./", 2);
 
   } else {
-    do {
-      // Consume the symbol name to import from the module.
-      consume(compiler, TK_NAME, "Expected symbol to import.");
-      const char* name = compiler->parser.previous.start;
-      uint32_t length = (uint32_t)compiler->parser.previous.length;
-      int line = compiler->parser.previous.line;
-
-      // Add the name of the symbol to the names buffer.
-      int name_index = 0;
-      moduleAddString(compiler->module, compiler->parser.vm,
-                      name, length, &name_index);
-
-      // Don't pop the lib since it'll be used for the next entry.
-      emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
-      emitShort(compiler, name_index); //< Name of the attrib.
-
-      // Check if it has an alias.
-      if (match(compiler, TK_AS)) {
-        // Consuming it'll update the previous token which would be the name of
-        // the binding variable.
-        consume(compiler, TK_NAME, "Expected a name after 'as'.");
-      }
-
-      // Set the imported symbol binding name, which wold be in the last token
-      // consumed by the first one or after the as keyword.
-      name = compiler->parser.previous.start;
-      length = (uint32_t)compiler->parser.previous.length;
-      line = compiler->parser.previous.line;
-
-      // Get the variable to bind the imported symbol, if we already have a
-      // variable with that name override it, otherwise use a new variable.
-      int var_index = compilerImportName(compiler, line, name, length);
-      if (var_index != -1) emitStoreGlobal(compiler, var_index);
-      emitOpcode(compiler, OP_POP);
-
-    } while (match(compiler, TK_COMMA) && (skipNewLines(compiler), true));
+    // Consume parent directory syntax.
+    while (match(compiler, TK_CARET)) {
+      pkByteBufferAddString(&buff, vm, "../", 3);
+    }
   }
 
-  // Done getting all the attributes, now pop the lib from the stack.
-  emitOpcode(compiler, OP_POP);
+  Token tkmodule = makeErrToken(&compiler->parser);
+
+  // Consume module path.
+  do {
+    consume(compiler, TK_NAME, "Expected a module name");
+    if (compiler->parser.has_syntax_error) break;
+
+    // A '.' consumed, write '/'.
+    if (tkmodule.type != TK_ERROR) pkByteBufferWrite(&buff, vm, (uint8_t) '/');
+
+    tkmodule = compiler->parser.previous;
+    pkByteBufferAddString(&buff, vm, tkmodule.start, tkmodule.length);
+
+  } while (match(compiler, TK_DOT));
+  pkByteBufferWrite(&buff, vm, '\0');
+
+  if (compiler->parser.has_syntax_error) {
+    pkByteBufferClear(&buff, vm);
+    return makeErrToken(&compiler->parser);
+  }
+
+  // Create constant pool entry for the path string.
+  int index = 0;
+  moduleAddString(compiler->module, compiler->parser.vm,
+                  buff.data, buff.count - 1, &index);
+
+  pkByteBufferClear(&buff, vm);
+
+  emitOpcode(compiler, OP_IMPORT);
+  emitShort(compiler, index);
+
+  return tkmodule;
+}
+
+// import module1 [as alias1 [, module2 [as alias2 ...]]
+void compileRegularImport(Compiler* compiler) {
+  ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
+
+  do {
+    Token tkmodule = compileImportPath(compiler);
+    if (tkmodule.type == TK_ERROR) return; //< Syntax error. Terminate.
+
+    if (match(compiler, TK_AS)) {
+      consume(compiler, TK_NAME, "Expected a name after 'as'.");
+      if (compiler->parser.has_syntax_error) return;
+      tkmodule = compiler->parser.previous;
+    }
+
+    // FIXME:
+    // Note that for compilerAddVariable for adding global doesn't create
+    // a new global variable if it's already exists. But it'll reuse it. So we
+    // don't have to check if it's exists (unlike locals) which is an
+    // inconsistance behavior IMO. The problem here is that compilerAddVariable
+    // will try to initialize the global with VAR_NULL which may not be
+    // accceptable in some scenarios,
+    int global_index = compilerAddVariable(compiler, tkmodule.start,
+                                           tkmodule.length, tkmodule.line);
+
+    emitStoreGlobal(compiler, global_index);
+    emitOpcode(compiler, OP_POP);
+
+  } while (match(compiler, TK_COMMA) && (skipNewLines(compiler), true));
 
   // Always end the import statement.
   consumeEndStatement(compiler);
 }
 
-static void compileRegularImport(Compiler* compiler) {
+// from module import sym1 [as alias1 [, sym2 [as alias2 ...]]]
+static void compileFromImport(Compiler* compiler) {
   ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
 
+  Token tkmodule = compileImportPath(compiler);
+  if (tkmodule.type == TK_ERROR) return; //< Syntax error. Terminate.
+
+  // At this point the module would be on the stack before executing the next
+  // instruction.
+  consume(compiler, TK_IMPORT, "Expected keyword 'import'.");
+  if (compiler->parser.has_syntax_error) return;
+
   do {
+    // Consume the symbol name to import from the module.
+    consume(compiler, TK_NAME, "Expected symbol to import.");
+    if (compiler->parser.has_syntax_error) return;
+    Token tkname = compiler->parser.previous;
 
-    // Import the library and push it on the stack. If it cannot import,
-    // the lib would be null, but we're not terminating here, just continue
-    // parsing for cascaded errors.
-    Module* lib = compilerImport(compiler);
+    // Add the name of the symbol to the constant pool.
+    int name_index = 0;
+    moduleAddString(compiler->module, compiler->parser.vm, tkname.start,
+                    tkname.length, &name_index);
 
-    // variable to bind the imported module.
-    int var_index = -1;
+    // Don't pop the lib since it'll be used for the next entry.
+    emitOpcode(compiler, OP_GET_ATTRIB_KEEP);
+    emitShort(compiler, name_index); //< Name of the attrib.
 
-    // Check if it has an alias, if so bind the variable with that name.
+    // Check if it has an alias.
     if (match(compiler, TK_AS)) {
       // Consuming it'll update the previous token which would be the name of
       // the binding variable.
       consume(compiler, TK_NAME, "Expected a name after 'as'.");
-
-      // Get the variable to bind the imported symbol, if we already have a
-      // variable with that name override it, otherwise use a new variable.
-      const char* name = compiler->parser.previous.start;
-      int length = compiler->parser.previous.length;
-      int line = compiler->parser.previous.line;
-      var_index = compilerImportName(compiler, line, name, length);
-
-    } else {
-      // If it has a module name use it as binding variable.
-      // Core libs names are it's module name but for local libs it's optional
-      // to define a module name for a module.
-      if (lib && lib->name != NULL) {
-
-        // Get the variable to bind the imported symbol, if we already have a
-        // variable with that name override it, otherwise use a new variable.
-        const char* name = lib->name->data;
-        uint32_t length = lib->name->length;
-        int line = compiler->parser.previous.line;
-        var_index = compilerImportName(compiler, line, name, length);
-
-      } else {
-        // -- Nothing to do here --
-        // Importing from path which doesn't have a module name. Import
-        // everything of it. and bind to a variables.
-        NO_OP;
-      }
+      tkname = compiler->parser.previous;
     }
 
-    if (var_index != -1) {
-      emitStoreGlobal(compiler, var_index);
-      emitOpcode(compiler, OP_POP);
-
-    } else {
-      if (lib) compilerImportAll(compiler, lib);
-      // Done importing everything from lib now pop the lib.
-      emitOpcode(compiler, OP_POP);
-    }
+    // FIXME: See the same FIXME for compilerAddVariable()
+    // compileRegularImport function.
+    int global_index = compilerAddVariable(compiler, tkname.start,
+                                           tkname.length, tkname.line);
+    emitStoreGlobal(compiler, global_index);
+    emitOpcode(compiler, OP_POP);
 
   } while (match(compiler, TK_COMMA) && (skipNewLines(compiler), true));
 
+  // Done getting all the attributes, now pop the lib from the stack.
+  emitOpcode(compiler, OP_POP);
+
+  // Always end the import statement.
   consumeEndStatement(compiler);
 }
 
@@ -3404,15 +3198,11 @@ static void compileTopLevelStatement(Compiler* compiler) {
   } else if (match(compiler, TK_DEF)) {
     compileFunction(compiler, FUNC_TOPLEVEL);
 
-  } else if (match(compiler, TK_FROM)) {
-    compileFromImport(compiler);
-
   } else if (match(compiler, TK_IMPORT)) {
     compileRegularImport(compiler);
 
-  } else if (match(compiler, TK_MODULE)) {
-    syntaxError(compiler, compiler->parser.previous,
-                "Module name must be the first statement of the script.");
+  } else if (match(compiler, TK_FROM)) {
+    compileFromImport(compiler);
 
   } else {
     compileStatement(compiler);
@@ -3473,24 +3263,6 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
   lexToken(compiler);
   skipNewLines(compiler);
 
-  if (match(compiler, TK_MODULE)) {
-
-    // If the module running a REPL or compiled multiple times by hosting
-    // application module attribute might already set. In that case make it
-    // Compile error.
-    if (module->name != NULL) {
-      syntaxError(compiler, compiler->parser.previous,
-                  "Module name already defined.");
-
-    } else {
-      consume(compiler, TK_NAME, "Expected a name for the module.");
-      const char* name = compiler->parser.previous.start;
-      uint32_t len = compiler->parser.previous.length;
-      module->name = newStringLength(vm, name, len);
-      consumeEndStatement(compiler);
-    }
-  }
-
   while (!match(compiler, TK_EOF) && !compiler->parser.has_syntax_error) {
     compileTopLevelStatement(compiler);
     skipNewLines(compiler);
@@ -3526,10 +3298,13 @@ PkResult compile(PKVM* vm, Module* module, const char* source,
     module->constants.count = constants_count;
     module->globals.count = module->global_names.count = globals_count;
   }
-
 #if DUMP_BYTECODE
-  dumpFunctionCode(compiler->parser.vm, module->body->fn);
-  DEBUG_BREAK();
+  else {
+    // If there is any syntax errors we cannot dump the bytecode
+    // (otherwise it'll crash with assertion).
+    dumpFunctionCode(compiler->parser.vm, module->body->fn);
+    DEBUG_BREAK();
+  }
 #endif
 
   // Return the compilation result.

@@ -1,0 +1,10 @@
+
+print('before cyclic_b')
+import cyclic_a
+print('after  cyclic_b')
+
+def fn_b()
+  assert(cyclic_a.fn_a() == "cyclic a")
+  return "cyclic b"
+end
+
