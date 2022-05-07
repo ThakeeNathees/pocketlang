@@ -1,0 +1,50 @@
+
+/* font-family: 'Source Code Pro', monospace; */
+@import url('https://fonts.googleapis.com/css2?family=Source+Code+Pro&display=swap');
+
+/*****************************************************************************/
+/* DOCSIFY SYTLE OVERRIDE                                                    */
+/*****************************************************************************/
+
+.sidebar-toggle.theme .sidebar-toggle-button {
+  top: 0;
+}
+
+.sidebar-toggle.theme {
+  top: calc(var(--sidebar-toggle-offset-top) + 40px);
+}
+
+.sidebar-toggle.theme div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.button {
+  cursor: pointer;
+  text-align: center;
+  min-width: 100px;
+  background-color: #0B87DA;
+  padding: 10px;
+  margin-left: 10px;
+  margin-right: 10px;
+}
+
+.button:hover {
+  background-color: #0a75bc;
+}
+
+a.button, a.button:hover {
+  color: white;
+  text-decoration: none;
+}

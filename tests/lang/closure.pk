@@ -2,15 +2,15 @@
 ## Simple upvalue.
 def f1
   local = "foo"
-  return function
+  return fn
     return local
   end
 end
 assert(f1()() == "foo")
 
 def add3(x)
-  return function(y)
-    return function(z)
+  return fn(y)
+    return fn(z)
       return x + y + z
     end
   end
@@ -21,11 +21,11 @@ assert(add3(7)(6)(4) == 17);
 ## Upvalue external to the inner function.
 def f2
   local = "bar"
-  return function
-    fn = function
+  return fn
+    f = fn
       return local
     end
-    return fn
+    return f
   end
 end
 assert(f2()()() == "bar")
@@ -33,10 +33,10 @@ assert(f2()()() == "bar")
 ## Check if upvalues are shared between closures.
 def f3
   local = "baz"
-  _fn1 = function(x)
+  _fn1 = fn(x)
     local = x
   end
-  _fn2 = function
+  _fn2 = fn
     return local
   end
   return [_fn1, _fn2]
@@ -52,7 +52,7 @@ def f4
     j = i ## 'i' is shared, but 'j' doesn't
     list_append(
       a,
-      function
+      fn
         return x + j
       end
     )
@@ -66,13 +66,13 @@ assert(a[1]() == 21)
 
 def f5
   l1 = 12
-  return function ## c1
+  return fn ## c1
     l2 = 34
-    return function ## c2
+    return fn ## c2
       l3 = 56
-      return function ## c3
-        return function ## c4
-          return function ## c5
+      return fn ## c3
+        return fn ## c4
+          return fn ## c5
             return l1 + l2 + l3
           end
         end
