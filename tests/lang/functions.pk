@@ -9,7 +9,7 @@ assert(f3('a', 'b', 'c', 'd') == 'c')
 ## Local variables of inner funcions.
 def f4
   l1 = 3.14
-  f5 = function
+  f5 = fn
     l2 = 42
     return l2
   end

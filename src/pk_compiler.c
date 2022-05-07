@@ -114,7 +114,7 @@ typedef enum {
   TK_AS,         // as
   TK_DEF,        // def
   TK_NATIVE,     // native (C function declaration)
-  TK_FUNCTION,   // function (literal function)
+  TK_FN,         // function (literal function)
   TK_END,        // end
 
   TK_NULL,       // null
@@ -178,7 +178,7 @@ static _Keyword _keywords[] = {
   { "as",       2, TK_AS       },
   { "def",      3, TK_DEF      },
   { "native",   6, TK_NATIVE   },
-  { "function", 8, TK_FUNCTION },
+  { "fn",       2, TK_FN       },
   { "end",      3, TK_END      },
   { "null",     4, TK_NULL     },
   { "in",       2, TK_IN       },
@@ -407,6 +407,11 @@ typedef struct sParser {
   ForwardName forwards[MAX_FORWARD_NAMES];
   int forwards_count;
 
+  // A syntax sugar to skip call parentheses. Like lua support for number of
+  // literals. We're doing it for literal functions for now. It'll be set to
+  // true before exprCall to indicate that the call paran should be skipped.
+  bool optional_call_paran;
+
   bool repl_mode;
   bool parsing_class;
   bool need_more_lines; //< True if we need more lines in REPL mode.
@@ -528,6 +533,7 @@ static void parserInit(Parser* parser, PKVM* vm, Compiler* compiler,
   parser->forwards_count = 0;
 
   parser->repl_mode = !!(compiler->options && compiler->options->repl_mode);
+  parser->optional_call_paran = false;
   parser->parsing_class = false;
   parser->has_errors = false;
   parser->has_syntax_error = false;
@@ -1589,7 +1595,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_AS         */   NO_RULE,
   /* TK_DEF        */   NO_RULE,
   /* TK_EXTERN     */   NO_RULE,
-  /* TK_FUNCTION   */ { exprFunction,  NULL,             NO_INFIX },
+  /* TK_FN         */ { exprFunction,  NULL,             NO_INFIX },
   /* TK_END        */   NO_RULE,
   /* TK_NULL       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_IN         */ { NULL,          exprBinaryOp,     PREC_TEST },
@@ -1704,6 +1710,71 @@ static void emitStoreValue(Compiler* compiler, NameDefnType type, int index) {
       emitStoreGlobal(compiler, index);
       return;
   }
+}
+
+// This function is reused between calls and method calls. if the [call_type]
+// is OP_METHOD_CALL the [method] should refer a string in the module's
+// constant pool, otherwise it's ignored.
+static void _compileCall(Compiler* compiler, Opcode call_type, int method) {
+  ASSERT((call_type == OP_CALL) ||
+    (call_type == OP_METHOD_CALL) ||
+    (call_type == OP_SUPER_CALL), OOPS);
+  // Compile parameters.
+  int argc = 0;
+
+  if (compiler->parser.optional_call_paran) {
+    compiler->parser.optional_call_paran = false;
+    compileExpression(compiler);
+    argc = 1;
+
+  } else {
+    if (!match(compiler, TK_RPARAN)) {
+      do {
+        skipNewLines(compiler);
+        compileExpression(compiler);
+        skipNewLines(compiler);
+        argc++;
+      } while (match(compiler, TK_COMMA));
+      consume(compiler, TK_RPARAN, "Expected ')' after parameter list.");
+    }
+  }
+
+  emitOpcode(compiler, call_type);
+
+  emitByte(compiler, argc);
+
+  if ((call_type == OP_METHOD_CALL) || (call_type == OP_SUPER_CALL)) {
+    ASSERT_INDEX(method, (int)compiler->module->constants.count);
+    emitShort(compiler, method);
+  }
+
+  // After the call the arguments will be popped and the callable
+  // will be replaced with the return value.
+  compilerChangeStack(compiler, -argc);
+}
+
+// Like lua, we're omitting the paranthese for literals, it'll check for
+// literals that can be passed for no pranthese call (a syntax sugar) and
+// emit the call. Return true if such call matched. If [method] >= 0 it'll
+// compile a method call otherwise a regular call.
+static bool _compileOptionalParanCall(Compiler* compiler, int method) {
+  static TokenType tk[] = {
+    TK_FN,
+    //TK_STRING,
+    //TK_STRING_INTERP,
+    TK_ERROR, // Sentinel to stop the iteration.
+  };
+
+  for (int i = 0; tk[i] != TK_ERROR; i++) {
+    if (peek(compiler) == tk[i]) {
+      compiler->parser.optional_call_paran = true;
+      Opcode call_type = ((method >= 0) ? OP_METHOD_CALL : OP_CALL);
+      _compileCall(compiler, call_type, method);
+      return true;
+    }
+  }
+
+  return false;
 }
 
 static void exprLiteral(Compiler* compiler) {
@@ -1878,6 +1949,8 @@ static void exprName(Compiler* compiler) {
     } else {
       emitPushValue(compiler, result.type, result.index);
     }
+
+    _compileOptionalParanCall(compiler, -1);
   }
 
 }
@@ -2016,40 +2089,6 @@ static void exprMap(Compiler* compiler) {
   consume(compiler, TK_RBRACE, "Expected '}' after map elements.");
 }
 
-// This function is reused between calls and method calls. if the [call_type]
-// is OP_METHOD_CALL the [method] should refer a string in the module's
-// constant pool, otherwise it's ignored.
-static void _compileCall(Compiler* compiler, Opcode call_type, int method) {
-  ASSERT((call_type == OP_CALL) ||
-         (call_type == OP_METHOD_CALL) ||
-         (call_type == OP_SUPER_CALL), OOPS);
-
-  // Compile parameters.
-  int argc = 0;
-  if (!match(compiler, TK_RPARAN)) {
-    do {
-      skipNewLines(compiler);
-      compileExpression(compiler);
-      skipNewLines(compiler);
-      argc++;
-    } while (match(compiler, TK_COMMA));
-    consume(compiler, TK_RPARAN, "Expected ')' after parameter list.");
-  }
-
-  emitOpcode(compiler, call_type);
-
-  emitByte(compiler, argc);
-
-  if ((call_type == OP_METHOD_CALL) || (call_type == OP_SUPER_CALL)) {
-    ASSERT_INDEX(method, (int)compiler->module->constants.count);
-    emitShort(compiler, method);
-  }
-
-  // After the call the arguments will be popped and the callable
-  // will be replaced with the return value.
-  compilerChangeStack(compiler, -argc);
-}
-
 static void exprCall(Compiler* compiler) {
   _compileCall(compiler, OP_CALL, -1);
 }
@@ -2069,6 +2108,9 @@ static void exprAttrib(Compiler* compiler) {
     _compileCall(compiler, OP_METHOD_CALL, index);
     return;
   }
+
+  // Check if it's a method call without paranthese.
+  if (_compileOptionalParanCall(compiler, index)) return;
 
   if (compiler->l_value && matchAssignment(compiler)) {
     TokenType assignment = compiler->parser.previous.type;

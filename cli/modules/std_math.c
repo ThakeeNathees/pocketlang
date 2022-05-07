@@ -32,7 +32,7 @@ DEF(stdMathCeil,
 }
 
 DEF(stdMathPow,
-  "pow(value:num) -> num\n") {
+  "pow(a:num, b:num) -> num\n") {
 
   double num, ex;
   if (!pkValidateSlotNumber(vm, 1, &num)) return;

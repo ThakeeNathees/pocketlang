@@ -818,6 +818,26 @@ static void _ctorFiber(PKVM* vm) {
 
 #define SELF (vm->fiber->self)
 
+DEF(_numberTimes,
+  "Number.times(f:fn)\n"
+  "Iterate the function [f] n times. Here n is the integral value of the "
+  "number. If the number is not an integer the floor value will be taken.") {
+
+  ASSERT(IS_NUM(SELF), OOPS);
+  double n = AS_NUM(SELF);
+
+  Closure* closure;
+  if (!validateArgClosure(vm, 1, &closure)) return;
+
+  for (int64_t i = 0; i < n; i++) {
+    Var _i = VAR_NUM((double)i);
+    PkResult result = vmRunFunction(vm, closure, 1, &_i, NULL);
+    if (result != PK_RESULT_SUCCESS) break;
+  }
+
+  RET(VAR_NULL);
+}
+
 DEF(_listAppend,
   "List.append(value:var) -> List\n"
   "Append the [value] to the list and return the list.") {
@@ -914,9 +934,10 @@ static void initializePrimitiveClasses(PKVM* vm) {
     vmPopTempRef(vm); /* fn. */                                   \
   } while (false)
 
-  ADD_METHOD(PK_LIST, "append",  _listAppend,   1);
-  ADD_METHOD(PK_FIBER, "run",    _fiberRun,    -1);
-  ADD_METHOD(PK_FIBER, "resume", _fiberResume, -1);
+  ADD_METHOD(PK_NUMBER, "times",  _numberTimes,  1);
+  ADD_METHOD(PK_LIST,   "append", _listAppend,   1);
+  ADD_METHOD(PK_FIBER,  "run",    _fiberRun,    -1);
+  ADD_METHOD(PK_FIBER,  "resume", _fiberResume, -1);
 
 #undef ADD_METHOD
 }
@@ -1346,8 +1367,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
                                 varTypeName(on), attrib->data))
 
   if (!IS_OBJ(on)) {
-    VM_SET_ERROR(vm, stringFormat(vm, "$ type is not subscriptable.",
-                                  varTypeName(on)));
+    ERR_NO_ATTRIB(vm, on, attrib);
     return VAR_NULL;
   }
 
@@ -1501,8 +1521,7 @@ do {                                                                          \
 } while (false)
 
   if (!IS_OBJ(on)) {
-    VM_SET_ERROR(vm, stringFormat(vm, "$ type is not subscriptable.",
-                                  varTypeName(on)));
+    ERR_NO_ATTRIB(vm, on, attrib);
     return;
   }
 

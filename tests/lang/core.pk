@@ -23,11 +23,11 @@ assert([1, 2, 3].length == 3)
 ## Function
 assert(print.arity == -1)
 assert(hex.arity == 1)
-assert(function(a, b)end .arity == 2)
+assert(fn(a, b)end .arity == 2)
 assert(print.name == "print")
-def fn(p1, p2, p3) end
-assert(fn.name == "fn")
-assert(fn.arity == 3)
+def foo(p1, p2, p3) end
+assert(foo.name == "foo")
+assert(foo.arity == 3)
 
 ## String functions
 assert(str_sub('c programming', 2, 11) == 'programming')
