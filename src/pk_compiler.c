@@ -81,6 +81,7 @@ typedef enum {
   TK_MINUS,      // -
   TK_STAR,       // *
   TK_FSLASH,     // /
+  TK_STARSTAR,   // **
   TK_BSLASH,     // \.
   TK_EQ,         // =
   TK_GT,         // >
@@ -96,6 +97,7 @@ typedef enum {
   TK_STAREQ,     // *=
   TK_DIVEQ,      // /=
   TK_MODEQ,      // %=
+  TK_POWEQ,      // **=
 
   TK_ANDEQ,      // &=
   TK_OREQ,       // |=
@@ -226,6 +228,7 @@ typedef enum {
   PREC_TERM,          // + -
   PREC_FACTOR,        // * / %
   PREC_UNARY,         // - ! ~ not
+  PREC_EXPONENT,      // **
   PREC_CALL,          // ()
   PREC_SUBSCRIPT,     // []
   PREC_ATTRIB,        // .index
@@ -1101,11 +1104,7 @@ static void lexToken(Compiler* compiler) {
 
       case '>':
         if (matchChar(parser, '>')) {
-          if (matchChar(parser, '=')) {
-            setNextToken(parser, TK_SRIGHTEQ);
-          } else {
-            setNextToken(parser, TK_SRIGHT);
-          }
+          setNextTwoCharToken(parser, '=', TK_SRIGHT, TK_SRIGHTEQ);
         } else {
           setNextTwoCharToken(parser, '=', TK_GT, TK_GTEQ);
         }
@@ -1113,11 +1112,7 @@ static void lexToken(Compiler* compiler) {
 
       case '<':
         if (matchChar(parser, '<')) {
-          if (matchChar(parser, '=')) {
-            setNextToken(parser, TK_SLEFTEQ);
-          } else {
-            setNextToken(parser, TK_SLEFT);
-          }
+          setNextTwoCharToken(parser, '=', TK_SLEFT, TK_SLEFTEQ);
         } else {
           setNextTwoCharToken(parser, '=', TK_LT, TK_LTEQ);
         }
@@ -1138,7 +1133,11 @@ static void lexToken(Compiler* compiler) {
         return;
 
       case '*':
-        setNextTwoCharToken(parser, '=', TK_STAR, TK_STAREQ);
+        if (matchChar(parser, '*')) {
+          setNextTwoCharToken(parser, '=', TK_STARSTAR, TK_POWEQ);
+        } else {
+          setNextTwoCharToken(parser, '=', TK_STAR, TK_STAREQ);
+        }
         return;
 
       case '/':
@@ -1298,6 +1297,7 @@ static bool matchAssignment(Compiler* compiler) {
   if (match(compiler, TK_STAREQ))   return true;
   if (match(compiler, TK_DIVEQ))    return true;
   if (match(compiler, TK_MODEQ))    return true;
+  if (match(compiler, TK_POWEQ))    return true;
   if (match(compiler, TK_ANDEQ))    return true;
   if (match(compiler, TK_OREQ))     return true;
   if (match(compiler, TK_XOREQ))    return true;
@@ -1569,6 +1569,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_MINUS      */ { exprUnaryOp,   exprBinaryOp,     PREC_TERM },
   /* TK_STAR       */ { NULL,          exprBinaryOp,     PREC_FACTOR },
   /* TK_FSLASH     */ { NULL,          exprBinaryOp,     PREC_FACTOR },
+  /* TK_STARSTAR   */ { NULL,          exprBinaryOp,     PREC_EXPONENT },
   /* TK_BSLASH     */   NO_RULE,
   /* TK_EQ         */   NO_RULE,
   /* TK_GT         */ { NULL,          exprBinaryOp,     PREC_COMPARISION },
@@ -1582,6 +1583,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_STAREQ     */   NO_RULE,
   /* TK_DIVEQ      */   NO_RULE,
   /* TK_MODEQ      */   NO_RULE,
+  /* TK_POWEQ      */   NO_RULE,
   /* TK_ANDEQ      */   NO_RULE,
   /* TK_OREQ       */   NO_RULE,
   /* TK_XOREQ      */   NO_RULE,
@@ -1998,17 +2000,18 @@ static void exprBinaryOp(Compiler* compiler) {
   do { emitOpcode(compiler, opcode); emitByte(compiler, 0); } while (false)
 
   switch (op) {
-    case TK_DOTDOT:  emitOpcode(compiler, OP_RANGE);        break;
-    case TK_PERCENT: EMIT_BINARY_OP_INPLACE(OP_MOD);        break;
-    case TK_PLUS:    EMIT_BINARY_OP_INPLACE(OP_ADD);        break;
-    case TK_MINUS:   EMIT_BINARY_OP_INPLACE(OP_SUBTRACT);   break;
-    case TK_STAR:    EMIT_BINARY_OP_INPLACE(OP_MULTIPLY);   break;
-    case TK_FSLASH:  EMIT_BINARY_OP_INPLACE(OP_DIVIDE);     break;
-    case TK_AMP:     EMIT_BINARY_OP_INPLACE(OP_BIT_AND);    break;
-    case TK_PIPE:    EMIT_BINARY_OP_INPLACE(OP_BIT_OR);     break;
-    case TK_CARET:   EMIT_BINARY_OP_INPLACE(OP_BIT_XOR);    break;
-    case TK_SRIGHT:  EMIT_BINARY_OP_INPLACE(OP_BIT_RSHIFT); break;
-    case TK_SLEFT:   EMIT_BINARY_OP_INPLACE(OP_BIT_LSHIFT); break;
+    case TK_DOTDOT:   emitOpcode(compiler, OP_RANGE);        break;
+    case TK_PERCENT:  EMIT_BINARY_OP_INPLACE(OP_MOD);        break;
+    case TK_PLUS:     EMIT_BINARY_OP_INPLACE(OP_ADD);        break;
+    case TK_MINUS:    EMIT_BINARY_OP_INPLACE(OP_SUBTRACT);   break;
+    case TK_STAR:     EMIT_BINARY_OP_INPLACE(OP_MULTIPLY);   break;
+    case TK_FSLASH:   EMIT_BINARY_OP_INPLACE(OP_DIVIDE);     break;
+    case TK_STARSTAR: EMIT_BINARY_OP_INPLACE(OP_EXPONENT);   break;
+    case TK_AMP:      EMIT_BINARY_OP_INPLACE(OP_BIT_AND);    break;
+    case TK_PIPE:     EMIT_BINARY_OP_INPLACE(OP_BIT_OR);     break;
+    case TK_CARET:    EMIT_BINARY_OP_INPLACE(OP_BIT_XOR);    break;
+    case TK_SRIGHT:   EMIT_BINARY_OP_INPLACE(OP_BIT_RSHIFT); break;
+    case TK_SLEFT:    EMIT_BINARY_OP_INPLACE(OP_BIT_LSHIFT); break;
 #undef EMIT_BINARY_OP_INPLACE
 
     case TK_GT:      emitOpcode(compiler, OP_GT);    break;
@@ -2238,6 +2241,10 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
     return;
   }
 
+  // Make a "backup" of the l value before parsing next operators to
+  // reset once it done.
+  bool l_value = compiler->l_value;
+
   compiler->l_value = precedence <= PREC_LOWEST;
   prefix(compiler);
 
@@ -2258,8 +2265,9 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
 
     // TK_LPARAN '(' as infix is the call operator.
     compiler->is_last_call = (op == TK_LPARAN);
-
   }
+
+  compiler->l_value = l_value;
 }
 
 /*****************************************************************************/
@@ -2458,6 +2466,7 @@ static void emitAssignedOp(Compiler* compiler, TokenType assignment) {
     case TK_STAREQ:   EMIT_BINARY_OP_INPLACE(OP_MULTIPLY);   break;
     case TK_DIVEQ:    EMIT_BINARY_OP_INPLACE(OP_DIVIDE);     break;
     case TK_MODEQ:    EMIT_BINARY_OP_INPLACE(OP_MOD);        break;
+    case TK_POWEQ:    EMIT_BINARY_OP_INPLACE(OP_EXPONENT);   break;
     case TK_ANDEQ:    EMIT_BINARY_OP_INPLACE(OP_BIT_AND);    break;
     case TK_OREQ:     EMIT_BINARY_OP_INPLACE(OP_BIT_OR);     break;
     case TK_XOREQ:    EMIT_BINARY_OP_INPLACE(OP_BIT_XOR);    break;
@@ -2627,9 +2636,11 @@ static bool matchOperatorMethod(Compiler* compiler,
   if (match(compiler, TK_STAR))      _RET("*",   1);
   if (match(compiler, TK_STAREQ))    _RET("*=",  1);
   if (match(compiler, TK_FSLASH))    _RET("/",   1);
+  if (match(compiler, TK_STARSTAR))  _RET("**",  1);
   if (match(compiler, TK_DIVEQ))     _RET("/=",  1);
   if (match(compiler, TK_PERCENT))   _RET("%",   1);
   if (match(compiler, TK_MODEQ))     _RET("%=",  1);
+  if (match(compiler, TK_POWEQ))     _RET("**=", 1);
   if (match(compiler, TK_AMP))       _RET("&",   1);
   if (match(compiler, TK_ANDEQ))     _RET("&=",  1);
   if (match(compiler, TK_PIPE))      _RET("|",   1);

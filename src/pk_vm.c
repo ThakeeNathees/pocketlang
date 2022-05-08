@@ -1579,6 +1579,19 @@ L_do_call:
       DISPATCH();
     }
 
+    OPCODE(EXPONENT):
+    {
+      // Don't pop yet, we need the reference for gc.
+      Var r = PEEK(-1), l = PEEK(-2);
+      uint8_t inplace = READ_BYTE(); ASSERT(inplace <= 1, OOPS);
+      Var result = varExponent(vm, l, r, inplace);
+      DROP(); DROP(); // r, l
+      PUSH(result);
+
+      CHECK_ERROR();
+      DISPATCH();
+    }
+
     OPCODE(MOD):
     {
       // Don't pop yet, we need the reference for gc.

@@ -98,6 +98,7 @@ Var varAdd(PKVM* vm, Var v1, Var v2, bool inplace);       // Returns v1 + v2.
 Var varSubtract(PKVM* vm, Var v1, Var v2, bool inplace);  // Returns v1 - v2.
 Var varMultiply(PKVM* vm, Var v1, Var v2, bool inplace);  // Returns v1 * v2.
 Var varDivide(PKVM* vm, Var v1, Var v2, bool inplace);    // Returns v1 / v2.
+Var varExponent(PKVM* vm, Var v1, Var v2, bool inplace);  // Returns v1 ** v2.
 Var varModulo(PKVM* vm, Var v1, Var v2, bool inplace);    // Returns v1 % v2.
 
 Var varBitAnd(PKVM* vm, Var v1, Var v2, bool inplace);    // Returns v1 & v2.

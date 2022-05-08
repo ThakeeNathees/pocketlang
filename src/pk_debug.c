@@ -44,7 +44,12 @@ void reportCompileTimeError(PKVM* vm, const char* path, int line,
 
     // Print the error message.
     buff.count = 0;
-    int size = vsnprintf(NULL, 0, fmt, args) + 1;
+
+    va_list args_copy;
+    va_copy(args_copy, args);
+    int size = vsnprintf(NULL, 0, fmt, args_copy) + 1;
+    va_end(args_copy);
+
     ASSERT(size >= 0, "vnsprintf() failed.");
     pkByteBufferReserve(&buff, vm, size);
     vsnprintf((char*)buff.data, size, fmt, args);
@@ -641,6 +646,7 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_SUBTRACT:
       case OP_MULTIPLY:
       case OP_DIVIDE:
+      case OP_EXPONENT:
       case OP_MOD:
       case OP_BIT_AND:
       case OP_BIT_OR:

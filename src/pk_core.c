@@ -251,7 +251,7 @@ DEF(coreTypeName,
 
 DEF(coreHelp,
   "help([fn:Closure]) -> null\n"
-  "This will write an error message to stdout and return null.") {
+  "It'll print the docstring the object and return.") {
 
   int argc = ARGC;
   if (argc != 0 && argc != 1) {
@@ -919,7 +919,6 @@ static void initializePrimitiveClasses(PKVM* vm) {
   ADD_CTOR(PK_LIST,   "@ctorList",   _ctorList,   -1);
   ADD_CTOR(PK_MAP,    "@ctorMap",    _ctorMap,     0);
   ADD_CTOR(PK_FIBER,  "@ctorFiber",  _ctorFiber,   1);
-
 #undef ADD_CTOR
 
 #define ADD_METHOD(type, name, ptr, arity_)                       \
@@ -1222,6 +1221,20 @@ Var varDivide(PKVM* vm, Var v1, Var v2, bool inplace) {
   return VAR_NULL;
 }
 
+Var varExponent(PKVM* vm, Var v1, Var v2, bool inplace) {
+  double n1, n2;
+  if (isNumeric(v1, &n1)) {
+    if (validateNumeric(vm, v2, &n2, RIGHT_OPERAND)) {
+      return VAR_NUM(pow(n1, n2));
+    }
+    return VAR_NULL;
+  }
+
+  CHECK_INST_BINARY_OP("**");
+  UNSUPPORTED_BINARY_OP("**");
+  return VAR_NULL;
+}
+
 Var varBitAnd(PKVM* vm, Var v1, Var v2, bool inplace) {
   CHECK_BITWISE_OP(&);
   CHECK_INST_BINARY_OP("&");
@@ -1283,6 +1296,14 @@ Var varOpRange(PKVM* vm, Var v1, Var v2) {
   if (IS_NUM(v1) && IS_NUM(v2)) {
     return VAR_OBJ(newRange(vm, AS_NUM(v1), AS_NUM(v2)));
   }
+
+  if (IS_OBJ_TYPE(v1, OBJ_STRING)) {
+    String* str = _varToString(vm, v2);
+    if (str == NULL) return VAR_NULL;
+    String* concat = stringJoin(vm, (String*) AS_OBJ(v1), str);
+    return VAR_OBJ(concat);
+  }
+
   const bool inplace = false;
   CHECK_INST_BINARY_OP("..");
   UNSUPPORTED_BINARY_OP("..");
@@ -1512,14 +1533,6 @@ void varSetAttrib(PKVM* vm, Var on, String* attrib, Var value) {
                    "'$' object has no mutable attribute named '$'", \
                    varTypeName(on), attrib->data))
 
-#define ATTRIB_IMMUTABLE(name)                                                \
-do {                                                                          \
-  if ((attrib->length == strlen(name) && strcmp(name, attrib->data) == 0)) {  \
-    VM_SET_ERROR(vm, stringFormat(vm, "'$' attribute is immutable.", name));  \
-    return;                                                                   \
-  }                                                                           \
-} while (false)
-
   if (!IS_OBJ(on)) {
     ERR_NO_ATTRIB(vm, on, attrib);
     return;
@@ -1527,30 +1540,6 @@ do {                                                                          \
 
   Object* obj = AS_OBJ(on);
   switch (obj->type) {
-    case OBJ_STRING:
-      ATTRIB_IMMUTABLE("length");
-      ATTRIB_IMMUTABLE("lower");
-      ATTRIB_IMMUTABLE("upper");
-      ATTRIB_IMMUTABLE("strip");
-      ERR_NO_ATTRIB(vm, on, attrib);
-      return;
-
-    case OBJ_LIST:
-      ATTRIB_IMMUTABLE("length");
-      ERR_NO_ATTRIB(vm, on, attrib);
-      return;
-
-    case OBJ_MAP:
-      TODO;
-      ERR_NO_ATTRIB(vm, on, attrib);
-      return;
-
-    case OBJ_RANGE:
-      ATTRIB_IMMUTABLE("as_list");
-      ATTRIB_IMMUTABLE("first");
-      ATTRIB_IMMUTABLE("last");
-      ERR_NO_ATTRIB(vm, on, attrib);
-      return;
 
     case OBJ_MODULE: {
       Module* module = (Module*)obj;
@@ -1563,26 +1552,9 @@ do {                                                                          \
     } break;
 
     case OBJ_FUNC:
-      UNREACHABLE(); // Functions aren't first class objects.
-      return;
-
-    case OBJ_CLOSURE:
-      ATTRIB_IMMUTABLE("arity");
-      ATTRIB_IMMUTABLE("name");
-      ERR_NO_ATTRIB(vm, on, attrib);
-      return;
-
     case OBJ_UPVALUE:
-      UNREACHABLE(); // Upvalues aren't first class objects.
-      return;
-
-    case OBJ_FIBER:
-      ERR_NO_ATTRIB(vm, on, attrib);
-      return;
-
-    case OBJ_CLASS:
-      ERR_NO_ATTRIB(vm, on, attrib);
-      return;
+      UNREACHABLE(); // Functions aren't first class objects.
+      break;
 
     case OBJ_INST: {
 
@@ -1612,6 +1584,9 @@ do {                                                                          \
       return;
 
     } break;
+
+    default:
+      break;
   }
 
   ERR_NO_ATTRIB(vm, on, attrib);
@@ -1619,6 +1594,101 @@ do {                                                                          \
 
 #undef ATTRIB_IMMUTABLE
 #undef ERR_NO_ATTRIB
+}
+
+// Given a range. It'll "normalize" the range to slice an object (string or
+// list) set the [start] index [length] and [reversed]. On success it'll return
+// true.
+static bool _normalizeSliceRange(PKVM* vm, Range* range, uint32_t count,
+                             int32_t* start, int32_t* length, bool* reversed) {
+  if ((floor(range->from) != range->from) ||
+    (floor(range->to) != range->to)) {
+    VM_SET_ERROR(vm, newString(vm, "Expected a whole number."));
+    return false;
+  }
+
+  int32_t from = (int32_t)range->from;
+  int32_t to = (int32_t)range->to;
+
+  if (from < 0) from = count + from;
+  if (to < 0) to = count + to;
+
+  *reversed = false;
+  if (to < from) {
+    int32_t tmp = to;
+    to = from;
+    from = tmp;
+    *reversed = true;
+  }
+
+  if (from < 0 || count <= (uint32_t) to) {
+
+    // Special case we allow 0..0 or 0..-1, -1..0, -1..-1 to be valid slice
+    // ranges for empty string/list,  and will gives an empty string/list.
+    if (count == 0 && (from == 0 || from == -1) && (to == 0 || to == -1)) {
+      *start = 0;
+      *length = 0;
+      *reversed = false;
+      return true;
+    }
+
+    VM_SET_ERROR(vm, newString(vm, "Index out of bound."));
+    return false;
+  }
+
+  *start = from;
+  *length = to - from + 1;
+
+  return true;
+}
+
+// Slice the string with the [range] and reutrn it. On error it'll set
+// an error and return NULL.
+static String* _sliceString(PKVM* vm, String* str, Range* range) {
+
+  int32_t start, length; bool reversed;
+  if (!_normalizeSliceRange(vm, range, str->length,
+                           &start, &length, &reversed)) {
+    return NULL;
+  }
+
+  // Optimize case.
+  if (start == 0 && length == str->length && !reversed) return str;
+
+  // TODO: check if length is 1 and return pre allocated character string.
+
+  String* slice = newStringLength(vm, str->data + start, length);
+  if (!reversed) return slice;
+
+  for (int32_t i = 0; i < length / 2; i++) {
+    char tmp = slice->data[i];
+    slice->data[i] = slice->data[length - i - 1];
+    slice->data[length - i - 1] = tmp;
+  }
+  slice->hash = utilHashString(slice->data);
+  return slice;
+}
+
+// Slice the list with the [range] and reutrn it. On error it'll set
+// an error and return NULL.
+static List* _sliceList(PKVM* vm, List* list, Range* range) {
+
+  int32_t start, length; bool reversed;
+  if (!_normalizeSliceRange(vm, range, list->elements.count,
+                            &start, &length, &reversed)) {
+    return NULL;
+  }
+
+  List* slice = newList(vm, length);
+  vmPushTempRef(vm, &slice->_super); // slice.
+
+  for (int32_t i = 0; i < length; i++) {
+    int32_t ind = (reversed) ? start + length - 1 - i : start + i;
+    listAppend(vm, slice, list->elements.data[ind]);
+  }
+
+  vmPopTempRef(vm); // slice.
+  return slice;
 }
 
 Var varGetSubscript(PKVM* vm, Var on, Var key) {
@@ -1631,28 +1701,50 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
   Object* obj = AS_OBJ(on);
   switch (obj->type) {
     case OBJ_STRING: {
+
       int64_t index;
       String* str = ((String*)obj);
-      if (!validateInteger(vm, key, &index, "List index")) {
+
+      if (isInteger(key, &index)) {
+        // Normalize index.
+        if (index < 0) index = str->length + index;
+        if (index >= str->length || index < 0) {
+          VM_SET_ERROR(vm, newString(vm, "String index out of bound."));
+          return VAR_NULL;
+        }
+        // FIXME: Add static VM characters instead of allocating here.
+        String* c = newStringLength(vm, str->data + index, 1);
+        return VAR_OBJ(c);
+      }
+
+      if (IS_OBJ_TYPE(key, OBJ_RANGE)) {
+        String* subs = _sliceString(vm, str, (Range*) AS_OBJ(key));
+        if (subs != NULL) return VAR_OBJ(subs);
         return VAR_NULL;
       }
-      if (!validateIndex(vm, index, str->length, "String")) {
-        return VAR_NULL;
-      }
-      String* c = newStringLength(vm, str->data + index, 1);
-      return VAR_OBJ(c);
+
     } break;
 
     case OBJ_LIST: {
       int64_t index;
       pkVarBuffer* elems = &((List*)obj)->elements;
-      if (!validateInteger(vm, key, &index, "List index")) {
+
+      if (isInteger(key, &index)) {
+        // Normalize index.
+        if (index < 0) index = elems->count + index;
+        if (index >= elems->count || index < 0) {
+          VM_SET_ERROR(vm, newString(vm, "List index out of bound."));
+          return VAR_NULL;
+        }
+        return elems->data[index];
+      }
+
+      if (IS_OBJ_TYPE(key, OBJ_RANGE)) {
+        List* sublist = _sliceList(vm, (List*)obj, (Range*)AS_OBJ(key));
+        if (sublist != NULL) return VAR_OBJ(sublist);
         return VAR_NULL;
       }
-      if (!validateIndex(vm, index, elems->count, "List")) {
-        return VAR_NULL;
-      }
-      return elems->data[index];
+
     } break;
 
     case OBJ_MAP: {
@@ -1676,6 +1768,9 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
     case OBJ_FUNC:
     case OBJ_UPVALUE:
       UNREACHABLE(); // Not first class objects.
+
+    default:
+      break;
   }
 
   VM_SET_ERROR(vm, stringFormat(vm, "$ type is not subscriptable.",
@@ -1696,9 +1791,16 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
       int64_t index;
       pkVarBuffer* elems = &((List*)obj)->elements;
       if (!validateInteger(vm, key, &index, "List index")) return;
-      if (!validateIndex(vm, index, elems->count, "List")) return;
+
+      // Normalize index.
+      if (index < 0) index = elems->count + index;
+      if (index >= elems->count || index < 0) {
+        VM_SET_ERROR(vm, newString(vm, "List index out of bound."));
+        return;
+      }
       elems->data[index] = value;
       return;
+
     } break;
 
     case OBJ_MAP: {
@@ -1714,6 +1816,9 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
     case OBJ_FUNC:
     case OBJ_UPVALUE:
       UNREACHABLE();
+
+    default:
+      break;
   }
 
   VM_SET_ERROR(vm, stringFormat(vm, "$ type is not subscriptable.",

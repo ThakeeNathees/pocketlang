@@ -224,7 +224,7 @@ fiber is finished check its attribute `is_done` and use the attribute `function`
 which could be used to create a new fiber to "re-start" the fiber.
 
 ```ruby
-fb = Fiber foo()
+fb = Fiber fn()
   for i in 0..5
     yield(i)
   end
