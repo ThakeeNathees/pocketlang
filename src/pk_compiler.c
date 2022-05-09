@@ -814,7 +814,7 @@ static void eatNumber(Compiler* compiler) {
   char c = *parser->token_start;
 
   // Binary literal.
-  if (c == '0' && peekChar(parser) == 'b') {
+  if (c == '0' && ((peekChar(parser) == 'b') || (peekChar(parser) == 'B'))) {
     eatChar(parser); // Consume '0b'
 
     uint64_t bin = 0;
@@ -845,7 +845,8 @@ static void eatNumber(Compiler* compiler) {
     }
     value = VAR_NUM((double)bin);
 
-  } else if (c == '0' && peekChar(parser) == 'x') {
+  } else if (c == '0' &&
+             ((peekChar(parser) == 'x') || (peekChar(parser) == 'X'))) {
     eatChar(parser); // Consume '0x'
 
     uint64_t hex = 0;
@@ -883,14 +884,17 @@ static void eatNumber(Compiler* compiler) {
     }
 
   } else { // Regular number literal.
+
     while (utilIsDigit(peekChar(parser))) {
       eatChar(parser);
     }
 
-    if (peekChar(parser) == '.' && utilIsDigit(peekNextChar(parser))) {
-      matchChar(parser, '.');
-      while (utilIsDigit(peekChar(parser))) {
-        eatChar(parser);
+    if (c != '.') { // Number starts with a decimal point.
+      if (peekChar(parser) == '.' && utilIsDigit(peekNextChar(parser))) {
+        matchChar(parser, '.');
+        while (utilIsDigit(peekChar(parser))) {
+          eatChar(parser);
+        }
       }
     }
 
