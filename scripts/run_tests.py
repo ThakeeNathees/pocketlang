@@ -21,6 +21,7 @@ TEST_SUITE = {
   "Unit Tests": (
     "lang/basics.pk",
     "lang/builtin_fn.pk",
+    "lang/builtin_ty.pk",
     "lang/class.pk",
     "lang/closure.pk",
     "lang/core.pk",

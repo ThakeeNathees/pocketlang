@@ -5,3 +5,5 @@ assert(list_join([1, 2, 3]) == "123")
 assert(list_join(["hello", " world"]) == "hello world")
 assert(list_join([[], []]) == "[][]")
 
+## If we got here, that means all test were passed.
+print('All TESTS PASSED')

@@ -136,6 +136,13 @@ x = 99
 x <<= 2
 assert(x == 99 << 2)
 
+x = 4
+assert(2**3 == 8)
+assert(-2**2 == -4 and (-2)**2 == 4)
+assert((x**=4) == 256)
+assert(x**.5 == 16)
+assert(4**-1 == .25)
+
 assert(.5 == 0.5)
 assert(.333 == .333)
 assert(.1 + 1 == 1.1)
