@@ -769,8 +769,20 @@ static void _ctorBool(PKVM* vm) {
 
 static void _ctorNumber(PKVM* vm) {
   double value;
-  if (!validateNumeric(vm, ARG(1), &value, "Argument 1")) return;
-  RET(VAR_NUM(value));
+  if (isNumeric(ARG(1), &value)) {
+    RET(VAR_NUM(value));
+  }
+
+  if (IS_OBJ_TYPE(ARG(1), OBJ_STRING)) {
+    String* str = (String*) AS_OBJ(ARG(1));
+    double value;
+    const char* err = utilToNumber(str->data, &value);
+    if (err == NULL) RET(VAR_NUM(value));
+    VM_SET_ERROR(vm, newString(vm, err));
+    RET(VAR_NULL);
+  }
+
+  VM_SET_ERROR(vm, newString(vm, "Argument must be numeric or string."));
 }
 
 static void _ctorString(PKVM* vm) {

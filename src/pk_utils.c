@@ -6,6 +6,11 @@
 
 #include "pk_utils.h"
 
+#include <assert.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+
 // Function implementation, see utils.h for description.
 int utilPowerOf2Ceil(int n) {
   n--;
@@ -92,6 +97,122 @@ uint32_t utilHashString(const char* string) {
 
 #undef FNV_prime_32_bit
 #undef FNV_offset_basis_32_bit
+}
+
+const char* utilToNumber(const char* str, double* num) {
+#define IS_HEX_CHAR(c)            \
+  (('0' <= (c) && (c) <= '9')  || \
+   ('a' <= (c) && (c) <= 'f'))
+
+#define IS_BIN_CHAR(c) (((c) == '0') || ((c) == '1'))
+#define IS_DIGIT(c) (('0' <= (c)) && ((c) <= '9'))
+#define INVALID_NUMERIC_STRING "Invalid numeric string."
+
+  assert((str != NULL) && (num != NULL));
+  uint32_t length = (uint32_t) strlen(str);
+
+  // Consume the sign.
+  double sign = +1;
+  if (*str == '-') {
+    sign = -1;
+    str++;
+  } else if (*str == '+') {
+    str++;
+  }
+
+  // Binary String.
+  if (length >= 3 &&
+      ((strncmp(str, "0b", 2) == 0) || (strncmp(str, "0B", 2) == 0))) {
+
+    uint64_t bin = 0;
+    const char* c = str + 2;
+
+    if (*c == '\0') return INVALID_NUMERIC_STRING;
+
+    do {
+      if (*c == '\0') {
+        *num = sign * bin;
+        return NULL;
+      };
+
+      if (!IS_BIN_CHAR(*c)) return INVALID_NUMERIC_STRING;
+      if ((c - str) > (68 /*STR_BIN_BUFF_SIZE*/ - 2)) { // -2 for '-, \0'.
+        return "Binary literal is too long.";
+      }
+
+      bin = (bin << 1) | (*c - '0');
+      c++;
+
+    } while (true);
+  }
+
+  // Hex String.
+  if (length >= 3 &&
+      ((strncmp(str, "0x", 2) == 0) || (strncmp(str, "0X", 2) == 0))) {
+
+    uint64_t hex = 0;
+    const char* c = str + 2;
+
+    if (*c == '\0') return INVALID_NUMERIC_STRING;
+
+    do {
+      if (*c == '\0') {
+        *num = sign * hex;
+        return NULL;
+      };
+
+      if (!IS_HEX_CHAR(*c)) return INVALID_NUMERIC_STRING;
+      if ((c - str) > (20 /*STR_HEX_BUFF_SIZE*/ - 2)) { // -2 for '-, \0'.
+        return "Hex literal is too long.";
+      }
+
+      uint8_t digit = ('0' <= *c && *c <= '9')
+        ? (uint8_t)(*c - '0')
+        : (uint8_t)((*c - 'a') + 10);
+
+      hex = (hex << 4) | digit;
+      c++;
+
+    } while (true);
+  }
+
+  // Regular number.
+  if (*str == '\0') return INVALID_NUMERIC_STRING;
+
+  const char* c = str;
+  do {
+
+    while (IS_DIGIT(*c)) c++;
+    if (*c == '.') { // TODO: allowing "1." as a valid float.?
+      c++;
+      while (IS_DIGIT(*c)) c++;
+    }
+
+    if (*c == '\0') break; // Done.
+
+    if (*c == 'e' || *c == 'E') {
+      c++;
+      if (*c == '+' || *c == '-') c++;
+
+      if (!IS_DIGIT(*c)) return INVALID_NUMERIC_STRING;
+      while (IS_DIGIT(*c)) c++;
+      if (*c != '\0') return INVALID_NUMERIC_STRING;
+    }
+
+    if (*c != '\0') return INVALID_NUMERIC_STRING;
+
+  } while (false);
+
+  errno = 0;
+  *num = atof(str) * sign;
+  if (errno == ERANGE) return "Numeric string is too long.";
+
+  return NULL;
+
+#undef INVALID_NUMERIC_STRING
+#undef IS_DIGIT
+#undef IS_HEX_CHAR
+#undef IS_BIN_CHAR
 }
 
 /****************************************************************************

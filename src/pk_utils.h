@@ -38,6 +38,11 @@ uint32_t utilHashNumber(double num);
 // Generate a has code for [string].
 uint32_t utilHashString(const char* string);
 
+// Convert the string to number. On success it'll return NULL and set the
+// [num] value. Otherwise it'll return a C literal string containing the error
+// message.
+const char* utilToNumber(const char* str, double* num);
+
 /****************************************************************************
  * UTF8                                                                     *
  ****************************************************************************/
