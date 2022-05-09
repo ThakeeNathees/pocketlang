@@ -36,10 +36,10 @@
 #define VALIDATE_ARGC(arg) \
   ASSERT(arg > 0 && arg <= ARGC, "Invalid argument index.")
 
-#define CHECK_RUNTIME()                                     \
-  do {                                                      \
-    ASSERT(vm->fiber != NULL,                               \
-           "This function can only be called at runtime."); \
+#define CHECK_FIBER_EXISTS(vm)                                           \
+  do {                                                                   \
+    ASSERT(vm->fiber != NULL,                                            \
+           "No fiber exists. Did you forget to call pkReserveSlots()?"); \
   } while (false)
 
 // A convenient macro to get the nth (1 based) argument of the current
@@ -484,25 +484,25 @@ PkResult pkRunREPL(PKVM* vm) {
 /*****************************************************************************/
 
 void pkSetRuntimeError(PKVM* vm, const char* message) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   VM_SET_ERROR(vm, newString(vm, message));
 }
 
 void* pkGetSelf(const PKVM* vm) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   ASSERT(IS_OBJ_TYPE(vm->fiber->self, OBJ_INST), OOPS);
-  Instance* inst = (Instance*)AS_OBJ(vm->fiber->self);
+  Instance* inst = (Instance*) AS_OBJ(vm->fiber->self);
   ASSERT(inst->native != NULL, OOPS);
   return inst->native;
 }
 
 int pkGetArgc(const PKVM* vm) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   return ARGC;
 }
 
 bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   ASSERT(min <= max, "invalid argc range (min > max).");
 
   if (argc < min) {
@@ -533,7 +533,7 @@ bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max) {
 // FIXME: If the user needs just the boolean value of the object, they should
 // use pkGetSlotBool().
 PK_PUBLIC bool pkValidateSlotBool(PKVM* vm, int arg, bool* value) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   VALIDATE_ARGC(arg);
 
   Var val = ARG(arg);
@@ -547,7 +547,7 @@ PK_PUBLIC bool pkValidateSlotBool(PKVM* vm, int arg, bool* value) {
 }
 
 PK_PUBLIC bool pkValidateSlotNumber(PKVM* vm, int arg, double* value) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   VALIDATE_ARGC(arg);
 
   Var val = ARG(arg);
@@ -562,7 +562,7 @@ PK_PUBLIC bool pkValidateSlotNumber(PKVM* vm, int arg, double* value) {
 
 PK_PUBLIC bool pkValidateSlotString(PKVM* vm, int arg, const char** value,
                                     uint32_t* length) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   VALIDATE_ARGC(arg);
 
   Var val = ARG(arg);
@@ -577,46 +577,40 @@ PK_PUBLIC bool pkValidateSlotString(PKVM* vm, int arg, const char** value,
 }
 
 void pkReserveSlots(PKVM* vm, int count) {
-  CHECK_RUNTIME();
-
+  if (vm->fiber == NULL) vm->fiber = newFiber(vm, NULL);
   int needed = (int)(vm->fiber->ret - vm->fiber->stack) + count;
   vmEnsureStackSize(vm, needed);
 }
 
 int pkGetSlotsCount(PKVM* vm) {
-  CHECK_RUNTIME();
-
-  return (int)(vm->fiber->sp - vm->fiber->ret);
+  CHECK_FIBER_EXISTS(vm);
+  return (int) ((vm->fiber->stack + vm->fiber->stack_size) - vm->fiber->ret);
 }
 
 PkVarType pkGetSlotType(PKVM* vm, int index) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
-
   return getVarType(SLOT(index));
 }
 
 bool pkGetSlotBool(PKVM* vm, int index) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
-
   Var value = SLOT(index);
   return toBool(value);
 }
 
 double pkGetSlotNumber(PKVM* vm, int index) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
-
   Var value = SLOT(index);
   ASSERT(IS_NUM(value), "Slot value wasn't a Number.");
   return AS_NUM(value);
 }
 
 const char* pkGetSlotString(PKVM* vm, int index, uint32_t* length) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
-
   Var value = SLOT(index);
   ASSERT(IS_OBJ_TYPE(value, OBJ_STRING), "Slot value wasn't a String.");
   if (length != NULL) *length = ((String*)AS_OBJ(value))->length;
@@ -624,55 +618,61 @@ const char* pkGetSlotString(PKVM* vm, int index, uint32_t* length) {
 }
 
 PkHandle* pkGetSlotHandle(PKVM* vm, int index) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
-
   return vmNewHandle(vm, SLOT(index));
 }
 
 void pkSetSlotNull(PKVM* vm, int index) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
-
   SET_SLOT(index, VAR_NULL);
 }
 
 void pkSetSlotBool(PKVM* vm, int index, bool value) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
-
   SET_SLOT(index, VAR_BOOL(value));
 }
 
 void pkSetSlotNumber(PKVM* vm, int index, double value) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
-
   SET_SLOT(index, VAR_NUM(value));
 }
 
 void pkSetSlotString(PKVM* vm, int index, const char* value) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
-
   SET_SLOT(index, VAR_OBJ(newString(vm, value)));
 }
 
 PK_PUBLIC void pkSetSlotStringLength(PKVM* vm, int index,
                                      const char* value, uint32_t length) {
-  CHECK_RUNTIME();
+  CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
-
   SET_SLOT(index, VAR_OBJ(newStringLength(vm, value, length)));
 }
 
-void PkSetSlotHandle(PKVM* vm, int index, PkHandle* handle) {
-  CHECK_RUNTIME();
+void pkSetSlotHandle(PKVM* vm, int index, PkHandle* handle) {
+  CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
   SET_SLOT(index, handle->value);
 }
 
-#undef CHECK_RUNTIME
+void pkSetGlobal(PKVM* vm, int module, int global, const char* name) {
+  CHECK_FIBER_EXISTS(vm);
+  CHECK_ARG_NULL(name);
+  VALIDATE_SLOT_INDEX(module);
+  VALIDATE_SLOT_INDEX(global);
+
+  Var value = SLOT(module);
+  ASSERT(IS_OBJ_TYPE(value, OBJ_MODULE), "Slot value wasn't a module.");
+  Module* m = (Module*) AS_OBJ(value);
+  (void) moduleAddGlobal(vm, m, name, (uint32_t) strlen(name), SLOT(global));
+}
+
+#undef CHECK_FIBER_EXISTS
 #undef VALIDATE_ARGC
 #undef ERR_INVALID_ARG_TYPE
 #undef ARG
