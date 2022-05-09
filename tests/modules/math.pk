@@ -7,18 +7,13 @@ from math import abs, round, log10,
 
 assert(ceil(1.1) == floor(2.9))
 
-## FIXME:
-## temproarly modules cannot define globals via native interface
-## and it'll be fixed soon.
-PI = 3.14159265358979323846
-
 assert(m.sin(0) == 0)
-assert(m.sin(PI/2) == 1)
+assert(m.sin(m.PI/2) == 1)
 
 threshold = 0.0000000000001
 
-assert(abs(m.cos(PI/3) - 0.5) < threshold )
-assert(abs(m.tan(PI/4) - 1.0) < threshold )
+assert(abs(m.cos(m.PI/3) - 0.5) < threshold )
+assert(abs(m.tan(m.PI/4) - 1.0) < threshold )
 for i in 0..1000
   assert(abs(m.sin(i) / m.cos(i) - m.tan(i)) < threshold)
 end
@@ -29,8 +24,8 @@ for i in 0..100
   assert(abs(m.sinh(i) / m.cosh(i) - m.tanh(i)) < threshold)
 end
 
-assert(abs(m.acos(PI/4) - 0.5) < 0.35)
-assert(abs(m.atan(PI/4) - 0.5) < 0.2)
+assert(abs(m.acos(m.PI/4) - 0.5) < 0.35)
+assert(abs(m.atan(m.PI/4) - 0.5) < 0.2)
 
 assert((m.acos(0.5) - 1.1276259652063807) < threshold)
 assert((m.atan(0.3) - 1.1276259652063807) < threshold)

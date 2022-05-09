@@ -8,12 +8,8 @@
 
 #include <math.h>
 
-// M_PI is non standard. The macro _USE_MATH_DEFINES defining before importing
-// <math.h> will define the constants for MSVC. But for a portable solution,
-// we're defining it ourselves if it isn't already.
-#ifndef M_PI
-  #define M_PI 3.14159265358979323846
-#endif
+// M_PI is non standard. For a portable solution, we're defining it ourselves.
+#define PK_PI 3.14159265358979323846
 
 DEF(stdMathFloor,
   "floor(value:num) -> num\n") {
@@ -187,6 +183,12 @@ void registerModuleMath(PKVM* vm) {
 
   PkHandle* math = pkNewModule(vm, "math");
 
+  // Set global value PI.
+  pkReserveSlots(vm, 2);
+  pkSetSlotHandle(vm, 0, math);  // slot[0]    = math
+  pkSetSlotNumber(vm, 1, PK_PI); // slot[1]    = 3.14
+  pkSetGlobal(vm, 0, 1, "PI");   // slot[0].PI = slot[1]
+
   pkModuleAddFunction(vm, math, "floor",  stdMathFloor,      1);
   pkModuleAddFunction(vm, math, "ceil",   stdMathCeil,       1);
   pkModuleAddFunction(vm, math, "pow",    stdMathPow,        2);
@@ -204,14 +206,6 @@ void registerModuleMath(PKVM* vm) {
   pkModuleAddFunction(vm, math, "atan",   stdMathArcTangent, 1);
   pkModuleAddFunction(vm, math, "log10",  stdMathLog10,      1);
   pkModuleAddFunction(vm, math, "round",  stdMathRound,      1);
-
-  // FIXME:
-  // Refactor native type interface and add PI as a global to the module.
-  //
-  // Note that currently it's mutable (since it's a global variable, not
-  // constant and pocketlang doesn't support constant) so the user shouldn't
-  // modify the PI, like in python.
-  //pkModuleAddGlobal(vm, math, "PI", Handle-Of-PI);
 
   pkRegisterModule(vm, math);
   pkReleaseHandle(vm, math);

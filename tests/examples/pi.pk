@@ -3,11 +3,7 @@
 ##
 ## PI/4 = 1 - 1/3 + 1/5 - 1/7 + 1/9 - ...
 
-from math import abs
-
-## Temproarly we cannot register variables on native modules
-## will be implemented soon. So defining the PI here.
-PI = 3.14159265358979323846
+from math import abs, PI
 
 pi_by_4 = 0; sign = -1
 for i in 1..100000

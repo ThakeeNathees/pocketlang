@@ -348,7 +348,11 @@ PK_PUBLIC void pkSetSlotStringLength(PKVM* vm, int index,
 // Set the [index] slot's value as the given [handle]. The function won't
 // reclaim the ownership of the handle and you can still use it till
 // it's released by yourself.
-PK_PUBLIC void PkSetSlotHandle(PKVM* vm, int index, PkHandle* handle);
+PK_PUBLIC void pkSetSlotHandle(PKVM* vm, int index, PkHandle* handle);
+
+// Assign a global variable to a module at [module] slot, with the value at the
+// [global] slot with the given [name].
+PK_PUBLIC void pkSetGlobal(PKVM* vm, int module, int global, const char* name);
 
 #ifdef __cplusplus
 } // extern "C"

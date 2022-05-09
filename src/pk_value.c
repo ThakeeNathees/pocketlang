@@ -389,7 +389,7 @@ Upvalue* newUpvalue(PKVM* vm, Var* value) {
 }
 
 Fiber* newFiber(PKVM* vm, Closure* closure) {
-  ASSERT(closure->fn->arity >= -1, OOPS);
+  ASSERT(closure == NULL || closure->fn->arity >= -1, OOPS);
 
   Fiber* fiber = ALLOCATE(vm, Fiber);
 
@@ -401,11 +401,13 @@ Fiber* newFiber(PKVM* vm, Closure* closure) {
   fiber->state = FIBER_NEW;
   fiber->closure = closure;
 
-  if (closure->fn->is_native) {
+  if (closure == NULL || closure->fn->is_native) {
     // For native functions, we're only using stack for parameters,
     // there won't be any locals or temps (which are belongs to the
     // native "C" stack).
-    int stack_size = utilPowerOf2Ceil(closure->fn->arity + 1);
+
+    int stack_size = (closure == NULL) ? 1 : closure->fn->arity + 1;
+    stack_size = utilPowerOf2Ceil(stack_size);
 
     // We need at least 1 stack slot for the return value.
     if (stack_size == 0) stack_size++;
