@@ -1096,6 +1096,8 @@ L_do_call:
       // citizens.
       ASSERT(!IS_OBJ_TYPE(callable, OBJ_FUNC), OOPS);
 
+      *(fiber->ret) = VAR_NULL; //< Set the return value to null.
+
       if (IS_OBJ_TYPE(callable, OBJ_CLOSURE)) {
         closure = (const Closure*)AS_OBJ(callable);
 
@@ -1105,6 +1107,12 @@ L_do_call:
         // Allocate / create a new self before calling constructor on it.
         fiber->self = preConstructSelf(vm, cls);
         CHECK_ERROR();
+
+        // Note:
+        // For pocketlang instance the constructor will update self and return
+        // the instance (which might not be necessary since we're setting it
+        // here).
+        *fiber->ret = fiber->self;
 
         closure = (const Closure*)(cls)->ctor;
         while (closure == NULL) {
@@ -1120,7 +1128,6 @@ L_do_call:
             RUNTIME_ERROR(msg);
           }
 
-          *fiber->ret = fiber->self;
           fiber->self = VAR_UNDEFINED;
           DISPATCH();
         }
@@ -1141,8 +1148,6 @@ L_do_call:
                                    buff);
         RUNTIME_ERROR(msg);
       }
-
-      *(fiber->ret) = VAR_NULL; //< Set the return value to null.
 
       if (closure->fn->is_native) {
 

@@ -283,8 +283,6 @@ PK_PUBLIC int pkGetArgc(const PKVM* vm);
 // that min <= max, and pocketlang won't validate this in release binary.
 PK_PUBLIC bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max);
 
-// SLOTS DOCS 
-
 // Helper function to check if the argument at the [arg] slot is Boolean and
 // if not set a runtime error.
 PK_PUBLIC bool pkValidateSlotBool(PKVM* vm, int arg, bool* value);
@@ -297,6 +295,16 @@ PK_PUBLIC bool pkValidateSlotNumber(PKVM* vm, int arg, double* value);
 // if not set a runtime error.
 PK_PUBLIC bool pkValidateSlotString(PKVM* vm, int arg,
                                     const char** value, uint32_t* length);
+
+// Helper function to check if the argument at the [arg] slot is an instance
+// of the class which is at the [cls] index. If not set a runtime error.
+PK_PUBLIC bool pkValidateSlotInstanceOf(PKVM* vm, int arg, int cls);
+
+// Helper function to check if the instance at the [inst] slot is an instance
+// of the class which is at the [cls] index. The value will be set to [val]
+// if the object at [cls] slot isn't a valid class a runtime error will be set
+// and return false.
+PK_PUBLIC bool pkIsSlotInstanceOf(PKVM* vm, int inst, int cls, bool* val);
 
 // Make sure the fiber has [count] number of slots to work with (including the
 // arguments).
@@ -328,6 +336,10 @@ PK_PUBLIC const char* pkGetSlotString(PKVM* vm, int index, uint32_t* length);
 // garbage collected.
 PK_PUBLIC PkHandle* pkGetSlotHandle(PKVM* vm, int index);
 
+// Returns the native instance at the [index] slot. If the value at the [index]
+// is not a valid native instance, an assertion will fail.
+PK_PUBLIC void* pkGetSlotNativeInstance(PKVM* vm, int index);
+
 // Set the [index] slot value as pocketlang null.
 PK_PUBLIC void pkSetSlotNull(PKVM* vm, int index);
 
@@ -345,6 +357,10 @@ PK_PUBLIC void pkSetSlotString(PKVM* vm, int index, const char* value);
 PK_PUBLIC void pkSetSlotStringLength(PKVM* vm, int index,
                                      const char* value, uint32_t length);
 
+// Create a new string copying from the formated string and set it to [index]
+// slot.
+PK_PUBLIC void pkSetSlotStringFmt(PKVM* vm, int index, const char* fmt, ...);
+
 // Set the [index] slot's value as the given [handle]. The function won't
 // reclaim the ownership of the handle and you can still use it till
 // it's released by yourself.
@@ -353,6 +369,20 @@ PK_PUBLIC void pkSetSlotHandle(PKVM* vm, int index, PkHandle* handle);
 // Assign a global variable to a module at [module] slot, with the value at the
 // [global] slot with the given [name].
 PK_PUBLIC void pkSetGlobal(PKVM* vm, int module, int global, const char* name);
+
+// Creates a new instance of class at the [cls] slot, calls the constructor,
+// and place it at the [index] slot. Returns true if the instance constructed
+// successfully.
+//
+// [argc] is the argument count for the constructor, and [argv]
+// is the first argument slot's index.
+PK_PUBLIC bool pkNewInstance(PKVM* vm, int cls, int index, int argc, int argv);
+
+// Place the [self] instance at the [index] slot.
+PK_PUBLIC void pkPlaceSelf(PKVM* vm, int index);
+
+// Set the [index] slot's value as the class of the [instance].
+PK_PUBLIC void pkGetClass(PKVM* vm, int instance, int index);
 
 #ifdef __cplusplus
 } // extern "C"

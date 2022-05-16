@@ -24,6 +24,14 @@ void _deleteDummy(void* ptr) {
   FREE_OBJ(dummy);
 }
 
+DEF(_dummyInit, "") {
+  double val;
+  if (!pkValidateSlotNumber(vm, 1, &val)) return;
+
+  Dummy* self = (Dummy*) pkGetSelf(vm);
+  self->val = val;
+}
+
 DEF(_dummyGetter, "") {
   const char* name = pkGetSlotString(vm, 1, NULL);
   Dummy* self = (Dummy*)pkGetSelf(vm);
@@ -42,6 +50,25 @@ DEF(_dummySetter, "") {
     self->val = val;
     return;
   }
+}
+
+DEF(_dummyAdd, "") {
+  Dummy* self = (Dummy*) pkGetSelf(vm);
+
+  pkReserveSlots(vm, 4); // Now we have slots [0, 1, 2, 3].
+
+  pkPlaceSelf(vm, 2); // slot[2] = self
+  pkGetClass(vm, 2, 2); // slot[2] = Dummy class.
+
+  // slots[1] = other.
+  if (!pkValidateSlotInstanceOf(vm, 1, 2)) return;
+  Dummy* other = (Dummy*) pkGetSlotNativeInstance(vm, 1);
+
+  // slot[3] = self.val + other.val
+  pkSetSlotNumber(vm, 3, self->val + other->val);
+
+  // slot[0] = Dummy(slot[3]) => return value.
+  if (!pkNewInstance(vm, 2, 0, 1, 3)) return;
 }
 
 DEF(_dummyEq, "") {
@@ -85,8 +112,10 @@ void registerModuleDummy(PKVM* vm) {
 
   PkHandle* cls_dummy = pkNewClass(vm, "Dummy", NULL, dummy,
                                    _newDummy, _deleteDummy);
+  pkClassAddMethod(vm, cls_dummy, "_init",    _dummyInit,   1);
   pkClassAddMethod(vm, cls_dummy, "@getter",  _dummyGetter, 1);
   pkClassAddMethod(vm, cls_dummy, "@setter",  _dummySetter, 2);
+  pkClassAddMethod(vm, cls_dummy, "+",        _dummyAdd,    1);
   pkClassAddMethod(vm, cls_dummy, "==",       _dummyEq,     1);
   pkClassAddMethod(vm, cls_dummy, ">",        _dummyGt,     1);
   pkClassAddMethod(vm, cls_dummy, "a_method", _dummyMethod, 2);

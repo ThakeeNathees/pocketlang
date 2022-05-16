@@ -274,6 +274,20 @@ String* newStringLength(PKVM* vm, const char* text, uint32_t length) {
   return string;
 }
 
+String* newStringCFmt(PKVM* vm, const char* fmt, va_list args) {
+  va_list copy;
+  va_copy(copy, args);
+  int size = vsnprintf(NULL, 0, fmt, copy);
+  va_end(copy);
+
+  // [size] is not including the null terminator so +1.
+  String* string = _allocateString(vm, (size_t) size + 1);
+  vsnprintf(string->data, string->capacity, fmt, args);
+  string->hash = utilHashString(string->data);
+
+  return string;
+}
+
 List* newList(PKVM* vm, uint32_t size) {
   List* list = ALLOCATE(vm, List);
   vmPushTempRef(vm, &list->_super);

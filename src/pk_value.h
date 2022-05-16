@@ -547,6 +547,8 @@ void varInitObject(Object* self, PKVM* vm, ObjectType type);
 
 String* newStringLength(PKVM* vm, const char* text, uint32_t length);
 
+String* newStringCFmt(PKVM* vm, const char* fmt, va_list args);
+
 // An inline function/macro implementation of newString(). Set below 0 to 1, to
 // make the implementation a static inline function, it's totally okey to
 // define a function inside a header as long as it's static (but not a fan).

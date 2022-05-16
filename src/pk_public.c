@@ -576,6 +576,32 @@ PK_PUBLIC bool pkValidateSlotString(PKVM* vm, int arg, const char** value,
   return true;
 }
 
+PK_PUBLIC bool pkValidateSlotInstanceOf(PKVM* vm, int arg, int cls) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_ARGC(arg);
+  VALIDATE_SLOT_INDEX(cls);
+
+  Var instance = ARG(arg), class_ = SLOT(cls);
+  if (!varIsType(vm, instance, class_)) {
+    // If [class_] is not a valid class, it's already an error.
+    if (VM_HAS_ERROR(vm)) return false;
+    ERR_INVALID_ARG_TYPE(((Class*)AS_OBJ(class_))->name->data);
+    return false;
+  }
+
+  return true;
+}
+
+bool pkIsSlotInstanceOf(PKVM* vm, int inst, int cls, bool* val) {
+  CHECK_ARG_NULL(val);
+  VALIDATE_SLOT_INDEX(inst);
+  VALIDATE_SLOT_INDEX(cls);
+
+  Var instance = SLOT(inst), class_ = SLOT(cls);
+  *val = varIsType(vm, inst, cls);
+  return !VM_HAS_ERROR(vm);
+}
+
 void pkReserveSlots(PKVM* vm, int count) {
   if (vm->fiber == NULL) vm->fiber = newFiber(vm, NULL);
   int needed = (int)(vm->fiber->ret - vm->fiber->stack) + count;
@@ -584,7 +610,7 @@ void pkReserveSlots(PKVM* vm, int count) {
 
 int pkGetSlotsCount(PKVM* vm) {
   CHECK_FIBER_EXISTS(vm);
-  return (int) ((vm->fiber->stack + vm->fiber->stack_size) - vm->fiber->ret);
+  return vm->fiber->stack_size - (int)(vm->fiber->ret - vm->fiber->stack);
 }
 
 PkVarType pkGetSlotType(PKVM* vm, int index) {
@@ -623,6 +649,21 @@ PkHandle* pkGetSlotHandle(PKVM* vm, int index) {
   return vmNewHandle(vm, SLOT(index));
 }
 
+void* pkGetSlotNativeInstance(PKVM* vm, int index) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_SLOT_INDEX(index);
+
+  Var value = SLOT(index);
+  ASSERT(IS_OBJ_TYPE(value, OBJ_INST), "Slot value wasn't an Instance");
+
+  // TODO: If the native initializer (pkNewInstanceFn()) returned NULL,
+  // [inst->native] will be null - handle.
+  Instance* inst = (Instance*) AS_OBJ(value);
+  ASSERT(inst->native != NULL, "Slot value wasn't a Native Instance");
+
+  return inst->native;
+}
+
 void pkSetSlotNull(PKVM* vm, int index) {
   CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
@@ -654,6 +695,14 @@ PK_PUBLIC void pkSetSlotStringLength(PKVM* vm, int index,
   SET_SLOT(index, VAR_OBJ(newStringLength(vm, value, length)));
 }
 
+void pkSetSlotStringFmt(PKVM* vm, int index, const char* fmt, ...) {
+
+  va_list args;
+  va_start(args, fmt);
+  SET_SLOT(index, VAR_OBJ(newStringCFmt(vm, fmt, args)));
+  va_end(args);
+}
+
 void pkSetSlotHandle(PKVM* vm, int index, PkHandle* handle) {
   CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
@@ -672,7 +721,50 @@ void pkSetGlobal(PKVM* vm, int module, int global, const char* name) {
   (void) moduleAddGlobal(vm, m, name, (uint32_t) strlen(name), SLOT(global));
 }
 
-#undef CHECK_FIBER_EXISTS
+bool pkNewInstance(PKVM* vm, int cls, int index, int argc, int argv) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_SLOT_INDEX(index);
+
+  if (argc != 0) {
+    VALIDATE_SLOT_INDEX(argv);
+    VALIDATE_SLOT_INDEX(argv + argc - 1);
+  }
+
+  ASSERT(IS_OBJ_TYPE(SLOT(cls), OBJ_CLASS), "Slot value wasn't a class.");
+
+  Class* class_ = (Class*) AS_OBJ(SLOT(cls));
+  Var instance = preConstructSelf(vm, class_);
+
+  Closure* ctor = class_->ctor;
+  while (ctor == NULL) {
+    class_ = class_->super_class;
+    if (class_ == NULL) break;
+    ctor = class_->ctor;
+  }
+
+  if (ctor != NULL) {
+    vmCallMethod(vm, instance, ctor, argc, vm->fiber->ret + argv, NULL);
+  }
+
+  SET_SLOT(index, instance);
+  return !VM_HAS_ERROR(vm);
+}
+
+void pkPlaceSelf(PKVM* vm, int index) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_SLOT_INDEX(index);
+  SET_SLOT(index, vm->fiber->self);
+}
+
+void pkGetClass(PKVM* vm, int instance, int index) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_SLOT_INDEX(instance);
+  VALIDATE_SLOT_INDEX(index);
+
+  SET_SLOT(index, VAR_OBJ(getClass(vm, SLOT(instance))));
+}
+
+#undef CHECK_RUNTIME
 #undef VALIDATE_ARGC
 #undef ERR_INVALID_ARG_TYPE
 #undef ARG
