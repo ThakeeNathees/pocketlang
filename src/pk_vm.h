@@ -224,7 +224,7 @@ PkResult vmRunFiber(PKVM* vm, Fiber* fiber);
 // Runs the function and if the [ret] is not NULL the return value will be set.
 // [argv] should be the first argument pointer following the rest of the
 // arguments in an array.
-PkResult vmRunFunction(PKVM* vm, Closure* fn, int argc, Var* argv, Var* ret);
+PkResult vmCallFunction(PKVM* vm, Closure* fn, int argc, Var* argv, Var* ret);
 
 // Call the method on the [self], (witch has retrieved by the getMethod()
 // function) and if the [ret] is not NULL, the return value will be set.

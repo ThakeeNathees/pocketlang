@@ -222,6 +222,7 @@ void pkClassAddMethod(PKVM* vm, PkHandle* cls,
   Function* fn = newFunction(vm, name, (int)strlen(name),
                              class_->owner, true, NULL, NULL);
   fn->arity = arity;
+  fn->is_method = true;
   fn->native = fptr;
 
   // No need to push the function to temp references of the VM
@@ -470,7 +471,7 @@ PkResult pkRunREPL(PKVM* vm) {
     // Compiled source would be the "main" function of the module. Run it.
     Closure* _main = moduleGetMainFunction(vm, _module);
     ASSERT(_main != NULL, OOPS);
-    result = vmRunFunction(vm, _main, 0, NULL, NULL);
+    result = vmCallFunction(vm, _main, 0, NULL, NULL);
 
   } while (!done);
 
@@ -486,6 +487,13 @@ PkResult pkRunREPL(PKVM* vm) {
 void pkSetRuntimeError(PKVM* vm, const char* message) {
   CHECK_FIBER_EXISTS(vm);
   VM_SET_ERROR(vm, newString(vm, message));
+}
+
+void pkSetRuntimeErrorFmt(PKVM* vm, const char* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  VM_SET_ERROR(vm, newStringVaArgs(vm, fmt, args));
+  va_end(args);
 }
 
 void* pkGetSelf(const PKVM* vm) {
@@ -573,6 +581,17 @@ PK_PUBLIC bool pkValidateSlotString(PKVM* vm, int arg, const char** value,
   String* str = (String*)AS_OBJ(val);
   if (value) *value = str->data;
   if (length) *length = str->length;
+  return true;
+}
+
+bool pkValidateSlotType(PKVM* vm, int arg, PkVarType type) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_ARGC(arg);
+  if (getVarType(ARG(arg)) != type) {
+    ERR_INVALID_ARG_TYPE(getPkVarTypeName(type));
+    return false;
+  }
+
   return true;
 }
 
@@ -699,7 +718,7 @@ void pkSetSlotStringFmt(PKVM* vm, int index, const char* fmt, ...) {
 
   va_list args;
   va_start(args, fmt);
-  SET_SLOT(index, VAR_OBJ(newStringCFmt(vm, fmt, args)));
+  SET_SLOT(index, VAR_OBJ(newStringVaArgs(vm, fmt, args)));
   va_end(args);
 }
 
@@ -709,16 +728,40 @@ void pkSetSlotHandle(PKVM* vm, int index, PkHandle* handle) {
   SET_SLOT(index, handle->value);
 }
 
-void pkSetGlobal(PKVM* vm, int module, int global, const char* name) {
+bool pkSetAttribute(PKVM* vm, int instance, int value, const char* name) {
   CHECK_FIBER_EXISTS(vm);
   CHECK_ARG_NULL(name);
-  VALIDATE_SLOT_INDEX(module);
-  VALIDATE_SLOT_INDEX(global);
+  VALIDATE_SLOT_INDEX(instance);
+  VALIDATE_SLOT_INDEX(value);
 
-  Var value = SLOT(module);
-  ASSERT(IS_OBJ_TYPE(value, OBJ_MODULE), "Slot value wasn't a module.");
-  Module* m = (Module*) AS_OBJ(value);
-  (void) moduleAddGlobal(vm, m, name, (uint32_t) strlen(name), SLOT(global));
+  varSetAttrib(vm, SLOT(instance), newString(vm, name), SLOT(value));
+  return !VM_HAS_ERROR(vm);
+}
+
+PK_PUBLIC bool pkGetAttribute(PKVM* vm, int instance, const char* name,
+                              int index) {
+  CHECK_FIBER_EXISTS(vm);
+  CHECK_ARG_NULL(name);
+  VALIDATE_SLOT_INDEX(instance);
+  VALIDATE_SLOT_INDEX(index);
+
+  SET_SLOT(index, varGetAttrib(vm, SLOT(instance), newString(vm, name)));
+  return !VM_HAS_ERROR(vm);
+}
+
+static Var _newInstance(PKVM* vm, Class* cls, int argc, Var* argv) {
+  Var instance = preConstructSelf(vm, cls);
+
+  Closure* ctor = cls->ctor;
+  while (ctor == NULL) {
+    cls = cls->super_class;
+    if (cls == NULL) break;
+    ctor = cls->ctor;
+  }
+
+  if (ctor != NULL) vmCallMethod(vm, instance, ctor, argc, argv, NULL);
+
+  return instance;
 }
 
 bool pkNewInstance(PKVM* vm, int cls, int index, int argc, int argv) {
@@ -733,21 +776,82 @@ bool pkNewInstance(PKVM* vm, int cls, int index, int argc, int argv) {
   ASSERT(IS_OBJ_TYPE(SLOT(cls), OBJ_CLASS), "Slot value wasn't a class.");
 
   Class* class_ = (Class*) AS_OBJ(SLOT(cls));
-  Var instance = preConstructSelf(vm, class_);
 
-  Closure* ctor = class_->ctor;
-  while (ctor == NULL) {
-    class_ = class_->super_class;
-    if (class_ == NULL) break;
-    ctor = class_->ctor;
-  }
-
-  if (ctor != NULL) {
-    vmCallMethod(vm, instance, ctor, argc, vm->fiber->ret + argv, NULL);
-  }
-
-  SET_SLOT(index, instance);
+  SET_SLOT(index, _newInstance(vm, class_, argc, vm->fiber->ret + argv));
   return !VM_HAS_ERROR(vm);
+}
+
+bool pkCallFunction(PKVM* vm, int fn, int argc, int argv, int ret) {
+  CHECK_FIBER_EXISTS(vm);
+  if (argc != 0) {
+    VALIDATE_SLOT_INDEX(argv);
+    VALIDATE_SLOT_INDEX(argv + argc - 1);
+  }
+  if (ret >= 0) VALIDATE_SLOT_INDEX(ret);
+
+  // Calls a class == construct.
+  if (IS_OBJ_TYPE(SLOT(fn), OBJ_CLASS)) {
+    Var inst = _newInstance(vm, (Class*) AS_OBJ(fn), argc,
+                            vm->fiber->ret + argv);
+    if (ret >= 0) SET_SLOT(ret, inst);
+    return !VM_HAS_ERROR(vm);
+  }
+
+  if (IS_OBJ_TYPE(SLOT(fn), OBJ_CLOSURE)) {
+
+    Closure* func = (Closure*) AS_OBJ(SLOT(fn));
+
+    // Methods are not first class. Accessing a method will return a method
+    // bind instance which has a reference to an instance and invoking it will
+    // calls the method with that instance.
+    ASSERT(!func->fn->is_method, OOPS);
+
+    Var retval;
+    vmCallFunction(vm, func, argc,
+                   vm->fiber->ret + argv, &retval);
+    if (ret >= 0) SET_SLOT(ret, retval);
+    return !VM_HAS_ERROR(vm);
+  }
+
+  VM_SET_ERROR(vm, newString(vm, "Expected a Callable."));
+  return false;
+}
+
+PK_PUBLIC bool pkCallMethod(PKVM* vm, int instance, const char* method,
+                            int argc, int argv, int ret) {
+  CHECK_FIBER_EXISTS(vm);
+  CHECK_ARG_NULL(method);
+  VALIDATE_SLOT_INDEX(instance);
+  if (argc != 0) {
+    VALIDATE_SLOT_INDEX(argv);
+    VALIDATE_SLOT_INDEX(argv + argc - 1);
+  }
+  if (ret >= 0) VALIDATE_SLOT_INDEX(ret);
+
+  bool is_method = false;
+  Var callable = getMethod(vm, SLOT(instance), newString(vm, method),
+                          &is_method);
+  if (VM_HAS_ERROR(vm)) return false;
+
+  // Calls a class == construct.
+  if (IS_OBJ_TYPE(callable, OBJ_CLASS)) {
+    Var inst = _newInstance(vm, (Class*) AS_OBJ(callable), argc,
+                            vm->fiber->ret + argv);
+    if (ret >= 0) SET_SLOT(ret, inst);
+    return !VM_HAS_ERROR(vm);
+  }
+
+  if (IS_OBJ_TYPE(callable, OBJ_CLOSURE)) {
+    Var retval;
+    vmCallMethod(vm, SLOT(instance), (Closure*) AS_OBJ(callable), argc,
+                 vm->fiber->ret + argv, &retval);
+    if (ret >= 0) SET_SLOT(ret, retval);
+    return !VM_HAS_ERROR(vm);
+  }
+
+  VM_SET_ERROR(vm, stringFormat(vm, "Instance has no method named '$'.",
+                                method));
+  return false;
 }
 
 void pkPlaceSelf(PKVM* vm, int index) {

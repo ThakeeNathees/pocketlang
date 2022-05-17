@@ -2308,7 +2308,7 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
   // Add the variable and return it's index.
 
   if (compiler->scope_depth == DEPTH_GLOBAL) {
-    return (int)moduleAddGlobal(compiler->parser.vm, compiler->module,
+    return (int)moduleSetGlobal(compiler->parser.vm, compiler->module,
                                 name, length, VAR_NULL);
   } else {
     Local* local = &compiler->func->locals[compiler->func->local_count];
@@ -2671,8 +2671,8 @@ static bool matchOperatorMethod(Compiler* compiler,
 // popped.
 static void compileFunction(Compiler* compiler, FuncType fn_type) {
 
-  const char* name;
-  int name_length;
+  const char* name = "(?)"; // Setting "(?)" in case of syntax errors.
+  int name_length = 3;
 
   // If it's an operator method the bellow value will set to a positive value
   // (the argc of the method) it requires to throw a compile time error.
@@ -2703,6 +2703,7 @@ static void compileFunction(Compiler* compiler, FuncType fn_type) {
   int fn_index;
   Function* func = newFunction(compiler->parser.vm, name, name_length,
                                compiler->module, false, NULL, &fn_index);
+  func->is_method = (fn_type == FUNC_METHOD || fn_type == FUNC_CONSTRUCTOR);
 
   checkMaxConstantsReached(compiler, fn_index);
 
