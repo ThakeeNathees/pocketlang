@@ -3,8 +3,6 @@
  *  Distributed Under The MIT License
  */
 
-#error Native interface is being refactored and will be completed soon.
-
 // This is an example on how to write your own custom type (Vector here) and
 // bind it with with the pocket VM.
 
@@ -21,24 +19,18 @@ static const char* code =
   "                                        \n"
   "  v1 = Vec2(1, 2)                       \n"
   "  print('v1        = $v1')              \n"
-  "  print()                               \n"
-  "                                        \n"
-  "  print('v1.x      = ${v1.x}')          \n"
-  "  print('v1.y      = ${v1.y}')          \n"
   "  print('v1.length = ${v1.length}')     \n"
   "  print()                               \n"
   "                                        \n"
   "  v1.x = 3; v1.y = 4;                   \n"
-  "  print('v1.x      = ${v1.x}')          \n"
-  "  print('v1.y      = ${v1.y}')          \n"
+  "  print('v1        = $v1')              \n"
   "  print('v1.length = ${v1.length}')     \n"
   "  print()                               \n"
   "                                        \n"
   "  v2 = Vec2(5, 6)                       \n"
+  "  print('v2        = $v2')              \n"
   "  v3 = v1 + v2                          \n"
-  "  print('v3        = ${v3}')            \n"
-  "  print('v3.x      = ${v3.x}')          \n"
-  "  print('v3.y      = ${v3.y}')          \n"
+  "  print('v3        = $v3')              \n"
   "                                        \n"
   ;
 
@@ -72,7 +64,12 @@ void _vecGetter(PKVM* vm) {
   } else if (strcmp("y", name) == 0) {
     pkSetSlotNumber(vm, 0, self->y);
     return;
+  } else if (strcmp("length", name) == 0) {
+    double length = sqrt(pow(self->x, 2) + pow(self->y, 2));
+    pkSetSlotNumber(vm, 0, length);
+    return;
   }
+
 }
 
 void _vecSetter(PKVM* vm) {
@@ -91,12 +88,42 @@ void _vecSetter(PKVM* vm) {
   }
 }
 
+void _vecInit(PKVM* vm) {
+  double x, y;
+  if (!pkValidateSlotNumber(vm, 1, &x)) return;
+  if (!pkValidateSlotNumber(vm, 2, &y)) return;
+
+  Vector* self = (Vector*) pkGetSelf(vm);
+  self->x = x;
+  self->y = y;
+}
+
 // Vec2 '+' operator method.
 void _vecAdd(PKVM* vm) {
+  Vector* self = (Vector*) pkGetSelf(vm);
+
+  pkReserveSlots(vm, 5); // Now we have slots [0, 1, 2, 3, 4].
+
+  pkPlaceSelf(vm, 2);   // slot[2] = self
+  pkGetClass(vm, 2, 2); // slot[2] = Vec2 class.
+
+  // slot[1] is slot[2] == other is Vec2 ?
+  if (!pkValidateSlotInstanceOf(vm, 1, 2)) return;
+  Vector* other = (Vector*) pkGetSlotNativeInstance(vm, 1);
+
+  // slot[3] = new.x
+  pkSetSlotNumber(vm, 3, self->x + other->x);
+
+  // slot[4] = new.y
+  pkSetSlotNumber(vm, 4, self->y + other->y);
+
+  // slot[0] = Vec2(slot[3], slot[4]) => return value.
+  if (!pkNewInstance(vm, 2, 0, 2, 3)) return;
+}
+
+void _vecStr(PKVM* vm) {
   Vector* self = (Vector*)pkGetSelf(vm);
-  // FIXME:
-  // Temproarly it's not possible to get vector from the args since the native
-  // interface is being refactored. Will be implemented soon.
+  pkSetSlotStringFmt(vm, 0, "[%g, %g]", self->x, self->y);
 }
 
 // Register the 'Vector' module and it's functions.
@@ -105,7 +132,12 @@ void registerVector(PKVM* vm) {
 
   PkHandle* Vec2 = pkNewClass(vm, "Vec2", NULL /*Base Class*/,
                               vector, _newVec, _deleteVec);
-  pkClassAddMethod(vm, Vec2, "+", _vecAdd, 1);
+
+  pkClassAddMethod(vm, Vec2, "@getter", _vecGetter, 1);
+  pkClassAddMethod(vm, Vec2, "@setter", _vecSetter, 2);
+  pkClassAddMethod(vm, Vec2, "_init",   _vecInit,   2);
+  pkClassAddMethod(vm, Vec2, "_str",    _vecStr,    0);
+  pkClassAddMethod(vm, Vec2, "+",       _vecAdd,    1);
   pkReleaseHandle(vm, Vec2);
 
   pkRegisterModule(vm, vector);

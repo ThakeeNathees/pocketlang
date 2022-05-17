@@ -5,7 +5,7 @@
 
 from dummy import Dummy
 
-d = Dummy()
+d = Dummy(0)
 print(d)
 
 assert(d.val == 0) ## @getter
@@ -18,6 +18,12 @@ assert(d >= 3)    ## > overload
 assert(d >= 3.14) ## > and == overload
 
 assert(d.a_method(12, 34) == 408) ## method
+
+d1 = Dummy(12)
+d2 = Dummy(23)
+d3 = d1 + d2
+assert(d3 is Dummy)
+assert(d3.val == d1.val + d2.val)
 
 # If we got here, that means all test were passed.
 print('All TESTS PASSED')
