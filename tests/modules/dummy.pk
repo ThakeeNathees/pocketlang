@@ -3,6 +3,7 @@
 ## native module interface and will be removed once it become stable
 ## and we have enough tests on other native interfaces.
 
+import dummy
 from dummy import Dummy
 
 d = Dummy(0)
@@ -24,6 +25,26 @@ d2 = Dummy(23)
 d3 = d1 + d2
 assert(d3 is Dummy)
 assert(d3.val == d1.val + d2.val)
+
+assert(dummy.afunc("foo", "bar") == "barfoo")
+
+## Test pkCallFunction()
+bar = dummy.call_native fn (a1, a2, a3)
+  print('a1 = $a1, a2 = $a2, a3 = $a3')
+  return "bar"
+end
+assert(bar == "bar")
+
+## Test pkCallMethod()
+class A
+  def do_something(a1, a2)
+    return [a2, a1]
+  end
+end
+inst = A()
+a1 = 1..2; a2 = 34
+ret = dummy.call_method(inst, 'do_something', a1, a2)
+assert(ret == [a2, a1])
 
 # If we got here, that means all test were passed.
 print('All TESTS PASSED')

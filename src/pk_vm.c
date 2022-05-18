@@ -323,7 +323,7 @@ PkResult vmCallMethod(PKVM* vm, Var self, Closure* fn,
   return result;
 }
 
-PkResult vmRunFunction(PKVM* vm, Closure* fn, int argc, Var* argv, Var* ret) {
+PkResult vmCallFunction(PKVM* vm, Closure* fn, int argc, Var* argv, Var* ret) {
 
   // Calling functions and methods are the same, except for the methods have
   // self defined, and for functions it'll be VAR_UNDEFINED.
@@ -1080,8 +1080,7 @@ L_vm_main_loop:
 
       index = READ_SHORT();
       name = moduleGetStringAt(module, (int)index);
-      bool is_method;
-      callable = getMethod(vm, fiber->self, name, &is_method);
+      callable = getMethod(vm, fiber->self, name, NULL);
       CHECK_ERROR();
       goto L_do_call;
 

@@ -107,8 +107,48 @@ DEF(_dummyMethod,
 
 }
 
+DEF(_dummyFunction,
+  "dummy.afunc(s1:str, s2:str) -> str\n"
+  "A dummy function the'll return s2 + s1.") {
+
+  const char *s1, *s2;
+  if (!pkValidateSlotString(vm, 1, &s1, NULL)) return;
+  if (!pkValidateSlotString(vm, 2, &s2, NULL)) return;
+
+  pkSetSlotStringFmt(vm, 0, "%s%s", s2, s1);
+}
+
+DEF(_dummyCallNative,
+  "dummy.call_native(f:fn) -> void\n"
+  "Calls the function 'f' with arguments 'foo', 42, false.") {
+  if (!pkValidateSlotType(vm, 1, PK_CLOSURE)) return;
+
+  pkReserveSlots(vm, 5); // Now we have slots [0, 1, 2, 3, 4].
+  pkSetSlotString(vm, 2, "foo");
+  pkSetSlotNumber(vm, 3, 42);
+  pkSetSlotBool(vm, 4, false);
+
+  // slot[0] = slot[1](slot[2], slot[3], slot[4])
+  if (!pkCallFunction(vm, 1, 3, 2, 0)) return;
+}
+
+DEF(_dummyCallMethod,
+  "dummy.call_method(o:Obj, method:str, a1, a2) -> \n"
+  "Calls the method int the object [o] with two arguments [a1] and [a2].") {
+  const char* method;
+  if (!pkValidateSlotString(vm, 2, &method, NULL)) return;
+
+  // slots = [null, o, method, a1, a2]
+
+  if (!pkCallMethod(vm, 1, method, 2, 3, 0)) return;
+}
+
 void registerModuleDummy(PKVM* vm) {
   PkHandle* dummy = pkNewModule(vm, "dummy");
+
+  pkModuleAddFunction(vm, dummy, "afunc", _dummyFunction, 2);
+  pkModuleAddFunction(vm, dummy, "call_native", _dummyCallNative, 1);
+  pkModuleAddFunction(vm, dummy, "call_method", _dummyCallMethod, 4);
 
   PkHandle* cls_dummy = pkNewClass(vm, "Dummy", NULL, dummy,
                                    _newDummy, _deleteDummy);

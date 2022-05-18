@@ -227,8 +227,7 @@ PK_PUBLIC void pkRegisterModule(PKVM* vm, PkHandle* module);
 
 // Add a native function to the given module. If [arity] is -1 that means
 // the function has variadic parameters and use pkGetArgc() to get the argc.
-// Note that the function will be added as a global variable of the module,
-// to retrieve the function use pkModuleGetGlobal().
+// Note that the function will be added as a global variable of the module.
 PK_PUBLIC void pkModuleAddFunction(PKVM* vm, PkHandle* module,
                                    const char* name,
                                    pkNativeFn fptr, int arity);
@@ -268,8 +267,8 @@ PK_PUBLIC PkResult pkRunREPL(PKVM* vm);
 // Set a runtime error to VM.
 PK_PUBLIC void pkSetRuntimeError(PKVM* vm, const char* message);
 
-// TODO: Set a runtime error to VM, with the formated string.
-//PK_PUBLIC void pkSetRuntimeErrorFmt(PKVM* vm, const char* fmt, ...);
+// Set a runtime error with C formated string.
+PK_PUBLIC void pkSetRuntimeErrorFmt(PKVM* vm, const char* fmt, ...);
 
 // Returns native [self] of the current method as a void*.
 PK_PUBLIC void* pkGetSelf(const PKVM* vm);
@@ -295,6 +294,10 @@ PK_PUBLIC bool pkValidateSlotNumber(PKVM* vm, int arg, double* value);
 // if not set a runtime error.
 PK_PUBLIC bool pkValidateSlotString(PKVM* vm, int arg,
                                     const char** value, uint32_t* length);
+
+// Helper function to check if the argument at the [arg] slot is of type
+// [type] and if not sets a runtime error.
+PK_PUBLIC bool pkValidateSlotType(PKVM* vm, int arg, PkVarType type);
 
 // Helper function to check if the argument at the [arg] slot is an instance
 // of the class which is at the [cls] index. If not set a runtime error.
@@ -366,9 +369,25 @@ PK_PUBLIC void pkSetSlotStringFmt(PKVM* vm, int index, const char* fmt, ...);
 // it's released by yourself.
 PK_PUBLIC void pkSetSlotHandle(PKVM* vm, int index, PkHandle* handle);
 
-// Assign a global variable to a module at [module] slot, with the value at the
-// [global] slot with the given [name].
-PK_PUBLIC void pkSetGlobal(PKVM* vm, int module, int global, const char* name);
+/*****************************************************************************/
+/* POCKET FFI                                                                */
+/*****************************************************************************/
+
+// Set the attribute with [name] of the instance at the [instance] slot to
+// the value at the [value] index slot. Return true on success.
+PK_PUBLIC bool pkSetAttribute(PKVM* vm, int instance, int value,
+                              const char* name);
+
+// Get the attribute with [name] of the instance at the [instance] slot and
+// place it at the [index] slot. Return true on success.
+PK_PUBLIC bool pkGetAttribute(PKVM* vm, int instance, const char* name,
+                              int index);
+
+// Place the [self] instance at the [index] slot.
+PK_PUBLIC void pkPlaceSelf(PKVM* vm, int index);
+
+// Set the [index] slot's value as the class of the [instance].
+PK_PUBLIC void pkGetClass(PKVM* vm, int instance, int index);
 
 // Creates a new instance of class at the [cls] slot, calls the constructor,
 // and place it at the [index] slot. Returns true if the instance constructed
@@ -378,11 +397,16 @@ PK_PUBLIC void pkSetGlobal(PKVM* vm, int module, int global, const char* name);
 // is the first argument slot's index.
 PK_PUBLIC bool pkNewInstance(PKVM* vm, int cls, int index, int argc, int argv);
 
-// Place the [self] instance at the [index] slot.
-PK_PUBLIC void pkPlaceSelf(PKVM* vm, int index);
+// Calls a function at the [fn] slot, with [argc] argument where [argv] is the
+// slot of the first argument. [ret] is the slot index of the return value. if
+// [ret] < 0 the return value will be discarded.
+PK_PUBLIC bool pkCallFunction(PKVM* vm, int fn, int argc, int argv, int ret);
 
-// Set the [index] slot's value as the class of the [instance].
-PK_PUBLIC void pkGetClass(PKVM* vm, int instance, int index);
+// Calls a [method] on the [instance] with [argc] argument where [argv] is the
+// slot of the first argument. [ret] is the slot index of the return value. if
+// [ret] < 0 the return value will be discarded.
+PK_PUBLIC bool pkCallMethod(PKVM* vm, int instance, const char* method,
+                            int argc, int argv, int ret);
 
 #ifdef __cplusplus
 } // extern "C"

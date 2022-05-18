@@ -341,6 +341,10 @@ struct Function {
   // initialized.
   int arity;
 
+  // A function can be either a function or a method, and if it's a method, it
+  // cannot directly invoked without an instance.
+  bool is_method;
+
   // Number of upvalues it uses, we're defining it here (and not in object Fn)
   // is prevent checking is_native everytime (which might be a bit faster).
   int upvalue_count;
@@ -547,7 +551,7 @@ void varInitObject(Object* self, PKVM* vm, ObjectType type);
 
 String* newStringLength(PKVM* vm, const char* text, uint32_t length);
 
-String* newStringCFmt(PKVM* vm, const char* fmt, va_list args);
+String* newStringVaArgs(PKVM* vm, const char* fmt, va_list args);
 
 // An inline function/macro implementation of newString(). Set below 0 to 1, to
 // make the implementation a static inline function, it's totally okey to
@@ -702,17 +706,15 @@ String* moduleAddString(Module* module, PKVM* vm, const char* name,
 // index is negative i'll fail an assertion).
 String* moduleGetStringAt(Module* module, int index);
 
-// Add a global [value] to the [module] and return its index.
-uint32_t moduleAddGlobal(PKVM* vm, Module* module,
+// Set the global [value] to the [module] and return its index. If the global
+// [name] already exists it'll update otherwise one will be created.
+uint32_t moduleSetGlobal(PKVM* vm, Module* module,
                          const char* name, uint32_t length,
                          Var value);
 
 // Search for the [name] in the module's globals and return it's index.
 // If not found it'll return -1.
 int moduleGetGlobalIndex(Module* module, const char* name, uint32_t length);
-
-// Set the global value at [index] in the global buffer with the [value].
-void moduleSetGlobal(Module* module, int index, Var value);
 
 // This will allocate a new implicit main function for the module and assign to
 // the module's body attribute. And the attribute initialized will be set to

@@ -31,7 +31,7 @@ DEFINE_BUFFER(Closure, Closure*)
 
 void pkByteBufferAddString(pkByteBuffer* self, PKVM* vm, const char* str,
                            uint32_t length) {
-  pkByteBufferReserve(self, vm, self->count + length);
+  pkByteBufferReserve(self, vm, (size_t) self->count + length);
   for (uint32_t i = 0; i < length; i++) {
     self->data[self->count++] = *(str++);
   }
@@ -274,14 +274,13 @@ String* newStringLength(PKVM* vm, const char* text, uint32_t length) {
   return string;
 }
 
-String* newStringCFmt(PKVM* vm, const char* fmt, va_list args) {
+String* newStringVaArgs(PKVM* vm, const char* fmt, va_list args) {
   va_list copy;
   va_copy(copy, args);
-  int size = vsnprintf(NULL, 0, fmt, copy);
+  int length = vsnprintf(NULL, 0, fmt, copy);
   va_end(copy);
 
-  // [size] is not including the null terminator so +1.
-  String* string = _allocateString(vm, (size_t) size + 1);
+  String* string = _allocateString(vm, (size_t) length);
   vsnprintf(string->data, string->capacity, fmt, args);
   string->hash = utilHashString(string->data);
 
@@ -348,6 +347,7 @@ Function* newFunction(PKVM* vm, const char* name, int length,
   func->is_native = is_native;
   func->upvalue_count = 0;
   func->arity = -2; // -2 means un-initialized (TODO: make it as a macro).
+  func->is_method = false;
   func->docstring = docstring;
 
   ASSERT(is_native || owner != NULL, OOPS);
@@ -485,7 +485,7 @@ Class* newClass(PKVM* vm, const char* name, int length,
     cls->name = moduleAddString(module, vm, name, length, NULL);
     int _cls_index = moduleAddConstant(vm, module, VAR_OBJ(cls));
     if (cls_index) *cls_index = _cls_index;
-    moduleAddGlobal(vm, module, name, length, VAR_OBJ(cls));
+    moduleSetGlobal(vm, module, name, length, VAR_OBJ(cls));
   } else {
     cls->name = newStringLength(vm, name, (uint32_t)length);
   }
@@ -1072,7 +1072,7 @@ String* moduleGetStringAt(Module* module, int index) {
   return NULL;
 }
 
-uint32_t moduleAddGlobal(PKVM* vm, Module* module,
+uint32_t moduleSetGlobal(PKVM* vm, Module* module,
                          const char* name, uint32_t length,
                          Var value) {
 
@@ -1105,11 +1105,6 @@ int moduleGetGlobalIndex(Module* module, const char* name, uint32_t length) {
   return -1;
 }
 
-void moduleSetGlobal(Module* module, int index, Var value) {
-  ASSERT_INDEX(index, (int)module->globals.count);
-  module->globals.data[index] = value;
-}
-
 void moduleAddMain(PKVM* vm, Module* module) {
   ASSERT(module->body == NULL, OOPS);
 
@@ -1124,7 +1119,7 @@ void moduleAddMain(PKVM* vm, Module* module) {
   module->body = newClosure(vm, body_fn);
   vmPopTempRef(vm); // body_fn.
 
-  moduleAddGlobal(vm, module,
+  moduleSetGlobal(vm, module,
                   IMPLICIT_MAIN_NAME, (uint32_t)strlen(IMPLICIT_MAIN_NAME),
                   VAR_OBJ(module->body));
 }

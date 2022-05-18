@@ -32,8 +32,9 @@
 #define __ASSERT(condition, message)                                 \
   do {                                                               \
     if (!(condition)) {                                              \
-      fprintf(stderr, "Assertion failed: %s\n\tat %s() (%s:%i)\n",   \
-        message, __func__, __FILE__, __LINE__);                      \
+      fprintf(stderr, "Assertion failed: %s\n\tat %s() (%s:%i)\n"    \
+                      "\tcondition: %s",                             \
+        message, __func__, __FILE__, __LINE__, #condition);          \
       DEBUG_BREAK();                                                 \
       abort();                                                       \
     }                                                                \

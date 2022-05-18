@@ -160,7 +160,7 @@ void initializeScript(PKVM* vm, Module* module) {
   // A script's path will always the absolute normalized path (the path
   // resolving function would do take care of it) which is something that
   // was added after python 3.9.
-  moduleAddGlobal(vm, module, "__file__", 8, VAR_OBJ(module->path));
+  moduleSetGlobal(vm, module, "__file__", 8, VAR_OBJ(module->path));
 }
 
 /*****************************************************************************/
@@ -659,7 +659,7 @@ void moduleAddFunctionInternal(PKVM* vm, Module* module,
 
   vmPushTempRef(vm, &fn->_super); // fn.
   Closure* closure = newClosure(vm, fn);
-  moduleAddGlobal(vm, module, name, (uint32_t)strlen(name), VAR_OBJ(closure));
+  moduleSetGlobal(vm, module, name, (uint32_t)strlen(name), VAR_OBJ(closure));
   vmPopTempRef(vm); // fn.
 }
 
@@ -843,7 +843,7 @@ DEF(_numberTimes,
 
   for (int64_t i = 0; i < n; i++) {
     Var _i = VAR_NUM((double)i);
-    PkResult result = vmRunFunction(vm, closure, 1, &_i, NULL);
+    PkResult result = vmCallFunction(vm, closure, 1, &_i, NULL);
     if (result != PK_RESULT_SUCCESS) break;
   }
 
@@ -937,6 +937,7 @@ static void initializePrimitiveClasses(PKVM* vm) {
   do {                                                            \
     Function* fn = newFunction(vm, name, (int)strlen(name),       \
                                NULL, true, DOCSTRING(ptr), NULL); \
+    fn->is_method = true;                                         \
     fn->native = ptr;                                             \
     fn->arity = arity_;                                           \
     vmPushTempRef(vm, &fn->_super); /* fn. */                     \
@@ -1021,6 +1022,7 @@ static inline Closure* clsGetMethod(Class* cls, String* name) {
   do {
     for (int i = 0; i < (int)cls_->methods.count; i++) {
       Closure* method_ = cls_->methods.data[i];
+      ASSERT(method_->fn->is_method, OOPS);
       if (IS_CSTR_EQ(name, method_->fn->name, name->length)) {
         return method_;
       }
@@ -1554,14 +1556,8 @@ void varSetAttrib(PKVM* vm, Var on, String* attrib, Var value) {
   switch (obj->type) {
 
     case OBJ_MODULE: {
-      Module* module = (Module*)obj;
-      int index = moduleGetGlobalIndex(module, attrib->data, attrib->length);
-      if (index != -1) {
-        ASSERT_INDEX((uint32_t)index, module->globals.count);
-        module->globals.data[index] = value;
-        return;
-      }
-    } break;
+      moduleSetGlobal(vm, (Module*) obj, attrib->data, attrib->length, value);
+    } return;
 
     case OBJ_FUNC:
     case OBJ_UPVALUE:
