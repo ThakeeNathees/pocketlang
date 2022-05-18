@@ -11,13 +11,11 @@
 extern void js_errorPrint(const char* message);
 extern void js_writeFunction(const char* message);
 
-void errorPrint(PKVM* vm, const char* message) {
-  // No need to pass the file (since there is only script that'll ever run on
-  // the browser.
+void stdoutWrite(PKVM* vm, const char* message) {
   js_errorPrint(message);
 }
 
-void writeFunction(PKVM* vm, const char* text) {
+void stderrWrite(PKVM* vm, const char* text) {
   js_writeFunction(text);
 }
 
@@ -25,8 +23,8 @@ EMSCRIPTEN_KEEPALIVE
 int runSource(const char* source) {
 
   PkConfiguration config = pkNewConfiguration();
-  config.stderr_write = errorPrint;
-  config.stdout_write = writeFunction;
+  config.stderr_write = stderrWrite;
+  config.stdout_write = stdoutWrite;
   config.load_script_fn = NULL;
   config.resolve_path_fn = NULL;
 
