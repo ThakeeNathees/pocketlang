@@ -4,26 +4,17 @@
  *  Distributed Under The MIT License
  */
 
-#include "pk_core.h"
-
 #include <ctype.h>
 #include <limits.h>
 #include <math.h>
 #include <time.h>
 
-#include "pk_debug.h"
-#include "pk_utils.h"
-#include "pk_vm.h"
-
-// Returns the docstring of the function, which is a static const char* defined
-// just above the function by the DEF() macro below.
-#define DOCSTRING(fn) _pk_doc_##fn
-
-// A macro to declare a function, with docstring, which is defined as
-// _pk_doc_<fn> = docstring; That'll used to generate function help text.
-#define DEF(fn, docstring)                      \
-  static const char* DOCSTRING(fn) = docstring; \
-  static void fn(PKVM* vm)
+#ifndef PK_AMALGAMATED
+#include "core.h"
+#include "debug.h"
+#include "utils.h"
+#include "vm.h"
+#endif
 
 // A convenient macro to get the nth (1 based) argument of the current
 // function.
@@ -955,8 +946,6 @@ static void initializePrimitiveClasses(PKVM* vm) {
 }
 
 #undef IS_NUM_BYTE
-#undef DOCSTRING
-#undef DEF
 
 /*****************************************************************************/
 /* OPERATORS                                                                 */

@@ -4,13 +4,14 @@
  *  Distributed Under The MIT License
  */
 
-#include "pk_compiler.h"
-
-#include "pk_core.h"
-#include "pk_buffers.h"
-#include "pk_utils.h"
-#include "pk_vm.h"
-#include "pk_debug.h"
+#ifndef PK_AMALGAMATED
+#include "compiler.h"
+#include "core.h"
+#include "buffers.h"
+#include "utils.h"
+#include "vm.h"
+#include "debug.h"
+#endif
 
 // The maximum number of locals or global (if compiling top level module)
 // to lookup from the compiling context. Also it's limited by it's opcode
@@ -155,10 +156,12 @@ typedef enum {
    *   TK_STRING     " e" */
    TK_STRING_INTERP,
 
-} TokenType;
+} _TokenType;
+// Winint.h has already defined TokenType which breaks amalgam build so I've
+// change the name from TokenType to _TokenType.
 
 typedef struct {
-  TokenType type;
+  _TokenType type;
 
   const char* start; //< Begining of the token in the source.
   int length;        //< Number of chars of the token.
@@ -169,7 +172,7 @@ typedef struct {
 typedef struct {
   const char* identifier;
   int length;
-  TokenType tk_type;
+  _TokenType tk_type;
 } _Keyword;
 
 // List of keywords mapped into their identifiers.
@@ -202,7 +205,7 @@ static _Keyword _keywords[] = {
   { "continue", 8, TK_CONTINUE },
   { "return",   6, TK_RETURN   },
 
-  { NULL,       0, (TokenType)(0) }, // Sentinel to mark the end of the array.
+  { NULL,       0, (_TokenType)(0) }, // Sentinel to mark the end of the array.
 };
 
 /*****************************************************************************/
@@ -493,7 +496,7 @@ typedef struct {
 
 static OpInfo opcode_info[] = {
   #define OPCODE(name, params, stack) { params, stack },
-  #include "pk_opcodes.h"
+  #include "opcodes.h"  //<< AMALG_INLINE >>
   #undef OPCODE
 };
 
@@ -657,8 +660,8 @@ static Token makeErrToken(Parser* parser);
 static char peekChar(Parser* parser);
 static char peekNextChar(Parser* parser);
 static char eatChar(Parser* parser);
-static void setNextValueToken(Parser* parser, TokenType type, Var value);
-static void setNextToken(Parser* parser, TokenType type);
+static void setNextValueToken(Parser* parser, _TokenType type, Var value);
+static void setNextToken(Parser* parser, _TokenType type);
 static bool matchChar(Parser* parser, char c);
 
 static void eatString(Compiler* compiler, bool single_quote) {
@@ -670,7 +673,7 @@ static void eatString(Compiler* compiler, bool single_quote) {
   char quote = (single_quote) ? '\'' : '"';
 
   // For interpolated string it'll be TK_STRING_INTERP.
-  TokenType tk_type = TK_STRING;
+  _TokenType tk_type = TK_STRING;
 
   while (true) {
     char c = eatChar(parser);
@@ -786,7 +789,7 @@ static void eatName(Parser* parser) {
 
   const char* name_start = parser->token_start;
 
-  TokenType type = TK_NAME;
+  _TokenType type = TK_NAME;
 
   int length = (int)(parser->current_char - name_start);
   for (int i = 0; _keywords[i].identifier != NULL; i++) {
@@ -950,8 +953,8 @@ static bool matchChar(Parser* parser, char c) {
 
 // If the current char is [c] eat the char and add token two otherwise eat
 // append token one.
-static void setNextTwoCharToken(Parser* parser, char c, TokenType one,
-  TokenType two) {
+static void setNextTwoCharToken(Parser* parser, char c, _TokenType one,
+  _TokenType two) {
   if (matchChar(parser, c)) {
     setNextToken(parser, two);
   } else {
@@ -970,7 +973,7 @@ static Token makeErrToken(Parser* parser) {
 }
 
 // Initialize the next token as the type.
-static void setNextToken(Parser* parser, TokenType type) {
+static void setNextToken(Parser* parser, _TokenType type) {
   Token* next = &parser->next;
   next->type = type;
   next->start = parser->token_start;
@@ -979,7 +982,7 @@ static void setNextToken(Parser* parser, TokenType type) {
 }
 
 // Initialize the next token as the type and assign the value.
-static void setNextValueToken(Parser* parser, TokenType type, Var value) {
+static void setNextValueToken(Parser* parser, _TokenType type, Var value) {
   setNextToken(parser, type);
   parser->next.value = value;
 }
@@ -1186,13 +1189,13 @@ static void lexToken(Compiler* compiler) {
 /*****************************************************************************/
 
 // Returns current token type without lexing a new token.
-static TokenType peek(Compiler* compiler) {
+static _TokenType peek(Compiler* compiler) {
   return compiler->parser.current.type;
 }
 
 // Consume the current token if it's expected and lex for the next token
 // and return true otherwise return false.
-static bool match(Compiler* compiler, TokenType expected) {
+static bool match(Compiler* compiler, _TokenType expected) {
   if (peek(compiler) != expected) return false;
 
   lexToken(compiler);
@@ -1203,7 +1206,7 @@ static bool match(Compiler* compiler, TokenType expected) {
 
 // Consume the the current token and if it's not [expected] emits error log
 // and continue parsing for more error logs.
-static void consume(Compiler* compiler, TokenType expected,
+static void consume(Compiler* compiler, _TokenType expected,
                     const char* err_msg) {
 
   lexToken(compiler);
@@ -1272,7 +1275,7 @@ static void consumeEndStatement(Compiler* compiler) {
 }
 
 // Match optional "do" or "then" keyword and new lines.
-static void consumeStartBlock(Compiler* compiler, TokenType delimiter) {
+static void consumeStartBlock(Compiler* compiler, _TokenType delimiter) {
   bool consumed = false;
 
   // Match optional "do" or "then".
@@ -1500,7 +1503,7 @@ static int emitByte(Compiler* compiler, int byte);
 static int emitShort(Compiler* compiler, int arg);
 
 static void emitLoopJump(Compiler* compiler);
-static void emitAssignedOp(Compiler* compiler, TokenType assignment);
+static void emitAssignedOp(Compiler* compiler, _TokenType assignment);
 static void emitFunctionEnd(Compiler* compiler);
 
 static void patchJump(Compiler* compiler, int addr_index);
@@ -1628,7 +1631,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_STRING_INTERP */ { exprInterpolation, NULL,      NO_INFIX },
 };
 
-static GrammarRule* getRule(TokenType type) {
+static GrammarRule* getRule(_TokenType type) {
   return &(rules[(int)type]);
 }
 
@@ -1764,7 +1767,7 @@ static void _compileCall(Compiler* compiler, Opcode call_type, int method) {
 // emit the call. Return true if such call matched. If [method] >= 0 it'll
 // compile a method call otherwise a regular call.
 static bool _compileOptionalParanCall(Compiler* compiler, int method) {
-  static TokenType tk[] = {
+  static _TokenType tk[] = {
     TK_FN,
     //TK_STRING,
     //TK_STRING_INTERP,
@@ -1861,7 +1864,7 @@ static void exprName(Compiler* compiler) {
   NameSearchResult result = compilerSearchName(compiler, start, length);
 
   if (compiler->l_value && matchAssignment(compiler)) {
-    TokenType assignment = compiler->parser.previous.type;
+    _TokenType assignment = compiler->parser.previous.type;
     skipNewLines(compiler);
 
     // Type of the name that's being assigned. Could only be local, global
@@ -1995,7 +1998,7 @@ void exprAnd(Compiler* compiler) {
 }
 
 static void exprBinaryOp(Compiler* compiler) {
-  TokenType op = compiler->parser.previous.type;
+  _TokenType op = compiler->parser.previous.type;
   skipNewLines(compiler);
   parsePrecedence(compiler, (Precedence)(getRule(op)->precedence + 1));
 
@@ -2032,7 +2035,7 @@ static void exprBinaryOp(Compiler* compiler) {
 }
 
 static void exprUnaryOp(Compiler* compiler) {
-  TokenType op = compiler->parser.previous.type;
+  _TokenType op = compiler->parser.previous.type;
   skipNewLines(compiler);
   parsePrecedence(compiler, (Precedence)(PREC_UNARY + 1));
 
@@ -2120,7 +2123,7 @@ static void exprAttrib(Compiler* compiler) {
   if (_compileOptionalParanCall(compiler, index)) return;
 
   if (compiler->l_value && matchAssignment(compiler)) {
-    TokenType assignment = compiler->parser.previous.type;
+    _TokenType assignment = compiler->parser.previous.type;
     skipNewLines(compiler);
 
     if (assignment != TK_EQ) {
@@ -2146,7 +2149,7 @@ static void exprSubscript(Compiler* compiler) {
   consume(compiler, TK_RBRACKET, "Expected ']' after subscription ends.");
 
   if (compiler->l_value && matchAssignment(compiler)) {
-    TokenType assignment = compiler->parser.previous.type;
+    _TokenType assignment = compiler->parser.previous.type;
     skipNewLines(compiler);
 
     if (assignment != TK_EQ) {
@@ -2166,7 +2169,7 @@ static void exprSubscript(Compiler* compiler) {
 }
 
 static void exprValue(Compiler* compiler) {
-  TokenType op = compiler->parser.previous.type;
+  _TokenType op = compiler->parser.previous.type;
   switch (op) {
     case TK_NULL:  emitOpcode(compiler, OP_PUSH_NULL);  break;
     case TK_TRUE:  emitOpcode(compiler, OP_PUSH_TRUE);  break;
@@ -2262,7 +2265,7 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
     lexToken(compiler);
     if (compiler->parser.has_syntax_error) return;
 
-    TokenType op = compiler->parser.previous.type;
+    _TokenType op = compiler->parser.previous.type;
     GrammarFn infix = getRule(op)->infix;
 
     infix(compiler);
@@ -2459,7 +2462,7 @@ static void emitLoopJump(Compiler* compiler) {
   emitShort(compiler, offset);
 }
 
-static void emitAssignedOp(Compiler* compiler, TokenType assignment) {
+static void emitAssignedOp(Compiler* compiler, _TokenType assignment) {
   // Emits the opcode and 1 (means true) as inplace operation.
 #define EMIT_BINARY_OP_INPLACE(opcode)\
   do { emitOpcode(compiler, opcode); emitByte(compiler, 1); } while (false)
@@ -2834,7 +2837,7 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
     skipNewLines(compiler);
   }
 
-  TokenType next = peek(compiler);
+  _TokenType next = peek(compiler);
   while (!(next == TK_END || next == TK_EOF ||
           ((type == BLOCK_IF) && (next == TK_ELSE)))) {
 

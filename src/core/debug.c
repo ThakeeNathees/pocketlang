@@ -4,10 +4,12 @@
  *  Distributed Under The MIT License
  */
 
-#include "pk_debug.h"
-
 #include <stdio.h>
-#include "pk_vm.h"
+
+#ifndef PK_AMALGAMATED
+#include "debug.h"
+#include "vm.h"
+#endif
 
 // FIXME:
 // Refactor this. Maybe move to a module, Rgb values are hardcoded ?!
@@ -257,7 +259,7 @@ void reportRuntimeError(PKVM* vm, Fiber* fiber) {
 // Opcode names array.
 static const char* op_names[] = {
   #define OPCODE(name, params, stack) #name,
-  #include "pk_opcodes.h"
+  #include "opcodes.h"  //<< AMALG_INLINE >>
   #undef OPCODE
 };
 

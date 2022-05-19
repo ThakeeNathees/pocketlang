@@ -7,8 +7,10 @@
 #ifndef PK_VALUE_H
 #define PK_VALUE_H
 
-#include "pk_buffers.h"
-#include "pk_internal.h"
+#ifndef PK_AMALGAMATED
+#include "buffers.h"
+#include "internal.h"
+#endif
 
 /**
  * A simple dynamic type system library for small dynamic typed languages using

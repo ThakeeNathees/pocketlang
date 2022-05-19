@@ -4,11 +4,25 @@
  *  Distributed Under The MIT License
  */
 
-#ifndef PK_COMMON_H
-#define PK_COMMON_H
+#ifndef LIBS_H
+#define LIBS_H
 
-#include <stdio.h> //< Only needed here for ASSERT() macro and for release mode
-                   //< TODO; macro use this to print a crash report.
+#ifndef PK_AMALGAMATED
+#include <pocketlang.h>
+#endif
+
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+
+/*****************************************************************************/
+/* MODULES INTERNAL                                                          */
+/*****************************************************************************/
+
+// We're re defining some core internal macros here which should be considered
+// as macro re-definition in amalgamated source, so we're skipping it for
+// amalgumated build.
+#ifndef PK_AMALGAMATED
 
 #define TOSTRING(x) #x
 #define STRINGIFY(x) TOSTRING(x)
@@ -83,23 +97,40 @@
 
 #endif // DEBUG
 
-#if defined(_MSC_VER)
-  #define forceinline __forceinline
-#else
-  #define forceinline __attribute__((always_inline))
-#endif
-
-// To use dynamic variably-sized struct with a tail array add an array at the
-// end of the struct with size DYNAMIC_TAIL_ARRAY. This method was a legacy
-// standard called "struct hack".
-#if defined(_MSC_VER) || __STDC_VERSION__ >= 199901L // stdc >= c99
-  #define DYNAMIC_TAIL_ARRAY
-#else
-  #define DYNAMIC_TAIL_ARRAY 0
-#endif
-
 // Using __ASSERT() for make it crash in release binary too.
 #define TODO __ASSERT(false, "TODO: It hasn't implemented yet.")
 #define OOPS "Oops a bug!! report please."
 
-#endif //PK_COMMON_H
+// Returns the docstring of the function, which is a static const char* defined
+// just above the function by the DEF() macro below.
+#define DOCSTRING(fn) __doc_##fn
+
+// A macro to declare a function, with docstring, which is defined as
+// ___doc_<fn> = docstring; That'll used to generate function help text.
+#define DEF(fn, docstring)                      \
+  static const char* DOCSTRING(fn) = docstring; \
+  static void fn(PKVM* vm)
+
+#endif // PK_AMALGAMATED
+
+// Allocate a new module object of type [Ty].
+#define NEW_OBJ(Ty) (Ty*) malloc(sizeof(Ty))
+
+// Dellocate module object, allocated by NEW_OBJ(). Called by the freeObj
+// callback.
+#define FREE_OBJ(ptr) free(ptr)
+
+/*****************************************************************************/
+/* SHARED FUNCTIONS                                                          */
+/*****************************************************************************/
+
+// These are "public" module functions that can be shared. Since some modules
+// can be used for cli's internals we're defining such functions here and they
+// will be imported in the cli.
+
+// The pocketlang's import statement path resolving function. This
+// implementation is required by pockelang from it's hosting application
+// inorder to use the import statements.
+char* pathResolveImport(PKVM * vm, const char* from, const char* path);
+
+#endif // LIBS_H

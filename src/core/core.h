@@ -7,8 +7,10 @@
 #ifndef PK_CORE_H
 #define PK_CORE_H
 
-#include "pk_internal.h"
-#include "pk_value.h"
+#ifndef PK_AMALGAMATED
+#include "internal.h"
+#include "value.h"
+#endif
 
 // Literal strings used in various places in pocketlang. For now these are
 // defined as macros so that it'll be easier in the future to refactor or

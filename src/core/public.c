@@ -6,13 +6,14 @@
 
 // This file contains all the pocketlang public function implementations.
 
-#include "include/pocketlang.h"
-
-#include "pk_core.h"
-#include "pk_compiler.h"
-#include "pk_utils.h"
-#include "pk_value.h"
-#include "pk_vm.h"
+#ifndef PK_AMALGAMATED
+#include <pocketlang.h>
+#include "core.h"
+#include "compiler.h"
+#include "utils.h"
+#include "value.h"
+#include "vm.h"
+#endif
 
 #define CHECK_ARG_NULL(name) \
   ASSERT((name) != NULL, "Argument " #name " was NULL.");
@@ -85,19 +86,34 @@ void pkDeAllocString(PKVM* vm, char* str) {
   vm->config.realloc_fn(str, 0, vm->config.user_data);
 }
 
+// TODO: Document this or Find a better way.
+//
+// Pocketlang core doesn't implement path resolving funcionality. Rather it
+// should be provided the host application. By default we're using an
+// implementation from the path library. However pocket core cannot be depend
+// on its libs, otherwise it'll breaks the encapsulation.
+//
+// As a workaround we declare the default path resolver here and use it.
+// But if someone wants to compile just the core pocketlang without libs
+// they have to define PK_NO_LIBS to prevent the compiler from not be able
+// to find functions when linking.
+#if !defined(PK_NO_LIBS)
+  char* pathResolveImport(PKVM* vm, const char* from, const char* path);
+#endif
+
 PkConfiguration pkNewConfiguration() {
   PkConfiguration config;
+  memset(&config, 0, sizeof(config));
+
   config.realloc_fn = defaultRealloc;
 
   config.stdout_write = stdoutWrite;
   config.stderr_write = stderrWrite;
   config.stdin_read = stdinRead;
-
-  config.resolve_path_fn = NULL;
+#if !defined(PK_NO_LIBS)
+  config.resolve_path_fn = pathResolveImport;
+#endif
   config.load_script_fn = loadScript;
-
-  config.use_ansi_color = false;
-  config.user_data = NULL;
 
   return config;
 }

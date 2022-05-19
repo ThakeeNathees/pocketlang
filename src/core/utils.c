@@ -4,7 +4,9 @@
  *  Distributed Under The MIT License
  */
 
-#include "pk_utils.h"
+#ifndef PK_AMALGAMATED
+#include "utils.h"
+#endif
 
 #include <assert.h>
 #include <errno.h>

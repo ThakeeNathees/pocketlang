@@ -7,8 +7,10 @@
 #ifndef PK_DEBUG_H
 #define PK_DEBUG_H
 
-#include "pk_internal.h"
-#include "pk_value.h"
+#ifndef PK_AMALGAMATED
+#include "internal.h"
+#include "value.h"
+#endif
 
 // Pretty print compile time error.
 void reportCompileTimeError(PKVM* vm, const char* path, int line,

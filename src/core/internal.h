@@ -7,9 +7,10 @@
 #ifndef PK_INTERNAL
 #define PK_INTERNAL
 
-#include "include/pocketlang.h"
-
-#include "pk_common.h"
+#ifndef PK_AMALGAMATED
+#include <pocketlang.h>
+#include "common.h"
+#endif
 
 // Commonly used C standard headers across the sources. Don't include any
 // headers that are specific to a single source here, instead include them in
@@ -111,6 +112,16 @@
 /*****************************************************************************/
 /* REUSABLE INTERNAL MACROS                                                  */
 /*****************************************************************************/
+
+// Returns the docstring of the function, which is a static const char* defined
+// just above the function by the DEF() macro below.
+#define DOCSTRING(fn) _pk_doc_##fn
+
+// A macro to declare a function, with docstring, which is defined as
+// _pk_doc_<fn> = docstring; That'll used to generate function help text.
+#define DEF(fn, docstring)                      \
+  static const char* DOCSTRING(fn) = docstring; \
+  static void fn(PKVM* vm)
 
 // Here we're switching the FNV-1a hash value of the name (cstring). Which is
 // an efficient way than having multiple if (attrib == "name"). From O(n) * k

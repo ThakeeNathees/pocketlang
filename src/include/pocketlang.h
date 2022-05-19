@@ -197,6 +197,11 @@ PK_PUBLIC PKVM* pkNewVM(PkConfiguration* config);
 // Clean the VM and dispose all the resources allocated by the VM.
 PK_PUBLIC void pkFreeVM(PKVM* vm);
 
+// This will register all the standard libraries of pocketlang to the VM. The
+// libraries are not part of the core implementation, and one can use just the
+// bare bone of the language without any libraries if they don't call this.
+PK_PUBLIC void pkRegisterLibs(PKVM* vm);
+
 // Update the user data of the vm.
 PK_PUBLIC void pkSetUserData(PKVM* vm, void* user_data);
 

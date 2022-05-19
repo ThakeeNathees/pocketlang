@@ -4,9 +4,11 @@
  *  Distributed Under The MIT License
  */
 
-#include "modules.h"
-
 #include <math.h>
+
+#ifndef PK_AMALGAMATED
+#include "libs.h"
+#endif
 
 // M_PI is non standard. For a portable solution, we're defining it ourselves.
 #define PK_PI 3.14159265358979323846
