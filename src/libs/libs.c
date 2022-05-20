@@ -8,14 +8,20 @@
 #include "libs.h"
 #endif
 
-void registerModuleDummy(PKVM* vm);
+void registerModuleMath(PKVM* vm);
+void registerModuleTime(PKVM* vm);
 void registerModuleIO(PKVM* vm);
 void registerModulePath(PKVM* vm);
-void registerModuleMath(PKVM* vm);
+void registerModuleDummy(PKVM* vm);
 
-void pkRegisterLibs(PKVM* vm) {
-  registerModuleDummy(vm);
+void registerLibs(PKVM* vm) {
+  registerModuleMath(vm);
+  registerModuleTime(vm);
   registerModuleIO(vm);
   registerModulePath(vm);
-  registerModuleMath(vm);
+  registerModuleDummy(vm);
+}
+
+void cleanupLibs(PKVM* vm) {
+
 }

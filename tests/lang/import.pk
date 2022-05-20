@@ -4,7 +4,7 @@ import lang
 import lang, path
 import lang as o, path as p
 from lang import write
-from lang import clock as c
+from time import sleep as s
 
 import basics
 import controlflow as if_test

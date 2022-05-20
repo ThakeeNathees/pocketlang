@@ -20,7 +20,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 
-#if defined(_WIN32)
+#ifdef _WIN32
   #include <windows.h>
 #endif
 
@@ -109,7 +109,7 @@ static char* tryImportPaths(PKVM* vm, char* path, char* buff) {
 
   char* ret = NULL;
   if (path_size != 0) {
-    ret = pkAllocString(vm, path_size + 1);
+    ret = pkRealloc(vm, NULL, path_size + 1);
     memcpy(ret, buff, path_size + 1);
   }
   return ret;
@@ -138,7 +138,7 @@ char* pathResolveImport(PKVM* vm, const char* from, const char* path) {
   if (cwk_path_is_absolute(path)) {
 
     // buff1 = normalized path. +1 for null terminator.
-    size_t size = cwk_path_normalize(path, buff1, sizeof(buff1)) + 1;
+    cwk_path_normalize(path, buff1, sizeof(buff1));
     pathFixWindowsSeperator(buff1);
 
     return tryImportPaths(vm, buff1, buff2);
@@ -150,7 +150,7 @@ char* pathResolveImport(PKVM* vm, const char* from, const char* path) {
     pathAbs(path, buff1, sizeof(buff1));
 
     // buff2 = normalized path. +1 for null terminator.
-    size_t size = cwk_path_normalize(buff1, buff2, sizeof(buff2)) + 1;
+    cwk_path_normalize(buff1, buff2, sizeof(buff2));
     pathFixWindowsSeperator(buff2);
 
     return tryImportPaths(vm, buff2, buff1);
@@ -173,7 +173,7 @@ char* pathResolveImport(PKVM* vm, const char* from, const char* path) {
     cwk_path_join(buff1, path, buff2, sizeof(buff2));
 
     // buff1 = normalized absolute path. +1 for null terminator
-    size_t size = cwk_path_normalize(buff2, buff1, sizeof(buff1)) + 1;
+    cwk_path_normalize(buff2, buff1, sizeof(buff1));
     pathFixWindowsSeperator(buff1);
 
     return tryImportPaths(vm, buff1, buff2);

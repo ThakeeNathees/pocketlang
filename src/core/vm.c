@@ -339,7 +339,7 @@ PkResult vmCallFunction(PKVM* vm, Closure* fn, int argc, Var* argv, Var* ret) {
 // Import and return the Module object with the [path] string. If the path
 // starts with with './' or '../' we'll only try relative imports, otherwise
 // we'll search native modules first and then at relative path.
-static inline Var importModule(PKVM* vm, String* from, String* path) {
+Var vmImportModule(PKVM* vm, String* from, String* path) {
   ASSERT((path != NULL) && (path->length > 0), OOPS);
 
   bool is_relative = path->data[0] == '.';
@@ -362,19 +362,13 @@ static inline Var importModule(PKVM* vm, String* from, String* path) {
                     (from) ? from->data : NULL, path->data);
 
   if (_resolved == NULL) { // Can't resolve a relative module.
-    pkDeAllocString(vm, _resolved);
-    if (from) {
-      VM_SET_ERROR(vm, stringFormat(vm, "Cannot resolve a relative import "
-                                        "path \"@\" from \"@\".", path, from));
-    } else {
-      VM_SET_ERROR(vm, stringFormat(vm, "Cannot resolve a relative import "
-                                        "path \"@\"", path));
-    }
+    pkRealloc(vm, _resolved, 0);
+    VM_SET_ERROR(vm, stringFormat(vm, "Cannot import module '@'", path));
     return VAR_NULL;
   }
 
   String* resolved = newString(vm, _resolved);
-  pkDeAllocString(vm, _resolved);
+  pkRealloc(vm, _resolved, 0);
 
   // If the script already imported and cached, return it.
   Var entry = mapGet(vm->modules, VAR_OBJ(resolved));
@@ -405,14 +399,14 @@ static inline Var importModule(PKVM* vm, String* from, String* path) {
       break;
     }
 
-    // Make a new module and to compile it.
+    // Make a new module, compile and cache it.
     module = newModule(vm);
     module->path = resolved;
     vmPushTempRef(vm, &module->_super); // module.
     {
       initializeScript(vm, module);
       PkResult result = compile(vm, module, source, NULL);
-      pkDeAllocString(vm, source);
+      pkRealloc(vm, source, 0);
       if (result == PK_RESULT_SUCCESS) {
         vmRegisterModule(vm, module, resolved);
       } else {
@@ -948,14 +942,14 @@ L_vm_main_loop:
       // Capture the vaupes.
       for (int i = 0; i < fn->upvalue_count; i++) {
         uint8_t is_immediate = READ_BYTE();
-        uint8_t index = READ_BYTE();
+        uint8_t idx = READ_BYTE();
 
         if (is_immediate) {
           // rbp[0] is the return value, rbp + 1 is the first local and so on.
-          closure->upvalues[i] = captureUpvalue(vm, fiber, (rbp + 1 + index));
+          closure->upvalues[i] = captureUpvalue(vm, fiber, (rbp + 1 + idx));
         } else {
           // The upvalue is already captured by the current function, reuse it.
-          closure->upvalues[i] = frame->closure->upvalues[index];
+          closure->upvalues[i] = frame->closure->upvalues[idx];
         }
       }
 
@@ -1025,7 +1019,7 @@ L_vm_main_loop:
       String* name = moduleGetStringAt(module, (int)index);
       ASSERT(name != NULL, OOPS);
 
-      Var _imported = importModule(vm, module->path, name);
+      Var _imported = vmImportModule(vm, module->path, name);
       CHECK_ERROR();
       ASSERT(IS_OBJ_TYPE(_imported, OBJ_MODULE), OOPS);
 
@@ -1485,8 +1479,8 @@ L_do_call:
     OPCODE(POSITIVE):
     {
       // Don't pop yet, we need the reference for gc.
-      Var self = PEEK(-1);
-      Var result = varPositive(vm, self);
+      Var self_ = PEEK(-1);
+      Var result = varPositive(vm, self_);
       DROP(); // self
       PUSH(result);
 
@@ -1497,8 +1491,8 @@ L_do_call:
     OPCODE(NEGATIVE):
     {
       // Don't pop yet, we need the reference for gc.
-      Var self = PEEK(-1);
-      Var result = varNegative(vm, self);
+      Var v = PEEK(-1);
+      Var result = varNegative(vm, v);
       DROP(); // self
       PUSH(result);
 
@@ -1509,8 +1503,8 @@ L_do_call:
     OPCODE(NOT):
     {
       // Don't pop yet, we need the reference for gc.
-      Var self = PEEK(-1);
-      Var result = varNot(vm, self);
+      Var v = PEEK(-1);
+      Var result = varNot(vm, v);
       DROP(); // self
       PUSH(result);
 
@@ -1521,8 +1515,8 @@ L_do_call:
     OPCODE(BIT_NOT):
     {
       // Don't pop yet, we need the reference for gc.
-      Var self = PEEK(-1);
-      Var result = varBitNot(vm, self);
+      Var v = PEEK(-1);
+      Var result = varBitNot(vm, v);
       DROP(); // self
       PUSH(result);
 

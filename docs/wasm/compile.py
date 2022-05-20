@@ -6,7 +6,7 @@ from shutil import which
 ## This file is not intended to be included in other files at the moment.
 THIS_PATH = abspath(dirname(__file__))
 
-POCKET_SOURCE_DIR = join(THIS_PATH, "../../../pocketlang/src/")
+POCKET_ROOT = join(THIS_PATH, "../../../pocketlang/src/")
 JS_API_PATH = join(THIS_PATH, "io_api.js")
 MAIN_C = join(THIS_PATH, "main.c")
 TARGET_DIR = join(THIS_PATH, "../static/wasm/")
@@ -27,7 +27,7 @@ def main():
     os.mkdir(TARGET_DIR)
 
   sources = ' '.join(collect_source_files())
-  include = '-I' + join(POCKET_SOURCE_DIR, 'include/')
+  include = '-I' + join(POCKET_ROOT, 'include/')
   output  = join(TARGET_DIR, TARGET_NAME)
   exports = "\"EXPORTED_RUNTIME_METHODS=['ccall','cwrap']\""
   js_api  = JS_API_PATH
@@ -39,9 +39,10 @@ def main():
 
 def collect_source_files():
   sources = []
-  for file in os.listdir(POCKET_SOURCE_DIR):
-    if isdir(file): continue
-    if file.endswith('.c'): sources.append(join(POCKET_SOURCE_DIR, file))
+  for dir in ('core/', 'libs/'):
+    for file in os.listdir(join(POCKET_ROOT, dir)):
+      if isdir(file): continue
+      if file.endswith('.c'): sources.append(join(POCKET_ROOT, dir, file))
   return sources
 
 if __name__ == "__main__":

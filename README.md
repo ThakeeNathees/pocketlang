@@ -17,7 +17,7 @@ were used as a reference to write this language.
 
 ```ruby
 # Python like import statement.
-from lang import clock as now
+from time import clock as now
 
 # A recursive fibonacci function.
 def fib(n)

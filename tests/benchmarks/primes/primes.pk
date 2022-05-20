@@ -1,4 +1,4 @@
-from lang import clock
+from time import clock
 
 def is_prime(n)
   if n < 2 then return false end

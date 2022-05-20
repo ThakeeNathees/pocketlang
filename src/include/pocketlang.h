@@ -94,13 +94,13 @@ typedef void (*pkWriteFn) (PKVM* vm, const char* text);
 
 // A function callback to read a line from stdin. The returned string shouldn't
 // contain a line ending (\n or \r\n). The returned string **must** be
-// allocated with pkAllocString() and the VM will claim the ownership of the
+// allocated with pkRealloc() and the VM will claim the ownership of the
 // string.
 typedef char* (*pkReadFn) (PKVM* vm);
 
 // Load and return the script. Called by the compiler to fetch initial source
 // code and source for import statements. Return NULL to indicate failure to
-// load. Otherwise the string **must** be allocated with pkAllocString() and
+// load. Otherwise the string **must** be allocated with pkRealloc() and
 // the VM will claim the ownership of the string.
 typedef char* (*pkLoadScriptFn) (PKVM* vm, const char* path);
 
@@ -108,18 +108,20 @@ typedef char* (*pkLoadScriptFn) (PKVM* vm, const char* path);
 // be either path to a script or NULL if [path] is relative to cwd. The return
 // value should be a normalized absolute path of the [path]. Return NULL to
 // indicate failure to resolve. Othrewise the string **must** be allocated with
-// pkAllocString() and the VM will claim the ownership of the string.
+// pkRealloc() and the VM will claim the ownership of the string.
 typedef char* (*pkResolvePathFn) (PKVM* vm, const char* from,
                                        const char* path);
 
 // A function callback to allocate and return a new instance of the registered
 // class. Which will be called when the instance is constructed. The returned/
 // data is expected to be alive till the delete callback occurs.
-typedef void* (*pkNewInstanceFn) ();
+typedef void* (*pkNewInstanceFn) (PKVM* vm);
 
-// A function callback to de-allocate the aloocated native instance of the
-// registered class.
-typedef void (*pkDeleteInstanceFn) (void*);
+// A function callback to de-allocate the allocated native instance of the
+// registered class. This function is invoked at the GC execution. No object
+// allocations are allowed during it, so **NEVER** allocate any objects
+// inside them.
+typedef void (*pkDeleteInstanceFn) (PKVM* vm, void*);
 
 /*****************************************************************************/
 /* POCKETLANG TYPES                                                          */
@@ -197,26 +199,20 @@ PK_PUBLIC PKVM* pkNewVM(PkConfiguration* config);
 // Clean the VM and dispose all the resources allocated by the VM.
 PK_PUBLIC void pkFreeVM(PKVM* vm);
 
-// This will register all the standard libraries of pocketlang to the VM. The
-// libraries are not part of the core implementation, and one can use just the
-// bare bone of the language without any libraries if they don't call this.
-PK_PUBLIC void pkRegisterLibs(PKVM* vm);
-
 // Update the user data of the vm.
 PK_PUBLIC void pkSetUserData(PKVM* vm, void* user_data);
 
 // Returns the associated user data.
 PK_PUBLIC void* pkGetUserData(const PKVM* vm);
 
-// Allocate memory with [size] and return it. This function should be called 
+// Invoke pocketlang's allocator directly.  This function should be called 
 // when the host application want to send strings to the PKVM that are claimed
-// by the VM once the caller returned it.
-PK_PUBLIC char* pkAllocString(PKVM* vm, size_t size);
-
-// Complementary function to pkAllocString. This should not be called if the
-// string is returned to the VM. Since PKVM will claim the ownership and
-// deallocate the string itself.
-PK_PUBLIC void pkDeAllocString(PKVM* vm, char* ptr);
+// by the VM once the caller returned it. For other uses you **should** call
+// pkRealloc with [size] 0 to cleanup, otherwise there will be a memory leak.
+//
+// Internally it'll call `pkReallocFn` function that was provided in the
+// configuration.
+PK_PUBLIC void* pkRealloc(PKVM* vm, void* ptr, size_t size);
 
 // Release the handle and allow its value to be garbage collected. Always call
 // this for every handles before freeing the VM.
@@ -390,6 +386,11 @@ PK_PUBLIC bool pkGetAttribute(PKVM* vm, int instance, const char* name,
 
 // Place the [self] instance at the [index] slot.
 PK_PUBLIC void pkPlaceSelf(PKVM* vm, int index);
+
+// Import a module with the [path] and place it at [index] slot. The path
+// sepearation should be '/'. Example: to import module "foo.bar" the [path]
+// should be "foo/bar". On failure, it'll set an error and return false.
+PK_PUBLIC bool pkImportModule(PKVM* vm, const char* path, int index);
 
 // Set the [index] slot's value as the class of the [instance].
 PK_PUBLIC void pkGetClass(PKVM* vm, int instance, int index);

@@ -14,16 +14,15 @@ typedef struct {
   double val;
 } Dummy;
 
-void* _newDummy() {
-  Dummy* dummy = NEW_OBJ(Dummy);
-  ASSERT(dummy != NULL, "malloc failed.");
+void* _newDummy(PKVM* vm) {
+  Dummy* dummy = pkRealloc(vm, NULL, sizeof(Dummy));
+  ASSERT(dummy != NULL, "pkRealloc failed.");
   dummy->val = 0;
   return dummy;
 }
 
-void _deleteDummy(void* ptr) {
-  Dummy* dummy = (Dummy*)ptr;
-  FREE_OBJ(dummy);
+void _deleteDummy(PKVM* vm, void* ptr) {
+  pkRealloc(vm, ptr, 0);
 }
 
 DEF(_dummyInit, "") {
@@ -146,6 +145,7 @@ DEF(_dummyCallMethod,
 }
 
 void registerModuleDummy(PKVM* vm) {
+
   PkHandle* dummy = pkNewModule(vm, "dummy");
 
   pkModuleAddFunction(vm, dummy, "afunc", _dummyFunction, 2);

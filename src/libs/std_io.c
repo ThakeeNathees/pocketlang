@@ -37,21 +37,22 @@ typedef struct {
   bool closed;         // True if the file isn't closed yet.
 } File;
 
-void* _newFile() {
-  File* file = NEW_OBJ(File);
+void* _newFile(PKVM* vm) {
+  File* file = pkRealloc(vm, NULL, sizeof(File));
+  ASSERT(file != NULL, "pkRealloc failed.");
   file->closed = true;
   file->mode = FMODE_NONE;
   file->fp = NULL;
   return file;
 }
 
-void _deleteFile(void* ptr) {
+void _deleteFile(PKVM* vm, void* ptr) {
   File* file = (File*)ptr;
   if (!file->closed) {
     if (fclose(file->fp) != 0) { /* TODO: error! */ }
     file->closed = true;
   }
-  FREE_OBJ(file);
+  pkRealloc(vm, file, 0);
 }
 
 /*****************************************************************************/
@@ -123,8 +124,10 @@ DEF(_fileRead, "") {
   }
 
   // TODO: this is temporary.
+
   char buff[2048];
-  fread((void*)buff, sizeof(char), sizeof(buff), file->fp);
+  size_t read = fread((void*)buff, sizeof(char), sizeof(buff), file->fp);
+  (void) read;
   pkSetSlotString(vm, 0, (const char*)buff);
 }
 

@@ -1,4 +1,4 @@
-from lang import clock
+from time import clock
 
 start = clock()
 N = 50000000; factors = []

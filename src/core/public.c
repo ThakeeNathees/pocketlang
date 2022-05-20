@@ -15,6 +15,23 @@
 #include "vm.h"
 #endif
 
+// TODO: Document this or Find a better way.
+//
+// Pocketlang core doesn't implement path resolving funcionality. Rather it
+// should be provided the host application. By default we're using an
+// implementation from the path library. However pocket core cannot be depend
+// on its libs, otherwise it'll breaks the encapsulation.
+//
+// As a workaround we declare the default path resolver here and use it.
+// But if someone wants to compile just the core pocketlang without libs
+// they have to define PK_NO_LIBS to prevent the compiler from not be able
+// to find functions when linking.
+#ifndef PK_NO_LIBS
+  void registerLibs(PKVM* vm);
+  void cleanupLibs(PKVM* vm);
+  char* pathResolveImport(PKVM* vm, const char* from, const char* path);
+#endif
+
 #define CHECK_ARG_NULL(name) \
   ASSERT((name) != NULL, "Argument " #name " was NULL.");
 
@@ -66,40 +83,16 @@ static void stdoutWrite(PKVM* vm, const char* text);
 static char* stdinRead(PKVM* vm);
 static char* loadScript(PKVM* vm, const char* path);
 
-char* pkAllocString(PKVM* vm, size_t size) {
+PK_PUBLIC void* pkRealloc(PKVM* vm, void* ptr, size_t size) {
   ASSERT(vm->config.realloc_fn != NULL, "PKVM's allocator was NULL.");
-
 #if TRACE_MEMORY
-  void* ptr = vm->config.realloc_fn(NULL, size, vm->config.user_data);
-  printf("[alloc string] alloc   : %p = %+li bytes\n", ptr, (long) size);
-  return (char*) ptr;
+  void* newptr = vm->config.realloc_fn(ptr, size, vm->config.user_data);
+  printf("[pkRealloc] %p -> %p %+li bytes\n", ptr, newptr, (long) size);
+  return ptr;
 #else
-  return (char*) vm->config.realloc_fn(NULL, size, vm->config.user_data);
+  return vm->config.realloc_fn(ptr, size, vm->config.user_data);
 #endif
 }
-
-void pkDeAllocString(PKVM* vm, char* str) {
-  ASSERT(vm->config.realloc_fn != NULL, "PKVM's allocator was NULL.");
-#if TRACE_MEMORY
-  printf("[alloc string] dealloc : %p\n", str);
-#endif
-  vm->config.realloc_fn(str, 0, vm->config.user_data);
-}
-
-// TODO: Document this or Find a better way.
-//
-// Pocketlang core doesn't implement path resolving funcionality. Rather it
-// should be provided the host application. By default we're using an
-// implementation from the path library. However pocket core cannot be depend
-// on its libs, otherwise it'll breaks the encapsulation.
-//
-// As a workaround we declare the default path resolver here and use it.
-// But if someone wants to compile just the core pocketlang without libs
-// they have to define PK_NO_LIBS to prevent the compiler from not be able
-// to find functions when linking.
-#if !defined(PK_NO_LIBS)
-  char* pathResolveImport(PKVM* vm, const char* from, const char* path);
-#endif
 
 PkConfiguration pkNewConfiguration() {
   PkConfiguration config;
@@ -110,7 +103,7 @@ PkConfiguration pkNewConfiguration() {
   config.stdout_write = stdoutWrite;
   config.stderr_write = stderrWrite;
   config.stdin_read = stdinRead;
-#if !defined(PK_NO_LIBS)
+#ifndef PK_NO_LIBS
   config.resolve_path_fn = pathResolveImport;
 #endif
   config.load_script_fn = loadScript;
@@ -146,10 +139,19 @@ PKVM* pkNewVM(PkConfiguration* config) {
   }
 
   initializeCore(vm);
+
+#ifndef PK_NO_LIBS
+  registerLibs(vm);
+#endif
+
   return vm;
 }
 
 void pkFreeVM(PKVM* vm) {
+
+#ifndef PK_NO_LIBS
+  cleanupLibs(vm);
+#endif
 
   Object* obj = vm->first;
   while (obj != NULL) {
@@ -334,7 +336,7 @@ PkResult pkRunFile(PKVM* vm, const char* path) {
     // Set module path and and deallocate resolved.
     String* script_path = newString(vm, resolved_);
     vmPushTempRef(vm, &script_path->_super); // script_path.
-    pkDeAllocString(vm, resolved_);
+    pkRealloc(vm, resolved_, 0);
     module->path = script_path;
     vmPopTempRef(vm); // script_path.
 
@@ -352,7 +354,7 @@ PkResult pkRunFile(PKVM* vm, const char* path) {
       }
     } else {
       result = compile(vm, module, source, NULL);
-      pkDeAllocString(vm, source);
+      pkRealloc(vm, source, 0);
     }
 
     if (result == PK_RESULT_SUCCESS) {
@@ -449,21 +451,21 @@ PkResult pkRunREPL(PKVM* vm) {
     if (line_length >= 1 && *(line + line_length - 1) == EOF) {
       printfn(vm, "\n");
       result = PK_RESULT_SUCCESS;
-      pkDeAllocString(vm, line);
+      pkRealloc(vm, line, 0);
       break;
     }
 
     // If the line is empty, we don't have to compile it.
     if (isStringEmpty(line)) {
       if (need_more_lines) ASSERT(lines.count != 0, OOPS);
-      pkDeAllocString(vm, line);
+      pkRealloc(vm, line, 0);
       continue;
     }
 
     // Add the line to the lines buffer.
     if (lines.count != 0) pkByteBufferWrite(&lines, vm, '\n');
     pkByteBufferAddString(&lines, vm, line, (uint32_t) line_length);
-    pkDeAllocString(vm, line);
+    pkRealloc(vm, line, 0);
     pkByteBufferWrite(&lines, vm, '\0');
 
     // Compile the buffer to the module.
@@ -546,12 +548,12 @@ bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max) {
 }
 
 // Set error for incompatible type provided as an argument. (TODO: got type).
-#define ERR_INVALID_ARG_TYPE(ty_name)                                  \
-  do {                                                                 \
-    char buff[STR_INT_BUFF_SIZE];                                      \
-    sprintf(buff, "%d", arg);                                          \
-    VM_SET_ERROR(vm, stringFormat(vm, "Expected a '$' at argument $.", \
-                                      ty_name, buff));                 \
+#define ERR_INVALID_SLOT_TYPE(ty_name)                             \
+  do {                                                             \
+    char buff[STR_INT_BUFF_SIZE];                                  \
+    sprintf(buff, "%d", arg);                                      \
+    VM_SET_ERROR(vm, stringFormat(vm, "Expected a '$' at slot $.", \
+                                      ty_name, buff));             \
   } while (false)
 
 // FIXME: If the user needs just the boolean value of the object, they should
@@ -562,7 +564,7 @@ PK_PUBLIC bool pkValidateSlotBool(PKVM* vm, int arg, bool* value) {
 
   Var val = ARG(arg);
   if (!IS_BOOL(val)) {
-    ERR_INVALID_ARG_TYPE("Boolean");
+    ERR_INVALID_SLOT_TYPE("Boolean");
     return false;
   }
 
@@ -576,7 +578,7 @@ PK_PUBLIC bool pkValidateSlotNumber(PKVM* vm, int arg, double* value) {
 
   Var val = ARG(arg);
   if (!IS_NUM(val)) {
-    ERR_INVALID_ARG_TYPE("Number");
+    ERR_INVALID_SLOT_TYPE("Number");
     return false;
   }
 
@@ -591,7 +593,7 @@ PK_PUBLIC bool pkValidateSlotString(PKVM* vm, int arg, const char** value,
 
   Var val = ARG(arg);
   if (!IS_OBJ_TYPE(val, OBJ_STRING)) {
-    ERR_INVALID_ARG_TYPE("String");
+    ERR_INVALID_SLOT_TYPE("String");
     return false;
   }
   String* str = (String*)AS_OBJ(val);
@@ -604,7 +606,7 @@ bool pkValidateSlotType(PKVM* vm, int arg, PkVarType type) {
   CHECK_FIBER_EXISTS(vm);
   VALIDATE_ARGC(arg);
   if (getVarType(ARG(arg)) != type) {
-    ERR_INVALID_ARG_TYPE(getPkVarTypeName(type));
+    ERR_INVALID_SLOT_TYPE(getPkVarTypeName(type));
     return false;
   }
 
@@ -620,7 +622,7 @@ PK_PUBLIC bool pkValidateSlotInstanceOf(PKVM* vm, int arg, int cls) {
   if (!varIsType(vm, instance, class_)) {
     // If [class_] is not a valid class, it's already an error.
     if (VM_HAS_ERROR(vm)) return false;
-    ERR_INVALID_ARG_TYPE(((Class*)AS_OBJ(class_))->name->data);
+    ERR_INVALID_SLOT_TYPE(((Class*)AS_OBJ(class_))->name->data);
     return false;
   }
 
@@ -632,7 +634,6 @@ bool pkIsSlotInstanceOf(PKVM* vm, int inst, int cls, bool* val) {
   VALIDATE_SLOT_INDEX(inst);
   VALIDATE_SLOT_INDEX(cls);
 
-  Var instance = SLOT(inst), class_ = SLOT(cls);
   *val = varIsType(vm, inst, cls);
   return !VM_HAS_ERROR(vm);
 }
@@ -876,6 +877,19 @@ void pkPlaceSelf(PKVM* vm, int index) {
   SET_SLOT(index, vm->fiber->self);
 }
 
+bool pkImportModule(PKVM* vm, const char* path, int index) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_SLOT_INDEX(index);
+
+  String* path_ = newString(vm, path);
+  vmPushTempRef(vm, &path_->_super); // path_
+  Var module = vmImportModule(vm, NULL, path_);
+  vmPopTempRef(vm); // path_
+
+  SET_SLOT(index, module);
+  return !VM_HAS_ERROR(vm);
+}
+
 void pkGetClass(PKVM* vm, int instance, int index) {
   CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(instance);
@@ -928,7 +942,7 @@ static char* stdinRead(PKVM* vm) {
   } while (c != EOF);
   pkByteBufferWrite(&buff, vm, '\0');
 
-  char* str = pkAllocString(vm, buff.count);
+  char* str = pkRealloc(vm, NULL, buff.count);
   memcpy(str, buff.data, buff.count);
   return str;
 }
@@ -946,8 +960,8 @@ static char* loadScript(PKVM* vm, const char* path) {
   fseek(file, 0, SEEK_SET);
 
   // Allocate string + 1 for the NULL terminator.
-  char* buff = pkAllocString(vm, file_size + 1);
-  ASSERT(buff != NULL, "pkAllocString failed.");
+  char* buff = pkRealloc(vm, NULL, file_size + 1);
+  ASSERT(buff != NULL, "pkRealloc failed.");
 
   clearerr(file);
   size_t read = fread(buff, sizeof(char), file_size, file);

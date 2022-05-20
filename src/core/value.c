@@ -508,7 +508,7 @@ Instance* newInstance(PKVM* vm, Class* cls) {
   inst->attribs = newMap(vm);
 
   if (cls->new_fn != NULL) {
-    inst->native = cls->new_fn();
+    inst->native = cls->new_fn(vm);
   } else {
     inst->native = NULL;
   }
@@ -753,6 +753,8 @@ static uint32_t _hashObject(Object* obj) {
       Range* range = (Range*)obj;
       return utilHashNumber(range->from) ^ utilHashNumber(range->to);
     }
+
+    default: break;
   }
 
   UNREACHABLE();
@@ -1020,7 +1022,7 @@ void freeObject(PKVM* vm, Object* self) {
     case OBJ_INST: {
       Instance* inst = (Instance*)self;
       if (inst->cls->delete_fn != NULL) {
-        inst->cls->delete_fn(inst->native);
+        inst->cls->delete_fn(vm, inst->native);
       }
       DEALLOCATE(vm, inst, Instance);
       return;
@@ -1506,7 +1508,6 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
       }
 
       case OBJ_UPVALUE: {
-        const Upvalue* upvalue = (const Upvalue*)obj;
         pkByteBufferAddString(buff, vm, "[Upvalue]", 9);
         return;
       }

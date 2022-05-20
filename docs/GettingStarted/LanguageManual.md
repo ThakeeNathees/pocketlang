@@ -384,7 +384,7 @@ from lang import clock as now
 import foo.bar # Import module bar from foo directory
 import baz # If baz is a directory it'll import baz/_init.pk
 
-# I'll only search for foo relatievly.
+# It'll only search for foo relatievly.
 import .foo # ./foo.pk or ./foo/_init.pk or ./foo.dll, ...
 
 # ^ meaning parent directory relative to this script.
