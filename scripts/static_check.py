@@ -8,7 +8,7 @@
 
 import os, sys, re
 from os import listdir
-from os.path import join, abspath, dirname, relpath, normpath
+from os.path import *
 
 ## Pocket lang root directory. All the listed paths bellow are relative to
 ## the root path.
@@ -17,8 +17,8 @@ ROOT_PATH = abspath(join(dirname(__file__), ".."))
 ## A list of source files, to check if the fnv1a hash values match it's
 ## corresponding cstring in the CASE_ATTRIB(name, hash) macro calls.
 HASH_CHECK_LIST = [
-  "src/pk_core.c",
-  "src/pk_value.c",
+  "src/core/core.c",
+  "src/core/value.c",
 ]
 
 ## A list of extension to perform static checks, of all the files in the
@@ -29,18 +29,21 @@ CHECK_EXTENTIONS = ('.c', '.h', '.py', '.pk', '.js')
 ## 79 characters, It's not "the correct way" but it works.
 ALLOW_LONG_LINES = ('http://', 'https://', '<script ', '<link ', '<svg ')
 
-## A list of files that are allowed to be longer than 79 characters.
-ALLOW_LONG_FILES = (
-  "cli/native.py",
-  "cli/modules/pknative.gen.c",
+## A list of files that are ignored for static check. Usually third party
+## files and generated source files.
+IGNORE_FILES = (
+  "cli/modules/pknative.gen.c", ## FIXME: set gen path.
+  "cli/argparse.h",             ## FIXME: collect all thirdparty files.
+  "src/libs/tp_dirent.h",
+  "src/libs/tp_cwalk.h",
 )
 
 ## A list of directory, contains C source files to perform static checks.
 ## This will include all files with extension from CHECK_EXTENTIONS.
 SOURCE_DIRS = [
-  "src/",
+  "src/core/",
+  "src/libs/",
   "cli/",
-  "cli/modules/",
 
   "docs/",
   "docs/wasm/",
@@ -98,6 +101,13 @@ def check_static(dirs):
       if os.path.isdir(join(dir, file)): continue
       
       curr_file = normpath(join(dir, file))
+
+      skip = False
+      for ignore in IGNORE_FILES:
+        if curr_file == normpath(join(ROOT_PATH, ignore)):
+          skip = True; break;
+      if skip: continue
+
       fp = open(curr_file, 'r')
       
       ## Path of the file relative to top-level.
@@ -122,11 +132,6 @@ def check_static(dirs):
           skip = False
           for ignore in ALLOW_LONG_LINES:
             if ignore in line:
-              skip = True
-              break
-          for ignore in ALLOW_LONG_FILES:
-            ## TODO: the bellow normpath(join()) should be calcuated once.
-            if curr_file == normpath(join(ROOT_PATH, ignore)):
               skip = True
               break
           if skip: continue

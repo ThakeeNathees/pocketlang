@@ -19,8 +19,9 @@
   #pragma warning(disable:26812)
 #endif
 
-#include "modules/modules.h"
-#include "thirdparty/argparse/argparse.h"
+#define _ARGPARSE_IMPL
+#include "argparse.h"
+#undef _ARGPARSE_IMPL
 
 // FIXME:
 // Included for isatty(). This should be moved to somewhere. and I'm not sure
@@ -44,7 +45,6 @@
 static PKVM* intializePocketVM() {
 
   PkConfiguration config = pkNewConfiguration();
-  config.resolve_path_fn = pathResolveImport;
 
 // FIXME:
 // Refactor and make it portable. Maybe custom is_tty() function?.
@@ -59,7 +59,9 @@ static PKVM* intializePocketVM() {
     config.use_ansi_color = true;
   }
 
-  return pkNewVM(&config);
+  PKVM* vm = pkNewVM(&config);
+  pkRegisterLibs(vm);
+  return vm;
 }
 
 int main(int argc, const char** argv) {
@@ -111,8 +113,6 @@ int main(int argc, const char** argv) {
 
   // Create and initialize pocket VM.
   PKVM* vm = intializePocketVM();
-
-  REGISTER_ALL_MODULES(vm);
 
   if (cmd != NULL) { // pocket -c "print('foo')"
     PkResult result = pkRunString(vm, cmd);

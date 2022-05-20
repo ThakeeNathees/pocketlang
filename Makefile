@@ -11,7 +11,7 @@ LDFLAGS        = -lm
 TARGET_EXEC = pocket
 BUILD_DIR   = ./build/
 
-SRC_DIRS = ./src/ ./cli/
+SRC_DIRS = ./cli/ ./src/core/ ./src/libs/
 INC_DIRS = ./src/include/
 
 BIN_DIR = bin/

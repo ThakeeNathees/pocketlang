@@ -4,11 +4,13 @@
  *  Distributed Under The MIT License
  */
 
-#include "pk_vm.h"
-
 #include <math.h>
-#include "pk_utils.h"
-#include "pk_debug.h"
+
+#ifndef PK_AMALGAMATED
+#include "vm.h"
+#include "utils.h"
+#include "debug.h"
+#endif
 
 PkHandle* vmNewHandle(PKVM* vm, Var value) {
   PkHandle* handle = (PkHandle*)ALLOCATE(vm, PkHandle);
@@ -634,7 +636,7 @@ static void closeUpvalues(Fiber* fiber, Var* top) {
   }
 }
 
-static void reportError(PKVM* vm) {
+static void vmReportError(PKVM* vm) {
   ASSERT(VM_HAS_ERROR(vm), "runtimeError() should be called after an error.");
 
   // TODO: pass the error to the caller of the fiber.
@@ -701,7 +703,7 @@ PkResult vmRunFiber(PKVM* vm, Fiber* fiber_) {
   do {                                \
     if (VM_HAS_ERROR(vm)) {           \
       UPDATE_FRAME();                 \
-      reportError(vm);                \
+      vmReportError(vm);              \
       FIBER_SWITCH_BACK();            \
       return PK_RESULT_RUNTIME_ERROR; \
     }                                 \
@@ -712,7 +714,7 @@ PkResult vmRunFiber(PKVM* vm, Fiber* fiber_) {
   do {                               \
     VM_SET_ERROR(vm, err_msg);       \
     UPDATE_FRAME();                  \
-    reportError(vm);                 \
+    vmReportError(vm);               \
     FIBER_SWITCH_BACK();             \
     return PK_RESULT_RUNTIME_ERROR;  \
   } while (false)

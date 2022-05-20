@@ -4,13 +4,14 @@
  *  Distributed Under The MIT License
  */
 
-#include "pk_value.h"
-
 #include <math.h>
 #include <ctype.h>
 
-#include "pk_utils.h"
-#include "pk_vm.h"
+#ifndef PK_AMALGAMATED
+#include "value.h"
+#include "utils.h"
+#include "vm.h"
+#endif
 
 // The maximum percentage of the map entries that can be filled before the map
 // is grown. A lower percentage reduce collision which makes looks up faster

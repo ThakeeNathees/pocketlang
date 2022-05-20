@@ -128,7 +128,7 @@ if not exist %target_dir%obj\cli\ mkdir %target_dir%obj\cli\
 
 cd %target_dir%obj\pocket
 
-cl /nologo /c %addnl_cdefines% %addnl_cflags% %pocket_root%src\*.c
+cl /nologo /c %addnl_cdefines% %addnl_cflags% /I%pocket_root%src\include\ %pocket_root%src\core\*.c %pocket_root%src\libs\*.c
 if errorlevel 1 goto :FAIL
 
 :: If compiling shared lib, jump pass the lib/cli binaries.

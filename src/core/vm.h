@@ -7,8 +7,10 @@
 #ifndef PK_VM_H
 #define PK_VM_H
 
-#include "pk_compiler.h"
-#include "pk_core.h"
+#ifndef PK_AMALGAMATED
+#include "compiler.h"
+#include "core.h"
+#endif
 
 // The maximum number of temporary object reference to protect them from being
 // garbage collected.

@@ -4,7 +4,9 @@
  *  Distributed Under The MIT License
  */
 
-#include "modules.h"
+#ifndef PK_AMALGAMATED
+#include "libs.h"
+#endif
 
 /*****************************************************************************/
 /* FILE CLASS                                                                */
@@ -161,8 +163,7 @@ DEF(_fileClose, "") {
   }
 
   if (fclose(file->fp) != 0) {
-    pkSetRuntimeError(vm, "fclose() failed!\n"                     \
-                      "  at " __FILE__ ":" STRINGIFY(__LINE__) ".");
+    pkSetRuntimeError(vm, "fclose() failed!.");
   }
   file->closed = true;
 }

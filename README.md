@@ -68,12 +68,12 @@ except for a c99 compatible compiler. It can be compiled with the following comm
 
 #### GCC / MinGw / Clang (alias with gcc)
 ```
-gcc -o pocket cli/*.c src/*.c -Isrc/include -lm
+gcc -o pocket cli/*.c src/core/*.c src/libs/*.c -Isrc/include -lm
 ```
 
 #### MSVC
 ```
-cl /Fepocket cli/*.c src/*.c /Isrc/include && rm *.obj
+cl /Fepocket cli/*.c src/core/*.c src/libs/*.c /Isrc/include && rm *.obj
 ```
 
 #### Makefile

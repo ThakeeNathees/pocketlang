@@ -7,11 +7,13 @@
 #ifndef PK_COMPILER_H
 #define PK_COMPILER_H
 
-#include "pk_value.h"
+#ifndef PK_AMALGAMATED
+#include "value.h"
+#endif
 
 typedef enum {
   #define OPCODE(name, _, __) OP_##name,
-  #include "pk_opcodes.h"
+  #include "opcodes.h"  //<< AMALG_INLINE >>
   #undef OPCODE
 } Opcode;
 
