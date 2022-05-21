@@ -154,10 +154,7 @@ void initializeScript(PKVM* vm, Module* module) {
 /* INTERNAL FUNCTIONS                                                        */
 /*****************************************************************************/
 
-// Returns the string value of the variable, a wrapper of toString() function
-// but for instances it'll try to calll "_to_string" function and on error
-// it'll return NULL.
-static inline String* _varToString(PKVM* vm, Var self) {
+String* varToString(PKVM* vm, Var self, bool repr) {
   if (IS_OBJ_TYPE(self, OBJ_INST)) {
 
     // The closure is retrieved from [self] thus, it doesn't need to be push
@@ -165,10 +162,20 @@ static inline String* _varToString(PKVM* vm, Var self) {
     // from GC).
     Closure* closure = NULL;
 
-    String* name = newString(vm, LITS__str); // TODO: static vm string?.
-    vmPushTempRef(vm, &name->_super); // method.
-    bool has_method = hasMethod(vm, self, name, &closure);
-    vmPopTempRef(vm); // method.
+    bool has_method = false;
+    if (!repr) {
+      String* name = newString(vm, LITS__str); // TODO: static vm string?.
+      vmPushTempRef(vm, &name->_super); // name.
+      has_method = hasMethod(vm, self, name, &closure);
+      vmPopTempRef(vm); // name.
+    }
+
+    if (!has_method) {
+      String* name = newString(vm, LITS__repr); // TODO: static vm string?.
+      vmPushTempRef(vm, &name->_super); // name.
+      has_method = hasMethod(vm, self, name, &closure);
+      vmPopTempRef(vm); // name.
+    }
 
     if (has_method) {
       Var ret = VAR_NULL;
@@ -188,6 +195,7 @@ static inline String* _varToString(PKVM* vm, Var self) {
     // "fall throught" and call 'toString()' bellow.
   }
 
+  if (repr) return toRepr(vm, self);
   return toString(vm, self);
 }
 
@@ -198,9 +206,9 @@ static inline bool _callUnaryOpMethod(PKVM* vm, Var self,
                                       const char* method_name, Var* ret) {
   Closure* closure = NULL;
   String* name = newString(vm, method_name);
-  vmPushTempRef(vm, &name->_super); // method.
+  vmPushTempRef(vm, &name->_super); // name.
   bool has_method = hasMethod(vm, self, name, &closure);
-  vmPopTempRef(vm); // method.
+  vmPopTempRef(vm); // name.
 
   if (!has_method) return false;
 
@@ -215,9 +223,9 @@ static inline bool _callBinaryOpMethod(PKVM* vm, Var self, Var other,
                                       const char* method_name, Var* ret) {
   Closure* closure = NULL;
   String* name = newString(vm, method_name);
-  vmPushTempRef(vm, &name->_super); // method.
+  vmPushTempRef(vm, &name->_super); // name.
   bool has_method = hasMethod(vm, self, name, &closure);
-  vmPopTempRef(vm); // method.
+  vmPopTempRef(vm); // name.
 
   if (!has_method) return false;
 
@@ -287,7 +295,7 @@ DEF(coreAssert,
 
     if (argc == 2) {
       if (AS_OBJ(ARG(2))->type != OBJ_STRING) {
-        msg = _varToString(vm, ARG(2));
+        msg = varToString(vm, ARG(2), false);
         if (msg == NULL) return; //< Error at _to_string override.
 
       } else {
@@ -380,7 +388,7 @@ DEF(coreToString,
   "str(value:var) -> string\n"
   "Returns the string representation of the value.") {
 
-  String* str = _varToString(vm, ARG(1));
+  String* str = varToString(vm, ARG(1), false);
   if (str == NULL) RET(VAR_NULL);
   RET(VAR_OBJ(str));
 }
@@ -425,7 +433,7 @@ DEF(corePrint,
 
   for (int i = 1; i <= ARGC; i++) {
     if (i != 1) vm->config.stdout_write(vm, " ");
-    String* str = _varToString(vm, ARG(i));
+    String* str = varToString(vm, ARG(i), false);
     if (str == NULL) RET(VAR_NULL);
     vm->config.stdout_write(vm, str->data);
   }
@@ -447,7 +455,7 @@ DEF(coreInput,
   if (vm->config.stdin_read == NULL) return;
 
   if (argc == 1) {
-    String* str = _varToString(vm, ARG(1));
+    String* str = varToString(vm, ARG(1), false);
     if (str == NULL) RET(VAR_NULL);
     vm->config.stdout_write(vm, str->data);
   }
@@ -537,7 +545,7 @@ DEF(coreListJoin,
   pkByteBufferInit(&buff);
 
   for (uint32_t i = 0; i < list->elements.count; i++) {
-    String* str = _varToString(vm, list->elements.data[i]);
+    String* str = varToString(vm, list->elements.data[i], false);
     if (str == NULL) RET(VAR_NULL);
     vmPushTempRef(vm, &str->_super); // elem
     pkByteBufferAddString(&buff, vm, str->data, str->length);
@@ -703,7 +711,7 @@ DEF(stdLangWrite,
     if (IS_OBJ_TYPE(arg, OBJ_STRING)) {
       str = (String*)AS_OBJ(arg);
     } else {
-      str = _varToString(vm, ARG(1));
+      str = varToString(vm, ARG(1), false);
       if (str == NULL) RET(VAR_NULL);
     }
 
@@ -769,7 +777,7 @@ static void _ctorString(PKVM* vm) {
     RET(VAR_OBJ(newStringLength(vm, NULL, 0)));
     return;
   }
-  String* str = _varToString(vm, ARG(1));
+  String* str = varToString(vm, ARG(1), false);
   if (str == NULL) RET(VAR_NULL);
   RET(VAR_OBJ(str));
 }
@@ -826,6 +834,20 @@ DEF(_numberTimes,
   }
 
   RET(VAR_NULL);
+}
+
+DEF(_numberIsint,
+    "Number.isint() -> bool\n"
+    "Returns true if the number is a whold number, otherwise false.") {
+  double n = AS_NUM(SELF);
+  RET(VAR_BOOL(floor(n) == n));
+}
+
+DEF(_numberIsbyte,
+  "Number.isbyte() -> bool\n"
+  "Returns true if the number is an integer and is between 0x00 and 0xff.") {
+  double n = AS_NUM(SELF);
+  RET(VAR_BOOL((floor(n) == n) && (0x00 <= n && n <= 0xff)));
 }
 
 DEF(_listAppend,
@@ -925,7 +947,10 @@ static void initializePrimitiveClasses(PKVM* vm) {
     vmPopTempRef(vm); /* fn. */                                   \
   } while (false)
 
+  // TODO: write docs.
   ADD_METHOD(PK_NUMBER, "times",  _numberTimes,  1);
+  ADD_METHOD(PK_NUMBER, "isint",  _numberIsint,  0);
+  ADD_METHOD(PK_NUMBER, "isbyte", _numberIsbyte, 0);
   ADD_METHOD(PK_LIST,   "append", _listAppend,   1);
   ADD_METHOD(PK_FIBER,  "run",    _fiberRun,    -1);
   ADD_METHOD(PK_FIBER,  "resume", _fiberResume, -1);
@@ -998,7 +1023,8 @@ static inline Closure* clsGetMethod(Class* cls, String* name) {
     for (int i = 0; i < (int)cls_->methods.count; i++) {
       Closure* method_ = cls_->methods.data[i];
       ASSERT(method_->fn->is_method, OOPS);
-      if (IS_CSTR_EQ(name, method_->fn->name, name->length)) {
+      const char* method_name = method_->fn->name;
+      if (IS_CSTR_EQ(name, method_name, strlen(method_name))) {
         return method_;
       }
     }
@@ -1289,7 +1315,7 @@ Var varOpRange(PKVM* vm, Var v1, Var v2) {
   }
 
   if (IS_OBJ_TYPE(v1, OBJ_STRING)) {
-    String* str = _varToString(vm, v2);
+    String* str = varToString(vm, v2, false);
     if (str == NULL) return VAR_NULL;
     String* concat = stringJoin(vm, (String*) AS_OBJ(v1), str);
     return VAR_OBJ(concat);
@@ -1742,7 +1768,7 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
           VM_SET_ERROR(vm, stringFormat(vm, "Unhashable key '$'.",
                                         varTypeName(key)));
         } else {
-          String* key_repr = toRepr(vm, key);
+          String* key_repr = varToString(vm, key, true);
           vmPushTempRef(vm, &key_repr->_super); // key_repr.
           VM_SET_ERROR(vm, stringFormat(vm, "Key '@' not exists", key_repr));
           vmPopTempRef(vm); // key_repr.
@@ -1755,6 +1781,13 @@ Var varGetSubscript(PKVM* vm, Var on, Var key) {
     case OBJ_FUNC:
     case OBJ_UPVALUE:
       UNREACHABLE(); // Not first class objects.
+
+    case OBJ_INST: {
+      Var ret;
+      if (_callBinaryOpMethod(vm, on, key, "[]", &ret)) {
+        return ret;
+      }
+    } break;
 
     default:
       break;
@@ -1803,6 +1836,22 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
     case OBJ_FUNC:
     case OBJ_UPVALUE:
       UNREACHABLE();
+
+    case OBJ_INST: {
+
+      Closure* closure = NULL;
+      String* name = newString(vm, "[]=");
+      vmPushTempRef(vm, &name->_super); // name.
+      bool has_method = hasMethod(vm, on, name, &closure);
+      vmPopTempRef(vm); // name.
+
+      if (has_method) {
+        Var args[2] = { key, value };
+        vmCallMethod(vm, on, closure, 2, args, NULL);
+        return;
+      }
+
+    } break;
 
     default:
       break;

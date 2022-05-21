@@ -40,6 +40,40 @@ bool utilIsDigit(char c) {
   return ('0' <= c && c <= '9');
 }
 
+#define _BETWEEN(a, c, b) (((a) <= (c)) && ((c) <= (b)))
+bool utilIsCharHex(char c) {
+  return (_BETWEEN('0', c, '9')
+    || _BETWEEN('a', c, 'z')
+    || _BETWEEN('A', c, 'Z'));
+}
+
+uint8_t utilCharHexVal(char c) {
+  assert(utilIsCharHex(c));
+
+  if (_BETWEEN('0', c, '9')) {
+    return c - '0';
+  } else if (_BETWEEN('a', c, 'z')) {
+    return c - 'a' + 10;
+  } else if (_BETWEEN('A', c, 'Z')) {
+    return c - 'A' + 10;
+  }
+
+  assert(false); // Unreachable.
+  return 0;
+}
+
+char utilHexDigit(uint8_t value, bool uppercase) {
+  assert(_BETWEEN(0x0, value, 0xf));
+
+  if (_BETWEEN(0, value, 9)) return '0' + value;
+
+  return (uppercase)
+    ? 'A' + (value - 10)
+    : 'a' + (value - 10);
+
+}
+#undef _BETWEEN
+
 // A union to reinterpret a double as raw bits and back.
 typedef union {
   uint64_t bits64;

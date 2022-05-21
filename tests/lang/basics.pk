@@ -7,6 +7,9 @@ assert(42 % 40.0 == 2)
 assert("'\"'" == '\'"\'')
 assert("testing" == "test" + "ing")
 
+assert("foo \
+bar" == "foo bar")
+
 assert(-0b10110010 == -178 and 0b11001010 == 202)
 assert(0b1111111111111111 == 65535)
 assert(

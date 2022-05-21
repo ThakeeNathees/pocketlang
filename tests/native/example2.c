@@ -43,16 +43,16 @@ typedef struct {
 } Vector;
 
 // Native instance allocation callback.
-void* _newVec() {
-  Vector* vec = (Vector*)malloc(sizeof(Vector));
+void* _newVec(PKVM* vm) {
+  Vector* vec = pkRealloc(vm, NULL, sizeof(Vector));
   vec->x = 0;
   vec->y = 0;
   return vec;
 }
 
 // Native instance de-allocatoion callback.
-void _deleteVec(void* vector) {
-  free(vector);
+void _deleteVec(PKVM* vm, void* vec) {
+  pkRealloc(vm, vec, 0);
 }
 
 void _vecGetter(PKVM* vm) {

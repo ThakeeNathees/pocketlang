@@ -111,4 +111,14 @@
 #define TODO __ASSERT(false, "TODO: It hasn't implemented yet.")
 #define OOPS "Oops a bug!! report please."
 
+// Returns the docstring of the function, which is a static const char* defined
+// just above the function by the DEF() macro below.
+#define DOCSTRING(fn) _pk_doc_##fn
+
+// A macro to declare a function, with docstring, which is defined as
+// _pk_doc_<fn> = docstring; That'll used to generate function help text.
+#define DEF(fn, docstring)                      \
+  static const char* DOCSTRING(fn) = docstring; \
+  static void fn(PKVM* vm)
+
 #endif //PK_COMMON_H

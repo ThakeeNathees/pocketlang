@@ -749,7 +749,9 @@ const char* getPkVarTypeName(PkVarType type);
 // Returns the type name of the ObjectType enum value.
 const char* getObjectTypeName(ObjectType type);
 
-// Returns the type name of the var [v].
+// Returns the type name of the var [v]. If [v] is an instance of a class
+// the return pointer will be the class name string's data, which would be
+// dangling if [v] is garbage collected.
 const char* varTypeName(Var v);
 
 // Returns the PkVarType of the first class varaible [v].

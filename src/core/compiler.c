@@ -664,28 +664,6 @@ static void setNextValueToken(Parser* parser, _TokenType type, Var value);
 static void setNextToken(Parser* parser, _TokenType type);
 static bool matchChar(Parser* parser, char c);
 
-#define _BETWEEN(a, c, b) (((a) <= (c)) && ((c) <= (b)))
-static inline bool _isCharHex(char c) {
-  return (_BETWEEN('0', c, '9')
-       || _BETWEEN('a', c, 'z')
-       || _BETWEEN('A', c, 'Z'));
-}
-
-static inline uint8_t _charHexVal(char c) {
-  ASSERT(_isCharHex(c), OOPS);
-
-  if (_BETWEEN('0', c, '9')) {
-    return c - '0';
-  } else if (_BETWEEN('a', c, 'z')) {
-    return c - 'a' + 10;
-  } else if (_BETWEEN('A', c, 'Z')) {
-    return c - 'A' + 10;
-  }
-  UNREACHABLE();
-  return 0;
-}
-#undef _BETWEEN
-
 static void eatString(Compiler* compiler, bool single_quote) {
   Parser* parser = &compiler->parser;
 
@@ -758,6 +736,7 @@ static void eatString(Compiler* compiler, bool single_quote) {
         case 'n':  pkByteBufferWrite(&buff, parser->vm, '\n'); break;
         case 'r':  pkByteBufferWrite(&buff, parser->vm, '\r'); break;
         case 't':  pkByteBufferWrite(&buff, parser->vm, '\t'); break;
+        case '\n': break; // Just ignore the next line.
 
         // '$' In pocketlang string is used for interpolation.
         case '$':  pkByteBufferWrite(&buff, parser->vm, '$'); break;
@@ -767,22 +746,22 @@ static void eatString(Compiler* compiler, bool single_quote) {
           uint8_t val = 0;
 
           c = eatChar(parser);
-          if (!_isCharHex(c)) {
+          if (!utilIsCharHex(c)) {
             semanticError(compiler, makeErrToken(parser),
                           "Invalid hex escape.");
             break;
           }
 
-          val = _charHexVal(c);
+          val = utilCharHexVal(c);
 
           c = eatChar(parser);
-          if (!_isCharHex(c)) {
+          if (!utilIsCharHex(c)) {
             semanticError(compiler, makeErrToken(parser),
               "Invalid hex escape.");
             break;
           }
 
-          val = (val << 4) | _charHexVal(c);
+          val = (val << 4) | utilCharHexVal(c);
 
           pkByteBufferWrite(&buff, parser->vm, val);
 
@@ -791,7 +770,7 @@ static void eatString(Compiler* compiler, bool single_quote) {
         default:
           semanticError(compiler, makeErrToken(parser),
                         "Invalid escape character.");
-          return;
+          break;
       }
     } else {
       pkByteBufferWrite(&buff, parser->vm, c);
@@ -900,7 +879,7 @@ static void eatNumber(Compiler* compiler) {
     c = peekChar(parser);
 
     // The first digit should be hex digit.
-    if (!_isCharHex(c)) {
+    if (!utilIsCharHex(c)) {
       syntaxError(compiler, makeErrToken(parser), "Invalid hex literal.");
       return;
 
@@ -908,7 +887,7 @@ static void eatNumber(Compiler* compiler) {
       do {
         // Consume the next digit.
         c = peekChar(parser);
-        if (!_isCharHex(c)) break;
+        if (!utilIsCharHex(c)) break;
         eatChar(parser);
 
         // Check the length of the binary literal.
@@ -920,7 +899,7 @@ static void eatNumber(Compiler* compiler) {
         }
 
         // "Append" the next digit at the end.
-        hex = (hex << 4) | _charHexVal(c);
+        hex = (hex << 4) | utilCharHexVal(c);
 
       } while (true);
 
@@ -2672,6 +2651,15 @@ static bool matchOperatorMethod(Compiler* compiler,
     if (match(compiler, TK_SELF)) _RET("!self", 0);
     syntaxError(compiler, compiler->parser.previous,
                 "Expected keyword self for unary operator definition.");
+    return false;
+  }
+  if (match(compiler, TK_LBRACKET)) {
+    if (match(compiler, TK_RBRACKET)) {
+      if (match(compiler, TK_EQ)) _RET("[]=", 2);
+      _RET("[]", 1);
+    }
+    syntaxError(compiler, compiler->parser.previous,
+      "Invalid operator method symbol.");
     return false;
   }
 
