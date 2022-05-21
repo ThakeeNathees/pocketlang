@@ -7,7 +7,6 @@
 #include <ctype.h>
 #include <limits.h>
 #include <math.h>
-#include <time.h>
 
 #ifndef PK_AMALGAMATED
 #include "core.h"
@@ -39,9 +38,6 @@
 /*****************************************************************************/
 /* VALIDATORS                                                                */
 /*****************************************************************************/
-
-// Evaluated to true of the [num] is in byte range.
-#define IS_NUM_BYTE(num) ((CHAR_MIN <= (num)) && ((num) <= CHAR_MAX))
 
 // Check if [var] is a numeric value (bool/number) and set [value].
 static inline bool isNumeric(Var var, double* value) {
@@ -396,11 +392,11 @@ DEF(coreChr,
   int64_t num;
   if (!validateInteger(vm, ARG(1), &num, "Argument 1")) return;
 
-  if (!IS_NUM_BYTE(num)) {
-    RET_ERR(newString(vm, "The number is not in a byte range."));
+  if (!(0 <= num && num <= 0xff)) {
+    RET_ERR(newString(vm, "The number should be in range 0x00 to 0xff."));
   }
 
-  char c = (char)num;
+  char c = (char) num;
   RET(VAR_OBJ(newStringLength(vm, &c, 1)));
 }
 
@@ -462,7 +458,7 @@ DEF(coreInput,
   }
 
   String* line = newString(vm, str);
-  pkDeAllocString(vm, str);
+  pkRealloc(vm, str, 0);
   RET(VAR_OBJ(line));
 }
 
@@ -655,14 +651,6 @@ void moduleAddFunctionInternal(PKVM* vm, Module* module,
 }
 
 // 'lang' library methods.
-// -----------------------
-
-DEF(stdLangClock,
-  "clock() -> num\n"
-  "Returns the number of seconds since the application started") {
-
-  RET(VAR_NUM((double)clock() / CLOCKS_PER_SEC));
-}
 
 DEF(stdLangGC,
   "gc() -> num\n"
@@ -734,7 +722,6 @@ static void initializeCoreModules(PKVM* vm) {
   vmPopTempRef(vm) /* module */
 
   NEW_MODULE(lang, "lang");
-  MODULE_ADD_FN(lang, "clock", stdLangClock,  0);
   MODULE_ADD_FN(lang, "gc",    stdLangGC,     0);
   MODULE_ADD_FN(lang, "disas", stdLangDisas,  1);
   MODULE_ADD_FN(lang, "write", stdLangWrite, -1);
@@ -760,13 +747,13 @@ static void _ctorBool(PKVM* vm) {
 
 static void _ctorNumber(PKVM* vm) {
   double value;
+
   if (isNumeric(ARG(1), &value)) {
     RET(VAR_NUM(value));
   }
 
   if (IS_OBJ_TYPE(ARG(1), OBJ_STRING)) {
     String* str = (String*) AS_OBJ(ARG(1));
-    double value;
     const char* err = utilToNumber(str->data, &value);
     if (err == NULL) RET(VAR_NUM(value));
     VM_SET_ERROR(vm, newString(vm, err));
@@ -919,6 +906,7 @@ static void initializePrimitiveClasses(PKVM* vm) {
   ADD_CTOR(PK_BOOL,   "@ctorBool",   _ctorBool,    1);
   ADD_CTOR(PK_NUMBER, "@ctorNumber", _ctorNumber,  1);
   ADD_CTOR(PK_STRING, "@ctorString", _ctorString, -1);
+  ADD_CTOR(PK_RANGE,  "@ctorRange",  _ctorRange,   2);
   ADD_CTOR(PK_LIST,   "@ctorList",   _ctorList,   -1);
   ADD_CTOR(PK_MAP,    "@ctorMap",    _ctorMap,     0);
   ADD_CTOR(PK_FIBER,  "@ctorFiber",  _ctorFiber,   1);
@@ -944,8 +932,6 @@ static void initializePrimitiveClasses(PKVM* vm) {
 
 #undef ADD_METHOD
 }
-
-#undef IS_NUM_BYTE
 
 /*****************************************************************************/
 /* OPERATORS                                                                 */
@@ -1176,6 +1162,8 @@ Var varAdd(PKVM* vm, Var v1, Var v2, bool inplace) {
           }
         }
       } break;
+
+      default: break;
     }
   }
   CHECK_INST_BINARY_OP("+");
@@ -1353,6 +1341,8 @@ bool varContains(PKVM* vm, Var elem, Var container) {
       Map* map = (Map*)AS_OBJ(container);
       return !IS_UNDEF(mapGet(map, elem));
     } break;
+
+    default: break;
   }
 
 #define v1 container

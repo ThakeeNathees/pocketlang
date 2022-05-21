@@ -113,13 +113,6 @@
 
 #endif // PK_AMALGAMATED
 
-// Allocate a new module object of type [Ty].
-#define NEW_OBJ(Ty) (Ty*) malloc(sizeof(Ty))
-
-// Dellocate module object, allocated by NEW_OBJ(). Called by the freeObj
-// callback.
-#define FREE_OBJ(ptr) free(ptr)
-
 /*****************************************************************************/
 /* SHARED FUNCTIONS                                                          */
 /*****************************************************************************/
@@ -132,5 +125,12 @@
 // implementation is required by pockelang from it's hosting application
 // inorder to use the import statements.
 char* pathResolveImport(PKVM * vm, const char* from, const char* path);
+
+// Register all the the libraries to the PKVM.
+void registerLibs(PKVM* vm);
+
+// Cleanup registered libraries call this only if the libraries were registered
+// with registerLibs() function.
+void cleanupLibs(PKVM* vm);
 
 #endif // LIBS_H

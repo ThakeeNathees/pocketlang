@@ -1,4 +1,4 @@
-from lang import clock
+from time import clock
 from math import floor
 
 def reverse_list(list)

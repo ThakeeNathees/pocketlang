@@ -1,5 +1,5 @@
 
-from lang import clock
+from time import clock
 
 def fib(n)
   if n < 2 then return n end

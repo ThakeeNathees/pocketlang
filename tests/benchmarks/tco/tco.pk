@@ -2,7 +2,7 @@
 ## Run the script in pocketlang with
 ## toc enabled VS toc disabled
 
-from lang import clock
+from time import clock
 
 N = 20000
 

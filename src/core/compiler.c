@@ -664,6 +664,28 @@ static void setNextValueToken(Parser* parser, _TokenType type, Var value);
 static void setNextToken(Parser* parser, _TokenType type);
 static bool matchChar(Parser* parser, char c);
 
+#define _BETWEEN(a, c, b) (((a) <= (c)) && ((c) <= (b)))
+static inline bool _isCharHex(char c) {
+  return (_BETWEEN('0', c, '9')
+       || _BETWEEN('a', c, 'z')
+       || _BETWEEN('A', c, 'Z'));
+}
+
+static inline uint8_t _charHexVal(char c) {
+  ASSERT(_isCharHex(c), OOPS);
+
+  if (_BETWEEN('0', c, '9')) {
+    return c - '0';
+  } else if (_BETWEEN('a', c, 'z')) {
+    return c - 'a' + 10;
+  } else if (_BETWEEN('A', c, 'Z')) {
+    return c - 'A' + 10;
+  }
+  UNREACHABLE();
+  return 0;
+}
+#undef _BETWEEN
+
 static void eatString(Compiler* compiler, bool single_quote) {
   Parser* parser = &compiler->parser;
 
@@ -693,15 +715,15 @@ static void eatString(Compiler* compiler, bool single_quote) {
       if (parser->si_depth < MAX_STR_INTERP_DEPTH) {
         tk_type = TK_STRING_INTERP;
 
-        char c = peekChar(parser);
-        if (c == '{') { // Expression interpolation (ie. "${expr}").
+        char c2 = peekChar(parser);
+        if (c2 == '{') { // Expression interpolation (ie. "${expr}").
           eatChar(parser);
           parser->si_depth++;
           parser->si_quote[parser->si_depth - 1] = quote;
           parser->si_open_brace[parser->si_depth - 1] = 0;
 
         } else { // Name Interpolation.
-          if (!utilIsName(c)) {
+          if (!utilIsName(c2)) {
             syntaxError(compiler, makeErrToken(parser),
                         "Expected '{' or identifier after '$'.");
             return;
@@ -740,9 +762,35 @@ static void eatString(Compiler* compiler, bool single_quote) {
         // '$' In pocketlang string is used for interpolation.
         case '$':  pkByteBufferWrite(&buff, parser->vm, '$'); break;
 
+        // Hex literal in string should match `\x[0-9a-zA-Z][0-9a-zA-Z]`
+        case 'x': {
+          uint8_t val = 0;
+
+          c = eatChar(parser);
+          if (!_isCharHex(c)) {
+            semanticError(compiler, makeErrToken(parser),
+                          "Invalid hex escape.");
+            break;
+          }
+
+          val = _charHexVal(c);
+
+          c = eatChar(parser);
+          if (!_isCharHex(c)) {
+            semanticError(compiler, makeErrToken(parser),
+              "Invalid hex escape.");
+            break;
+          }
+
+          val = (val << 4) | _charHexVal(c);
+
+          pkByteBufferWrite(&buff, parser->vm, val);
+
+        } break;
+
         default:
-          syntaxError(compiler, makeErrToken(parser),
-                      "Invalid escape character.");
+          semanticError(compiler, makeErrToken(parser),
+                        "Invalid escape character.");
           return;
       }
     } else {
@@ -807,10 +855,6 @@ static void eatName(Parser* parser) {
 static void eatNumber(Compiler* compiler) {
   Parser* parser = &compiler->parser;
 
-#define IS_HEX_CHAR(c)            \
-  (('0' <= (c) && (c) <= '9')  || \
-   ('a' <= (c) && (c) <= 'f'))
-
 #define IS_BIN_CHAR(c) (((c) == '0') || ((c) == '1'))
 
   Var value = VAR_NULL; // The number value.
@@ -855,8 +899,8 @@ static void eatNumber(Compiler* compiler) {
     uint64_t hex = 0;
     c = peekChar(parser);
 
-    // The first digit should be either hex digit.
-    if (!IS_HEX_CHAR(c)) {
+    // The first digit should be hex digit.
+    if (!_isCharHex(c)) {
       syntaxError(compiler, makeErrToken(parser), "Invalid hex literal.");
       return;
 
@@ -864,7 +908,7 @@ static void eatNumber(Compiler* compiler) {
       do {
         // Consume the next digit.
         c = peekChar(parser);
-        if (!IS_HEX_CHAR(c)) break;
+        if (!_isCharHex(c)) break;
         eatChar(parser);
 
         // Check the length of the binary literal.
@@ -876,10 +920,7 @@ static void eatNumber(Compiler* compiler) {
         }
 
         // "Append" the next digit at the end.
-        uint8_t append_val = ('0' <= c && c <= '9')
-          ? (uint8_t)(c - '0')
-          : (uint8_t)((c - 'a') + 10);
-        hex = (hex << 4) | append_val;
+        hex = (hex << 4) | _charHexVal(c);
 
       } while (true);
 
@@ -930,7 +971,6 @@ static void eatNumber(Compiler* compiler) {
 
   setNextValueToken(parser, TK_NUMBER, value);
 #undef IS_BIN_CHAR
-#undef IS_HEX_CHAR
 }
 
 // Read and ignore chars till it reach new line or EOF.
@@ -1337,7 +1377,6 @@ static int findBuiltinFunction(const PKVM* vm,
 static int findBuiltinClass(const PKVM* vm,
                             const char* name, uint32_t length) {
   for (int i = 0; i < PK_INSTANCE; i++) {
-    uint32_t bfn_length = vm->builtin_classes[i]->name->length;
     if (IS_CSTR_EQ(vm->builtin_classes[i]->name, name, length)) {
       return i;
     }
@@ -2344,12 +2383,10 @@ static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn,
 
 // Add a literal constant to module literals and return it's index.
 static int compilerAddConstant(Compiler* compiler, Var value) {
-  pkVarBuffer* constants = &compiler->module->constants;
-
   uint32_t index = moduleAddConstant(compiler->parser.vm,
                                      compiler->module, value);
   checkMaxConstantsReached(compiler, index);
-  return (int)index;
+  return (int) index;
 }
 
 // Enters inside a block.
@@ -2899,7 +2936,7 @@ static Token compileImportPath(Compiler* compiler) {
   // Create constant pool entry for the path string.
   int index = 0;
   moduleAddString(compiler->module, compiler->parser.vm,
-                  buff.data, buff.count - 1, &index);
+                  (const char*) buff.data, buff.count - 1, &index);
 
   pkByteBufferClear(&buff, vm);
 

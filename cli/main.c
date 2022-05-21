@@ -60,7 +60,6 @@ static PKVM* intializePocketVM() {
   }
 
   PKVM* vm = pkNewVM(&config);
-  pkRegisterLibs(vm);
   return vm;
 }
 

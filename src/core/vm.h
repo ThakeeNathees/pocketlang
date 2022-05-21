@@ -235,4 +235,10 @@ PkResult vmCallFunction(PKVM* vm, Closure* fn, int argc, Var* argv, Var* ret);
 PkResult vmCallMethod(PKVM* vm, Var self, Closure* fn,
                       int argc, Var* argv, Var* ret);
 
+// Import a module with the [path] and return it. The path sepearation should
+// be '/' example: to import module "a.b" the [path] should be "a/b".
+// If the [from] is not NULL, it'll be used for relative path search.
+// On failure, it'll set an error and return VAR_NULL.
+Var vmImportModule(PKVM* vm, String* from, String* path);
+
 #endif // PK_VM_H

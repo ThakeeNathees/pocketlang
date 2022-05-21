@@ -96,10 +96,10 @@ def generate():
             '\n'
     gen += parse(header) + '\n'
 
-  gen += '#ifdef PK_IMPL\n\n'
+  gen += '#ifdef PK_IMPLEMENT\n\n'
   for source in SOURCES:
     gen += parse(source)
-  gen += '#endif // PK_IMPL\n'
+  gen += '#endif // PK_IMPLEMENT\n'
 
   return gen
   

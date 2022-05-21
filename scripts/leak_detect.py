@@ -8,6 +8,9 @@
 ## To get the trace report redefine TRACE_MEMORY as 1 at the
 ## pk_internal.h and compile pocketlang.
 
+raise "This script Need refactor after removing pkAllocString " + \
+      "and adding pkRealloc"
+
 import sys
 
 def detect_leak():
