@@ -189,7 +189,7 @@ void registerModuleMath(PKVM* vm) {
   pkReserveSlots(vm, 2);
   pkSetSlotHandle(vm, 0, math);   // slot[0]    = math
   pkSetSlotNumber(vm, 1, PK_PI);  // slot[1]    = 3.14
-  pkSetAttribute(vm, 0, 1, "PI"); // slot[0].PI = slot[1]
+  pkSetAttribute(vm, 0, "PI", 1); // slot[0].PI = slot[1]
 
   pkModuleAddFunction(vm, math, "floor",  stdMathFloor,      1);
   pkModuleAddFunction(vm, math, "ceil",   stdMathCeil,       1);

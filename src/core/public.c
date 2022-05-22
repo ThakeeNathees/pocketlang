@@ -49,11 +49,6 @@
       "Slot index is too large. Did you forget to call pkReserveSlots()?."); \
   } while (false)
 
-// ARGC won't be the real arity if any slots allocated before calling argument
-// validation calling this first is the callers responsibility.
-#define VALIDATE_ARGC(arg) \
-  ASSERT(arg > 0 && arg <= ARGC, "Invalid argument index.")
-
 #define CHECK_FIBER_EXISTS(vm)                                           \
   do {                                                                   \
     ASSERT(vm->fiber != NULL,                                            \
@@ -548,23 +543,23 @@ bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max) {
 }
 
 // Set error for incompatible type provided as an argument. (TODO: got type).
-#define ERR_INVALID_SLOT_TYPE(ty_name)                             \
+#define ERR_INVALID_SLOT_TYPE(slot, ty_name)                       \
   do {                                                             \
     char buff[STR_INT_BUFF_SIZE];                                  \
-    sprintf(buff, "%d", arg);                                      \
+    sprintf(buff, "%d", slot);                                     \
     VM_SET_ERROR(vm, stringFormat(vm, "Expected a '$' at slot $.", \
                                       ty_name, buff));             \
   } while (false)
 
 // FIXME: If the user needs just the boolean value of the object, they should
 // use pkGetSlotBool().
-PK_PUBLIC bool pkValidateSlotBool(PKVM* vm, int arg, bool* value) {
+PK_PUBLIC bool pkValidateSlotBool(PKVM* vm, int slot, bool* value) {
   CHECK_FIBER_EXISTS(vm);
-  VALIDATE_ARGC(arg);
+  VALIDATE_SLOT_INDEX(slot);
 
-  Var val = ARG(arg);
+  Var val = ARG(slot);
   if (!IS_BOOL(val)) {
-    ERR_INVALID_SLOT_TYPE("Boolean");
+    ERR_INVALID_SLOT_TYPE(slot, "Boolean");
     return false;
   }
 
@@ -572,13 +567,13 @@ PK_PUBLIC bool pkValidateSlotBool(PKVM* vm, int arg, bool* value) {
   return true;
 }
 
-PK_PUBLIC bool pkValidateSlotNumber(PKVM* vm, int arg, double* value) {
+PK_PUBLIC bool pkValidateSlotNumber(PKVM* vm, int slot, double* value) {
   CHECK_FIBER_EXISTS(vm);
-  VALIDATE_ARGC(arg);
+  VALIDATE_SLOT_INDEX(slot);
 
-  Var val = ARG(arg);
+  Var val = ARG(slot);
   if (!IS_NUM(val)) {
-    ERR_INVALID_SLOT_TYPE("Number");
+    ERR_INVALID_SLOT_TYPE(slot, "Number");
     return false;
   }
 
@@ -586,14 +581,14 @@ PK_PUBLIC bool pkValidateSlotNumber(PKVM* vm, int arg, double* value) {
   return true;
 }
 
-PK_PUBLIC bool pkValidateSlotString(PKVM* vm, int arg, const char** value,
+PK_PUBLIC bool pkValidateSlotString(PKVM* vm, int slot, const char** value,
                                     uint32_t* length) {
   CHECK_FIBER_EXISTS(vm);
-  VALIDATE_ARGC(arg);
+  VALIDATE_SLOT_INDEX(slot);
 
-  Var val = ARG(arg);
+  Var val = ARG(slot);
   if (!IS_OBJ_TYPE(val, OBJ_STRING)) {
-    ERR_INVALID_SLOT_TYPE("String");
+    ERR_INVALID_SLOT_TYPE(slot, "String");
     return false;
   }
   String* str = (String*)AS_OBJ(val);
@@ -602,27 +597,27 @@ PK_PUBLIC bool pkValidateSlotString(PKVM* vm, int arg, const char** value,
   return true;
 }
 
-bool pkValidateSlotType(PKVM* vm, int arg, PkVarType type) {
+bool pkValidateSlotType(PKVM* vm, int slot, PkVarType type) {
   CHECK_FIBER_EXISTS(vm);
-  VALIDATE_ARGC(arg);
-  if (getVarType(ARG(arg)) != type) {
-    ERR_INVALID_SLOT_TYPE(getPkVarTypeName(type));
+  VALIDATE_SLOT_INDEX(slot);
+  if (getVarType(ARG(slot)) != type) {
+    ERR_INVALID_SLOT_TYPE(slot, getPkVarTypeName(type));
     return false;
   }
 
   return true;
 }
 
-PK_PUBLIC bool pkValidateSlotInstanceOf(PKVM* vm, int arg, int cls) {
+PK_PUBLIC bool pkValidateSlotInstanceOf(PKVM* vm, int slot, int cls) {
   CHECK_FIBER_EXISTS(vm);
-  VALIDATE_ARGC(arg);
+  VALIDATE_SLOT_INDEX(slot);
   VALIDATE_SLOT_INDEX(cls);
 
-  Var instance = ARG(arg), class_ = SLOT(cls);
+  Var instance = ARG(slot), class_ = SLOT(cls);
   if (!varIsType(vm, instance, class_)) {
     // If [class_] is not a valid class, it's already an error.
     if (VM_HAS_ERROR(vm)) return false;
-    ERR_INVALID_SLOT_TYPE(((Class*)AS_OBJ(class_))->name->data);
+    ERR_INVALID_SLOT_TYPE(slot, ((Class*)AS_OBJ(class_))->name->data);
     return false;
   }
 
@@ -741,11 +736,12 @@ void pkSetSlotStringFmt(PKVM* vm, int index, const char* fmt, ...) {
 
 void pkSetSlotHandle(PKVM* vm, int index, PkHandle* handle) {
   CHECK_FIBER_EXISTS(vm);
+  CHECK_ARG_NULL(handle);
   VALIDATE_SLOT_INDEX(index);
   SET_SLOT(index, handle->value);
 }
 
-bool pkSetAttribute(PKVM* vm, int instance, int value, const char* name) {
+bool pkSetAttribute(PKVM* vm, int instance, const char* name, int value) {
   CHECK_FIBER_EXISTS(vm);
   CHECK_ARG_NULL(name);
   VALIDATE_SLOT_INDEX(instance);
@@ -898,15 +894,11 @@ void pkGetClass(PKVM* vm, int instance, int index) {
   SET_SLOT(index, VAR_OBJ(getClass(vm, SLOT(instance))));
 }
 
-#undef CHECK_RUNTIME
-#undef VALIDATE_ARGC
 #undef ERR_INVALID_ARG_TYPE
 #undef ARG
 #undef SLOT
 #undef SET_SLOT
 #undef ARGC
-#undef CHECK_NULL
-#undef CHECK_TYPE
 
 /*****************************************************************************/
 /* INTERNAL                                                                  */

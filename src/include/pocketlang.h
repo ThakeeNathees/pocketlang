@@ -283,26 +283,26 @@ PK_PUBLIC int pkGetArgc(const PKVM* vm);
 // that min <= max, and pocketlang won't validate this in release binary.
 PK_PUBLIC bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max);
 
-// Helper function to check if the argument at the [arg] slot is Boolean and
+// Helper function to check if the argument at the [slot] slot is Boolean and
 // if not set a runtime error.
-PK_PUBLIC bool pkValidateSlotBool(PKVM* vm, int arg, bool* value);
+PK_PUBLIC bool pkValidateSlotBool(PKVM* vm, int slot, bool* value);
 
-// Helper function to check if the argument at the [arg] slot is Number and
+// Helper function to check if the argument at the [slot] slot is Number and
 // if not set a runtime error.
-PK_PUBLIC bool pkValidateSlotNumber(PKVM* vm, int arg, double* value);
+PK_PUBLIC bool pkValidateSlotNumber(PKVM* vm, int slot, double* value);
 
-// Helper function to check if the argument at the [arg] slot is String and
+// Helper function to check if the argument at the [slot] slot is String and
 // if not set a runtime error.
-PK_PUBLIC bool pkValidateSlotString(PKVM* vm, int arg,
+PK_PUBLIC bool pkValidateSlotString(PKVM* vm, int slot,
                                     const char** value, uint32_t* length);
 
-// Helper function to check if the argument at the [arg] slot is of type
+// Helper function to check if the argument at the [slot] slot is of type
 // [type] and if not sets a runtime error.
-PK_PUBLIC bool pkValidateSlotType(PKVM* vm, int arg, PkVarType type);
+PK_PUBLIC bool pkValidateSlotType(PKVM* vm, int slot, PkVarType type);
 
-// Helper function to check if the argument at the [arg] slot is an instance
+// Helper function to check if the argument at the [slot] slot is an instance
 // of the class which is at the [cls] index. If not set a runtime error.
-PK_PUBLIC bool pkValidateSlotInstanceOf(PKVM* vm, int arg, int cls);
+PK_PUBLIC bool pkValidateSlotInstanceOf(PKVM* vm, int slot, int cls);
 
 // Helper function to check if the instance at the [inst] slot is an instance
 // of the class which is at the [cls] index. The value will be set to [val]
@@ -374,15 +374,15 @@ PK_PUBLIC void pkSetSlotHandle(PKVM* vm, int index, PkHandle* handle);
 /* POCKET FFI                                                                */
 /*****************************************************************************/
 
-// Set the attribute with [name] of the instance at the [instance] slot to
-// the value at the [value] index slot. Return true on success.
-PK_PUBLIC bool pkSetAttribute(PKVM* vm, int instance, int value,
-                              const char* name);
-
 // Get the attribute with [name] of the instance at the [instance] slot and
 // place it at the [index] slot. Return true on success.
 PK_PUBLIC bool pkGetAttribute(PKVM* vm, int instance, const char* name,
                               int index);
+
+// Set the attribute with [name] of the instance at the [instance] slot to
+// the value at the [value] index slot. Return true on success.
+PK_PUBLIC bool pkSetAttribute(PKVM* vm, int instance,
+                              const char* name, int value);
 
 // Place the [self] instance at the [index] slot.
 PK_PUBLIC void pkPlaceSelf(PKVM* vm, int index);

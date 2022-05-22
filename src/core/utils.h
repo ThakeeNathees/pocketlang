@@ -23,6 +23,17 @@ bool utilIsName(char c);
 // Returns true if `c` is [0-9].
 bool utilIsDigit(char c);
 
+// Returns true if character is a hex digit.
+// ie [a-zA-Z0-9].
+bool utilIsCharHex(char c);
+
+// Returns the decimal value of the hex digit.
+// char should match [a-zA-Z0-9].
+uint8_t utilCharHexVal(char c);
+
+// Returns the values hex digit. The value must be 0x0 <= val < 0xf
+char utilHexDigit(uint8_t value, bool uppercase);
+
 // Return Reinterpreted bits of the double value.
 uint64_t utilDoubleToBits(double value);
 

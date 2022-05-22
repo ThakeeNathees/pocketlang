@@ -183,7 +183,7 @@ bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var* argv) {
   ASSERT(fiber->closure->fn->arity >= -1,
          OOPS " (Forget to initialize arity.)");
 
-  if (argc != fiber->closure->fn->arity) {
+  if ((fiber->closure->fn->arity != -1) && argc != fiber->closure->fn->arity) {
     char buff[STR_INT_BUFF_SIZE];
     sprintf(buff, "%d", fiber->closure->fn->arity);
     _ERR_FAIL(stringFormat(vm, "Expected exactly $ argument(s).", buff));
@@ -1128,9 +1128,9 @@ L_do_call:
         }
 
       } else {
-        RUNTIME_ERROR(stringFormat(vm, "$ $(@).", "Expected a callable to "
+        RUNTIME_ERROR(stringFormat(vm, "$ '$'.", "Expected a callable to "
                       "call, instead got",
-                      varTypeName(callable), toString(vm, callable)));
+                      varTypeName(callable)));
       }
 
       // If we reached here it's a valid callable.
@@ -1785,7 +1785,7 @@ L_do_call:
       if (vm->config.stdout_write != NULL) {
         Var tmp = PEEK(-1);
         if (!IS_NULL(tmp)) {
-          vm->config.stdout_write(vm, toRepr(vm, tmp)->data);
+          vm->config.stdout_write(vm, varToString(vm, tmp, true)->data);
           vm->config.stdout_write(vm, "\n");
         }
       }

@@ -17,6 +17,7 @@
 // restructre. The names of the macros are begin with LIST_ and the string.
 #define LITS__init      "_init"
 #define LITS__str       "_str"
+#define LITS__repr      "_repr"
 
 // Functions, methods, classes and  other names which are intrenal / special to
 // pocketlang are starts with the following character (ex: @main, @literalFn).
@@ -90,6 +91,15 @@ Closure* getSuperMethod(PKVM* vm, Var self, String* name);
 // with the same name. It'll return true if the method exists on [self], false
 // otherwise and if the [method] argument is not NULL, method will be set.
 bool hasMethod(PKVM* vm, Var self, String* name, Closure** method);
+
+// Returns the string value of the variable, a wrapper of toString() function
+// but for instances it'll try to calll "_to_string" function and on error
+// it'll return NULL.
+// if parameter [repr] is true it'll return repr string of the value and for
+// instances it'll call "_repr()" method.
+// Note that if _str method does not exists it'll use _repr method for to
+// string.
+String* varToString(PKVM* vm, Var self, bool repr);
 
 Var varPositive(PKVM* vm, Var v); // Returns +v.
 Var varNegative(PKVM* vm, Var v); // Returns -v.

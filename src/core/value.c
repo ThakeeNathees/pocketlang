@@ -1212,6 +1212,11 @@ const char* varTypeName(Var v) {
 
   ASSERT(IS_OBJ(v), OOPS);
   Object* obj = AS_OBJ(v);
+
+  if (obj->type == OBJ_INST) {
+    return ((Instance*)obj)->cls->name->data;
+  }
+
   return getObjectTypeName(obj->type);
 }
 
@@ -1350,17 +1355,26 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
         } else {
           // If recursive return with quotes (ex: [42, "hello", 0..10]).
           pkByteBufferWrite(buff, vm, '"');
-          for (const char* c = str->data; *c != '\0'; c++) {
-            switch (*c) {
+          for (uint32_t i = 0; i < str->length; i++) {
+            char c = str->data[i];
+            switch (c) {
               case '"': pkByteBufferAddString(buff, vm, "\\\"", 2); break;
               case '\\': pkByteBufferAddString(buff, vm, "\\\\", 2); break;
               case '\n': pkByteBufferAddString(buff, vm, "\\n", 2); break;
               case '\r': pkByteBufferAddString(buff, vm, "\\r", 2); break;
               case '\t': pkByteBufferAddString(buff, vm, "\\t", 2); break;
 
-              default:
-                pkByteBufferWrite(buff, vm, *c);
-                break;
+              default: {
+                if (isprint(c)) pkByteBufferWrite(buff, vm, c);
+                else {
+                  pkByteBufferAddString(buff, vm, "\\x", 2);
+                  uint8_t byte = (uint8_t) c;
+                  pkByteBufferWrite(buff, vm, utilHexDigit(((byte >> 4) & 0xf),
+                                    false));
+                  pkByteBufferWrite(buff, vm, utilHexDigit(((byte >> 0) & 0xf),
+                                    false));
+                }
+              } break;
             }
           }
           pkByteBufferWrite(buff, vm, '"');
