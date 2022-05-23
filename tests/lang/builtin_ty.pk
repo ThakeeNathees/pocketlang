@@ -5,6 +5,10 @@
 ## Number
 ###############################################################################
 
+assert(hex(12648430) == '0xc0ffee')
+assert(hex(255) == '0xff' and hex(10597059) == '0xa1b2c3')
+assert(hex(-4294967295) == '-0xffffffff') ## the largest.
+
 sum = 0
 5.times fn(i)
   sum += i
@@ -16,8 +20,25 @@ assert(Number("0b10100101") == 0b10100101)
 assert(Number("-0Xabcdef123") == -0xabcdef123)
 
 ###############################################################################
+## RANGE
+###############################################################################
+
+r = 1..5
+assert(r.as_list == [1, 2, 3, 4])
+assert(r.first == 1)
+assert(r.last == 5)
+
+###############################################################################
 ## STRING
 ###############################################################################
+
+assert(''.length == 0)
+assert('test'.length == 4)
+assert(''.lower() == '' and ''.upper() == '')
+assert('already+lower '.lower() == 'already+lower ')
+assert('ALREADY+UPPER '.upper() == 'ALREADY+UPPER ')
+assert('tEST+InG'.lower() == 'test+ing')
+assert('tEST+InG'.upper() == 'TEST+ING')
 
 s = "foobar"
 assert(s[-3] == 'b')
@@ -32,6 +53,39 @@ assert("abcd"[-1..-3] == "dcb")
 
 assert(""[0..-1] == "")
 assert(""[-1..0] == "")
+
+assert(' trim '.strip() == 'trim')
+assert(''.strip() == '')
+
+lorem = "\
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor 
+incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nost
+rud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis 
+aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fug
+iat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in cu
+lpa qui officia deserunt mollit anim id est laborum."
+
+assert("sint" in lorem)
+ut = lorem.find('ut'); assert(ut != -1)
+assert(lorem[ut+3 .. ut+8] == 'labore')
+
+assert("foobar".replace("foo", "baz") == "bazbar")
+assert("abcdefabdcefabaeef".replace("ab", "") == "cdefdcefaeef")
+assert("xx.xx.xx.xx".replace("xx", "yy", 2) == "yy.yy.xx.xx")
+assert("aaaaaaaaaaaaa".replace('a', '!b', 5) == "!b!b!b!b!baaaaaaaa")
+assert("aaaaaaaaaaaaa".replace('a', 'b', 1000) == "bbbbbbbbbbbbb")
+
+assert("a,b,c".split(',') == ['a', 'b', 'c'])
+assert('a,'.split(',') == ['a', ''])
+assert('foo!!bar!!baz'.split('!!') == ['foo', 'bar', 'baz'])
+
+assert('abcdef'.startswith('abc'))
+assert(not 'x'.startswith('abc'))
+assert(not 'pqr'.startswith(['abc', 'def', 'gh']))
+
+assert('foobar'.endswith('obar'))
+assert(not 'foobar'.endswith('rfoo'))
+assert('image.png'.endswith(['.jpg', '.jpeg', '.png', '.ppm']))
 
 ###############################################################################
 ## LIST
@@ -52,6 +106,67 @@ assert(l[-1..-3] == [4, 3, 2])
 assert([][0..0] == [])
 assert([][-1..-1] == [])
 
+assert([].length == 0)
+assert([1, 2, 3].length == 3)
+
+assert(['a'].append('b') == ['a', 'b'])
+
+assert(l.find(2) == 1)
+assert(l.find(4) == 3)
+assert(l.find(7) == -1)
+
+assert(l.pop(-2) == 3 and l == [1, 2, 4])
+assert(l.pop() == 4)
+assert(l.pop() == 2)
+assert(l == [1])
+
+l = []
+l.insert(0, 'l')
+l.insert(1, 'l')
+l.insert(0, 'h')
+l.insert(3, 'o')
+l.insert(1, 'e')
+assert(l == ['h', 'e', 'l', 'l', 'o'])
+
+###############################################################################
+## MAP
+###############################################################################
+
+swtich = {
+  0 : fn return 1 end,
+  1 : fn return 2 end,
+  2 : fn return 3 end,
+  3 : fn return 4 end,
+  4 : fn return 5 end,
+}
+
+for i in 0..5
+  assert(swtich.get(i)() == i+1)
+end
+
+vars = {
+  'os' : 'mint',
+  'version' : '20.3',
+  'name' : 'Una',
+}
+
+assert(vars.get('os') == 'mint')
+assert(vars.get('family', 'linux') == 'linux')
+assert(vars.has('version'))
+assert(!vars.has('build'))
+
+
+###############################################################################
+## FUNCTIONS
+###############################################################################
+
+assert(print.arity == -1)
+assert(hex.arity == 1)
+assert(fn(a, b)end .arity == 2)
+assert(print.name == "print")
+def foo(p1, p2, p3) end
+assert(foo.name == "foo")
+assert(foo.arity == 3)
 
 ## If we got here, that means all test were passed.
 print('All TESTS PASSED')

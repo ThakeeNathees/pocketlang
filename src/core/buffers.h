@@ -71,7 +71,7 @@
     if (self->capacity < size) {                                              \
       int capacity = utilPowerOf2Ceil((int)size);                             \
       if (capacity < MIN_CAPACITY) capacity = MIN_CAPACITY;                   \
-      self->data = (m_type*)vmRealloc(vm, self->data,                         \
+      self->data = (m_type*) vmRealloc(vm, self->data,                        \
         self->capacity * sizeof(m_type), capacity * sizeof(m_type));          \
       self->capacity = capacity;                                              \
     }                                                                         \
