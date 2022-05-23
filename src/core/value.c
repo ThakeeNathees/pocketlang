@@ -23,6 +23,9 @@
 // capacity by the GROW_FACTOR.
 #define GROW_FACTOR 2
 
+#define _MAX(a,b) ((a) > (b) ? (a) : (b))
+#define _MIN(a,b) ((a) < (b) ? (a) : (b))
+
 // Buffer implementations.
 DEFINE_BUFFER(Uint, uint32_t)
 DEFINE_BUFFER(Byte, uint8_t)
@@ -544,7 +547,7 @@ String* stringLower(PKVM* vm, String* self) {
 
       // Start where the first upper case letter found.
       char* _c = lower->data + (c - self->data);
-      for (; *_c != '\0'; _c++) *_c = (char)tolower(*_c);
+      for (; *_c != '\0'; _c++) *_c = (char) tolower(*_c);
 
       // Since the string is modified re-hash it.
       lower->hash = utilHashString(lower->data);
@@ -565,7 +568,7 @@ String* stringUpper(PKVM* vm, String* self) {
 
       // Start where the first lower case letter found.
       char* _c = upper->data + (c - self->data);
-      for (; *_c != '\0'; _c++) *_c = (char)toupper(*_c);
+      for (; *_c != '\0'; _c++) *_c = (char) toupper(*_c);
 
       // Since the string is modified re-hash it.
       upper->hash = utilHashString(upper->data);
@@ -606,6 +609,139 @@ String* stringStrip(PKVM* vm, String* self) {
   }
 
   return newStringLength(vm, start, (uint32_t)(end - start + 1));
+}
+
+String* stringReplace(PKVM* vm, String* self,
+                      String* old, String* new_, int32_t count) {
+  // The algorithm:
+  //
+  // We'll first deduce the maximum possible occurence of the old string.
+  //
+  //   max_count = floor(self.length / old.length)
+  //
+  // If count == -1 we'll set it to max_count, otherwise we can update our
+  // count as follows.
+  //
+  //   count = min(count, min_count)
+  //
+  // Now we know the maximum possible length of the new string.
+  //
+  //   length = max(self.length,
+  //                self.length + (new.length - old.length) * count)
+  //
+  // Finally we use "C" functions strstr() and memcpy() to find and replace.
+
+  // FIXME: this function use strstr() which only supports null terminated
+  // strings, if our string contain any \x00 the replacement will stop.
+
+  ASSERT(count >= 0 || count == -1, OOPS);
+
+  // Optimize case.
+  if (self->length == 0 || old->length == 0 || count == 0) return self;
+  if (IS_STR_EQ(old, new_)) return self;
+
+  int32_t max_count = self->length / old->length;
+  count = (count == -1)
+    ? max_count
+    : _MIN(count, max_count);
+
+  // TODO: New length can be overflow if the string is too large
+  // we should handle it here.
+
+  uint32_t length = _MAX(self->length,
+                    self->length + (new_->length - old->length) * count);
+
+  String* replaced = self; // Will be allocated if any match found.
+  int32_t replacedc = 0; // Replaced count so far.
+
+  const char* s = self->data; // Source: current position in self.
+  char* d = NULL; // Destination pointer in replaced.
+
+  do {
+    if (replacedc == count) break;
+
+    const char* match = strstr(s, old->data);
+    if (match == NULL) break;
+
+    // Note that since we're not allocating anything else here, this string
+    // doesn't needs to pushed to VM's temp references.
+    if (replacedc == 0) {
+      replaced = newStringLength(vm, "", length);
+      d = replaced->data;
+    }
+
+    // Copy everything from [s] till [match].
+    memcpy(d, s, match - s);
+    d += match - s;
+    s = match;
+
+    // Copy the replace string.
+    memcpy(d, new_->data, new_->length);
+    d += new_->length;
+    s += old->length;
+    replacedc++;
+
+  } while (true);
+
+  // Copy the rest of the string from [s] till the end.
+  if (d != NULL) {
+    uint32_t tail_length = self->length - (int32_t) (s - self->data);
+    memcpy(d, s, tail_length);
+    d += tail_length;
+
+    // Update the string.
+    replaced->length = (int32_t) (d - replaced->data);
+    ASSERT(replaced->length < replaced->capacity, OOPS);
+    replaced->data[replaced->length] = '\0';
+    replaced->hash = utilHashString(replaced->data);
+
+  } else {
+    ASSERT(self == replaced, OOPS);
+  }
+
+  return replaced;
+}
+
+List* stringSplit(PKVM* vm, String* self, String* sep) {
+
+  ASSERT(sep->length != 0, OOPS);
+
+  const char* s = self->data; // Current position in self.
+
+  List* list = newList(vm, 0);
+  vmPushTempRef(vm, &list->_super); // list.
+  do {
+    const char* match = strstr(s, sep->data);
+    if (match == NULL) {
+
+      // Add the tail string from [s] till the end. Optimize case: if the
+      // string doesn't have any match we can reuse self.
+      if (s == self->data) {
+        ASSERT(list->elements.count == 0, OOPS);
+        listAppend(vm, list, VAR_OBJ(self));
+
+      } else {
+        String* tail = newStringLength(vm, s,
+          (uint32_t)(self->length - (s - self->data)));
+        vmPushTempRef(vm, &tail->_super); // tail.
+        listAppend(vm, list, VAR_OBJ(tail));
+        vmPopTempRef(vm); // tail.
+      }
+
+      break; // We're done.
+    }
+
+    String* split = newStringLength(vm, s, (uint32_t)(match - s));
+    vmPushTempRef(vm, &split->_super); // split.
+    listAppend(vm, list, VAR_OBJ(split));
+    vmPopTempRef(vm); // split.
+
+    s = match + sep->length;
+
+  } while (true);
+  vmPopTempRef(vm); // list.
+
+  return list;
 }
 
 String* stringFormat(PKVM* vm, const char* fmt, ...) {
@@ -698,6 +834,8 @@ void listInsert(PKVM* vm, List* self, uint32_t index, Var value) {
 }
 
 Var listRemoveAt(PKVM* vm, List* self, uint32_t index) {
+  ASSERT_INDEX(index, self->elements.count);
+
   Var removed = self->elements.data[index];
   if (IS_OBJ(removed)) vmPushTempRef(vm, AS_OBJ(removed));
 
@@ -708,7 +846,7 @@ Var listRemoveAt(PKVM* vm, List* self, uint32_t index) {
 
   // Shrink the size if it's too much excess.
   if (self->elements.capacity / GROW_FACTOR >= self->elements.count) {
-    self->elements.data = (Var*)vmRealloc(vm, self->elements.data,
+    self->elements.data = (Var*) vmRealloc(vm, self->elements.data,
       sizeof(Var) * self->elements.capacity,
       sizeof(Var) * self->elements.capacity / GROW_FACTOR);
     self->elements.capacity /= GROW_FACTOR;
@@ -718,6 +856,10 @@ Var listRemoveAt(PKVM* vm, List* self, uint32_t index) {
 
   self->elements.count--;
   return removed;
+}
+
+void listClear(PKVM* vm, List* self) {
+  pkVarBufferClear(&self->elements, vm);
 }
 
 List* listAdd(PKVM* vm, List* l1, List* l2) {
@@ -898,7 +1040,7 @@ void mapClear(PKVM* vm, Map* self) {
 
 Var mapRemoveKey(PKVM* vm, Map* self, Var key) {
   MapEntry* entry;
-  if (!_mapFindEntry(self, key, &entry)) return VAR_NULL;
+  if (!_mapFindEntry(self, key, &entry)) return VAR_UNDEFINED;
 
   // Set the key as VAR_UNDEFINED to mark is as an available slow and set it's
   // value to VAR_TRUE for tombstone.
@@ -1609,3 +1751,7 @@ bool toBool(Var v) {
   UNREACHABLE();
   return false;
 }
+
+// Undefining for amalgamation to let othre libraries also define _MIN, _MAX.
+#undef _MAX
+#undef _MIN

@@ -489,34 +489,6 @@ DEF(coreExit,
   exit((int)value);
 }
 
-// String functions.
-// -----------------
-
-DEF(coreStrSub,
-  "str_sub(str:string, pos:num, len:num) -> string\n"
-  "Returns a substring from a given string supplied. In addition, "
-  "the position and length of the substring are provided when this "
-  "function is called. For example: `str_sub(str, pos, len)`.") {
-
-  String* str;
-  int64_t pos, len;
-
-  if (!validateArgString(vm, 1, &str)) return;
-  if (!validateInteger(vm, ARG(2), &pos, "Argument 2")) return;
-  if (!validateInteger(vm, ARG(3), &len, "Argument 3")) return;
-
-  if (pos < 0 || str->length < pos)
-    RET_ERR(newString(vm, "Index out of range."));
-
-  if (str->length < pos + len)
-    RET_ERR(newString(vm, "Substring length exceeded the limit."));
-
-  // Edge case, empty string.
-  if (len == 0) RET(VAR_OBJ(newStringLength(vm, "", 0)));
-
-  RET(VAR_OBJ(newStringLength(vm, str->data + pos, (uint32_t)len)));
-}
-
 // List functions.
 // ---------------
 
@@ -557,21 +529,6 @@ DEF(coreListJoin,
   RET(VAR_OBJ(str));
 }
 
-// Map functions.
-// --------------
-
-DEF(coreMapRemove,
-  "map_remove(self:map, key:var) -> var\n"
-  "Remove the [key] from the map [self] and return it's value if the key "
-  "exists, otherwise it'll return null.") {
-
-  Map* map;
-  if (!validateArgMap(vm, 1, &map)) return;
-  Var key = ARG(2);
-
-  RET(mapRemoveKey(vm, map, key));
-}
-
 static void initializeBuiltinFN(PKVM* vm, Closure** bfn, const char* name,
                                 int length, int arity, pkNativeFn ptr,
                                 const char* docstring) {
@@ -601,18 +558,9 @@ static void initializeBuiltinFunctions(PKVM* vm) {
   INITIALIZE_BUILTIN_FN("input",     coreInput,   -1);
   INITIALIZE_BUILTIN_FN("exit",      coreExit,    -1);
 
-  // FIXME:
-  // move this functions as methods. and make "append()" a builtin.
-
-  // String functions.
-  INITIALIZE_BUILTIN_FN("str_sub", coreStrSub, 3);
-
   // List functions.
   INITIALIZE_BUILTIN_FN("list_append", coreListAppend, 2);
   INITIALIZE_BUILTIN_FN("list_join",   coreListJoin,   1);
-
-  // Map functions.
-  INITIALIZE_BUILTIN_FN("map_remove", coreMapRemove, 2);
 
 #undef INITIALIZE_BUILTIN_FN
 }
@@ -850,14 +798,284 @@ DEF(_numberIsbyte,
   RET(VAR_BOOL((floor(n) == n) && (0x00 <= n && n <= 0xff)));
 }
 
+DEF(_stringFind,
+  "String.find(sub:String[, start:Number=0]) -> Number\n"
+  "Returns the first index of the substring [sub] found from the "
+  "[start] index") {
+
+  if (!pkCheckArgcRange(vm, ARGC, 1, 2)) return;
+
+  String* sub;
+  if (!validateArgString(vm, 1, &sub)) return;
+
+  int64_t start = 0;
+  if (ARGC == 2) {
+    if (!validateInteger(vm, ARG(2), &start, "Argument 1")) return;
+  }
+
+  String* self = (String*) AS_OBJ(SELF);
+
+  if (self->length <= start) {
+    RET(VAR_NUM((double) -1));
+  }
+
+  // FIXME: Pocketlang strings can contain \x00 ie. NULL byte and strstr
+  // doesn't support them. However pocketlang strings always ends with a null
+  // byte so the match won't go outside of the string.
+  const char* match = strstr(self->data + start, sub->data);
+
+  if (match == NULL) RET(VAR_NUM((double) -1));
+
+  ASSERT_INDEX(match - self->data, self->capacity);
+  RET(VAR_NUM((double) (match - self->data)));
+}
+
+DEF(_stringReplace,
+  "String.replace(old:Sttring, new:String[, count:Number=-1]) -> String\n"
+  "Returns a copy of the string where [count] occurrence of the substring "
+  "[old] will be replaced with [new]. If [count] == -1 all the occurrence "
+  "will be replaced.") {
+
+  if (!pkCheckArgcRange(vm, ARGC, 2, 3)) return;
+
+  String *old, *new_;
+  if (!validateArgString(vm, 1, &old)) return;
+  if (!validateArgString(vm, 2, &new_)) return;
+
+  String* self = (String*) AS_OBJ(SELF);
+
+  int64_t count = -1;
+  if (ARGC == 3) {
+    if (!validateInteger(vm, ARG(3), &count, "Argument 3")) return;
+    if (count < 0 && count != -1) {
+      RET_ERR(newString(vm, "count should either be >= 0 or -1"));
+    }
+  }
+
+  RET(VAR_OBJ(stringReplace(vm, self, old, new_, (int32_t) count)));
+}
+
+DEF(_stringSplit,
+  "String.split(sep:String) -> List\n"
+  "Split the string into a list of string seperated by [sep] delimeter.") {
+
+  String* sep;
+  if (!validateArgString(vm, 1, &sep)) return;
+
+  if (sep->length == 0) {
+    RET_ERR(newString(vm, "Cannot use empty string as a seperator."));
+  }
+
+  RET(VAR_OBJ(stringSplit(vm, (String*)AS_OBJ(SELF), sep)));
+}
+
+DEF(_stringStrip,
+  "String.strip() -> String\n"
+  "Returns a copy of the string where the leading and trailing whitespace "
+  "removed.") {
+  RET(VAR_OBJ(stringStrip(vm, (String*) AS_OBJ(SELF))));
+}
+
+DEF(_stringLower,
+  "String.lower() -> String\n"
+  "Returns a copy of the string where all the characters are converted to "
+  "lower case letters.") {
+  RET(VAR_OBJ(stringLower(vm, (String*) AS_OBJ(SELF))));
+}
+
+DEF(_stringUpper,
+  "String.lower() -> String\n"
+  "Returns a copy of the string where all the characters are converted to "
+  "upper case letters.") {
+  RET(VAR_OBJ(stringUpper(vm, (String*) AS_OBJ(SELF))));
+}
+
+DEF(_stingStartswith,
+  "String.startswith(prefix: String | List) -> Bool\n"
+  "Returns true if the string starts the specified prefix.") {
+
+  Var prefix = ARG(1);
+  String* self = (String*) AS_OBJ(SELF);
+
+  if (IS_OBJ_TYPE(prefix, OBJ_STRING)) {
+    String* pre = (String*) AS_OBJ(prefix);
+    if (pre->length > self->length) RET(VAR_FALSE);
+    RET(VAR_BOOL((strncmp(self->data, pre->data, pre->length) == 0)));
+
+  } else if (IS_OBJ_TYPE(prefix, OBJ_LIST)) {
+
+    List* prefixes = (List*) AS_OBJ(prefix);
+    for (uint32_t i = 0; i < prefixes->elements.count; i++) {
+      Var pre_var = prefixes->elements.data[i];
+      if (!IS_OBJ_TYPE(pre_var, OBJ_STRING)) {
+        RET_ERR(newString(vm, "Expected a String for prefix."));
+      }
+      String* pre = (String*) AS_OBJ(pre_var);
+      if (pre->length > self->length) RET(VAR_FALSE);
+      if (strncmp(self->data, pre->data, pre->length) == 0) RET(VAR_TRUE);
+    }
+    RET(VAR_FALSE);
+
+  } else {
+    RET_ERR(newString(vm, "Expected a String or a List of prifiexes."));
+  }
+}
+
+DEF(_stingEndswith,
+  "String.endswith(suffix: String | List) -> Bool\n"
+  "Returns true if the string ends with the specified suffix.") {
+
+  Var suffix = ARG(1);
+  String* self = (String*)AS_OBJ(SELF);
+
+  if (IS_OBJ_TYPE(suffix, OBJ_STRING)) {
+    String* suf = (String*)AS_OBJ(suffix);
+    if (suf->length > self->length) RET(VAR_FALSE);
+
+    const char* start = (self->data + (self->length - suf->length));
+    RET(VAR_BOOL((strncmp(start, suf->data, suf->length) == 0)));
+
+  } else if (IS_OBJ_TYPE(suffix, OBJ_LIST)) {
+
+    List* suffixes = (List*)AS_OBJ(suffix);
+    for (uint32_t i = 0; i < suffixes->elements.count; i++) {
+      Var suff_var = suffixes->elements.data[i];
+      if (!IS_OBJ_TYPE(suff_var, OBJ_STRING)) {
+        RET_ERR(newString(vm, "Expected a String for suffix."));
+      }
+      String* suf = (String*)AS_OBJ(suff_var);
+      if (suf->length > self->length) RET(VAR_FALSE);
+
+      const char* start = (self->data + (self->length - suf->length));
+      if (strncmp(start, suf->data, suf->length) == 0) RET(VAR_TRUE);
+    }
+    RET(VAR_FALSE);
+
+  } else {
+    RET_ERR(newString(vm, "Expected a String or a List of suffixes."));
+  }
+}
+
 DEF(_listAppend,
   "List.append(value:var) -> List\n"
-  "Append the [value] to the list and return the list.") {
+  "Append the [value] to the list and return the List.") {
 
   ASSERT(IS_OBJ_TYPE(SELF, OBJ_LIST), OOPS);
 
-  listAppend(vm, ((List*)AS_OBJ(SELF)), ARG(1));
+  listAppend(vm, ((List*) AS_OBJ(SELF)), ARG(1));
   RET(SELF);
+}
+
+DEF(_listInsert,
+  "List.insert(index:Number, value:var) -> null\n"
+  "Insert the element at the given index. The index should be "
+  "0 <= index <= list.length.") {
+
+  List* self = (List*)AS_OBJ(SELF);
+
+  int64_t index;
+  if (!validateInteger(vm, ARG(1), &index, "Argument 1")) return;
+
+  if (index < 0 || index > self->elements.count) {
+    RET_ERR(newString(vm, "List.insert index out of bounds."));
+  }
+
+  listInsert(vm, self, (uint32_t) index, ARG(2));
+}
+
+DEF(_listPop,
+  "List.pop(index=-1) -> var\n"
+  "Removes the last element of the list and return it.") {
+
+  ASSERT(IS_OBJ_TYPE(SELF, OBJ_LIST), OOPS);
+  List* self = (List*) AS_OBJ(SELF);
+
+  if (!pkCheckArgcRange(vm, ARGC, 0, 1)) return;
+
+  if (self->elements.count == 0) {
+    RET_ERR(newString(vm, "Cannot pop from an empty list."));
+  }
+
+  int64_t index = -1;
+  if (ARGC == 1) {
+    if (!validateInteger(vm, ARG(1), &index, "Argument 1")) return;
+  }
+  if (index < 0) index = self->elements.count + index;
+
+  if (index < 0 || index >= self->elements.count) {
+    RET_ERR(newString(vm, "List.pop index out of bounds."));
+  }
+  RET(listRemoveAt(vm, self, (uint32_t) index));
+}
+
+DEF(_listFind,
+  "List.find(value:var) -> Number\n"
+  "Find the value and return its index. If the vlaue not exists "
+  "it'll return -1.") {
+
+  ASSERT(IS_OBJ_TYPE(SELF, OBJ_LIST), OOPS);
+  List* self = (List*)AS_OBJ(SELF);
+
+  Var* it = self->elements.data;
+  if (it == NULL) RET(VAR_NUM(-1)); // Empty list.
+
+  for (; it < self->elements.data + self->elements.count; it++) {
+    if (isValuesEqual(*it, ARG(1))) {
+      RET(VAR_NUM((double) (it - self->elements.data)));
+    }
+  }
+
+  RET(VAR_NUM(-1));
+}
+
+DEF(_listClear,
+  "List.clear() -> null\n"
+  "Removes all the entries in the list.") {
+  listClear(vm, (List*) AS_OBJ(SELF));
+}
+
+DEF(_mapClear,
+  "Map.clear() -> null\n"
+  "Removes all the entries in the map.") {
+  Map* self = (Map*) AS_OBJ(SELF);
+  mapClear(vm, self);
+}
+
+DEF(_mapGet,
+  "Map.get(key:var, default=null) -> var\n"
+  "Returns the key if its in the map, otherwise the default value will "
+  "be returned.") {
+
+  if (!pkCheckArgcRange(vm, ARGC, 1, 2)) return;
+
+  Var default_ = (ARGC == 1) ? VAR_NULL : ARG(2);
+
+  Map* self = (Map*) AS_OBJ(SELF);
+
+  Var value = mapGet(self, ARG(1));
+  if (IS_UNDEF(value)) RET(default_);
+  RET(value);
+}
+
+DEF(_mapHas,
+  "Map.has(key:var) -> Bool\n"
+  "Returns true if the key exists.") {
+
+  Map* self = (Map*)AS_OBJ(SELF);
+  Var value = mapGet(self, ARG(1));
+  RET(VAR_BOOL(!IS_UNDEF(value)));
+}
+
+DEF(_mapPop,
+  "Map.pop(key:var) -> var\n"
+  "Pops the value at the key and return it.") {
+
+  Map* self = (Map*)AS_OBJ(SELF);
+  Var value = mapRemoveKey(vm, self, ARG(1));
+  if (IS_UNDEF(value)) {
+    RET_ERR(stringFormat(vm, "Key '@' does not exists.", toRepr(vm, ARG(1))));
+  }
+  RET(value);
 }
 
 DEF(_fiberRun,
@@ -866,7 +1084,7 @@ DEF(_fiberRun,
   "return value or the yielded value if it's yielded.") {
 
   ASSERT(IS_OBJ_TYPE(SELF, OBJ_FIBER), OOPS);
-  Fiber* self = (Fiber*)AS_OBJ(SELF);
+  Fiber* self = (Fiber*) AS_OBJ(SELF);
 
   // Switch fiber and start execution. New fibers are marked as running in
   // either it's stats running with vmRunFiber() or here -- inserting a
@@ -884,7 +1102,7 @@ DEF(_fiberResume,
   "Return it's return value or the yielded value if it's yielded.") {
 
   ASSERT(IS_OBJ_TYPE(SELF, OBJ_FIBER), OOPS);
-  Fiber* self = (Fiber*)AS_OBJ(SELF);
+  Fiber* self = (Fiber*) AS_OBJ(SELF);
 
   if (!pkCheckArgcRange(vm, ARGC, 0, 1)) return;
 
@@ -948,12 +1166,32 @@ static void initializePrimitiveClasses(PKVM* vm) {
   } while (false)
 
   // TODO: write docs.
-  ADD_METHOD(PK_NUMBER, "times",  _numberTimes,  1);
-  ADD_METHOD(PK_NUMBER, "isint",  _numberIsint,  0);
-  ADD_METHOD(PK_NUMBER, "isbyte", _numberIsbyte, 0);
-  ADD_METHOD(PK_LIST,   "append", _listAppend,   1);
-  ADD_METHOD(PK_FIBER,  "run",    _fiberRun,    -1);
-  ADD_METHOD(PK_FIBER,  "resume", _fiberResume, -1);
+  ADD_METHOD(PK_NUMBER, "times",  _numberTimes,     1);
+  ADD_METHOD(PK_NUMBER, "isint",  _numberIsint,     0);
+  ADD_METHOD(PK_NUMBER, "isbyte", _numberIsbyte,    0);
+
+  ADD_METHOD(PK_STRING, "strip",   _stringStrip,    0);
+  ADD_METHOD(PK_STRING, "lower",   _stringLower,    0);
+  ADD_METHOD(PK_STRING, "upper",   _stringUpper,    0);
+  ADD_METHOD(PK_STRING, "find",    _stringFind,    -1);
+  ADD_METHOD(PK_STRING, "replace", _stringReplace, -1);
+  ADD_METHOD(PK_STRING, "split",   _stringSplit,    1);
+  ADD_METHOD(PK_STRING, "startswith", _stingStartswith, 1);
+  ADD_METHOD(PK_STRING, "endswith", _stingEndswith, 1);
+
+  ADD_METHOD(PK_LIST,   "clear",  _listClear,      0);
+  ADD_METHOD(PK_LIST,   "find",   _listFind,       1);
+  ADD_METHOD(PK_LIST,   "append", _listAppend,     1);
+  ADD_METHOD(PK_LIST,   "pop",    _listPop,       -1);
+  ADD_METHOD(PK_LIST,   "insert", _listInsert,     2);
+
+  ADD_METHOD(PK_MAP,    "clear",  _mapClear,       0);
+  ADD_METHOD(PK_MAP,    "get",    _mapGet,        -1);
+  ADD_METHOD(PK_MAP,    "has",    _mapHas,         1);
+  ADD_METHOD(PK_MAP,    "pop",    _mapPop,         1);
+
+  ADD_METHOD(PK_FIBER,  "run",    _fiberRun,      -1);
+  ADD_METHOD(PK_FIBER,  "resume", _fiberResume,   -1);
 
 #undef ADD_METHOD
 }
@@ -1347,11 +1585,15 @@ bool varContains(PKVM* vm, Var elem, Var container) {
         return false;
       }
 
-      String* sub = (String*)AS_OBJ(elem);
-      String* str = (String*)AS_OBJ(container);
+      String* sub = (String*) AS_OBJ(elem);
+      String* str = (String*) AS_OBJ(container);
       if (sub->length > str->length) return false;
 
-      TODO;
+      // FIXME: strstr function can only be used for null terminated strings.
+      // But pocket lang strings can contain any byte values including a null
+      // byte \x00.
+      const char* match = strstr(str->data, sub->data);
+      return match != NULL;
 
     } break;
 
@@ -1419,15 +1661,6 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
         case CHECK_HASH("length", 0x83d03615):
           return VAR_NUM((double)(str->length));
-
-        case CHECK_HASH("lower", 0xb51d04ba):
-          return VAR_OBJ(stringLower(vm, str));
-
-        case CHECK_HASH("upper", 0xa8c6a47):
-          return VAR_OBJ(stringUpper(vm, str));
-
-        case CHECK_HASH("strip", 0xfd1b18d1):
-          return VAR_OBJ(stringStrip(vm, str));
       }
     } break;
 
@@ -1441,10 +1674,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     } break;
 
     case OBJ_MAP: {
-      // map = { "foo" : 42, "can't access" : 32 }
-      // val = map.foo ## <-- This should be error
-      // Only the map's attributes are accessed here.
-      TODO;
+      // TODO:
     } break;
 
     case OBJ_RANGE: {
@@ -1509,7 +1739,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     } break;
 
     case OBJ_CLASS:
-      TODO;
+      // TODO:
       break;
 
     case OBJ_INST: {

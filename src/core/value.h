@@ -643,6 +643,16 @@ String* stringUpper(PKVM* vm, String* self);
 // If the string is already trimmed it'll return the same string.
 String* stringStrip(PKVM* vm, String* self);
 
+// Replace the [count] occurence of the [old] string with [new_] string. If
+// [count] == -1. It'll replace all the occurences. If nothing is replaced
+// the original string will be returned.
+String* stringReplace(PKVM* vm, String* self,
+                      String* old, String* new_, int count);
+
+// Split the string into a list of string separated by [sep]. String [sep] must
+// not be of length 0 otherwise an assertion will fail.
+List* stringSplit(PKVM* vm, String* self, String* sep);
+
 // Creates a new string from the arguments. This is intended for internal
 // usage and it has 2 formated characters (just like wren does).
 // $ - a C string
@@ -672,6 +682,9 @@ void listInsert(PKVM* vm, List* self, uint32_t index, Var value);
 // Remove and return element at [index].
 Var listRemoveAt(PKVM* vm, List* self, uint32_t index);
 
+// Remove all the elements of the list.
+void listClear(PKVM* vm, List* self);
+
 // Create a new list by joining the 2 given list and return the result.
 List* listAdd(PKVM* vm, List* l1, List* l2);
 
@@ -686,7 +699,7 @@ void mapSet(PKVM* vm, Map* self, Var key, Var value);
 void mapClear(PKVM* vm, Map* self);
 
 // Remove the [key] from the map. If the key exists return it's value
-// otherwise return VAR_NULL.
+// otherwise return VAR_UNDEFINED.
 Var mapRemoveKey(PKVM* vm, Map* self, Var key);
 
 // Returns true if the fiber has error, and if it has any the fiber cannot be

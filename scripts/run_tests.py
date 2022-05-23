@@ -24,7 +24,6 @@ TEST_SUITE = {
     "lang/builtin_ty.pk",
     "lang/class.pk",
     "lang/closure.pk",
-    "lang/core.pk",
     "lang/controlflow.pk",
     "lang/fibers.pk",
     "lang/functions.pk",
