@@ -119,7 +119,7 @@ class Path
   def /(other)
     if other is String
       return Path(self.path + "/" + other)
-    else if other is Path
+    elif other is Path
       return Path(self.path + "/" + other.path)
     else
       assert(false, "Invalid type")

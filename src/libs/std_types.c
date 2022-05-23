@@ -36,6 +36,23 @@ void _bytebuffReserve(PKVM* vm) {
   pkByteBufferReserve(self, vm, (size_t) size);
 }
 
+// buff.fill(data, count)
+void _bytebuffFill(PKVM* vm) {
+  uint32_t n;
+  if (!pkValidateSlotInteger(vm, 1, &n)) return;
+  if (n < 0x00 || n > 0xff) {
+    pkSetRuntimeErrorFmt(vm, "Expected integer in range "
+      "0x00 to 0xff, got %i.", n);
+    return;
+  }
+
+  double count;
+  if (!pkValidateSlotNumber(vm, 1, &count)) return;
+
+  pkByteBuffer* self = pkGetSelf(vm);
+  pkByteBufferFill(self, vm, (uint8_t) n, (int) count);
+}
+
 void _bytebuffClear(PKVM* vm) {
   // TODO: Should I also zero or reduce the capacity?
   pkByteBuffer* self = pkGetSelf(vm);
@@ -55,12 +72,8 @@ void _bytebuffWrite(PKVM* vm) {
       return;
 
     case PK_NUMBER: {
-      double n = pkGetSlotNumber(vm, 1);
-      if (floor(n) != n) {
-        pkSetRuntimeErrorFmt(vm, "Expected an integer, got float %g.", n);
-        return;
-      }
-      int64_t i = (int64_t) n;
+      uint32_t i;
+      if (!pkValidateSlotInteger(vm, 1, &i)) return;
       if (i < 0x00 || i > 0xff) {
         pkSetRuntimeErrorFmt(vm, "Expected integer in range "
                                  "0x00 to 0xff, got %i.", i);
@@ -78,6 +91,10 @@ void _bytebuffWrite(PKVM* vm) {
       pkByteBufferAddString(self, vm, str, length);
       pkSetSlotNumber(vm, 0, (double) length);
       return;
+    }
+
+    // TODO:
+    case PK_LIST: {
     }
 
     default:
@@ -142,6 +159,11 @@ void _bytebuffSubscriptSet(PKVM* vm) {
 void _bytebuffString(PKVM* vm) {
   pkByteBuffer* self = pkGetSelf(vm);
   pkSetSlotStringLength(vm, 0, self->data, self->count);
+}
+
+void _bytebuffCount(PKVM* vm) {
+  pkByteBuffer* self = pkGetSelf(vm);
+  pkSetSlotNumber(vm, 0, self->count);
 }
 
 /*****************************************************************************/
@@ -244,12 +266,14 @@ void registerModuleTypes(PKVM* vm) {
   PkHandle* cls_byte_buffer = pkNewClass(vm, "ByteBuffer", NULL, types,
                                          _bytebuffNew, _bytebuffDelete);
 
-  pkClassAddMethod(vm, cls_byte_buffer, "[]", _bytebuffSubscriptGet, 1);
-  pkClassAddMethod(vm, cls_byte_buffer, "[]=", _bytebuffSubscriptSet, 2);
+  pkClassAddMethod(vm, cls_byte_buffer, "[]",      _bytebuffSubscriptGet, 1);
+  pkClassAddMethod(vm, cls_byte_buffer, "[]=",     _bytebuffSubscriptSet, 2);
   pkClassAddMethod(vm, cls_byte_buffer, "reserve", _bytebuffReserve, 1);
-  pkClassAddMethod(vm, cls_byte_buffer, "clear", _bytebuffClear, 0);
-  pkClassAddMethod(vm, cls_byte_buffer, "write", _bytebuffWrite, 1);
-  pkClassAddMethod(vm, cls_byte_buffer, "string", _bytebuffString, 0);
+  pkClassAddMethod(vm, cls_byte_buffer, "fill",    _bytebuffFill, 2);
+  pkClassAddMethod(vm, cls_byte_buffer, "clear",   _bytebuffClear, 0);
+  pkClassAddMethod(vm, cls_byte_buffer, "write",   _bytebuffWrite, 1);
+  pkClassAddMethod(vm, cls_byte_buffer, "string",  _bytebuffString, 0);
+  pkClassAddMethod(vm, cls_byte_buffer, "count",   _bytebuffCount, 0);
   pkReleaseHandle(vm, cls_byte_buffer);
 
   // TODO: add move mthods.
