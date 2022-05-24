@@ -7,21 +7,21 @@ if true then variable = 42 else unreachable() end
 assert(variable == 42, 'If statement failed.')
 
 if false then unreachable()
-else if true then variable = null
+elif true then variable = null
 else unreachable() end
 assert(variable == null)
 
 if false then unreachable()
-else if false then unreachable()
-else if false then unreachable()
+elif false then unreachable()
+elif false then unreachable()
 else variable = "changed" end
 assert(variable == "changed")
 
 if false then unreachable()
-else if true
+elif true
   if false
     unreachable()
-  else if true
+  elif true
     variable = 123
   else
     unreachable()
@@ -39,9 +39,9 @@ assert(variable == 1212)
 
 while true
 	variable = 22
-	if true then else if false then end	
+	if true then elif false then end
 	if false
-	else if true
+	elif true
 		variable += 2300
 	end
 	variable += 1
@@ -57,7 +57,7 @@ assert(sum == 54)
 
 val = 2
 if val == 1 then val = null
-else if val == 2 then val = 'foo'
+elif val == 2 then val = 'foo'
 else val = null
 end
 assert(val == 'foo')
@@ -66,7 +66,7 @@ val = 2
 if val == 1 then val = null
 else
   if val == 2 then val = 'bar'
-	end ##< Need an extra end since 'else if' != 'else \n if'.
+	end ##< Need an extra end since 'elif' != 'else \n if'.
 end
 assert(val == 'bar')
 

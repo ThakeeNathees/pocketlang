@@ -237,13 +237,6 @@ static inline bool _callBinaryOpMethod(PKVM* vm, Var self, Var other,
 /* CORE BUILTIN FUNCTIONS                                                    */
 /*****************************************************************************/
 
-DEF(coreTypeName,
-  "type_name(value:var) -> string\n"
-  "Returns the type name of the of the value.") {
-
-  RET(VAR_OBJ(newString(vm, varTypeName(ARG(1)))));
-}
-
 DEF(coreHelp,
   "help([fn:Closure]) -> null\n"
   "It'll print the docstring the object and return.") {
@@ -545,7 +538,6 @@ static void initializeBuiltinFunctions(PKVM* vm) {
   initializeBuiltinFN(vm, &vm->builtins_funcs[vm->builtins_count++], name, \
                       (int)strlen(name), argc, fn, DOCSTRING(fn));
   // General functions.
-  INITIALIZE_BUILTIN_FN("type_name", coreTypeName, 1);
   INITIALIZE_BUILTIN_FN("help",      coreHelp,    -1);
   INITIALIZE_BUILTIN_FN("assert",    coreAssert,  -1);
   INITIALIZE_BUILTIN_FN("bin",       coreBin,      1);
@@ -642,31 +634,6 @@ DEF(stdLangDebugBreak,
 }
 #endif
 
-DEF(stdLangWrite,
-  "write(...) -> null\n"
-  "Write function, just like print function but it wont put space between"
-  "args and write a new line at the end.") {
-
-  // If the host application doesn't provide any write function, discard the
-  // output.
-  if (vm->config.stdout_write == NULL) return;
-
-  String* str; //< Will be cleaned by garbage collector;
-
-  for (int i = 1; i <= ARGC; i++) {
-    Var arg = ARG(i);
-    // If it's already a string don't allocate a new string instead use it.
-    if (IS_OBJ_TYPE(arg, OBJ_STRING)) {
-      str = (String*)AS_OBJ(arg);
-    } else {
-      str = varToString(vm, ARG(1), false);
-      if (str == NULL) RET(VAR_NULL);
-    }
-
-    vm->config.stdout_write(vm, str->data);
-  }
-}
-
 static void initializeCoreModules(PKVM* vm) {
 #define MODULE_ADD_FN(module, name, fn, argc) \
   moduleAddFunctionInternal(vm, module, name, fn, argc, DOCSTRING(fn))
@@ -680,7 +647,6 @@ static void initializeCoreModules(PKVM* vm) {
   NEW_MODULE(lang, "lang");
   MODULE_ADD_FN(lang, "gc",    stdLangGC,     0);
   MODULE_ADD_FN(lang, "disas", stdLangDisas,  1);
-  MODULE_ADD_FN(lang, "write", stdLangWrite, -1);
 #ifdef DEBUG
   MODULE_ADD_FN(lang, "debug_break", stdLangDebugBreak, 0);
 #endif
@@ -763,6 +729,18 @@ static void _ctorFiber(PKVM* vm) {
 /*****************************************************************************/
 
 #define SELF (vm->fiber->self)
+
+DEF(_objTypeName,
+  "Object.typename() -> String\n"
+  "Returns the type name of the object.") {
+  RET(VAR_OBJ(newString(vm, varTypeName(SELF))));
+}
+
+DEF(_objRepr,
+  "Object.repr() -> String\n"
+  "Returns the repr string of the object.") {
+  RET(VAR_OBJ(varToString(vm, SELF, true)));
+}
 
 DEF(_numberTimes,
   "Number.times(f:fn)\n"
@@ -1166,6 +1144,9 @@ static void initializePrimitiveClasses(PKVM* vm) {
   } while (false)
 
   // TODO: write docs.
+  ADD_METHOD(PK_OBJECT, "typename", _objTypeName,    0);
+  ADD_METHOD(PK_OBJECT, "repr",     _objRepr,        0);
+
   ADD_METHOD(PK_NUMBER, "times",  _numberTimes,     1);
   ADD_METHOD(PK_NUMBER, "isint",  _numberIsint,     0);
   ADD_METHOD(PK_NUMBER, "isbyte", _numberIsbyte,    0);
@@ -1465,6 +1446,26 @@ Var varSubtract(PKVM* vm, Var v1, Var v2, bool inplace) {
 Var varMultiply(PKVM* vm, Var v1, Var v2, bool inplace) {
   CHECK_NUMERIC_OP(*);
   CHECK_INST_BINARY_OP("*");
+
+  if (IS_OBJ_TYPE(v1, OBJ_STRING)) {
+    String* left = (String*) AS_OBJ(v1);
+    int64_t right;
+    if (isInteger(v2, &right)) {
+      if (left->length == 0) return VAR_OBJ(left);
+      if (right == 0) return VAR_OBJ(newString(vm, ""));
+
+      String* str = newStringLength(vm, "", left->length * (uint32_t) right);
+      char* buff = str->data;
+      for (int i = 0; i < (int) right; i++) {
+        memcpy(buff, left->data, left->length);
+        buff += left->length;
+      }
+      ASSERT(buff == str->data + str->length, OOPS);
+      str->hash = utilHashString(str->data);
+      return VAR_OBJ(str);
+    }
+  }
+
   UNSUPPORTED_BINARY_OP("*");
   return VAR_NULL;
 }

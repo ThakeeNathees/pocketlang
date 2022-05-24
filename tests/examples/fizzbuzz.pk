@@ -2,8 +2,8 @@
 
 for i in 1..100
 	if i%3 == 0 and i%5 == 0 then print('fizzbuzz')
-	else if i%3 == 0 then print('fizz')
-	else if i%5 == 0 then print('buzz')
+	elif i%3 == 0 then print('fizz')
+	elif i%5 == 0 then print('buzz')
 	else print(i)
 	end
 end

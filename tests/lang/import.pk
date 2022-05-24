@@ -3,7 +3,7 @@
 import lang
 import lang, path
 import lang as o, path as p
-from lang import write
+from io import write
 from time import sleep as s
 
 import basics

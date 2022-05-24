@@ -136,6 +136,7 @@ typedef enum {
   TK_WHILE,      // while
   TK_FOR,        // for
   TK_IF,         // if
+  TK_ELIF,       // elif
   TK_ELSE,       // else
   TK_BREAK,      // break
   TK_CONTINUE,   // continue
@@ -200,6 +201,7 @@ static _Keyword _keywords[] = {
   { "while",    5, TK_WHILE    },
   { "for",      3, TK_FOR      },
   { "if",       2, TK_IF       },
+  { "elif",     4, TK_ELIF     },
   { "else",     4, TK_ELSE     },
   { "break",    5, TK_BREAK    },
   { "continue", 8, TK_CONTINUE },
@@ -1267,7 +1269,8 @@ static void skipNewLines(Compiler* compiler) {
   matchLine(compiler);
 }
 
-// Match semi collon, multiple new lines or peek 'end', 'else' keywords.
+// Match semi collon, multiple new lines or peek 'end', 'else', 'elif'
+// keywords.
 static bool matchEndStatement(Compiler* compiler) {
   if (match(compiler, TK_SEMICOLLON)) {
     skipNewLines(compiler);
@@ -1278,7 +1281,9 @@ static bool matchEndStatement(Compiler* compiler) {
 
   // In the below statement we don't require any new lines or semicolons.
   // 'if cond then stmnt1 else if cond2 then stmnt2 else stmnt3 end'
-  if (peek(compiler) == TK_END || peek(compiler) == TK_ELSE)
+  if (peek(compiler) == TK_END
+    || peek(compiler) == TK_ELSE
+    || peek(compiler) == TK_ELIF)
     return true;
 
   return false;
@@ -1639,6 +1644,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_WHILE      */   NO_RULE,
   /* TK_FOR        */   NO_RULE,
   /* TK_IF         */   NO_RULE,
+  /* TK_ELIF       */   NO_RULE,
   /* TK_ELSE       */   NO_RULE,
   /* TK_BREAK      */   NO_RULE,
   /* TK_CONTINUE   */   NO_RULE,
@@ -2864,7 +2870,7 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
 
   _TokenType next = peek(compiler);
   while (!(next == TK_END || next == TK_EOF ||
-          ((type == BLOCK_IF) && (next == TK_ELSE)))) {
+          ((type == BLOCK_IF) && (next == TK_ELSE || next == TK_ELIF)))) {
 
     compileStatement(compiler);
     skipNewLines(compiler);
@@ -3024,7 +3030,7 @@ static void compileExpression(Compiler* compiler) {
   parsePrecedence(compiler, PREC_LOWEST);
 }
 
-static void compileIfStatement(Compiler* compiler, bool else_if) {
+static void compileIfStatement(Compiler* compiler, bool elif) {
 
   skipNewLines(compiler);
   compileExpression(compiler); //< Condition.
@@ -3033,40 +3039,36 @@ static void compileIfStatement(Compiler* compiler, bool else_if) {
 
   compileBlockBody(compiler, BLOCK_IF);
 
-  if (match(compiler, TK_ELSE)) {
+  if (match(compiler, TK_ELIF)) {
+    // Jump pass else.
+    emitOpcode(compiler, OP_JUMP);
+    int exit_jump = emitShort(compiler, 0xffff); //< Will be patched.
 
-    if (match(compiler, TK_IF)) { //< Compile 'else if'.
-      // Jump pass else.
-      emitOpcode(compiler, OP_JUMP);
-      int exit_jump = emitShort(compiler, 0xffff); //< Will be patched.
+    // if (false) jump here.
+    patchJump(compiler, ifpatch);
 
-      // if (false) jump here.
-      patchJump(compiler, ifpatch);
+    compilerEnterBlock(compiler);
+    compileIfStatement(compiler, true);
+    compilerExitBlock(compiler);
 
-      compilerEnterBlock(compiler);
-      compileIfStatement(compiler, true);
-      compilerExitBlock(compiler);
+    patchJump(compiler, exit_jump);
 
-      patchJump(compiler, exit_jump);
+  } else if (match(compiler, TK_ELSE)) {
+    // Jump pass else.
+    emitOpcode(compiler, OP_JUMP);
+    int exit_jump = emitShort(compiler, 0xffff); //< Will be patched.
 
-    } else { //< Compile 'else'.
-
-      // Jump pass else.
-      emitOpcode(compiler, OP_JUMP);
-      int exit_jump = emitShort(compiler, 0xffff); //< Will be patched.
-
-      patchJump(compiler, ifpatch);
-      compileBlockBody(compiler, BLOCK_ELSE);
-      patchJump(compiler, exit_jump);
-    }
+    patchJump(compiler, ifpatch);
+    compileBlockBody(compiler, BLOCK_ELSE);
+    patchJump(compiler, exit_jump);
 
   } else {
     patchJump(compiler, ifpatch);
   }
 
-  // 'else if' will not consume the 'end' keyword as it'll be leaved to be
-  // consumed by it's 'if'.
-  if (!else_if) {
+  // elif will not consume the 'end' keyword as it'll be leaved to be consumed
+  // by it's 'if'.
+  if (!elif) {
     skipNewLines(compiler);
     consume(compiler, TK_END, "Expected 'end' after statement end.");
   }

@@ -98,6 +98,11 @@ typedef void (*pkWriteFn) (PKVM* vm, const char* text);
 // string.
 typedef char* (*pkReadFn) (PKVM* vm);
 
+// A generic function thiat could be used by the PKVM to signal something to
+// the host application. The first argument is depend on the callback it's
+// registered.
+typedef void (*pkSignalFn) (void*);
+
 // Load and return the script. Called by the compiler to fetch initial source
 // code and source for import statements. Return NULL to indicate failure to
 // load. Otherwise the string **must** be allocated with pkRealloc() and
@@ -170,10 +175,12 @@ struct PkConfiguration {
   // pointer is NULL it defaults to the VM's realloc(), free() wrappers.
   pkReallocFn realloc_fn;
 
+  // I/O callbacks.
   pkWriteFn stderr_write;
   pkWriteFn stdout_write;
   pkReadFn stdin_read;
 
+  // Import system callbacks.
   pkResolvePathFn resolve_path_fn;
   pkLoadScriptFn load_script_fn;
 
@@ -290,6 +297,10 @@ PK_PUBLIC bool pkValidateSlotBool(PKVM* vm, int slot, bool* value);
 // Helper function to check if the argument at the [slot] slot is Number and
 // if not set a runtime error.
 PK_PUBLIC bool pkValidateSlotNumber(PKVM* vm, int slot, double* value);
+
+// Helper function to check if the argument at the [slot] is an a whold number
+// and if not set a runtime error.
+PK_PUBLIC bool pkValidateSlotInteger(PKVM* vm, int slot, int32_t* value);
 
 // Helper function to check if the argument at the [slot] slot is String and
 // if not set a runtime error.

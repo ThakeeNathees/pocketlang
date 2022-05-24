@@ -1,4 +1,4 @@
-from lang import write
+import io
 
 ###############################################################################
 ##               BRAINFUCK IMPLEMENTATION IN POCKETLANG                      ##
@@ -31,6 +31,11 @@ def main()
   execute(hello_world)
   execute(triangle)
   ##execute(fibonacci) This will run endlessly (cannot run test).
+  io.flush()
+end
+
+def write(msg)
+  io.write(io.stdout, msg)
 end
 
 ###############################################################################
@@ -51,52 +56,52 @@ def execute(expr)
       if ptr >= mem.length then list_append(mem, 0) end
 
     ## Decrement the data pointer (to point to the next cell to the left).
-    else if c == '<'
+    elif c == '<'
       ptr -= 1
       if ptr < 0 then assert(false, "ip < 0") end
 
     ## Increment (increase by one) the byte at the data pointer.
-    else if c == '+'
+    elif c == '+'
       if mem[ptr] == 255 then mem[ptr] = 0
       else mem[ptr] += 1 end
 
     ## Decrement (decrease by one) the byte at the data pointer.
-    else if c == '-'
+    elif c == '-'
       if mem[ptr] == 0 then mem[ptr] = 255
       else mem[ptr] -= 1 end
 
     ## output the byte at the data pointer.      
-    else if c == '.'
+    elif c == '.'
       write(chr(mem[ptr]))
 
-    else if c == ','
+    elif c == ','
       assert(false, "Currently input isn't supported in pocketlang.")
 
     ## if the byte at the data pointer is zero, then instead of moving the
     ## instruction pointer forward to the next command, jump it forward to
     ## the command after the matching ] command.
-    else if c == '[' and mem[ptr] == 0
+    elif c == '[' and mem[ptr] == 0
       open = 0
       while true
         i += 1
         if expr[i] == ']' and open == 0 then break end
 
         if expr[i] == '[' then open += 1
-        else if expr[i] == ']' then open -= 1
+        elif expr[i] == ']' then open -= 1
         end assert(open >= 0)
       end
 
     ## if the byte at the data pointer is nonzero, then instead of moving the
     ## instruction pointer forward to the next command, jump it back to the
     ## command after the matching [ command
-    else if c == ']' and mem[ptr] != 0
+    elif c == ']' and mem[ptr] != 0
       open = 0
       while true
         i -= 1
         if expr[i] == '[' and open == 0 then break end
 
         if expr[i] == ']' then open -= 1
-        else if expr[i] == '[' then open += 1
+        elif expr[i] == '[' then open += 1
         end assert(open <= 0)
       end
 

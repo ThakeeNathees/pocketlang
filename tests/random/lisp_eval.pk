@@ -44,27 +44,27 @@ def eval(expr, ind)
     end
     return [val, ind]
   
-  else if c == '+'
+  elif c == '+'
     r = binary_op(expr, ind)
     if not r[0] then return [null, -1] end
     return [r[1] + r[2], r[3]]
   
-  else if c == '-'
+  elif c == '-'
     r = binary_op(expr, ind)
     if not r[0] then return [null, -1] end
     return [r[1] - r[2], r[3]]
   
-  else if c == '*'
+  elif c == '*'
     r = binary_op(expr, ind)
     if not r[0] then return [null, -1] end
     return [r[1] * r[2], r[3]]
   
-  else if c == '/'
+  elif c == '/'
     r = binary_op(expr, ind)
     if not r[0] then return [null, -1] end
     return [r[1] / r[2], r[3]]
     
-  else if isnum(c)
+  elif isnum(c)
     val = ord(c) - ord('0')
     assert(0 <= val and val < 10)
     return [val, ind]

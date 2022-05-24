@@ -6,6 +6,8 @@
 
 // This file contains all the pocketlang public function implementations.
 
+#include <math.h>
+
 #ifndef PK_AMALGAMATED
 #include <pocketlang.h>
 #include "core.h"
@@ -78,7 +80,7 @@ static void stdoutWrite(PKVM* vm, const char* text);
 static char* stdinRead(PKVM* vm);
 static char* loadScript(PKVM* vm, const char* path);
 
-PK_PUBLIC void* pkRealloc(PKVM* vm, void* ptr, size_t size) {
+void* pkRealloc(PKVM* vm, void* ptr, size_t size) {
   ASSERT(vm->config.realloc_fn != NULL, "PKVM's allocator was NULL.");
 #if TRACE_MEMORY
   void* newptr = vm->config.realloc_fn(ptr, size, vm->config.user_data);
@@ -553,7 +555,7 @@ bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max) {
 
 // FIXME: If the user needs just the boolean value of the object, they should
 // use pkGetSlotBool().
-PK_PUBLIC bool pkValidateSlotBool(PKVM* vm, int slot, bool* value) {
+bool pkValidateSlotBool(PKVM* vm, int slot, bool* value) {
   CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(slot);
 
@@ -567,7 +569,7 @@ PK_PUBLIC bool pkValidateSlotBool(PKVM* vm, int slot, bool* value) {
   return true;
 }
 
-PK_PUBLIC bool pkValidateSlotNumber(PKVM* vm, int slot, double* value) {
+bool pkValidateSlotNumber(PKVM* vm, int slot, double* value) {
   CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(slot);
 
@@ -581,7 +583,23 @@ PK_PUBLIC bool pkValidateSlotNumber(PKVM* vm, int slot, double* value) {
   return true;
 }
 
-PK_PUBLIC bool pkValidateSlotString(PKVM* vm, int slot, const char** value,
+bool pkValidateSlotInteger(PKVM* vm, int slot, int32_t* value) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_SLOT_INDEX(slot);
+
+  double n;
+  if (!pkValidateSlotNumber(vm, slot, &n)) return false;
+
+  if (floor(n) != n) {
+    VM_SET_ERROR(vm, newString(vm, "Expected an integer got float."));
+    return false;
+  }
+
+  if (value) *value = (int32_t) n;
+  return true;
+}
+
+bool pkValidateSlotString(PKVM* vm, int slot, const char** value,
                                     uint32_t* length) {
   CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(slot);
@@ -608,7 +626,7 @@ bool pkValidateSlotType(PKVM* vm, int slot, PkVarType type) {
   return true;
 }
 
-PK_PUBLIC bool pkValidateSlotInstanceOf(PKVM* vm, int slot, int cls) {
+bool pkValidateSlotInstanceOf(PKVM* vm, int slot, int cls) {
   CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(slot);
   VALIDATE_SLOT_INDEX(cls);
@@ -719,7 +737,7 @@ void pkSetSlotString(PKVM* vm, int index, const char* value) {
   SET_SLOT(index, VAR_OBJ(newString(vm, value)));
 }
 
-PK_PUBLIC void pkSetSlotStringLength(PKVM* vm, int index,
+void pkSetSlotStringLength(PKVM* vm, int index,
                                      const char* value, uint32_t length) {
   CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
@@ -751,7 +769,7 @@ bool pkSetAttribute(PKVM* vm, int instance, const char* name, int value) {
   return !VM_HAS_ERROR(vm);
 }
 
-PK_PUBLIC bool pkGetAttribute(PKVM* vm, int instance, const char* name,
+bool pkGetAttribute(PKVM* vm, int instance, const char* name,
                               int index) {
   CHECK_FIBER_EXISTS(vm);
   CHECK_ARG_NULL(name);
@@ -830,7 +848,7 @@ bool pkCallFunction(PKVM* vm, int fn, int argc, int argv, int ret) {
   return false;
 }
 
-PK_PUBLIC bool pkCallMethod(PKVM* vm, int instance, const char* method,
+bool pkCallMethod(PKVM* vm, int instance, const char* method,
                             int argc, int argv, int ret) {
   CHECK_FIBER_EXISTS(vm);
   CHECK_ARG_NULL(method);
@@ -928,7 +946,7 @@ static char* stdinRead(PKVM* vm) {
   pkByteBufferInit(&buff);
   char c;
   do {
-    c = (char)fgetc(stdin);
+    c = (char) fgetc(stdin);
     if (c == '\n') break;
     pkByteBufferWrite(&buff, vm, (uint8_t)c);
   } while (c != EOF);
@@ -936,6 +954,7 @@ static char* stdinRead(PKVM* vm) {
 
   char* str = pkRealloc(vm, NULL, buff.count);
   memcpy(str, buff.data, buff.count);
+  pkByteBufferClear(&buff, vm);
   return str;
 }
 
