@@ -149,7 +149,9 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
 
       markObject(vm, &func->owner->_super);
 
-      if (!func->is_native) {
+      // If a garbage collection is triggered when allocating a name string
+      // for this function, it's [fn] property will be NULL.
+      if (!func->is_native && func->fn != NULL) {
         Fn* fn = func->fn;
         vm->bytes_allocated += sizeof(Fn);
 
@@ -293,14 +295,14 @@ String* newStringVaArgs(PKVM* vm, const char* fmt, va_list args) {
 
 List* newList(PKVM* vm, uint32_t size) {
   List* list = ALLOCATE(vm, List);
-  vmPushTempRef(vm, &list->_super);
+  vmPushTempRef(vm, &list->_super); // list.
   varInitObject(&list->_super, vm, OBJ_LIST);
   pkVarBufferInit(&list->elements);
   if (size > 0) {
     pkVarBufferFill(&list->elements, vm, VAR_NULL, size);
     list->elements.count = 0;
   }
-  vmPopTempRef(vm);
+  vmPopTempRef(vm); // list.
   return list;
 }
 
@@ -323,12 +325,8 @@ Range* newRange(PKVM* vm, double from, double to) {
 
 Module* newModule(PKVM* vm) {
   Module* module = ALLOCATE(vm, Module);
+  memset(module, 0, sizeof(Module));
   varInitObject(&module->_super, vm, OBJ_MODULE);
-
-  module->path = NULL;
-  module->name = NULL;
-  module->initialized = false;
-  module->body = NULL;
 
   pkVarBufferInit(&module->globals);
   pkUintBufferInit(&module->global_names);
@@ -343,6 +341,7 @@ Function* newFunction(PKVM* vm, const char* name, int length,
                       int* fn_index) {
 
   Function* func = ALLOCATE(vm, Function);
+  memset(func, 0, sizeof(Function));
   varInitObject(&func->_super, vm, OBJ_FUNC);
 
   vmPushTempRef(vm, &func->_super); // func
@@ -388,10 +387,7 @@ Closure* newClosure(PKVM* vm, Function* fn) {
   varInitObject(&closure->_super, vm, OBJ_CLOSURE);
 
   closure->fn = fn;
-
-  for (int i = 0; i < fn->upvalue_count; i++) {
-    closure->upvalues[i] = NULL;
-  }
+  memset(closure->upvalues, 0, sizeof(Upvalue*) * fn->upvalue_count);
 
   return closure;
 }
@@ -410,9 +406,10 @@ Fiber* newFiber(PKVM* vm, Closure* closure) {
   ASSERT(closure == NULL || closure->fn->arity >= -1, OOPS);
 
   Fiber* fiber = ALLOCATE(vm, Fiber);
-  ASSERT(fiber != NULL, "Out of memory");
 
-  // Not sure why this memset is needed here. If it doesn't then remove it.
+  // If a garbage collection is triggered here, and the fiber isn't fully
+  // constructed -> it's fields are not intialized yet, would cause a crash
+  // so we need to memset here.
   memset(fiber, 0, sizeof(Fiber));
 
   varInitObject(&fiber->_super, vm, OBJ_FIBER);
@@ -476,6 +473,12 @@ Class* newClass(PKVM* vm, const char* name, int length,
                 const char* docstring, int* cls_index) {
 
   Class* cls = ALLOCATE(vm, Class);
+
+  // If the garbage collection trigged bellow while allocating for
+  // [cls->name] or other properties, the calss is in the root (temp ref)
+  // and it's property [cls->name] is un initialized, which cause a crash.
+  memset(cls, 0, sizeof(Class));
+
   varInitObject(&cls->_super, vm, OBJ_CLASS);
 
   vmPushTempRef(vm, &cls->_super); // class.
@@ -483,12 +486,7 @@ Class* newClass(PKVM* vm, const char* name, int length,
   pkClosureBufferInit(&cls->methods);
 
   cls->class_of = PK_INSTANCE;
-  cls->owner = NULL;
   cls->super_class = super;
-  cls->docstring = NULL;
-  cls->ctor = NULL;
-  cls->new_fn = NULL;
-  cls->delete_fn = NULL;
 
   // Builtin types doesn't belongs to a module.
   if (module != NULL) {
@@ -510,36 +508,38 @@ Instance* newInstance(PKVM* vm, Class* cls) {
                                        "class with newInstance() function.");
 
   Instance* inst = ALLOCATE(vm, Instance);
+  memset(inst, 0, sizeof(Instance));
   varInitObject(&inst->_super, vm, OBJ_INST);
+
   vmPushTempRef(vm, &inst->_super); // inst.
 
   inst->cls = cls;
-  inst->attribs = newMap(vm);
-
   if (cls->new_fn != NULL) {
     inst->native = cls->new_fn(vm);
   } else {
     inst->native = NULL;
   }
 
+  inst->attribs = newMap(vm);
+
   vmPopTempRef(vm); // inst.
   return inst;
 }
 
 List* rangeAsList(PKVM* vm, Range* self) {
-  List* list;
+
   if (self->from < self->to) {
-    list = newList(vm, (uint32_t)(self->to - self->from));
+    List* list = newList(vm, (uint32_t)(self->to - self->from));
+    vmPushTempRef(vm, &list->_super); // list.
     for (double i = self->from; i < self->to; i++) {
       pkVarBufferWrite(&list->elements, vm, VAR_NUM(i));
     }
-    return list;
+    vmPopTempRef(vm); // list.
 
-  } else {
-    list = newList(vm, 0);
+    return list;
   }
 
-  return list;
+  return newList(vm, 0);
 }
 
 String* stringLower(PKVM* vm, String* self) {

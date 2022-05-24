@@ -69,6 +69,10 @@ struct PKVM {
   // The number of bytes that'll trigger the next GC.
   size_t next_gc;
 
+  // True if PKVM is running a garbage collection, and no new allocation is
+  // allowed in this phase.
+  bool collecting_garbage;
+
   // Minimum size the heap could get.
   size_t min_heap_size;
 

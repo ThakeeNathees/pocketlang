@@ -2734,9 +2734,12 @@ static void compileFunction(Compiler* compiler, FuncType fn_type) {
 
   if (compiler->parser.has_syntax_error) return;
 
+  // The function will register itself in the owner's constant pool and it's
+  // GC root so we don't need to push it to temp references.
   int fn_index;
   Function* func = newFunction(compiler->parser.vm, name, name_length,
                                compiler->module, false, NULL, &fn_index);
+
   func->is_method = (fn_type == FUNC_METHOD || fn_type == FUNC_CONSTRUCTOR);
 
   checkMaxConstantsReached(compiler, fn_index);

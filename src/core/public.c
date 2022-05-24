@@ -124,6 +124,7 @@ PKVM* pkNewVM(PkConfiguration* config) {
   vm->working_set = (Object**)vm->config.realloc_fn(
                        NULL, sizeof(Object*) * vm->working_set_capacity, NULL);
   vm->next_gc = INITIAL_GC_SIZE;
+  vm->collecting_garbage = false;
   vm->min_heap_size = MIN_HEAP_SIZE;
   vm->heap_fill_percent = HEAP_FILL_PERCENT;
 
@@ -179,7 +180,12 @@ void pkSetUserData(PKVM* vm, void* user_data) {
 PkHandle* pkNewModule(PKVM* vm, const char* name) {
   CHECK_ARG_NULL(name);
   Module* module = newModuleInternal(vm, name);
-  return vmNewHandle(vm, VAR_OBJ(module));
+
+  vmPushTempRef(vm, &module->_super); // module.
+  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(module));
+  vmPopTempRef(vm); // module.
+
+  return handle;
 }
 
 void pkRegisterModule(PKVM* vm, PkHandle* module) {
@@ -219,7 +225,10 @@ PkHandle* pkNewClass(PKVM* vm, const char* name,
   class_->new_fn = new_fn;
   class_->delete_fn = delete_fn;
 
-  return vmNewHandle(vm, VAR_OBJ(class_));
+  vmPushTempRef(vm, &class_->_super); // class_.
+  PkHandle* handle = vmNewHandle(vm, VAR_OBJ(class_));
+  vmPopTempRef(vm); // class_.
+  return handle;
 }
 
 void pkClassAddMethod(PKVM* vm, PkHandle* cls,
@@ -237,6 +246,8 @@ void pkClassAddMethod(PKVM* vm, PkHandle* cls,
 
   Function* fn = newFunction(vm, name, (int)strlen(name),
                              class_->owner, true, NULL, NULL);
+  vmPushTempRef(vm, &fn->_super); // fn.
+
   fn->arity = arity;
   fn->is_method = true;
   fn->native = fptr;
@@ -246,15 +257,19 @@ void pkClassAddMethod(PKVM* vm, PkHandle* cls,
   // won't be garbage collected (class handle has reference to the module).
 
   Closure* method = newClosure(vm, fn);
+  vmPopTempRef(vm); // fn.
+  vmPushTempRef(vm, &method->_super); // method.
+  {
+    if (strcmp(name, CTOR_NAME) == 0) {
+      class_->ctor = method;
 
-  if (strcmp(name, CTOR_NAME) == 0) {
-    class_->ctor = method;
-
-  } else {
-    vmPushTempRef(vm, &method->_super); // method.
-    pkClosureBufferWrite(&class_->methods, vm, method);
-    vmPopTempRef(vm); // method.
+    } else {
+      vmPushTempRef(vm, &method->_super); // method.
+      pkClosureBufferWrite(&class_->methods, vm, method);
+      vmPopTempRef(vm); // method.
+    }
   }
+  vmPopTempRef(vm); // method.
 }
 
 void pkReleaseHandle(PKVM* vm, PkHandle* handle) {
@@ -766,7 +781,11 @@ bool pkSetAttribute(PKVM* vm, int instance, const char* name, int value) {
   VALIDATE_SLOT_INDEX(instance);
   VALIDATE_SLOT_INDEX(value);
 
-  varSetAttrib(vm, SLOT(instance), newString(vm, name), SLOT(value));
+  String* sname = newString(vm, name);
+  vmPushTempRef(vm, &sname->_super); // sname.
+  varSetAttrib(vm, SLOT(instance), sname, SLOT(value));
+  vmPopTempRef(vm); // sname.
+
   return !VM_HAS_ERROR(vm);
 }
 
@@ -777,12 +796,19 @@ bool pkGetAttribute(PKVM* vm, int instance, const char* name,
   VALIDATE_SLOT_INDEX(instance);
   VALIDATE_SLOT_INDEX(index);
 
-  SET_SLOT(index, varGetAttrib(vm, SLOT(instance), newString(vm, name)));
+  String* sname = newString(vm, name);
+  vmPushTempRef(vm, &sname->_super); // sname.
+  SET_SLOT(index, varGetAttrib(vm, SLOT(instance), sname));
+  vmPopTempRef(vm); // sname.
+
   return !VM_HAS_ERROR(vm);
 }
 
 static Var _newInstance(PKVM* vm, Class* cls, int argc, Var* argv) {
   Var instance = preConstructSelf(vm, cls);
+  if (VM_HAS_ERROR(vm)) return VAR_NULL;
+
+  if (IS_OBJ(instance)) vmPushTempRef(vm, AS_OBJ(instance)); // instance.
 
   Closure* ctor = cls->ctor;
   while (ctor == NULL) {
@@ -792,6 +818,7 @@ static Var _newInstance(PKVM* vm, Class* cls, int argc, Var* argv) {
   }
 
   if (ctor != NULL) vmCallMethod(vm, instance, ctor, argc, argv, NULL);
+  if (IS_OBJ(instance)) vmPopTempRef(vm); // instance.
 
   return instance;
 }
@@ -861,8 +888,12 @@ bool pkCallMethod(PKVM* vm, int instance, const char* method,
   if (ret >= 0) VALIDATE_SLOT_INDEX(ret);
 
   bool is_method = false;
-  Var callable = getMethod(vm, SLOT(instance), newString(vm, method),
+  String* smethod = newString(vm, method);
+  vmPushTempRef(vm, &smethod->_super); // smethod.
+  Var callable = getMethod(vm, SLOT(instance), smethod,
                           &is_method);
+  vmPopTempRef(vm); // smethod.
+
   if (VM_HAS_ERROR(vm)) return false;
 
   // Calls a class == construct.
