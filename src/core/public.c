@@ -81,6 +81,7 @@ static char* stdinRead(PKVM* vm);
 static char* loadScript(PKVM* vm, const char* path);
 
 void* pkRealloc(PKVM* vm, void* ptr, size_t size) {
+
   ASSERT(vm->config.realloc_fn != NULL, "PKVM's allocator was NULL.");
 #if TRACE_MEMORY
   void* newptr = vm->config.realloc_fn(ptr, size, vm->config.user_data);

@@ -8,6 +8,8 @@
 #include "libs.h"
 #endif
 
+// Standard libraries.
+
 void registerModuleMath(PKVM* vm);
 void registerModuleTypes(PKVM* vm);
 void registerModuleTime(PKVM* vm);
@@ -15,6 +17,12 @@ void registerModuleIO(PKVM* vm);
 void registerModulePath(PKVM* vm);
 void registerModuleDummy(PKVM* vm);
 
+// Additional libraries.
+
+void registerModuleTerm(PKVM* vm);
+void cleanupModuleTerm(PKVM* vm);
+
+// Registers the modules.
 void registerLibs(PKVM* vm) {
   registerModuleMath(vm);
   registerModuleTypes(vm);
@@ -22,8 +30,11 @@ void registerLibs(PKVM* vm) {
   registerModuleIO(vm);
   registerModulePath(vm);
   registerModuleDummy(vm);
+
+  registerModuleTerm(vm);
 }
 
+// Cleanup the modules.
 void cleanupLibs(PKVM* vm) {
-
+  cleanupModuleTerm(vm);
 }

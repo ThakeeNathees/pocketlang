@@ -97,7 +97,7 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
   switch (obj->type) {
     case OBJ_STRING: {
       vm->bytes_allocated += sizeof(String);
-      vm->bytes_allocated += ((size_t)((String*)obj)->length + 1);
+      vm->bytes_allocated += ((size_t)((String*)obj)->capacity);
     } break;
 
     case OBJ_LIST: {
@@ -153,7 +153,7 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
         Fn* fn = func->fn;
         vm->bytes_allocated += sizeof(Fn);
 
-        vm->bytes_allocated += sizeof(uint8_t)* fn->opcodes.capacity;
+        vm->bytes_allocated += sizeof(uint8_t) * fn->opcodes.capacity;
         vm->bytes_allocated += sizeof(uint32_t) * fn->oplines.capacity;
       }
     } break;
@@ -410,11 +410,14 @@ Fiber* newFiber(PKVM* vm, Closure* closure) {
   ASSERT(closure == NULL || closure->fn->arity >= -1, OOPS);
 
   Fiber* fiber = ALLOCATE(vm, Fiber);
+  ASSERT(fiber != NULL, "Out of memory");
 
   // Not sure why this memset is needed here. If it doesn't then remove it.
   memset(fiber, 0, sizeof(Fiber));
 
   varInitObject(&fiber->_super, vm, OBJ_FIBER);
+
+  vmPushTempRef(vm, &fiber->_super); // fiber.
 
   fiber->state = FIBER_NEW;
   fiber->closure = closure;
@@ -431,6 +434,7 @@ Fiber* newFiber(PKVM* vm, Closure* closure) {
     if (stack_size == 0) stack_size++;
 
     fiber->stack = ALLOCATE_ARRAY(vm, Var, stack_size);
+    ASSERT(fiber->stack != NULL, "Out of memory");
     fiber->stack_size = stack_size;
     fiber->ret = fiber->stack;
     fiber->sp = fiber->stack + 1;
@@ -461,6 +465,8 @@ Fiber* newFiber(PKVM* vm, Closure* closure) {
   // Initialize the return value to null (doesn't really have to do that here
   // but if we're trying to debut it may crash when dumping the return value).
   *fiber->ret = VAR_NULL;
+
+  vmPopTempRef(vm); // fiber.
 
   return fiber;
 }

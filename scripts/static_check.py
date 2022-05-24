@@ -34,8 +34,7 @@ ALLOW_LONG_LINES = ('http://', 'https://', '<script ', '<link ', '<svg ')
 IGNORE_FILES = (
   "cli/modules/pknative.gen.c", ## FIXME: set gen path.
   "cli/argparse.h",             ## FIXME: collect all thirdparty files.
-  "src/libs/tp_dirent.h",
-  "src/libs/tp_cwalk.h",
+  "src/libs/ext_term.c",
 )
 
 ## A list of directory, contains C source files to perform static checks.

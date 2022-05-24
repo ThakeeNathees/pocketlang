@@ -62,12 +62,13 @@ def log(*msg):
   sys.stderr.write(message + '\n')
 
 def parse(path):
+  dir = dirname(path).replace('\\', '/') ## Windows.
   text = ""  
   with open(path, 'r') as fp:
     for line in fp.readlines():
       if "//<< AMALG_INLINE >>" in line:
-        path = join(dirname(path), _get_include_path(line))
-        path = path.replace('\\', '/') ## Aaah windows path.
+        path = join(dir, _get_include_path(line))
+        path = path.replace('\\', '/')
         text += parse(path) + '\n'
       else: text += line
       

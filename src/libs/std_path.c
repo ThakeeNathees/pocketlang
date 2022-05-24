@@ -14,7 +14,7 @@
 // Refactor the bellow macro includes.
 
 #define _CWALK_IMPL
-#include "tp_cwalk.h" //<< AMALG_INLINE >>
+#include "thirdparty/cwalk/cwalk.h" //<< AMALG_INLINE >>
 #undef _CWALK_IMPL
 
 #include <errno.h>
@@ -28,7 +28,7 @@
   #include <direct.h>
   #include <io.h>
 
-  #include "tp_dirent.h"  //<< AMALG_INLINE >>
+  #include "thirdparty/dirent/dirent.h"  //<< AMALG_INLINE >>
 
   // access() function flag defines for windows.
   // Reference :https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/access-waccess?view=msvc-170#remarks
@@ -338,6 +338,10 @@ DEF(_pathIsDir, "") {
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
   pkSetSlotBool(vm, 0, pathIsDir(path));
 }
+
+/*****************************************************************************/
+/* MODULE REGISTER                                                           */
+/*****************************************************************************/
 
 void registerModulePath(PKVM* vm) {
   PkHandle* path = pkNewModule(vm, "path");
