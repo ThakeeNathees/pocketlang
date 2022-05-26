@@ -402,6 +402,10 @@ DEF(_fileTell, "") {
   pkSetSlotNumber(vm, 0, (double) ftell(file->fp));
 }
 
+/*****************************************************************************/
+/* MODULE REGISTER                                                           */
+/*****************************************************************************/
+
 void registerModuleIO(PKVM* vm) {
 
   PkHandle* io = pkNewModule(vm, "io");

@@ -47,6 +47,10 @@ DEF(_timeSleep,
 #endif
 }
 
+/*****************************************************************************/
+/* MODULE REGISTER                                                           */
+/*****************************************************************************/
+
 void registerModuleTime(PKVM* vm) {
   PkHandle* time = pkNewModule(vm, "time");
 

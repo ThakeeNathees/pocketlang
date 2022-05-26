@@ -181,6 +181,20 @@ DEF(stdMathRound,
   pkSetSlotNumber(vm, 0, round(num));
 }
 
+DEF(stdMathRand,
+  "rand() -> num\n"
+  "Return a random runber in the range of 0..0x7fff.") {
+
+  // RAND_MAX is implementation dependent but is guaranteed to be at least
+  // 0x7fff on any standard library implementation.
+  // https://www.cplusplus.com/reference/cstdlib/RAND_MAX/
+  pkSetSlotNumber(vm, 0, rand() % 0x7fff);
+}
+
+/*****************************************************************************/
+/* MODULE REGISTER                                                           */
+/*****************************************************************************/
+
 void registerModuleMath(PKVM* vm) {
 
   PkHandle* math = pkNewModule(vm, "math");
@@ -208,6 +222,7 @@ void registerModuleMath(PKVM* vm) {
   pkModuleAddFunction(vm, math, "atan",   stdMathArcTangent, 1);
   pkModuleAddFunction(vm, math, "log10",  stdMathLog10,      1);
   pkModuleAddFunction(vm, math, "round",  stdMathRound,      1);
+  pkModuleAddFunction(vm, math, "rand",   stdMathRand,       0);
 
   pkRegisterModule(vm, math);
   pkReleaseHandle(vm, math);

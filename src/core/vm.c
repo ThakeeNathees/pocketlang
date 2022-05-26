@@ -27,10 +27,24 @@ void* vmRealloc(PKVM* vm, void* memory, size_t old_size, size_t new_size) {
   // Track the total allocated memory of the VM to trigger the GC.
   // if vmRealloc is called for freeing, the old_size would be 0 since
   // deallocated bytes are traced by garbage collector.
-  vm->bytes_allocated += new_size - old_size;
+  //
+  // If we're running a garbage collection, VM's byte allocated will be
+  // re-calculated at vmCollectGarbage() which is equal to the remaining
+  // objects after clening the garbage. And clearing a garbage will
+  // recursively invoke this function so we shouldn't modify it.
+  if (!vm->collecting_garbage) {
+    vm->bytes_allocated += new_size - old_size;
+  }
+
+  // If we're garbage collecting no new allocation is allowed.
+  ASSERT(!vm->collecting_garbage || new_size == 0,
+         "No new allocation is allowed while garbage collection is running.");
 
   if (new_size > 0 && vm->bytes_allocated > vm->next_gc) {
+    ASSERT(vm->collecting_garbage == false, OOPS);
+    vm->collecting_garbage = true;
     vmCollectGarbage(vm);
+    vm->collecting_garbage = false;
   }
 
 #if TRACE_MEMORY
@@ -99,10 +113,6 @@ Module* vmGetModule(PKVM* vm, String* key) {
 
 void vmCollectGarbage(PKVM* vm) {
 
-  // Reset VM's bytes_allocated value and count it again so that we don't
-  // required to know the size of each object that'll be freeing.
-  vm->bytes_allocated = 0;
-
   // Mark builtin functions.
   for (int i = 0; i < vm->builtins_count; i++) {
     markObject(vm, &vm->builtins_funcs[i]->_super);
@@ -139,10 +149,22 @@ void vmCollectGarbage(PKVM* vm) {
     markObject(vm, &vm->fiber->_super);
   }
 
+  // Reset VM's bytes_allocated value and count it again so that we don't
+  // required to know the size of each object that'll be freeing.
+  vm->bytes_allocated = 0;
+
   // Pop the marked objects from the working set and push all of it's
   // referenced objects. This will repeat till no more objects left in the
   // working set.
   popMarkedObjects(vm);
+
+  // Now [vm->bytes_allocated] is equal to the number of bytes allocated for
+  // the root objects which are marked above. Since we're garbage collecting
+  // freeObject() shouldn't modify vm->bytes_allocated. We ensure this by
+  // copying the value to [bytes_allocated] and check after freeing.
+#ifdef DEBUG
+  size_t bytes_allocated = vm->bytes_allocated;
+#endif
 
   // Now sweep all the un-marked objects in then link list and remove them
   // from the chain.
@@ -165,6 +187,10 @@ void vmCollectGarbage(PKVM* vm) {
       ptr = &(*ptr)->next;
     }
   }
+
+#ifdef DEBUG
+  ASSERT(bytes_allocated = vm->bytes_allocated, OOPS);
+#endif
 
   // Next GC heap size will be change depends on the byte we've left with now,
   // and the [heap_fill_percent].
@@ -937,7 +963,9 @@ L_vm_main_loop:
       ASSERT_INDEX(index, module->constants.count);
       ASSERT(IS_OBJ_TYPE(module->constants.data[index], OBJ_FUNC), OOPS);
       Function* fn = (Function*)AS_OBJ(module->constants.data[index]);
+
       Closure* closure = newClosure(vm, fn);
+      vmPushTempRef(vm, &closure->_super); // closure.
 
       // Capture the vaupes.
       for (int i = 0; i < fn->upvalue_count; i++) {
@@ -954,6 +982,8 @@ L_vm_main_loop:
       }
 
       PUSH(VAR_OBJ(closure));
+      vmPopTempRef(vm); // closure.
+
       DISPATCH();
     }
 

@@ -144,6 +144,10 @@ DEF(_dummyCallMethod,
   if (!pkCallMethod(vm, 1, method, 2, 3, 0)) return;
 }
 
+/*****************************************************************************/
+/* MODULE REGISTER                                                           */
+/*****************************************************************************/
+
 void registerModuleDummy(PKVM* vm) {
 
   PkHandle* dummy = pkNewModule(vm, "dummy");
