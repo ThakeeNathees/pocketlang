@@ -231,6 +231,8 @@ bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var* argv) {
 
   ASSERT(fiber->stack != NULL && fiber->sp == fiber->stack + 1, OOPS);
   ASSERT(fiber->ret == fiber->stack, OOPS);
+
+  vmEnsureStackSize(vm, fiber, (int) (fiber->sp - fiber->stack) + argc);
   ASSERT((fiber->stack + fiber->stack_size) - fiber->sp >= argc, OOPS);
 
   // Pass the function arguments.
@@ -454,14 +456,13 @@ Var vmImportModule(PKVM* vm, String* from, String* path) {
   return VAR_OBJ(module);
 }
 
-void vmEnsureStackSize(PKVM* vm, int size) {
+void vmEnsureStackSize(PKVM* vm, Fiber* fiber, int size) {
 
   if (size >= (MAX_STACK_SIZE / sizeof(Var))) {
     VM_SET_ERROR(vm, newString(vm, "Maximum stack limit reached."));
     return;
   }
 
-  Fiber* fiber = vm->fiber;
   if (fiber->stack_size >= size) return;
 
   int new_size = utilPowerOf2Ceil(size);
@@ -524,7 +525,7 @@ static inline void pushCallFrame(PKVM* vm, const Closure* closure) {
   // Grow the stack if needed.
   int current_stack_slots = (int)(vm->fiber->sp - vm->fiber->stack) + 1;
   int needed = closure->fn->fn->stack_size + current_stack_slots;
-  vmEnsureStackSize(vm, needed);
+  vmEnsureStackSize(vm, vm->fiber, needed);
 
   CallFrame* frame = vm->fiber->frames + vm->fiber->frame_count++;
   frame->rbp = vm->fiber->ret;
@@ -567,7 +568,7 @@ static inline void reuseCallFrame(PKVM* vm, const Closure* closure) {
   // Grow the stack if needed (least probably).
   int needed = (closure->fn->fn->stack_size +
                 (int)(vm->fiber->sp - vm->fiber->stack));
-  vmEnsureStackSize(vm, needed);
+  vmEnsureStackSize(vm, vm->fiber, needed);
 }
 
 // Capture the [local] into an upvalue and return it. If the upvalue already

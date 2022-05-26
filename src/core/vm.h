@@ -147,7 +147,7 @@ PkHandle* vmNewHandle(PKVM* vm, Var value);
 
 // If the stack size is less than [size], the stack will grow to keep more
 // values on it.
-void vmEnsureStackSize(PKVM* vm, int size);
+void vmEnsureStackSize(PKVM* vm, Fiber* fiber, int size);
 
 // Trigger garbage collection. This is an implementation of mark and sweep
 // garbage collection (https://en.wikipedia.org/wiki/Tracing_garbage_collection).

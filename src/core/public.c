@@ -177,6 +177,30 @@ void pkSetUserData(PKVM* vm, void* user_data) {
   vm->config.user_data = user_data;
 }
 
+void pkRegisterBuiltinFn(PKVM* vm, const char* name, pkNativeFn fn,
+                         int arity, const char* docstring) {
+  ASSERT(vm->builtins_count < BUILTIN_FN_CAPACITY,
+        "Maximum builtin function limit reached, To increase the limit set "
+        "BUILTIN_FN_CAPACITY and recompile.");
+
+  // TODO: if the functions are sorted, we can do a binary search, but builtin
+  // functions are not searched at runtime, just looked up using it's index
+  // O(1) However it'll decrease the compile time.
+  for (int i = 0; i < vm->builtins_count; i++) {
+    Closure* bfn = vm->builtins_funcs[i];
+    ASSERT(strcmp(bfn->fn->name, name) != 0,
+           "Overriding existing function not supported yet.");
+  }
+
+  Function* fptr = newFunction(vm, name, (int) strlen(name), NULL,
+                               true, docstring, NULL);
+  vmPushTempRef(vm, &fptr->_super); // fptr.
+  fptr->native = fn;
+  fptr->arity = arity;
+  vm->builtins_funcs[vm->builtins_count++] = newClosure(vm, fptr);
+  vmPopTempRef(vm); // fptr.
+}
+
 PkHandle* pkNewModule(PKVM* vm, const char* name) {
   CHECK_ARG_NULL(name);
   Module* module = newModuleInternal(vm, name);
@@ -260,14 +284,8 @@ void pkClassAddMethod(PKVM* vm, PkHandle* cls,
   vmPopTempRef(vm); // fn.
   vmPushTempRef(vm, &method->_super); // method.
   {
-    if (strcmp(name, CTOR_NAME) == 0) {
-      class_->ctor = method;
-
-    } else {
-      vmPushTempRef(vm, &method->_super); // method.
-      pkClosureBufferWrite(&class_->methods, vm, method);
-      vmPopTempRef(vm); // method.
-    }
+    pkClosureBufferWrite(&class_->methods, vm, method);
+    if (!strcmp(name, CTOR_NAME)) class_->ctor = method;
   }
   vmPopTempRef(vm); // method.
 }
@@ -670,7 +688,7 @@ bool pkIsSlotInstanceOf(PKVM* vm, int inst, int cls, bool* val) {
 void pkReserveSlots(PKVM* vm, int count) {
   if (vm->fiber == NULL) vm->fiber = newFiber(vm, NULL);
   int needed = (int)(vm->fiber->ret - vm->fiber->stack) + count;
-  vmEnsureStackSize(vm, needed);
+  vmEnsureStackSize(vm, vm->fiber, needed);
 }
 
 int pkGetSlotsCount(PKVM* vm) {
