@@ -212,6 +212,12 @@ PK_PUBLIC void pkSetUserData(PKVM* vm, void* user_data);
 // Returns the associated user data.
 PK_PUBLIC void* pkGetUserData(const PKVM* vm);
 
+// Register a new builtin function with the given [name]. [docstring] could be
+// NULL or will always valid pointer since PKVM doesn't allocate a string for
+// docstrings.
+PK_PUBLIC void pkRegisterBuiltinFn(PKVM* vm, const char* name, pkNativeFn fn,
+                                   int arity, const char* docstring);
+
 // Invoke pocketlang's allocator directly.  This function should be called 
 // when the host application want to send strings to the PKVM that are claimed
 // by the VM once the caller returned it. For other uses you **should** call

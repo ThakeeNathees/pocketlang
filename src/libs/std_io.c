@@ -402,11 +402,31 @@ DEF(_fileTell, "") {
   pkSetSlotNumber(vm, 0, (double) ftell(file->fp));
 }
 
+// open(path, mode='r') is equal to:
+//
+// from io import File
+// return File().open(path, mode)
+DEF(_open, NULL /* == _fileOpen */) {
+
+  // slots[1] = path
+  // slots[2] = mode
+  int argc = pkGetArgc(vm);
+  if (!pkCheckArgcRange(vm, argc, 1, 2)) return;
+  if (argc == 1) pkSetSlotString(vm, 2, "r");
+
+  if (!pkImportModule(vm, "io", 0)) return;           // slots[0] = io
+  if (!pkGetAttribute(vm, 0, "File", 0)) return;      // slots[0] = File
+  if (!pkNewInstance(vm, 0, 0, 0, 0)) return;         // slots[0] = File()
+  if (!pkCallMethod(vm, 0, "open", 2, 1, -1)) return; // slots[0] = opened file
+}
+
 /*****************************************************************************/
 /* MODULE REGISTER                                                           */
 /*****************************************************************************/
 
 void registerModuleIO(PKVM* vm) {
+
+  pkRegisterBuiltinFn(vm, "open", _open, -1, DOCSTRING(_fileOpen));
 
   PkHandle* io = pkNewModule(vm, "io");
 

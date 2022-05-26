@@ -1506,7 +1506,7 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
           for (uint32_t i = 0; i < str->length; i++) {
             char c = str->data[i];
             switch (c) {
-              case '"': pkByteBufferAddString(buff, vm, "\\\"", 2); break;
+              case '"':  pkByteBufferAddString(buff, vm, "\\\"", 2); break;
               case '\\': pkByteBufferAddString(buff, vm, "\\\\", 2); break;
               case '\n': pkByteBufferAddString(buff, vm, "\\n", 2); break;
               case '\r': pkByteBufferAddString(buff, vm, "\\r", 2); break;
