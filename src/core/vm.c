@@ -321,8 +321,11 @@ PkResult vmCallMethod(PKVM* vm, Var self, Closure* fn,
   fiber->self = self;
   vmPushTempRef(vm, &fiber->_super); // fiber.
   bool success = vmPrepareFiber(vm, fiber, argc, argv);
-  vmPopTempRef(vm); // fiber.
-  if (!success) return PK_RESULT_RUNTIME_ERROR;
+
+  if (!success) {
+    vmPopTempRef(vm); // fiber.
+    return PK_RESULT_RUNTIME_ERROR;
+  }
 
   PkResult result;
 
@@ -345,7 +348,10 @@ PkResult vmCallMethod(PKVM* vm, Var self, Closure* fn,
       result = vmRunFiber(vm, fiber);
     }
   }
+
   if (last != NULL) vmPopTempRef(vm); // last.
+  vmPopTempRef(vm); // fiber.
+
   vm->fiber = last;
 
   if (ret != NULL) *ret = *fiber->ret;
@@ -515,7 +521,11 @@ static inline void pushCallFrame(PKVM* vm, const Closure* closure) {
 
   // Grow the stack frame if needed.
   if (vm->fiber->frame_count + 1 > vm->fiber->frame_capacity) {
+
+    // Native functions doesn't allocate a frame initially.
     int new_capacity = vm->fiber->frame_capacity << 1;
+    if (new_capacity == 0) new_capacity = 1;
+
     vm->fiber->frames = (CallFrame*)vmRealloc(vm, vm->fiber->frames,
                            sizeof(CallFrame) * vm->fiber->frame_capacity,
                            sizeof(CallFrame) * new_capacity);
@@ -691,11 +701,11 @@ PkResult vmRunFiber(PKVM* vm, Fiber* fiber_) {
   register Fiber* fiber = fiber_;
 
 #if DEBUG
-  #define PUSH(value)                                            \
-  do {                                                           \
-    ASSERT(fiber->sp < (fiber->stack + (fiber->stack_size - 1)), \
-           OOPS);                                                \
-    (*fiber->sp++ = (value));                                    \
+  #define PUSH(value)                                                       \
+  do {                                                                      \
+    ASSERT(fiber->sp < (fiber->stack + ((intptr_t) fiber->stack_size - 1)), \
+           OOPS);                                                           \
+    (*fiber->sp++ = (value));                                               \
   } while (false)
 #else
   #define PUSH(value)  (*fiber->sp++ = (value))

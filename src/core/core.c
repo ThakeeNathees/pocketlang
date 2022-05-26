@@ -1629,7 +1629,7 @@ bool varContains(PKVM* vm, Var elem, Var container) {
 bool varIsType(PKVM* vm, Var inst, Var type) {
   if (!IS_OBJ_TYPE(type, OBJ_CLASS)) {
     VM_SET_ERROR(vm, newString(vm, "Right operand must be a class."));
-    return VAR_NULL;
+    return false;
   }
 
   Class* cls = (Class*)AS_OBJ(type);

@@ -769,7 +769,12 @@ static void eatString(Compiler* compiler, bool single_quote) {
 
         } break;
 
+        case '\r':
+          if (matchChar(parser, '\n')) break;
+          // Else fallthrough.
+
         default:
+
           semanticError(compiler, makeErrToken(parser),
                         "Invalid escape character.");
           break;

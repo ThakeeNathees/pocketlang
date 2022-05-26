@@ -860,6 +860,7 @@ bool pkNewInstance(PKVM* vm, int cls, int index, int argc, int argv) {
 
 bool pkCallFunction(PKVM* vm, int fn, int argc, int argv, int ret) {
   CHECK_FIBER_EXISTS(vm);
+  ASSERT(IS_OBJ_TYPE(SLOT(fn), OBJ_CLOSURE), "Slot value wasn't a function");
   if (argc != 0) {
     VALIDATE_SLOT_INDEX(argv);
     VALIDATE_SLOT_INDEX(argv + argc - 1);
@@ -868,7 +869,7 @@ bool pkCallFunction(PKVM* vm, int fn, int argc, int argv, int ret) {
 
   // Calls a class == construct.
   if (IS_OBJ_TYPE(SLOT(fn), OBJ_CLASS)) {
-    Var inst = _newInstance(vm, (Class*) AS_OBJ(fn), argc,
+    Var inst = _newInstance(vm, (Class*) AS_OBJ(SLOT(fn)), argc,
                             vm->fiber->ret + argv);
     if (ret >= 0) SET_SLOT(ret, inst);
     return !VM_HAS_ERROR(vm);
