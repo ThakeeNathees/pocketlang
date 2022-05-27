@@ -1,0 +1,5 @@
+import path
+
+THIS_PATH = path.dirname(__file__)
+
+assert('path.pk' in path.listdir(THIS_PATH))

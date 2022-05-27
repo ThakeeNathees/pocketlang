@@ -339,6 +339,37 @@ DEF(_pathIsDir, "") {
   pkSetSlotBool(vm, 0, pathIsDir(path));
 }
 
+DEF(_pathListDir, "") {
+
+  int argc = pkGetArgc(vm);
+  if (!pkCheckArgcRange(vm, argc, 0, 1)) return;
+
+  const char* path = ".";
+  if (argc == 1) if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
+
+  if (!pathIsExists(path)) {
+    pkSetRuntimeErrorFmt(vm, "Path '%s' does not exists.", path);
+    return;
+  }
+
+  // We create a new list at slot[0] and use slot[1] as our working memory
+  // overriding our parameter.
+  pkNewList(vm, 0);
+
+  DIR* dirstream = opendir(path);
+  if (dirstream) {
+    struct dirent* dir;
+    while ((dir = readdir(dirstream)) != NULL) {
+      if (!strcmp(dir->d_name, ".")) continue;
+      if (!strcmp(dir->d_name, "..")) continue;
+
+      pkSetSlotString(vm, 1, dir->d_name);
+      if (!pkListInsert(vm, 0, -1, 1)) return;
+    }
+    closedir(dirstream);
+  }
+}
+
 /*****************************************************************************/
 /* MODULE REGISTER                                                           */
 /*****************************************************************************/
@@ -358,6 +389,7 @@ void registerModulePath(PKVM* vm) {
   pkModuleAddFunction(vm, path, "exists",    _pathExists,       1);
   pkModuleAddFunction(vm, path, "isfile",    _pathIsFile,       1);
   pkModuleAddFunction(vm, path, "isdir",     _pathIsDir,        1);
+  pkModuleAddFunction(vm, path, "listdir",   _pathListDir,     -1);
 
   pkRegisterModule(vm, path);
   pkReleaseHandle(vm, path);

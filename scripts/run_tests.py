@@ -33,7 +33,7 @@ TEST_SUITE = {
   "Modules Test" : (
     "modules/dummy.pk",
     "modules/math.pk",
-    "modules/io.File.pk",
+    "modules/io.pk",
   ),
 
   "Random Scripts" : (

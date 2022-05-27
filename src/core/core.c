@@ -273,6 +273,87 @@ DEF(coreHelp,
   }
 }
 
+// Add all the methods recursively to the lits used for generating a list of
+// attributes for the 'dir()' function.
+static void _collectMethods(PKVM* vm, List* list, Class* cls) {
+  if (cls == NULL) return;
+
+  for (uint32_t i = 0; i < cls->methods.count; i++) {
+    listAppend(vm, list,
+      VAR_OBJ(newString(vm, cls->methods.data[i]->fn->name)));
+  }
+  _collectMethods(vm, list, cls->super_class);
+}
+
+DEF(coreDir,
+  "dir(v:var) -> List[String]\n"
+  "It'll return all the elements of the variable [v]. If [v] is a module "
+  "it'll return the names of globals, functions, and classes. If it's an "
+  "instance it'll return all the attributes and methods.") {
+
+  Var v = ARG(1);
+  switch (getVarType(v)) {
+
+    case PK_NULL:
+    case PK_BOOL:
+    case PK_NUMBER:
+    case PK_STRING:
+    case PK_LIST:
+    case PK_MAP:
+    case PK_RANGE:
+    case PK_CLOSURE:
+    case PK_FIBER: {
+      List* list = newList(vm, 8);
+      vmPushTempRef(vm, &list->_super); // list.
+      _collectMethods(vm, list, getClass(vm, v));
+      vmPopTempRef(vm); // list.
+      RET(VAR_OBJ(list));
+    }
+
+    case PK_MODULE: {
+      Module* m = (Module*) AS_OBJ(v);
+      List* list = newList(vm, 8);
+      vmPushTempRef(vm, &list->_super); // list.
+      for (uint32_t i = 0; i < m->globals.count; i++) {
+        Var name = m->constants.data[m->global_names.data[i]];
+        ASSERT(IS_OBJ_TYPE(name, OBJ_STRING), OOPS);
+        listAppend(vm, list, name);
+      }
+      vmPopTempRef(vm); // list.
+      RET(VAR_OBJ(list));
+    } break;
+
+    case PK_CLASS: {
+      Class* cls = (Class*) AS_OBJ(v);
+      List* list = newList(vm, 8);
+      vmPushTempRef(vm, &list->_super); // list.
+      _collectMethods(vm, list, cls);
+      // TODO: if we add static variables to classes it should be
+      // added here as well.
+      vmPopTempRef(vm); // list.
+      RET(VAR_OBJ(list));
+    } break;
+
+    case PK_INSTANCE: {
+      Instance* inst = (Instance*) AS_OBJ(v);
+      List* list = newList(vm, 8);
+      vmPushTempRef(vm, &list->_super); // list.
+      for (uint32_t i = 0; i < inst->attribs->capacity; i++) {
+        Var key = (inst->attribs->entries + i)->key;
+        if (!IS_UNDEF(key)) {
+          ASSERT(IS_OBJ_TYPE(key, OBJ_STRING), OOPS);
+          listAppend(vm, list, key);
+        }
+      }
+      _collectMethods(vm, list, inst->cls);
+      vmPopTempRef(vm); // list.
+      RET(VAR_OBJ(list));
+    } break;
+  }
+
+  UNREACHABLE();
+}
+
 DEF(coreAssert,
   "assert(condition:bool [, msg:string]) -> void\n"
   "If the condition is false it'll terminate the current fiber with the "
@@ -539,6 +620,7 @@ static void initializeBuiltinFunctions(PKVM* vm) {
                       (int)strlen(name), argc, fn, DOCSTRING(fn));
   // General functions.
   INITIALIZE_BUILTIN_FN("help",      coreHelp,    -1);
+  INITIALIZE_BUILTIN_FN("dir",       coreDir,      1);
   INITIALIZE_BUILTIN_FN("assert",    coreAssert,  -1);
   INITIALIZE_BUILTIN_FN("bin",       coreBin,      1);
   INITIALIZE_BUILTIN_FN("hex",       coreHex,      1);
