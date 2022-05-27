@@ -17,6 +17,9 @@ void registerModuleIO(PKVM* vm);
 void registerModulePath(PKVM* vm);
 void registerModuleDummy(PKVM* vm);
 
+void registerModuleTerm(PKVM* vm);
+void cleanupModuleTerm(PKVM* vm);
+
 // Registers the modules.
 void registerLibs(PKVM* vm) {
   registerModuleMath(vm);
@@ -25,8 +28,11 @@ void registerLibs(PKVM* vm) {
   registerModuleIO(vm);
   registerModulePath(vm);
   registerModuleDummy(vm);
+
+  registerModuleTerm(vm);
 }
 
 // Cleanup the modules.
 void cleanupLibs(PKVM* vm) {
+  cleanupModuleTerm(vm);
 }

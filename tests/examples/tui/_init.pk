@@ -1,0 +1,321 @@
+
+import term, io
+from time import clock, sleep
+from types import ByteBuffer
+
+def write(msg)
+  io.write(io.stdout, msg)
+end
+
+## The configuration that should be used to create tui context
+## and run.
+class Config
+  def _init()
+    self.title = null
+    self.fps = 60
+    self.hide_cursor = false
+    self.capture_events = false
+    self.new_buffer = false
+
+    self.init_fn = null
+    self.event_fn = null
+    self.frame_fn = null
+    self.cleanup_fn = null    
+  end
+end
+
+## Interlan context contains draw buffer and other data.
+class _Context
+  def _init()
+    self.buff = ByteBuffer()
+    self.clear()
+  end
+  
+  ## Called to reset all the internal for reusing the context.
+  def clear()
+    self.buff.clear()
+    self.done = false ## If true the main loop ends.
+  end
+end
+
+## Internal global context.
+_ctx = _Context()
+
+## -------------------------------------------------------------------------
+## FUNCTIONS
+## -------------------------------------------------------------------------
+
+## Flush all the buffered bytes in the context's buffer.
+def flush()
+  write(_ctx.buff.string())
+  io.flush()
+  _ctx.buff.clear()
+end
+
+## Stops the main loop and return from run().
+def stop()
+  _ctx.done = true
+end
+
+def set_title(title)
+  write("\x1b]0;$title\x07")
+end
+
+def hide_cursor()
+  write("\x1b[?25l")
+end
+
+def show_cursor()
+  write("\x1b[?25h")
+end
+
+## It'll write escape sequence to move the cursor but not actually move.
+## for this to make effect, one should flush the buffer.
+def set_position(x, y)
+  _ctx.buff.write("\x1b[${y + 1};${x + 1}H")
+end
+
+def get_size()
+  return term.getsize()
+end
+
+## 
+## Hex    ASCII  DEC-Line-Drawing
+## ------------------------------
+##  0x6a    j        ┘
+##  0x6b    k        ┐
+##  0x6c    l        ┌
+##  0x6d    m        └
+##  0x6e    n        ┼
+##  0x71    q        ─
+##  0x74    t        ├
+##  0x75    u        ┤
+##  0x76    v        ┴
+##  0x77    w        ┬
+##  0x78    x        │
+##
+def box_char(c)
+  _ctx.buff.write("\x1b(0$c\x1b(B")
+end
+
+## FIXME: Implement str * int multiplicatin to support
+##
+##     "\x1b(0${ c * n }\x1b(B"
+##
+## and define box_char_len() or refactor the above to take argument n.
+
+## Write a string to the context buffer.
+def string(s)
+  _ctx.buff.write(str(s))
+end
+
+## Clear the screen and move cursor to (0, 0).
+def clear()
+  _ctx.buff.write("\x1b[H\x1b[J")
+end
+
+## Clear everythin from cursor to EOL.
+def clear_eol()
+  _ctx.buff.write("\x1b[K")
+end
+
+## Clear everythin from cursor to EOF.
+def clear_eof()
+  _ctx.buff.write("\x1b[J")
+end
+
+## Reset all the stylings.
+def reset()
+  _ctx.buff.write("\x1b[0m")
+end
+
+def _is_valid_color(r, g, b)
+  return r is Number and g is Number and b is Number
+  return r.isbyte() and g.isbyte() and b.isbyte()
+end
+
+## Set the forground color.
+def start_color(r, g, b)
+  assert(_is_valid_color(r, g, b))
+  _ctx.buff.write("\x1b[38;2;$r;$g;${b}m")
+end
+
+## End the forground color.
+def end_color()
+  _ctx.buff.write("\x1b[39m")
+end
+
+## Start the background color.
+def start_bg(r, g, b)
+  assert(_is_valid_color(r, g, b))
+  _ctx.buff.write("\x1b[48;2;$r;$g;${b}m")
+end
+
+## End the background color.
+def end_bg()
+  _ctx.buff.write("\x1b[49m")
+end
+
+def start_bold()
+  _ctx.buff.write("\x1b[1m")
+end
+
+def end_bold()
+  _ctx.buff.write("\x1b[22m")
+end
+
+def start_dim()
+  _ctx.buff.write("\x1b[2m")
+end
+
+def end_dim()
+  _ctx.buff.write("\x1b[22m")
+end
+
+def start_italic()
+  _ctx.buff.write("\x1b[3m")
+end
+
+def end_italic()
+  _ctx.buff.write("\x1b[23m")
+end
+
+def start_underline()
+  _ctx.buff.write("\x1b[4m")
+end
+
+def end_underline()
+  _ctx.buff.write("\x1b[24m")
+end
+
+def start_hidden()
+  _ctx.buff.write("\x1b[8m")
+end
+
+def end_hidden()
+  _ctx.buff.write("\x1b[28m")
+end
+
+def start_strikethrough()
+  _ctx.buff.write("\x1b[9m")
+end
+
+def end_strikethrough()
+  _ctx.buff.write("\x1b[29m")
+end
+
+def start_color_black()
+  _ctx.buff.write("\x1b[30m")
+end
+
+def end_color_black()
+  _ctx.buff.write("\x1b[40m")
+end
+
+def start_color_red()
+  _ctx.buff.write("\x1b[31m")
+end
+
+def end_color_red()
+  _ctx.buff.write("\x1b[41m")
+end
+
+def start_color_green()
+  _ctx.buff.write("\x1b[32m")
+end
+
+def end_color_green()
+  _ctx.buff.write("\x1b[42m")
+end
+
+def start_color_yellow()
+  _ctx.buff.write("\x1b[33m")
+end
+
+def end_color_yellow()
+  _ctx.buff.write("\x1b[43m")
+end
+
+def start_color_blue()
+  _ctx.buff.write("\x1b[34m")
+end
+
+def end_color_blue()
+  _ctx.buff.write("\x1b[44m")
+end
+
+def start_color_magenta()
+  _ctx.buff.write("\x1b[35m")
+end
+
+def end_color_magenta()
+  _ctx.buff.write("\x1b[45m")
+end
+
+def start_color_cyan()
+  _ctx.buff.write("\x1b[36m")
+end
+
+def end_color_cyan()
+  _ctx.buff.write("\x1b[46m")
+end
+
+def start_color_white()
+  _ctx.buff.write("\x1b[37m")
+end
+
+def end_color_white()
+  _ctx.buff.write("\x1b[47m")
+end
+
+def start_color_default()
+  _ctx.buff.write("\x1b[39m")
+end
+
+def end_color_default()
+  _ctx.buff.write("\x1b[49m")
+end
+
+
+## -------------------------------------------------------------------------
+## TUI MAIN LOOP
+## -------------------------------------------------------------------------
+
+def run(config)
+  term.init(config.capture_events)
+  
+  if config.new_buffer then term.new_screen_buffer() end
+  if config.hide_cursor then hide_cursor() end
+  if config.init_fn then config.init_fn() end
+  
+  event = term.Event()
+  
+  ## The main loop.
+  while not _ctx.done
+    start = clock()
+    
+    ## Dispatch events.
+    while term.read_event(event)
+      if config.event_fn then config.event_fn(event) end
+      if _ctx.done then break end
+    end
+    
+    ## Run frame function
+    if config.frame_fn then config.frame_fn() end
+    
+    ## Sleep to sync FPS.
+    et = clock() - start ## Elapsed time.
+    ft = 1 / config.fps  ## Frame time.
+    
+    ## TODO: set title to print fps if said in config.
+    if ft > et then sleep((ft - et) * 1000) end
+  end
+  
+  ## Cleanup.
+  if config.cleanup_fn then config.cleanup_fn() end
+  if config.hide_cursor then show_cursor() end
+  if config.new_buffer then term.restore_screen_buffer() end
+  term.cleanup()
+  _ctx.clear()
+  
+end

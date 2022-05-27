@@ -1454,6 +1454,10 @@ Var varMultiply(PKVM* vm, Var v1, Var v2, bool inplace) {
       if (left->length == 0) return VAR_OBJ(left);
       if (right == 0) return VAR_OBJ(newString(vm, ""));
 
+      // In python multiplying with negative number will result an empty
+      // string so we're following the same rule here.
+      if (right < 0) return VAR_OBJ(newString(vm, ""));
+
       String* str = newStringLength(vm, "", left->length * (uint32_t) right);
       char* buff = str->data;
       for (int i = 0; i < (int) right; i++) {
