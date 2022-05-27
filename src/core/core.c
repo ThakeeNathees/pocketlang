@@ -737,9 +737,9 @@ DEF(_objTypeName,
 }
 
 DEF(_objRepr,
-  "Object.repr() -> String\n"
+  "Object._repr() -> String\n"
   "Returns the repr string of the object.") {
-  RET(VAR_OBJ(varToString(vm, SELF, true)));
+  RET(VAR_OBJ(toRepr(vm, SELF)));
 }
 
 DEF(_numberTimes,
@@ -1145,7 +1145,7 @@ static void initializePrimitiveClasses(PKVM* vm) {
 
   // TODO: write docs.
   ADD_METHOD(PK_OBJECT, "typename", _objTypeName,    0);
-  ADD_METHOD(PK_OBJECT, "repr",     _objRepr,        0);
+  ADD_METHOD(PK_OBJECT, "_repr",    _objRepr,        0);
 
   ADD_METHOD(PK_NUMBER, "times",  _numberTimes,     1);
   ADD_METHOD(PK_NUMBER, "isint",  _numberIsint,     0);

@@ -71,5 +71,11 @@ end
 assert(val == 'bar')
 
 
+def test_in_local()
+  if x = fn y = false; return not y end ()
+    assert(x == true)
+  end
+end
+
 # If we got here, that means all test were passed.
 print('All TESTS PASSED')

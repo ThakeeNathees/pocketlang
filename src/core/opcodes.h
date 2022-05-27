@@ -33,6 +33,9 @@ OPCODE(PUSH_FALSE, 0, 1)
 // Swap the top 2 stack values.
 OPCODE(SWAP, 0, 0)
 
+// Duplicate the stack top value.
+OPCODE(DUP, 0, 1)
+
 // Push a new list to construct from literal.
 // param: 2 bytes list size (default is 0).
 OPCODE(PUSH_LIST, 2, 1)
