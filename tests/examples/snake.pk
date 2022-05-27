@@ -1,0 +1,124 @@
+
+import tui, term, math
+from types import Vector
+
+## This is a pocketlang implementation of:
+## https://www.youtube.com/watch?v=xGmXxpIj6vs&t=279s&ab_channel=ChrisDeLeonofHomeTeamGameDev
+
+## x, y velocity of snake.
+vx = 0; vy = 0
+
+## position (at the middle).
+px = 0; py = 0
+
+## tile size.
+tx = 0; ty = 0
+
+## apple position.
+ax = 15; ay = 15
+
+## tail, trail
+trail = []
+tail = 15
+
+## score
+score = 0
+
+def init()
+  size = tui.get_size()
+  tx = size.x
+  ty = size.y
+  
+  px = tx / 2; py = ty / 2
+end
+
+def frame()
+  px += vx
+  py += vy
+  if px < 0 then px = tx - 1 end
+  if px > tx - 1 then px = 0 end
+  if py < 0 then py = ty - 1 end
+  if py > ty - 1 then py = 0 end
+  
+  tui.clear()
+  tui.string('press Q to quit | score = $score')
+  
+  for i in trail
+    tui.set_position(i.x, i.y)
+    tui.start_bg(0, 0xff, 0)
+    tui.string(' ')
+    tui.end_bg()
+    
+    if i.x == px and i.y == py
+      tail = 5
+    end
+  end
+  
+  tui.set_position(ax, ay)
+  tui.start_bg(0xff, 0, 0)
+  tui.string(' ')
+  tui.end_bg()
+  
+  trail.append(Vector(px, py))
+  while trail.length > tail
+    trail.pop(0)
+  end
+  
+  if px == ax and py == ay
+    tail += 1
+    score += 1
+    ax = math.rand() % tx
+    ay = math.rand() % ty
+  end
+  tui.flush()
+end
+
+def handle(event)
+  if event.type == term.EVENT_KEY_DOWN
+    if event.keycode == term.KEY_Q
+      tui.stop()
+    end
+    
+    ## The "Switch Statement" alternative.
+    {
+      term.KEY_LEFT: fn
+        vx = -1; vy = 0
+      end,
+      
+      term.KEY_UP: fn
+        vx = 0; vy = -1
+      end,
+      
+      term.KEY_DOWN: fn
+        vx = 0; vy = 1
+      end,
+      
+      term.KEY_RIGHT: fn
+        vx = 1; vy = 0
+      end,
+      
+      term.KEY_T: fn
+        math.sin(12)
+      end,
+
+    }.get(event.keycode, fn end)()
+  
+  end
+end
+
+
+def main()
+  config = tui.Config()
+  config.capture_events = true
+  config.hide_cursor = true
+  config.new_buffer = true
+  config.fps = 20
+  config.init_fn = init
+  config.event_fn = handle
+  config.frame_fn = frame
+  tui.run(config)
+end
+
+
+main()
+
