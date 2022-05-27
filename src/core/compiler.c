@@ -479,6 +479,18 @@ struct Compiler {
   // "r-value".
   bool l_value;
 
+  // We can do a new assignment inside an expression however we shouldn't
+  // define a new one, since in pocketlang both assignment and definition
+  // are syntactically the same, we use [can_define] "context" to prevent
+  // such assignments.
+  bool can_define;
+
+  // This value will set to true for parsing a temproary expression
+  // (ie. if <expr> ...) and the value of the expression will be popped out of
+  // the stack onece we're done, if it's a defenition, that value should be
+  // duplicated on the stack to prevent it.
+  bool expr_temp;
+
   // This value will be true after parsing a call expression, for every other
   // Expressions it'll be false. This is **ONLY** to be used when compiling a
   // return statement to check if the last parsed expression is a call to
@@ -551,6 +563,8 @@ static void parserInit(Parser* parser, PKVM* vm, Compiler* compiler,
 static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
                          Module* module, const CompileOptions* options) {
 
+  memset(compiler, 0, sizeof(Compiler));
+
   compiler->next_compiler = NULL;
 
   compiler->module = module;
@@ -561,6 +575,7 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
   compiler->loop = NULL;
   compiler->func = NULL;
 
+  compiler->can_define = true;
   compiler->new_local = false;
   compiler->is_last_call = false;
 
@@ -1880,7 +1895,14 @@ static void exprInterpolation(Compiler* compiler) {
 }
 
 static void exprFunction(Compiler* compiler) {
+  bool can_define = compiler->can_define;
+  bool expr_temp = compiler->expr_temp;
+
+  compiler->can_define = true;
+  compiler->expr_temp = false;
   compileFunction(compiler, FUNC_LITERAL);
+  compiler->can_define = can_define;
+  compiler->expr_temp = expr_temp;
 }
 
 static void exprName(Compiler* compiler) {
@@ -1926,10 +1948,18 @@ static void exprName(Compiler* compiler) {
         if (name_type == NAME_LOCAL_VAR) {
           new_local = true;
         }
+
+        if (!compiler->can_define) {
+          semanticError(compiler, tkname,
+            "Variable definition isn't allowed here.");
+        }
       }
 
       // Compile the assigned value.
+      bool can_define = compiler->can_define;
+      compiler->can_define = false;
       compileExpression(compiler);
+      compiler->can_define = can_define;
 
     } else { // name += / -= / *= ... = (expr);
 
@@ -1963,6 +1993,11 @@ static void exprName(Compiler* compiler) {
       // If the compiler has errors, we cannot and don't have to assert.
       ASSERT(compiler->parser.has_errors ||
              (compiler->func->stack_size - 1) == index, OOPS);
+
+      if (compiler->expr_temp) {
+        emitOpcode(compiler, OP_DUP);
+      }
+
     } else {
       // The assigned value or the result of the operator will be at the top of
       // the stack by now. Store it.
@@ -2281,8 +2316,17 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
   // reset once it done.
   bool l_value = compiler->l_value;
 
+  // Inside an expression no new difinition is allowed. We make a "backup"
+  // here to prevent such and reset it once we're done.
+  bool can_define = compiler->can_define;
+  if (prefix != exprName) compiler->can_define = false;
+
   compiler->l_value = precedence <= PREC_LOWEST;
   prefix(compiler);
+
+  // Prefix expression can be either allow or not allow a definition however
+  // an infix expression can never be a definition.
+  compiler->can_define = false;
 
   // The above expression cannot be a call '(', since call is an infix
   // operator. But could be true (ex: x = f()). we set is_last_call to false
@@ -2304,6 +2348,7 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
   }
 
   compiler->l_value = l_value;
+  compiler->can_define = can_define;
 }
 
 /*****************************************************************************/
@@ -3041,7 +3086,12 @@ static void compileExpression(Compiler* compiler) {
 static void compileIfStatement(Compiler* compiler, bool elif) {
 
   skipNewLines(compiler);
+
+  bool expr_temp = compiler->expr_temp;
+  compiler->expr_temp = true;
   compileExpression(compiler); //< Condition.
+  compiler->expr_temp = expr_temp;
+
   emitOpcode(compiler, OP_JUMP_IF_NOT);
   int ifpatch = emitShort(compiler, 0xffff); //< Will be patched.
 
@@ -3090,7 +3140,11 @@ static void compileWhileStatement(Compiler* compiler) {
   loop.depth = compiler->scope_depth;
   compiler->loop = &loop;
 
+  bool expr_temp = compiler->expr_temp;
+  compiler->expr_temp = true;
   compileExpression(compiler); //< Condition.
+  compiler->expr_temp = expr_temp;
+
   emitOpcode(compiler, OP_JUMP_IF_NOT);
   int whilepatch = emitShort(compiler, 0xffff); //< Will be patched.
 
@@ -3122,7 +3176,10 @@ static void compileForStatement(Compiler* compiler) {
 
   // Compile and store sequence.
   compilerAddVariable(compiler, "@Sequence", 9, iter_line); // Sequence
+  bool expr_temp = compiler->expr_temp;
+  compiler->expr_temp = true;
   compileExpression(compiler);
+  compiler->expr_temp = expr_temp;
 
   // Add iterator to locals. It's an increasing integer indicating that the
   // current loop is nth starting from 0.
@@ -3233,7 +3290,10 @@ static void compileStatement(Compiler* compiler) {
                     "Cannor 'return' a value from constructor.");
       }
 
+      bool can_define = compiler->can_define;
+      compiler->can_define = false;
       compileExpression(compiler); //< Return value is at stack top.
+      compiler->can_define = can_define;
 
       // If the last expression parsed with compileExpression() is a call
       // is_last_call would be true by now.

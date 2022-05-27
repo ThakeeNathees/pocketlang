@@ -407,6 +407,7 @@ DEF(_fileTell, "") {
 // from io import File
 // return File().open(path, mode)
 DEF(_open, NULL /* == _fileOpen */) {
+  pkReserveSlots(vm, 3);
 
   // slots[1] = path
   // slots[2] = mode

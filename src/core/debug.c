@@ -374,6 +374,7 @@ void dumpFunctionCode(PKVM* vm, Function* func) {
       case OP_PUSH_TRUE:
       case OP_PUSH_FALSE:
       case OP_SWAP:
+      case OP_DUP:
         NO_ARGS();
         break;
 

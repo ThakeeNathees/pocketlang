@@ -828,6 +828,12 @@ L_vm_main_loop:
       DISPATCH();
     }
 
+    OPCODE(DUP):
+    {
+      PUSH(*(fiber->sp - 1));
+      DISPATCH();
+    }
+
     OPCODE(PUSH_LIST):
     {
       List* list = newList(vm, (uint32_t)READ_SHORT());
