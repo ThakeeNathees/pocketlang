@@ -1513,8 +1513,11 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
               case '\t': pkByteBufferAddString(buff, vm, "\\t", 2); break;
 
               default: {
-                if (isprint(c)) pkByteBufferWrite(buff, vm, c);
-                else {
+                // if c isn't in range 0x00 to 0xff, isprintc()
+                // fail an assertion.
+                if ((0x00 <= c && c <= 0xff) && isprint(c)) {
+                  pkByteBufferWrite(buff, vm, c);
+                } else {
                   pkByteBufferAddString(buff, vm, "\\x", 2);
                   uint8_t byte = (uint8_t) c;
                   pkByteBufferWrite(buff, vm, utilHexDigit(((byte >> 4) & 0xf),

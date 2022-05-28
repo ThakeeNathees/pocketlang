@@ -259,6 +259,11 @@ PK_PUBLIC void pkClassAddMethod(PKVM* vm, PkHandle* cls,
                                 const char* name,
                                 pkNativeFn fptr, int arity);
 
+// It'll compile the pocket [source] for the module which result all the
+// functions and classes in that [source] to register on the module.
+PK_PUBLIC void pkModuleAddSource(PKVM* vm, PkHandle* module,
+                                 const char* source);
+
 // Run the source string. The [source] is expected to be valid till this
 // function returns.
 PK_PUBLIC PkResult pkRunString(PKVM* vm, const char* source);

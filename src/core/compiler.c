@@ -576,7 +576,8 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
   const char* source_path = "@??";
   if (module->path != NULL) {
     source_path = module->path->data;
-  } else if (options->repl_mode) {
+
+  } else if (options && options->repl_mode) {
     source_path = "@REPL";
   }
 
@@ -2766,7 +2767,7 @@ static void compileFunction(Compiler* compiler, FuncType fn_type) {
 
   } else {
     name = LITERAL_FN_NAME;
-    name_length = (int)strlen(name);
+    name_length = (int) strlen(name);
   }
 
   if (compiler->parser.has_syntax_error) return;
