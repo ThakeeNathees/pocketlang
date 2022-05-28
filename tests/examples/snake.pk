@@ -1,5 +1,5 @@
 
-import tui, term, math
+import term, math
 from types import Vector
 
 ## This is a pocketlang implementation of:
@@ -25,7 +25,7 @@ tail = 15
 score = 0
 
 def init()
-  size = tui.get_size()
+  size = term.getsize()
   tx = size.x
   ty = size.y
   
@@ -40,24 +40,24 @@ def frame()
   if py < 0 then py = ty - 1 end
   if py > ty - 1 then py = 0 end
   
-  tui.clear()
-  tui.string('press Q to quit | score = $score')
+  term.clear()
+  term.write('press Q to quit | score = $score')
   
   for i in trail
-    tui.set_position(i.x, i.y)
-    tui.start_bg(0, 0xff, 0)
-    tui.string(' ')
-    tui.end_bg()
+    term.setposition(i.x, i.y)
+    term.start_bg(0, 0xff, 0)
+    term.write(' ')
+    term.end_bg()
     
     if i.x == px and i.y == py
       tail = 5
     end
   end
   
-  tui.set_position(ax, ay)
-  tui.start_bg(0xff, 0, 0)
-  tui.string(' ')
-  tui.end_bg()
+  term.setposition(ax, ay)
+  term.start_bg(0xff, 0, 0)
+  term.write(' ')
+  term.end_bg()
   
   trail.append(Vector(px, py))
   while trail.length > tail
@@ -70,13 +70,13 @@ def frame()
     ax = math.rand() % tx
     ay = math.rand() % ty
   end
-  tui.flush()
+  term.flush()
 end
 
 def handle(event)
   if event.type == term.EVENT_KEY_DOWN
     if event.keycode == term.KEY_Q
-      tui.stop()
+      term.stop()
     end
     
     ## The "Switch Statement" alternative.
@@ -108,7 +108,7 @@ end
 
 
 def main()
-  config = tui.Config()
+  config = term.Config()
   config.capture_events = true
   config.hide_cursor = true
   config.new_buffer = true
@@ -116,7 +116,7 @@ def main()
   config.init_fn = init
   config.event_fn = handle
   config.frame_fn = frame
-  tui.run(config)
+  term.run(config)
 end
 
 

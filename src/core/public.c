@@ -290,6 +290,13 @@ void pkClassAddMethod(PKVM* vm, PkHandle* cls,
   vmPopTempRef(vm); // method.
 }
 
+void pkModuleAddSource(PKVM* vm, PkHandle* module, const char* source) {
+  CHECK_HANDLE_TYPE(module, OBJ_MODULE);
+  CHECK_ARG_NULL(source);
+  // TODO: compiler options, maybe set to the vm and reuse it here.
+  compile(vm, (Module*) AS_OBJ(module->value), source, NULL);
+}
+
 void pkReleaseHandle(PKVM* vm, PkHandle* handle) {
   ASSERT(handle != NULL, "Given handle was NULL.");
 

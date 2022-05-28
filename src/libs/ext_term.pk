@@ -1,11 +1,7 @@
 
-import term, io
+import io
 from time import clock, sleep
 from types import ByteBuffer
-
-def write(msg)
-  io.write(io.stdout, msg)
-end
 
 ## The configuration that should be used to create tui context
 ## and run.
@@ -33,6 +29,7 @@ class _Context
   
   ## Called to reset all the internal for reusing the context.
   def clear()
+    self.config = null
     self.buff.clear()
     self.done = false ## If true the main loop ends.
   end
@@ -47,7 +44,7 @@ _ctx = _Context()
 
 ## Flush all the buffered bytes in the context's buffer.
 def flush()
-  write(_ctx.buff.string())
+  io.write(io.stdout, _ctx.buff.string())
   io.flush()
   _ctx.buff.clear()
 end
@@ -58,25 +55,21 @@ def stop()
 end
 
 def set_title(title)
-  write("\x1b]0;$title\x07")
+  io.write(io.stdout, "\x1b]0;$title\x07")
 end
 
 def hide_cursor()
-  write("\x1b[?25l")
+  io.write(io.stdout, "\x1b[?25l")
 end
 
 def show_cursor()
-  write("\x1b[?25h")
+  io.write(io.stdout, "\x1b[?25h")
 end
 
 ## It'll write escape sequence to move the cursor but not actually move.
 ## for this to make effect, one should flush the buffer.
-def set_position(x, y)
+def setposition(x, y)
   _ctx.buff.write("\x1b[${y + 1};${x + 1}H")
-end
-
-def get_size()
-  return term.getsize()
 end
 
 ## 
@@ -94,18 +87,16 @@ end
 ##  0x77    w        ┬
 ##  0x78    x        │
 ##
-def box_char(c)
-  _ctx.buff.write("\x1b(0$c\x1b(B")
+def start_boxchar()
+  _ctx.buff.write("\x1b(0")
 end
 
-## FIXME: Implement str * int multiplicatin to support
-##
-##     "\x1b(0${ c * n }\x1b(B"
-##
-## and define box_char_len() or refactor the above to take argument n.
+def end_boxchar()
+  _ctx.buff.write("\x1b(B")
+end
 
 ## Write a string to the context buffer.
-def string(s)
+def write(s)
   _ctx.buff.write(str(s))
 end
 
@@ -186,6 +177,14 @@ end
 
 def end_underline()
   _ctx.buff.write("\x1b[24m")
+end
+
+def start_inverse()
+  _ctx.buff.write("\x1b[7m")
+end
+
+def end_inverse()
+  _ctx.buff.write("\x1b[27m")
 end
 
 def start_hidden()
@@ -281,21 +280,33 @@ end
 ## TUI MAIN LOOP
 ## -------------------------------------------------------------------------
 
+## Internal event dispatcher
+def _dispatch(event)
+  ## Windows show cursor every time the window resize.
+  if event.type == EVENT_RESIZE
+    if _ctx.config.hide_cursor
+      hide_cursor()
+    end
+  end
+end
+
 def run(config)
-  term.init(config.capture_events)
+  _ctx.config = config
+  init(config.capture_events)
   
-  if config.new_buffer then term.new_screen_buffer() end
+  if config.new_buffer then new_screen_buffer() end
   if config.hide_cursor then hide_cursor() end
   if config.init_fn then config.init_fn() end
   
-  event = term.Event()
+  event = Event()
   
   ## The main loop.
   while not _ctx.done
     start = clock()
     
     ## Dispatch events.
-    while term.read_event(event)
+    while read_event(event)
+      _dispatch(event)
       if config.event_fn then config.event_fn(event) end
       if _ctx.done then break end
     end
@@ -314,8 +325,8 @@ def run(config)
   ## Cleanup.
   if config.cleanup_fn then config.cleanup_fn() end
   if config.hide_cursor then show_cursor() end
-  if config.new_buffer then term.restore_screen_buffer() end
-  term.cleanup()
+  if config.new_buffer then restore_screen_buffer() end
+  cleanup()
   _ctx.clear()
   
 end

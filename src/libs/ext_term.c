@@ -6,6 +6,7 @@
 
 #ifndef PK_AMALGAMATED
 #include "libs.h"
+#include "gen/ext_term.pk.h"  //<< AMALG_INLINE >>
 #endif
 
 #define TERM_IMPLEMENT
@@ -248,6 +249,8 @@ void registerModuleTerm(PKVM* vm) {
 
   _cls_term_event = pkNewClass(vm, "Event", NULL, term, _termEventNew, _termEventDelete);
   pkClassAddMethod(vm, _cls_term_event, "@getter", _termEventGetter, 1);
+
+  pkModuleAddSource(vm, term, ext_term_pk);
 
   pkRegisterModule(vm, term);
   pkReleaseHandle(vm, term);

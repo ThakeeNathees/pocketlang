@@ -33,8 +33,12 @@ ALLOW_LONG_LINES = ('http://', 'https://', '<script ', '<link ', '<svg ')
 ## files and generated source files.
 IGNORE_FILES = (
   "cli/modules/pknative.gen.c", ## FIXME: set gen path.
-  "cli/argparse.h",             ## FIXME: collect all thirdparty files.
+  "cli/argparse.h",             ## FIXME: collect all thirdparty files.  
+  ## Contain longer lines. I shoule add something like static-check-off,
+  ## static-check-on like clang or just use clang.
   "src/libs/ext_term.c",
+  ## Contain extendedted ascii characters that raise UnicodeDecodeError.
+  "src/libs/ext_term.pk",
 )
 
 ## A list of directory, contains C source files to perform static checks.
