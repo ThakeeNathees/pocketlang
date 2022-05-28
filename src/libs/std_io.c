@@ -230,8 +230,7 @@ DEF(_fileRead, "") {
   size_t read = fread(buff, sizeof(char), count, file->fp);
 
   if (ferror(file->fp)) {
-    pkSetRuntimeErrorFmt(vm, "An error occured at C.fread() - '%s'.",
-                              strerror(errno));
+    REPORT_ERRNO(fread);
     goto L_done;
   }
 
@@ -293,8 +292,7 @@ DEF(_fileGetLine, "") {
     // End of file or error.
     if (c == EOF) {
       if (ferror(file->fp)) {
-        pkSetRuntimeErrorFmt(vm, "Error while reading line - '%s'.",
-                             strerror(errno));
+        REPORT_ERRNO(fgetc);
         goto L_done;
       }
       break; // EOF is reached.
@@ -334,8 +332,7 @@ DEF(_fileWrite, "") {
   clearerr(file->fp);
   fwrite(text, sizeof(char), (size_t) length, file->fp);
   if (ferror(file->fp)) {
-    pkSetRuntimeErrorFmt(vm, "An error occureed at C.fwrite() - '%s'.",
-                         strerror(errno));
+    REPORT_ERRNO(fwrite);
     return;
   }
 }
@@ -351,7 +348,8 @@ DEF(_fileClose, "") {
   }
 
   if (fclose(file->fp) != 0) {
-    pkSetRuntimeError(vm, "fclose() failed!.");
+    REPORT_ERRNO(fclose);
+    return;
   }
 
   file->fp = NULL;
@@ -384,8 +382,7 @@ DEF(_fileSeek,
   }
 
   if (fseek(file->fp, offset, whence) != 0) {
-    pkSetRuntimeErrorFmt(vm, "An error occureed at C.fseek() - '%s'.",
-                         strerror(errno));
+    REPORT_ERRNO(fseek);
     return;
   }
 }

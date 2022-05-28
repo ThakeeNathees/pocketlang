@@ -15,7 +15,7 @@
 // Refactor this. Maybe move to a module, Rgb values are hardcoded ?!
 // Should check stderr/stdout etc.
 static void _printRed(PKVM* vm, const char* msg) {
-  if (vm->config.use_ansi_color) {
+  if (vm->config.use_ansi_escape) {
     vm->config.stderr_write(vm, "\033[38;2;220;100;100m");
     vm->config.stderr_write(vm, msg);
     vm->config.stderr_write(vm, "\033[0m");

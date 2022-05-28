@@ -185,7 +185,7 @@ struct PkConfiguration {
   pkLoadScriptFn load_script_fn;
 
   // If true stderr calls will use ansi color codes.
-  bool use_ansi_color;
+  bool use_ansi_escape;
 
   // User defined data associated with VM.
   void* user_data;

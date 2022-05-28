@@ -15,7 +15,10 @@ void registerModuleTypes(PKVM* vm);
 void registerModuleTime(PKVM* vm);
 void registerModuleIO(PKVM* vm);
 void registerModulePath(PKVM* vm);
+void registerModuleOS(PKVM* vm);
 void registerModuleDummy(PKVM* vm);
+
+// Extra libraries.
 
 void registerModuleTerm(PKVM* vm);
 void cleanupModuleTerm(PKVM* vm);
@@ -27,6 +30,7 @@ void registerLibs(PKVM* vm) {
   registerModuleTime(vm);
   registerModuleIO(vm);
   registerModulePath(vm);
+  registerModuleOS(vm);
   registerModuleDummy(vm);
 
   registerModuleTerm(vm);

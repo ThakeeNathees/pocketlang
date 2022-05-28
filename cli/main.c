@@ -56,7 +56,7 @@ static PKVM* intializePocketVM() {
     GetConsoleMode(handle, &outmode);
     SetConsoleMode(handle, outmode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
 #endif
-    config.use_ansi_color = true;
+    config.use_ansi_escape = true;
   }
 
   PKVM* vm = pkNewVM(&config);
