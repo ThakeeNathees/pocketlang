@@ -391,23 +391,8 @@ PK_PUBLIC void pkSetSlotHandle(PKVM* vm, int index, PkHandle* handle);
 /* POCKET FFI                                                                */
 /*****************************************************************************/
 
-// Get the attribute with [name] of the instance at the [instance] slot and
-// place it at the [index] slot. Return true on success.
-PK_PUBLIC bool pkGetAttribute(PKVM* vm, int instance, const char* name,
-                              int index);
-
-// Set the attribute with [name] of the instance at the [instance] slot to
-// the value at the [value] index slot. Return true on success.
-PK_PUBLIC bool pkSetAttribute(PKVM* vm, int instance,
-                              const char* name, int value);
-
 // Place the [self] instance at the [index] slot.
 PK_PUBLIC void pkPlaceSelf(PKVM* vm, int index);
-
-// Import a module with the [path] and place it at [index] slot. The path
-// sepearation should be '/'. Example: to import module "foo.bar" the [path]
-// should be "foo/bar". On failure, it'll set an error and return false.
-PK_PUBLIC bool pkImportModule(PKVM* vm, const char* path, int index);
 
 // Set the [index] slot's value as the class of the [instance].
 PK_PUBLIC void pkGetClass(PKVM* vm, int instance, int index);
@@ -420,6 +405,29 @@ PK_PUBLIC void pkGetClass(PKVM* vm, int instance, int index);
 // is the first argument slot's index.
 PK_PUBLIC bool pkNewInstance(PKVM* vm, int cls, int index, int argc, int argv);
 
+// Create a new Range object and place it at [index] slot.
+PK_PUBLIC void pkNewRange(PKVM* vm, int index, double first, double last);
+
+// Create a new List object and place it at [index] slot.
+PK_PUBLIC void pkNewList(PKVM* vm, int index);
+
+// Create a new Map object and place it at [index] slot.
+PK_PUBLIC void pkNewMap(PKVM* vm, int index);
+
+// Insert [value] to the [list] at the [index], if the index is less than zero,
+// it'll count from backwards. ie. insert[-1] == insert[list.length].
+// Note that slot [list] must be a valid list otherwise it'll fail an
+// assertion.
+PK_PUBLIC bool pkListInsert(PKVM* vm, int list, int32_t index, int value);
+
+// Pop an element from [list] at [index] and place it at the [popped] slot, if
+// [popped] is negative, the popped value will be ignored.
+PK_PUBLIC bool pkListPop(PKVM* vm, int list, int32_t index, int popped);
+
+// Returns the length of the list at the [list] slot, it the slot isn't a list
+// an assertion will fail.
+PK_PUBLIC uint32_t pkListLength(PKVM* vm, int list);
+
 // Calls a function at the [fn] slot, with [argc] argument where [argv] is the
 // slot of the first argument. [ret] is the slot index of the return value. if
 // [ret] < 0 the return value will be discarded.
@@ -430,6 +438,21 @@ PK_PUBLIC bool pkCallFunction(PKVM* vm, int fn, int argc, int argv, int ret);
 // [ret] < 0 the return value will be discarded.
 PK_PUBLIC bool pkCallMethod(PKVM* vm, int instance, const char* method,
                             int argc, int argv, int ret);
+
+// Get the attribute with [name] of the instance at the [instance] slot and
+// place it at the [index] slot. Return true on success.
+PK_PUBLIC bool pkGetAttribute(PKVM* vm, int instance, const char* name,
+                              int index);
+
+// Set the attribute with [name] of the instance at the [instance] slot to
+// the value at the [value] index slot. Return true on success.
+PK_PUBLIC bool pkSetAttribute(PKVM* vm, int instance,
+                              const char* name, int value);
+
+// Import a module with the [path] and place it at [index] slot. The path
+// sepearation should be '/'. Example: to import module "foo.bar" the [path]
+// should be "foo/bar". On failure, it'll set an error and return false.
+PK_PUBLIC bool pkImportModule(PKVM* vm, const char* path, int index);
 
 #ifdef __cplusplus
 } // extern "C"

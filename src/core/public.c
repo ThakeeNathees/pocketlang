@@ -858,6 +858,74 @@ bool pkNewInstance(PKVM* vm, int cls, int index, int argc, int argv) {
   return !VM_HAS_ERROR(vm);
 }
 
+void pkNewRange(PKVM* vm, int index, double first, double last) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_SLOT_INDEX(index);
+
+  SET_SLOT(index, VAR_OBJ(newRange(vm, first, last)));
+}
+
+void pkNewList(PKVM* vm, int index) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_SLOT_INDEX(index);
+
+  SET_SLOT(index, VAR_OBJ(newList(vm, 0)));
+}
+
+void pkNewMap(PKVM* vm, int index) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_SLOT_INDEX(index);
+
+  SET_SLOT(index, VAR_OBJ(newMap(vm)));
+}
+
+bool pkListInsert(PKVM* vm, int list, int32_t index, int value) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_SLOT_INDEX(list);
+  VALIDATE_SLOT_INDEX(value);
+
+  ASSERT(IS_OBJ_TYPE(SLOT(list), OBJ_LIST), "Slot value wasn't a List");
+  List* l = (List*) AS_OBJ(SLOT(list));
+  if (index < 0) index = l->elements.count + index + 1;
+
+  if (index < 0 || (uint32_t) index > l->elements.count) {
+    VM_SET_ERROR(vm, newString(vm, "Index out of bounds."));
+    return false;
+  }
+
+  listInsert(vm, l, (uint32_t) index, SLOT(value));
+  return true;
+}
+
+bool pkListPop(PKVM* vm, int list, int32_t index, int popped) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_SLOT_INDEX(list);
+  if (popped >= 0) VALIDATE_SLOT_INDEX(popped);
+
+  ASSERT(IS_OBJ_TYPE(SLOT(list), OBJ_LIST), "Slot value wasn't a List");
+  List* l = (List*) AS_OBJ(SLOT(list));
+  if (index < 0) index += l->elements.count;
+
+  if (index < 0 || (uint32_t) index >= l->elements.count) {
+    VM_SET_ERROR(vm, newString(vm, "Index out of bounds."));
+    return false;
+  }
+
+  Var p = listRemoveAt(vm, l, index);
+  if (popped >= 0) SET_SLOT(popped, p);
+  return true;
+}
+
+uint32_t pkListLength(PKVM* vm, int list) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_SLOT_INDEX(list);
+
+  ASSERT(IS_OBJ_TYPE(SLOT(list), OBJ_LIST), "Slot value wasn't a List");
+  List* l = (List*)AS_OBJ(SLOT(list));
+
+  return l->elements.count;
+}
+
 bool pkCallFunction(PKVM* vm, int fn, int argc, int argv, int ret) {
   CHECK_FIBER_EXISTS(vm);
   ASSERT(IS_OBJ_TYPE(SLOT(fn), OBJ_CLOSURE), "Slot value wasn't a function");

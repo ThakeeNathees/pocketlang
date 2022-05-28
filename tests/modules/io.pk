@@ -16,9 +16,10 @@ def read_file()
     'line4 : qux\n',
   ]
 
-  line = ''
+  line = ''; i = 0
   while line = f.getline()
-    assert(line in LINES)
+    assert(LINES[i] == line)
+    i += 1
   end
 
   f.close()

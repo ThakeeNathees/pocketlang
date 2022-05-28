@@ -189,14 +189,20 @@ char* pathResolveImport(PKVM* vm, const char* from, const char* path) {
 
 static inline bool pathIsFile(const char* path) {
   struct stat path_stat;
-  stat(path, &path_stat);
+  if (stat(path, &path_stat)) return false; // Error: might be path not exists.
   return (path_stat.st_mode & S_IFMT) == S_IFREG;
 }
 
 static inline bool pathIsDir(const char* path) {
   struct stat path_stat;
-  stat(path, &path_stat);
+  if (stat(path, &path_stat)) return false; // Error: might be path not exists.
   return (path_stat.st_mode & S_IFMT) == S_IFDIR;
+}
+
+static inline time_t pathMtime(const char* path) {
+  struct stat path_stat;
+  if (stat(path, &path_stat)) return 0; // Error: might be path not exists.
+  return path_stat.st_mtime;
 }
 
 static inline bool pathIsExists(const char* path) {
@@ -339,6 +345,64 @@ DEF(_pathIsDir, "") {
   pkSetSlotBool(vm, 0, pathIsDir(path));
 }
 
+DEF(_pathListDir, "") {
+
+  int argc = pkGetArgc(vm);
+  if (!pkCheckArgcRange(vm, argc, 0, 1)) return;
+
+  const char* path = ".";
+  if (argc == 1) if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
+
+  if (!pathIsExists(path)) {
+    pkSetRuntimeErrorFmt(vm, "Path '%s' does not exists.", path);
+    return;
+  }
+
+  // We create a new list at slot[0] and use slot[1] as our working memory
+  // overriding our parameter.
+  pkNewList(vm, 0);
+
+  DIR* dirstream = opendir(path);
+  if (dirstream) {
+    struct dirent* dir;
+    while ((dir = readdir(dirstream)) != NULL) {
+      if (!strcmp(dir->d_name, ".")) continue;
+      if (!strcmp(dir->d_name, "..")) continue;
+
+      pkSetSlotString(vm, 1, dir->d_name);
+      if (!pkListInsert(vm, 0, -1, 1)) return;
+    }
+    closedir(dirstream);
+  }
+}
+
+// Returns the modified time of the file.
+DEF(_pathMtime, "") {
+  const char* path;
+  if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
+
+  double mtime = 0;
+  struct stat path_stat;
+  if (stat(path, &path_stat) == 0) mtime = (double) path_stat.st_mtime;
+  pkSetSlotNumber(vm, 0, mtime);
+}
+
+// Returns the file size in bytes.
+DEF(_pathSize, "") {
+  const char* path;
+
+  if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
+
+  struct stat path_stat;
+  if (stat(path, &path_stat) || ((path_stat.st_mode & S_IFMT) != S_IFREG)) {
+    pkSetRuntimeErrorFmt(vm, "Path '%s' wasn't a file.", path);
+    return;
+  }
+
+  pkSetSlotNumber(vm, 0, path_stat.st_size);
+
+}
+
 /*****************************************************************************/
 /* MODULE REGISTER                                                           */
 /*****************************************************************************/
@@ -358,6 +422,9 @@ void registerModulePath(PKVM* vm) {
   pkModuleAddFunction(vm, path, "exists",    _pathExists,       1);
   pkModuleAddFunction(vm, path, "isfile",    _pathIsFile,       1);
   pkModuleAddFunction(vm, path, "isdir",     _pathIsDir,        1);
+  pkModuleAddFunction(vm, path, "listdir",   _pathListDir,     -1);
+  pkModuleAddFunction(vm, path, "mtime",     _pathMtime,        1);
+  pkModuleAddFunction(vm, path, "size",      _pathSize,         1);
 
   pkRegisterModule(vm, path);
   pkReleaseHandle(vm, path);
