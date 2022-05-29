@@ -15,10 +15,6 @@
 #include <stdio.h>
 #include <string.h>
 
-/*****************************************************************************/
-/* MODULES INTERNAL                                                          */
-/*****************************************************************************/
-
 // FIXME:
 // Since this are part of the "standard" pocketlang libraries, we can include
 // pocketlang internals here using the relative path, however it'll make these
@@ -29,6 +25,11 @@
 #ifndef PK_AMALGAMATED
 #include "../core/common.h"
 #endif // PK_AMALGAMATED
+
+#include <errno.h>
+
+#define REPORT_ERRNO(fn) \
+  pkSetRuntimeErrorFmt(vm, "C." #fn " errno:%i - %s.", errno, strerror(errno))
 
 /*****************************************************************************/
 /* SHARED FUNCTIONS                                                          */
