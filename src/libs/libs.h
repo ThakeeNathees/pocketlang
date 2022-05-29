@@ -35,14 +35,9 @@
 /* SHARED FUNCTIONS                                                          */
 /*****************************************************************************/
 
-// These are "public" module functions that can be shared. Since some modules
-// can be used for cli's internals we're defining such functions here and they
-// will be imported in the cli.
-
-// The pocketlang's import statement path resolving function. This
-// implementation is required by pockelang from it's hosting application
-// inorder to use the import statements.
-char* pathResolveImport(PKVM * vm, const char* from, const char* path);
+// These are "public" module functions that can be shared. Since each source
+// files in this modules doesn't have their own headers we're using this as
+// a common header for every one.
 
 // Register all the the libraries to the PKVM.
 void registerLibs(PKVM* vm);
@@ -50,5 +45,14 @@ void registerLibs(PKVM* vm);
 // Cleanup registered libraries call this only if the libraries were registered
 // with registerLibs() function.
 void cleanupLibs(PKVM* vm);
+
+// The pocketlang's import statement path resolving function. This
+// implementation is required by pockelang from it's hosting application
+// inorder to use the import statements.
+char* pathResolveImport(PKVM * vm, const char* from, const char* path);
+
+// Write the executable's path to the buffer and return true, if it failed
+// it'll return false.
+bool osGetExeFilePath(char* buff, int size);
 
 #endif // LIBS_H

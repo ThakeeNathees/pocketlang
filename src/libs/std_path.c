@@ -54,7 +54,7 @@
 // value as needed.
 #define MAX_JOIN_PATHS 8
 
-static inline size_t pathAbs(const char* path, char* buff, size_t buff_size);
+static inline size_t pathAbs(const char* path, char* buff, size_t buffsz);
 static inline bool pathIsFile(const char* path);
 static inline bool pathIsDir(const char* path);
 
@@ -93,18 +93,18 @@ static inline size_t checkImportExists(char* path, const char* ext,
 static char* tryImportPaths(PKVM* vm, char* path, char* buff) {
   size_t path_size = 0;
 
-  // FIXME: review this code.
-  do {
-    if ((path_size = checkImportExists(path, "", buff)) != 0) {
-      break;
+  static const char* EXT[] = {
+    "",
+    ".pk",
+    "/_init.pk",
+    NULL, // Sentinal to mark the array end.
+  };
 
-    }  else if ((path_size = checkImportExists(path, ".pk", buff)) != 0) {
-      break;
-
-    } else if ((path_size = checkImportExists(path, "/_init.pk", buff)) != 0) {
+  for (const char** ext = EXT; *ext != NULL; ext++) {
+    if ((path_size = checkImportExists(path, *ext, buff)) != 0) {
       break;
     }
-  } while (false);
+  }
 
   char* ret = NULL;
   if (path_size != 0) {
@@ -112,17 +112,6 @@ static char* tryImportPaths(PKVM* vm, char* path, char* buff) {
     memcpy(ret, buff, path_size + 1);
   }
   return ret;
-}
-
-// replace all the '\\' with '/' to make all the seperator in a path is the
-// same this is only used in import path system to make the path of a module
-// unique (otherwise same path with different seperator makes them different).
-void pathFixWindowsSeperator(char* buff) {
-  ASSERT(buff, OOPS);
-  while (*buff != '\0') {
-    if (*buff == '\\') *buff = '/';
-    buff++;
-  }
 }
 
 // Implementation of pocketlang import path resolving function.
@@ -138,7 +127,6 @@ char* pathResolveImport(PKVM* vm, const char* from, const char* path) {
 
     // buff1 = normalized path. +1 for null terminator.
     cwk_path_normalize(path, buff1, sizeof(buff1));
-    pathFixWindowsSeperator(buff1);
 
     return tryImportPaths(vm, buff1, buff2);
   }
@@ -150,36 +138,33 @@ char* pathResolveImport(PKVM* vm, const char* from, const char* path) {
 
     // buff2 = normalized path. +1 for null terminator.
     cwk_path_normalize(buff1, buff2, sizeof(buff2));
-    pathFixWindowsSeperator(buff2);
 
     return tryImportPaths(vm, buff2, buff1);
   }
 
-  // Import statements doesn't support absolute paths.
-  ASSERT(cwk_path_is_absolute(from), "From path should be absolute.");
+  // Regardless of the platform both '/' and '\\' will be used by pocketlang
+  // to indicate its the path of a directory.
+  char last = from[strlen(from) - 1];
 
-  // From is a path of a script. Try relative to that script.
-  {
+  // buff1 = absolute path of [from].
+  pathAbs(from, buff1, sizeof(buff1));
+
+  // If the [from] path isn't a directory we use the dirname of the from
+  // script.
+  if (last != '/' && last != '\\') {
     size_t from_dir_length = 0;
-    cwk_path_get_dirname(from, &from_dir_length);
+    cwk_path_get_dirname(buff1, &from_dir_length);
     if (from_dir_length == 0) return NULL;
-
-    // buff1 = from directory.
-    strncpy(buff1, from, sizeof(buff1));
     buff1[from_dir_length] = '\0';
-
-    // buff2 = absolute joined path.
-    cwk_path_join(buff1, path, buff2, sizeof(buff2));
-
-    // buff1 = normalized absolute path. +1 for null terminator
-    cwk_path_normalize(buff2, buff1, sizeof(buff1));
-    pathFixWindowsSeperator(buff1);
-
-    return tryImportPaths(vm, buff1, buff2);
   }
 
-  // Cannot resolve the path. Return NULL to indicate failure.
-  return NULL;
+  // buff2 = absolute joined path.
+  cwk_path_join(buff1, path, buff2, sizeof(buff2));
+
+  // buff1 = normalized absolute path. +1 for null terminator
+  cwk_path_normalize(buff2, buff1, sizeof(buff1));
+
+  return tryImportPaths(vm, buff1, buff2);
 }
 
 /*****************************************************************************/
@@ -208,7 +193,7 @@ static inline bool pathIsExists(const char* path) {
   return access(path, F_OK) == 0;
 }
 
-static inline size_t pathAbs(const char* path, char* buff, size_t buff_size) {
+static inline size_t pathAbs(const char* path, char* buff, size_t buffsz) {
 
   char cwd[MAX_PATH_LEN];
 
@@ -216,7 +201,7 @@ static inline size_t pathAbs(const char* path, char* buff, size_t buff_size) {
     // TODO: handle error.
   }
 
-  return cwk_path_get_absolute(cwd, path, buff, buff_size);
+  return cwk_path_get_absolute(cwd, path, buff, buffsz);
 }
 
 /*****************************************************************************/
@@ -379,7 +364,39 @@ DEF(_pathListDir, "") {
 /* MODULE REGISTER                                                           */
 /*****************************************************************************/
 
+// Add the executables path and exe_path + 'libs/' as a search path for
+// the PKVM.
+void _registerSearchPaths(PKVM* vm) {
+  char buff[MAX_PATH_LEN];
+  if (!osGetExeFilePath(buff, MAX_PATH_LEN)) return;
+  size_t length;
+  cwk_path_get_dirname(buff, &length);
+  if (length == 0) return;
+
+  enum cwk_path_style ps = cwk_path_get_style();
+
+  // Add path separator. Otherwise pkAddSearchPath will fail an assertion.
+  char last = buff[length - 1];
+  if (last != '/' && last != '\\') {
+    last = (ps == CWK_STYLE_WINDOWS) ? '\\' : '/';
+    buff[length++] = last;
+  }
+
+  buff[length] = '\0';
+
+  pkAddSearchPath(vm, buff);
+
+  // FIXME: the bellow code is hard coded.
+  if (length + strlen("libs/") < MAX_PATH_LEN) {
+    strcpy(buff + length, (ps == CWK_STYLE_WINDOWS) ? "libs\\" : "libs/");
+    pkAddSearchPath(vm, buff);
+  }
+}
+
 void registerModulePath(PKVM* vm) {
+
+  _registerSearchPaths(vm);
+
   PkHandle* path = pkNewModule(vm, "path");
 
   pkModuleAddFunction(vm, path, "getcwd",    _pathGetCWD,       0);
