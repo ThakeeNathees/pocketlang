@@ -210,6 +210,10 @@ DECLARE_BUFFER(Closure, Closure*)
 void pkByteBufferAddString(pkByteBuffer* self, PKVM* vm, const char* str,
                            uint32_t length);
 
+// Add formated string to the byte buffer.
+void pkByteBufferAddStringFmt(pkByteBuffer* self, PKVM* vm,
+                              const char* fmt, ...);
+
 // Type enums of the pocketlang heap allocated types.
 typedef enum {
   OBJ_STRING = 0,
@@ -484,8 +488,11 @@ struct Fiber {
   // and reset to VAR_UNDEFINED.
   Var self;
 
-  // Caller of this fiber if it has one, NULL otherwise.
-  Fiber* caller;
+  // [caller] is the caller of the fiber that was created by invoking the
+  // pocket concurency model. Where [native] is the native fiber which
+  // started this fiber. If a native function wants to call pocket function
+  // it needs to create a new fiber, so we keep track of both.
+  Fiber *caller, *native;
 
   // Runtime error initially NULL, heap allocated.
   String* error;

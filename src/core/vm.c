@@ -319,6 +319,7 @@ PkResult vmCallMethod(PKVM* vm, Var self, Closure* fn,
 
   Fiber* fiber = newFiber(vm, fn);
   fiber->self = self;
+  fiber->native = vm->fiber;
   vmPushTempRef(vm, &fiber->_super); // fiber.
   bool success = vmPrepareFiber(vm, fiber, argc, argv);
 
@@ -436,9 +437,20 @@ Var vmImportModule(PKVM* vm, String* from, String* path) {
     // Make a new module, compile and cache it.
     module = newModule(vm);
     module->path = resolved;
+
+    // FIXME:
+    // __name__ will contain '/' instead of '.', To fix this I should use
+    // stringReplace with old = '/', new = '.' and the parameters should be
+    // string objects which should be allocated in VM statically for single
+    // char strings.
+    //
+    // path here is the imported symbol not the actual path,
+    // Example: "foo/bar" which was imported as "foo.bar"
+    module->name = path;
+
     vmPushTempRef(vm, &module->_super); // module.
     {
-      initializeScript(vm, module);
+      initializeModule(vm, module, false);
       PkResult result = compile(vm, module, source, NULL);
       pkRealloc(vm, source, 0);
       if (result == PK_RESULT_SUCCESS) {
