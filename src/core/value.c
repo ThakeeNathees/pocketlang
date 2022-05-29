@@ -41,6 +41,22 @@ void pkByteBufferAddString(pkByteBuffer* self, PKVM* vm, const char* str,
   }
 }
 
+void pkByteBufferAddStringFmt(pkByteBuffer* self, PKVM* vm,
+                              const char* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+
+  va_list copy;
+  va_copy(copy, args);
+  int length = vsnprintf(NULL, 0, fmt, copy);
+  va_end(copy);
+
+  pkByteBufferReserve(self, vm, self->count + (size_t) length + 1);
+  vsnprintf(self->data + self->count, self->capacity - self->count, fmt, args);
+  self->count += length;
+  va_end(args);
+}
+
 void varInitObject(Object* self, PKVM* vm, ObjectType type) {
   self->type = type;
   self->is_marked = false;
@@ -207,6 +223,7 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       vm->bytes_allocated += sizeof(CallFrame) * fiber->frame_capacity;
 
       markObject(vm, &fiber->caller->_super);
+      markObject(vm, &fiber->native->_super);
       markObject(vm, &fiber->error->_super);
 
       markValue(vm, fiber->self);

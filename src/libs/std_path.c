@@ -241,15 +241,15 @@ DEF(_pathAbspath, "") {
 }
 
 DEF(_pathRelpath, "") {
-  const char* from, * path;
-  if (!pkValidateSlotString(vm, 1, &from, NULL)) return;
-  if (!pkValidateSlotString(vm, 2, &path, NULL)) return;
-
-  char abs_from[MAX_PATH_LEN];
-  pathAbs(from, abs_from, sizeof(abs_from));
+  const char* path, * from;
+  if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
+  if (!pkValidateSlotString(vm, 2, &from, NULL)) return;
 
   char abs_path[MAX_PATH_LEN];
   pathAbs(path, abs_path, sizeof(abs_path));
+
+  char abs_from[MAX_PATH_LEN];
+  pathAbs(from, abs_from, sizeof(abs_from));
 
   char result[MAX_PATH_LEN];
   uint32_t len = (uint32_t) cwk_path_get_relative(abs_from, abs_path,
@@ -278,7 +278,7 @@ DEF(_pathJoin, "") {
   pkSetSlotStringLength(vm, 0, result, len);
 }
 
-DEF(_pathNormalize, "") {
+DEF(_pathNormpath, "") {
   const char* path;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
@@ -386,7 +386,7 @@ void registerModulePath(PKVM* vm) {
   pkModuleAddFunction(vm, path, "abspath",   _pathAbspath,      1);
   pkModuleAddFunction(vm, path, "relpath",   _pathRelpath,      2);
   pkModuleAddFunction(vm, path, "join",      _pathJoin,        -1);
-  pkModuleAddFunction(vm, path, "normalize", _pathNormalize,    1);
+  pkModuleAddFunction(vm, path, "normpath",  _pathNormpath,     1);
   pkModuleAddFunction(vm, path, "basename",  _pathBaseName,     1);
   pkModuleAddFunction(vm, path, "dirname",   _pathDirName,      1);
   pkModuleAddFunction(vm, path, "isabspath", _pathIsPathAbs,    1);

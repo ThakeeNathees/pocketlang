@@ -45,10 +45,14 @@
 // Initialize core language, builtin function and core libs.
 void initializeCore(PKVM* vm);
 
-// Initialize a script module. At the moment it'll define __file__ global
-// as an absolute path of the script. [path] should be the normalized absolute
-// path of the script.
-void initializeScript(PKVM* vm, Module* module);
+// Initialize a module. If the script has path, it'll define __file__ global
+// as an absolute path of the module. [path] will be the normalized absolute
+// path of the module. If the module's path is NULL, it's name is used.
+//
+// Also define __name__ as the name of the module, assuming all the modules
+// have name excpet for main which. for main the name will be defined as
+// '__main__' just like python.
+void initializeModule(PKVM* vm, Module* module, bool is_main);
 
 // Create a new module with the given [name] and returns as a Module*.
 // This is function is a wrapper around `newModule()` function to create

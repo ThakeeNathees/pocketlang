@@ -140,14 +140,32 @@ void initializeCore(PKVM* vm) {
   initializePrimitiveClasses(vm);
 }
 
-void initializeScript(PKVM* vm, Module* module) {
-  ASSERT(module->path != NULL, OOPS);
-  ASSERT(module->path->data[0] != SPECIAL_NAME_CHAR, OOPS);
+void initializeModule(PKVM* vm, Module* module, bool is_main) {
+
+  String *path = module->path, *name = NULL;
+
+  if (is_main) {
+    // TODO: consider static string "__main__" stored in PKVM. to reduce
+    // allocations everytime here.
+    name = newString(vm, "__main__");
+    vmPushTempRef(vm, &name->_super); // _main.
+  } else {
+    ASSERT(module->name != NULL, OOPS);
+    name = module->name;
+  }
+
+  ASSERT(name != NULL, OOPS);
 
   // A script's path will always the absolute normalized path (the path
   // resolving function would do take care of it) which is something that
   // was added after python 3.9.
-  moduleSetGlobal(vm, module, "__file__", 8, VAR_OBJ(module->path));
+  if (path != NULL) {
+    moduleSetGlobal(vm, module, "__file__", 8, VAR_OBJ(path));
+  }
+
+  moduleSetGlobal(vm, module, "__name__", 8, VAR_OBJ(name));
+
+  if (is_main) vmPopTempRef(vm); // _main.
 }
 
 /*****************************************************************************/
@@ -234,6 +252,22 @@ static inline bool _callBinaryOpMethod(PKVM* vm, Var self, Var other,
 }
 
 /*****************************************************************************/
+/* REFLECTION AND HELPER FUNCTIONS                                           */
+/*****************************************************************************/
+
+// Add all the methods recursively to the lits used for generating a list of
+// attributes for the 'dir()' function.
+static void _collectMethods(PKVM* vm, List* list, Class* cls) {
+  if (cls == NULL) return;
+
+  for (uint32_t i = 0; i < cls->methods.count; i++) {
+    listAppend(vm, list,
+      VAR_OBJ(newString(vm, cls->methods.data[i]->fn->name)));
+  }
+  _collectMethods(vm, list, cls->super_class);
+}
+
+/*****************************************************************************/
 /* CORE BUILTIN FUNCTIONS                                                    */
 /*****************************************************************************/
 
@@ -271,18 +305,6 @@ DEF(coreHelp,
       vm->config.stdout_write(vm, "()' doesn't have a docstring.\n");
     }
   }
-}
-
-// Add all the methods recursively to the lits used for generating a list of
-// attributes for the 'dir()' function.
-static void _collectMethods(PKVM* vm, List* list, Class* cls) {
-  if (cls == NULL) return;
-
-  for (uint32_t i = 0; i < cls->methods.count; i++) {
-    listAppend(vm, list,
-      VAR_OBJ(newString(vm, cls->methods.data[i]->fn->name)));
-  }
-  _collectMethods(vm, list, cls->super_class);
 }
 
 DEF(coreDir,
@@ -661,6 +683,7 @@ Module* newModuleInternal(PKVM* vm, const char* name) {
   module->initialized = true;
   vmPopTempRef(vm); // _name
 
+  initializeModule(vm, module, false);
   return module;
 }
 
@@ -683,7 +706,7 @@ void moduleAddFunctionInternal(PKVM* vm, Module* module,
 // 'lang' library methods.
 
 DEF(stdLangGC,
-  "gc() -> num\n"
+  "lang.gc() -> num\n"
   "Trigger garbage collection and return the amount of bytes cleaned.") {
 
   size_t bytes_before = vm->bytes_allocated;
@@ -693,7 +716,7 @@ DEF(stdLangGC,
 }
 
 DEF(stdLangDisas,
-  "disas(fn:Closure) -> String\n"
+  "lang.disas(fn:Closure) -> String\n"
   "Returns the disassembled opcode of the function [fn].") {
 
   // TODO: support dissasemble class constructors and module main body.
@@ -707,9 +730,73 @@ DEF(stdLangDisas,
   dumpFunctionCode(vm, closure->fn);
 }
 
+DEF(stdLangBackTrace,
+  "lang.backtrace() -> String\n"
+  "Returns the backtrace as a string, each line is formated as "
+  "'<function>;<file>;<line>\n'.") {
+
+  // FIXME:
+  // All of the bellow code were copied from "debug.c" file, consider
+  // refactor the functionality in a way that it's possible to re use them.
+
+  pkByteBuffer bb;
+  pkByteBufferInit(&bb);
+
+  Fiber* fiber = vm->fiber;
+  ASSERT(fiber != NULL, OOPS);
+
+  while (fiber) {
+
+    for (int i = fiber->frame_count - 1; i >= 0; i--) {
+      CallFrame* frame = &fiber->frames[i];
+      const Function* fn = frame->closure->fn;
+
+      // After fetching the instruction the ip will be inceased so we're
+      // reducing it by 1. But stack overflows are occure before executing
+      // any instruction of that function, so the instruction_index possibly
+      // be -1 (set it to zero in that case).
+      int instruction_index = (int)(frame->ip - fn->fn->opcodes.data) - 1;
+      if (instruction_index == -1) instruction_index = 0;
+      int line = fn->fn->oplines.data[instruction_index];
+
+      // Note that path can be null.
+      const char* path = (fn->owner->path) ? fn->owner->path->data : "<?>";
+      const char* fn_name = (fn->name) ? fn->name : "<?>";
+
+      pkByteBufferAddStringFmt(&bb, vm, "%s;%s;%i\n", fn_name, path, line);
+    }
+
+    if (fiber->caller) fiber = fiber->caller;
+    else fiber = fiber->native;
+  }
+
+  // bb.count not including the null byte and which is the length.
+  String* bt = newStringLength(vm, bb.data, bb.count);
+  vmPushTempRef(vm, &bt->_super); // bt.
+  pkByteBufferClear(&bb, vm);
+  vmPopTempRef(vm); // bt.
+
+  RET(VAR_OBJ(bt));
+}
+
+DEF(stdLangModules,
+  "lang.modules() -> List\n"
+  "Returns the list of all registered modules.") {
+
+  List* list = newList(vm, 8);
+  vmPushTempRef(vm, &list->_super); // list.
+  for (uint32_t i = 0; i < vm->modules->capacity; i++) {
+    if (!IS_UNDEF(vm->modules->entries[i].key)) {
+      listAppend(vm, list, vm->modules->entries[i].value);
+    }
+  }
+  vmPopTempRef(vm); // list.
+  RET(VAR_OBJ(list));
+}
+
 #ifdef DEBUG
 DEF(stdLangDebugBreak,
-  "debug_break() -> null\n"
+  "lang.debug_break() -> null\n"
   "A debug function for development (will be removed).") {
 
   DEBUG_BREAK();
@@ -727,8 +814,10 @@ static void initializeCoreModules(PKVM* vm) {
   vmPopTempRef(vm) /* module */
 
   NEW_MODULE(lang, "lang");
-  MODULE_ADD_FN(lang, "gc",    stdLangGC,     0);
-  MODULE_ADD_FN(lang, "disas", stdLangDisas,  1);
+  MODULE_ADD_FN(lang, "gc", stdLangGC, 0);
+  MODULE_ADD_FN(lang, "disas", stdLangDisas, 1);
+  MODULE_ADD_FN(lang, "backtrace", stdLangBackTrace, 0);
+  MODULE_ADD_FN(lang, "modules", stdLangModules, 0);
 #ifdef DEBUG
   MODULE_ADD_FN(lang, "debug_break", stdLangDebugBreak, 0);
 #endif

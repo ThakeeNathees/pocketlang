@@ -378,7 +378,7 @@ PkResult pkRunFile(PKVM* vm, const char* path) {
     module->path = script_path;
     vmPopTempRef(vm); // script_path.
 
-    initializeScript(vm, module);
+    initializeModule(vm, module, true);
 
     const char* _path = module->path->data;
     char* source = vm->config.load_script_fn(vm, _path);
@@ -460,7 +460,8 @@ PkResult pkRunREPL(PKVM* vm) {
   // The main module that'll be used to compile and execute the input source.
   PkHandle* module = pkNewModule(vm, "@(REPL)");
   ASSERT(IS_OBJ_TYPE(module->value, OBJ_MODULE), OOPS);
-  Module* _module = (Module*)AS_OBJ(module->value);
+  Module* _module = (Module*) AS_OBJ(module->value);
+  initializeModule(vm, _module, true);
 
   // A buffer to store multiple lines read from stdin.
   pkByteBuffer lines;
