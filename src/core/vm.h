@@ -248,4 +248,11 @@ PkResult vmCallMethod(PKVM* vm, Var self, Closure* fn,
 // On failure, it'll set an error and return VAR_NULL.
 Var vmImportModule(PKVM* vm, String* from, String* path);
 
+#ifndef PK_NO_DL
+
+// Release platform dependent native extension module handle. (*.dll, *.so).
+void vmUnloadDlHandle(PKVM* vm, void* handle);
+
+#endif
+
 #endif // PK_VM_H

@@ -6,7 +6,7 @@ CC             = gcc
 CFLAGS         = -fPIC
 DEBUG_CFLAGS   = -D DEBUG -g3 -Og
 RELEASE_CFLAGS = -g -O3
-LDFLAGS        = -lm
+LDFLAGS        = -lm -ldl
 
 TARGET_EXEC = pocket
 BUILD_DIR   = ./build/

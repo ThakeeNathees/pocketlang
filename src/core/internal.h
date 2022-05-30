@@ -51,10 +51,6 @@
 // Dump the stack values and the globals.
 #define DUMP_STACK 0
 
-// Trace memory allocations. Enable this and redirect the trace dump to a file
-// and run the script leak_detect.py to check for memory leaks.
-#define TRACE_MEMORY 0
-
 // Nan-Tagging could be disable for debugging/portability purposes. See "var.h"
 // header for more information on Nan-tagging.
 #define VAR_NAN_TAGGING 1

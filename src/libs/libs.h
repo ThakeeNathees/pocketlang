@@ -51,6 +51,19 @@ void cleanupLibs(PKVM* vm);
 // inorder to use the import statements.
 char* pathResolveImport(PKVM * vm, const char* from, const char* path);
 
+#ifndef PK_NO_DL
+
+// Loads the platform dependent dynamic library and returns the handle.
+void* osLoadDL(PKVM* vm, const char* path);
+
+// Import the module from the dynamic library handle which was loaded from os.
+PkHandle* osImportDL(PKVM* vm, void* handle);
+
+// Release the dynamic library.
+void osUnloadDL(PKVM* vm, void* handle);
+
+#endif
+
 // Write the executable's path to the buffer and return true, if it failed
 // it'll return false.
 bool osGetExeFilePath(char* buff, int size);

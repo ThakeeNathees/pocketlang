@@ -97,6 +97,13 @@ static char* tryImportPaths(PKVM* vm, char* path, char* buff) {
     "",
     ".pk",
     "/_init.pk",
+#ifndef PK_NO_DL
+  #ifdef _WIN32
+    ".dll",
+  #else
+    ".so",
+  #endif
+#endif
     NULL, // Sentinal to mark the array end.
   };
 
@@ -382,15 +389,10 @@ void _registerSearchPaths(PKVM* vm) {
     buff[length++] = last;
   }
 
-  buff[length] = '\0';
-
-  pkAddSearchPath(vm, buff);
-
   // FIXME: the bellow code is hard coded.
-  if (length + strlen("libs/") < MAX_PATH_LEN) {
-    strcpy(buff + length, (ps == CWK_STYLE_WINDOWS) ? "libs\\" : "libs/");
-    pkAddSearchPath(vm, buff);
-  }
+  ASSERT(length + strlen("libs/") < MAX_PATH_LEN, OOPS);
+  strcpy(buff + length, (ps == CWK_STYLE_WINDOWS) ? "libs\\" : "libs/");
+  pkAddSearchPath(vm, buff);
 }
 
 void registerModulePath(PKVM* vm) {

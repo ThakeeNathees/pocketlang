@@ -68,7 +68,7 @@ except for a c99 compatible compiler. It can be compiled with the following comm
 
 #### GCC / MinGw / Clang (alias with gcc)
 ```
-gcc -o pocket cli/*.c src/core/*.c src/libs/*.c -Isrc/include -lm
+gcc -o pocket cli/*.c src/core/*.c src/libs/*.c -Isrc/include -lm -ldl
 ```
 
 #### MSVC
@@ -93,10 +93,12 @@ for the MSVS installation path and setup the build environment.
 ### For other compiler/IDE
 
 1. Create an empty project file / makefile.
-2. Add all C files in the src directory.
-3. Add all C files in the cli directory (**NOT** recursively).
-4. Add `src/include` to include path.
-5. Compile.
+2. Add all C files in the src/core/ directory.
+3. Add all C files in the src/libs/ directory.
+4. Add all C files in the cli/ directory.
+5. Add `src/include` to include path.
+6. If \*nix link m, dl
+7. Compile.
 
 Visual studio project files can be generated with the premake, see
 [scripts/README](https://github.com/ThakeeNathees/pocketlang/scripts/README.md)

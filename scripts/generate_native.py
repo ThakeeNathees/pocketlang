@@ -11,12 +11,12 @@ from os.path import (join, exists, abspath,
 ## the root path.
 ROOT_PATH = abspath(join(dirname(__file__), "../"))
 
-NATIVE_HEADER = "pknative.gen.h"
-NATIVE_SOURCE = "nativeapi.gen.h"
+NATIVE_API_EXT = "pknative.c"
+NATIVE_API_IMP = "nativeapi.h"
 
 POCKET_HEADER = join(ROOT_PATH, f"src/include/pocketlang.h")
-TARGET_HEADER = join(ROOT_PATH, f"src/include/{NATIVE_HEADER}")
-TARGET_SOURCE = join(ROOT_PATH, f"src/core/{NATIVE_SOURCE}")
+TARGET_EXT    = join(ROOT_PATH, f"tests/native/dl/{NATIVE_API_EXT}")
+TARGET_IMP    = join(ROOT_PATH, f"src/libs/gen/{NATIVE_API_IMP}")
 DL_IMPLEMENT  = 'PK_DL_IMPLEMENT'
 
 PK_API = "pk_api"
@@ -38,11 +38,7 @@ HEADER = f'''\
  *  Copyright (c) 2021-2022 Pocketlang Contributors
  *  Distributed Under The MIT License
  */
-
-#ifndef PK_AMALGAMATED
-#include <pocketlang.h>%s
-#endif
-
+%s
 // !! THIS FILE IS GENERATED DO NOT EDIT !!
 
 '''
@@ -135,18 +131,16 @@ def generate():
   api_functions = get_api_functions()
 
   ## Generate pocket native header.
-  with open(TARGET_HEADER, 'w') as fp:
-    fp.write(HEADER % '')
+  with open(TARGET_EXT, 'w') as fp:
+    fp.write(HEADER % '\n#include <pocketlang.h>\n')
     fp.write(fn_typedefs(api_functions))
     fp.write(api_typedef(api_functions))
-    fp.write(f'\n#if defined({DL_IMPLEMENT})\n\n')
     fp.write(init_api(api_functions))
     fp.write(define_functions(api_functions))
-    fp.write(f'\n#endif //{DL_IMPLEMENT}\n')
 
   ## Generate native api source.
-  with open(TARGET_SOURCE, 'w') as fp:
-    fp.write(HEADER % '')
+  with open(TARGET_IMP, 'w') as fp:
+    fp.write(HEADER % '\n#ifndef PK_AMALGAMATED\n#include <pocketlang.h>\n#endif\n\n')
 
     fp.write(fn_typedefs(api_functions))
     fp.write(api_typedef(api_functions))
@@ -163,5 +157,5 @@ def generate():
 
 if __name__ == "__main__":
   generate()
-  print("Generated:", relpath(TARGET_HEADER, ROOT_PATH))
-  print("Generated:", relpath(TARGET_SOURCE, ROOT_PATH))
+  print("Generated:", relpath(TARGET_EXT, ROOT_PATH))
+  print("Generated:", relpath(TARGET_IMP, ROOT_PATH))

@@ -29,21 +29,20 @@
   #define _PKOS_LINUX_
   #define OS_NAME "linux"
 
-#elif defined(__unix__)
-  #define _PKOS_UNIX_
-  #define OS_NAME "unix"
-
-#elif defined(_POSIX_VERSION)
-  #define _PKOS_POSIX_
-  #define OS_NAME "posix"
-
 #else
   #define _PKOS_UNKNOWN_
   #define OS_NAME "<?>"
 #endif
 
-#if defined(_MSC_VER) || (defined(_WIN32) && defined(__TINYC__))
+#if defined(_PKOS_WIN_)
   #include <windows.h>
+#endif
+
+#if defined(__linux__) && !defined(PK_NO_DL)
+  #include <dlfcn.h>
+#endif
+
+#if defined(_MSC_VER) || (defined(_WIN32) && defined(__TINYC__))
   #include <direct.h>
   #include <io.h>
 
@@ -64,6 +63,88 @@
 // platform specific we're defining a more general limit.
 // See: https://insanecoding.blogspot.com/2007/11/pathmax-simply-isnt.html
 #define MAX_PATH_LEN 4096
+
+#ifndef PK_NO_DL
+
+#define PK_DL_IMPLEMENT
+#include "gen/nativeapi.h"  //<< AMALG_INLINE >>
+
+#ifdef _PKOS_WIN_
+void* osLoadDL(PKVM* vm, const char* path) {
+  HMODULE handle = LoadLibraryA(path);
+  if (handle == NULL) return NULL;
+
+  pkInitApiFn init_fn = \
+    (pkInitApiFn) GetProcAddress(handle, PK_API_INIT_FN_NAME);
+
+  if (init_fn == NULL) {
+    FreeLibrary(handle);
+    return NULL;
+  }
+
+  PkNativeApi api = pkMakeNativeAPI();
+  init_fn(&api);
+
+  return (void*) handle;
+}
+
+PkHandle* osImportDL(PKVM* vm, void* handle) {
+  pkExportModuleFn export_fn = \
+    (pkExportModuleFn)GetProcAddress((HMODULE) handle, PK_EXPORT_FN_NAME);
+  if (export_fn == NULL) return NULL;
+
+  return export_fn(vm);
+}
+
+void osUnloadDL(PKVM* vm, void* handle) {
+  FreeLibrary((HMODULE) handle);
+}
+
+#elif defined(__linux__)
+
+void* osLoadDL(PKVM* vm, const char* path) {
+  // https://man7.org/linux/man-pages/man3/dlopen.3.html
+  void* handle = dlopen(path, RTLD_LAZY);
+  if (handle == NULL) return NULL;
+
+  pkInitApiFn init_fn = dlsym(handle, PK_API_INIT_FN_NAME);
+  if (init_fn == NULL) {
+    if (dlclose(handle)) { /* TODO: Handle error. */ }
+    dlerror(); // Clear error.
+    return NULL;
+  }
+
+  PkNativeApi api = pkMakeNativeAPI();
+  init_fn(&api);
+
+  return handle;
+}
+
+PkHandle* osImportDL(PKVM* vm, void* handle) {
+  pkExportModuleFn export_fn = dlsym(handle, PK_EXPORT_FN_NAME);
+  if (export_fn == NULL) {
+    dlerror(); // Clear error.
+    return NULL;
+  }
+
+  PkHandle* module = export_fn(vm);
+  dlerror(); // Clear error.
+  return module;
+}
+
+void osUnloadDL(PKVM* vm, void* handle) {
+  dlclose(handle);
+}
+
+#else
+
+void* osLoadDL(PKVM* vm, const char* path) { return NULL; }
+PkHandle* osImportDL(PKVM* vm, void* handle) { return NULL; }
+void osUnloadDL(PKVM* vm, void* handle) { }
+
+#endif
+
+#endif // PK_NO_DL
 
 bool osGetExeFilePath(char* buff, int size) {
 

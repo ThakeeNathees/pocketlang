@@ -47,39 +47,7 @@ void* vmRealloc(PKVM* vm, void* memory, size_t old_size, size_t new_size) {
     vm->collecting_garbage = false;
   }
 
-#if TRACE_MEMORY
-
-  void* ptr = vm->config.realloc_fn(memory, new_size, vm->config.user_data);
-  do {
-    // Deallocation of the VM itself cannot be traced.
-    if (memory == vm) break;
-    if (memory == NULL && new_size == 0) { //< Just nothing.
-      ASSERT(old_size == 0, OOPS);
-      break;
-    }
-
-    if (old_size == 0 && new_size > 0) { // New allocation.
-        ASSERT(memory == NULL, OOPS);
-        printf("[memory trace] malloc  : %p = %+li bytes\n",
-               ptr, (long) new_size);
-      } else if (new_size == 0) { // Free.
-        ASSERT(memory != NULL && old_size != 0, OOPS);
-        printf("[memory trace] free    : %p = -%li bytes\n",
-               memory, (long) old_size);
-      } else { // Realloc.
-        ASSERT(old_size != 0 && new_size != 0 && memory != NULL, OOPS);
-        printf("[memory trace] realloc : %p -> %p = %+li -> %+li bytes\n",
-               memory, ptr, (long) (old_size), (long) (new_size));
-      }
-
-  } while (false);
-
-  return ptr;
-
-#else
   return vm->config.realloc_fn(memory, new_size, vm->config.user_data);
-#endif
-
 }
 
 void vmPushTempRef(PKVM* vm, Object* obj) {
@@ -368,6 +336,68 @@ PkResult vmCallFunction(PKVM* vm, Closure* fn, int argc, Var* argv, Var* ret) {
   return vmCallMethod(vm, VAR_UNDEFINED, fn, argc, argv, ret);
 }
 
+#ifndef PK_NO_DL
+
+// Returns true if the path ends with ".dll" or ".so".
+static bool _isPathDL(String* path) {
+  const char* dlext[] = {
+    ".so",
+    ".dll",
+    NULL,
+  };
+
+  for (const char** ext = dlext; *ext != NULL; ext++) {
+    const char* start = path->data + (path->length - strlen(*ext));
+    if (!strncmp(start, *ext, strlen(*ext))) return true;
+  }
+
+  return false;
+}
+
+static Module* _importDL(PKVM* vm, String* resolved, String* name) {
+  if (vm->config.import_dl_fn == NULL) {
+    VM_SET_ERROR(vm, newString(vm, "Dynamic library importer not provided."));
+    return NULL;
+  }
+
+  ASSERT(vm->config.load_dl_fn != NULL, OOPS);
+  void* handle = vm->config.load_dl_fn(vm, resolved->data);
+
+  if (handle == NULL) {
+    VM_SET_ERROR(vm, stringFormat(vm, "Error loading module at \"@\"",
+      resolved));
+    return NULL;
+  }
+
+  PkHandle* pkhandle = vm->config.import_dl_fn(vm, handle);
+  if (pkhandle == NULL) {
+    VM_SET_ERROR(vm, stringFormat(vm, "Error loading module at \"@\"",
+      resolved));
+    return NULL;
+  }
+
+  if (!IS_OBJ_TYPE(pkhandle->value, OBJ_MODULE)) {
+    VM_SET_ERROR(vm, stringFormat(vm, "Returned handle wasn't a "
+                 "module at \"@\"", resolved));
+    return NULL;
+  }
+
+  Module* module = (Module*) AS_OBJ(pkhandle->value);
+  module->name = name;
+  module->path = resolved;
+  module->handle = handle;
+  vmRegisterModule(vm, module, resolved);
+
+  pkReleaseHandle(vm, pkhandle);
+  return module;
+}
+
+void vmUnloadDlHandle(PKVM* vm, void* handle) {
+  if (handle && vm->config.unload_dl_fn)
+    vm->config.unload_dl_fn(vm, handle);
+}
+#endif // PK_NO_DL
+
 /*****************************************************************************/
 /* VM INTERNALS                                                              */
 /*****************************************************************************/
@@ -460,7 +490,14 @@ Var vmImportModule(PKVM* vm, String* from, String* path) {
   // The script not exists in the VM, make sure we have the script loading
   // api function.
 
+  #ifndef PK_NO_DL
+  bool isdl = _isPathDL(resolved);
+  if (isdl && vm->config.load_dl_fn == NULL
+      || vm->config.load_script_fn == NULL) {
+  #else
   if (vm->config.load_script_fn == NULL) {
+  #endif
+
     VM_SET_ERROR(vm, newString(vm, "Cannot import. The hosting application "
                                "haven't registered the module loading API"));
     return VAR_NULL;
@@ -485,7 +522,13 @@ Var vmImportModule(PKVM* vm, String* from, String* path) {
     }
     _name->hash = utilHashString(_name->data);
     vmPushTempRef(vm, &_name->_super); // _name.
+
+    #ifndef PK_NO_DL
+    if (isdl) module = _importDL(vm, resolved, _name);
+    else /* ... */
+    #endif
     module = _importScript(vm, resolved, _name);
+
     vmPopTempRef(vm); // _name.
   }
   vmPopTempRef(vm); // resolved.

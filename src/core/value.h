@@ -311,6 +311,13 @@ struct Module {
   // will be set to true. If a module doesn't have globals, We can safely set
   // it to true to prevent from running the above body function, if it has one.
   bool initialized;
+
+#ifndef PK_NO_DL
+  // If the module loaded from a native extension, this handle will reference
+  // to the platform dependent handle of that module and will be released
+  // when the module garbage collected.
+  void* handle;
+#endif
 };
 
 // A struct contain opcodes and other information of a compiled function.
