@@ -35,21 +35,21 @@ extern "C" {
 // pocketlang it self as a shared library.
 
 #ifdef _MSC_VER
-  #define _PK_EXPORT __declspec(dllexport)
-  #define _PK_IMPORT __declspec(dllimport)
+  #define PK_EXPORT __declspec(dllexport)
+  #define PK_IMPORT __declspec(dllimport)
 #elif defined(__GNUC__)
-  #define _PK_EXPORT __attribute__((visibility ("default")))
-  #define _PK_IMPORT
+  #define PK_EXPORT __attribute__((visibility ("default")))
+  #define PK_IMPORT
 #else
-  #define _PK_EXPORT
-  #define _PK_IMPORT
+  #define PK_EXPORT
+  #define PK_IMPORT
 #endif
 
 #ifdef PK_DLL
   #ifdef PK_COMPILE
-    #define PK_PUBLIC _PK_EXPORT
+    #define PK_PUBLIC PK_EXPORT
   #else
-    #define PK_PUBLIC _PK_IMPORT
+    #define PK_PUBLIC PK_IMPORT
   #endif
 #else
   #define PK_PUBLIC
@@ -110,12 +110,17 @@ typedef void (*pkSignalFn) (void*);
 typedef char* (*pkLoadScriptFn) (PKVM* vm, const char* path);
 
 // A function callback to resolve the import statement path. [from] path can
-// be either path to a script or NULL if [path] is relative to cwd. The return
-// value should be a normalized absolute path of the [path]. Return NULL to
-// indicate failure to resolve. Othrewise the string **must** be allocated with
-// pkRealloc() and the VM will claim the ownership of the string.
+// be either path to a script or a directory or NULL if [path] is relative to
+// cwd. If the path is a directory it'll always ends with a path separator
+// which could be either '/' or '\\' regardless of the system. Since pocketlang is
+// un aware of the system, to indicate that the path is a directory.
+//
+// The return value should be a normalized absolute path of the [path]. Return
+// NULL to indicate failure to resolve. Othrewise the string **must** be
+// allocated with pkRealloc() and the VM will claim the ownership of the
+// string.
 typedef char* (*pkResolvePathFn) (PKVM* vm, const char* from,
-                                       const char* path);
+                                  const char* path);
 
 // A function callback to allocate and return a new instance of the registered
 // class. Which will be called when the instance is constructed. The returned/
@@ -217,6 +222,11 @@ PK_PUBLIC void* pkGetUserData(const PKVM* vm);
 // docstrings.
 PK_PUBLIC void pkRegisterBuiltinFn(PKVM* vm, const char* name, pkNativeFn fn,
                                    int arity, const char* docstring);
+
+// Adds a new search paht to the VM, the path will be appended to the list of
+// search paths. Search path orders are the same as the registered order.
+// the last character of the path **must** be a path seperator '/' or '\\'.
+PK_PUBLIC void pkAddSearchPath(PKVM* vm, const char* path);
 
 // Invoke pocketlang's allocator directly.  This function should be called 
 // when the host application want to send strings to the PKVM that are claimed

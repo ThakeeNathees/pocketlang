@@ -97,13 +97,7 @@ set addnl_cdefines=/D_CRT_SECURE_NO_WARNINGS
 
 
 if "%debug_build%"=="false" (
-
-  :: Not sure why, but the release build are much slower with this script.
-  :: I might have to double check the compilation flags.
-  echo TODO: This Batch script doesn't support release builds for now
-  exit /b 1
-  
-	set cflags=%cflags% -O2 -MD
+	set cflags=%cflags% -O2 -MD /DNDEBUG
 	set target_dir=%pocket_root%build\Release\
 ) else (
 	set cflags=%cflags% -MDd -ZI

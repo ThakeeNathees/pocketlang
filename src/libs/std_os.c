@@ -65,6 +65,30 @@
 // See: https://insanecoding.blogspot.com/2007/11/pathmax-simply-isnt.html
 #define MAX_PATH_LEN 4096
 
+bool osGetExeFilePath(char* buff, int size) {
+
+#if defined(_PKOS_WIN_)
+    int bytes = GetModuleFileNameA(NULL, buff, size);
+    ASSERT(bytes > 0, "GetModuleFileName failed.");
+    return true;
+
+#elif defined(_PKOS_APPLE_)
+  unsigned sz = size;
+  _NSGetExecutablePath(buff, &sz);
+  return true;
+
+#elif defined(_PKOS_LINUX_)
+    char tmp[MAX_PATH_LEN];
+    sprintf(tmp, "/proc/%d/exe", getpid());
+    int len = readlink(tmp, buff, size);
+    buff[len] = '\0';
+    return true;
+
+#else
+    return false;
+#endif
+}
+
 // Yes both 'os' and 'path' have getcwd functions.
 DEF(_osGetCWD,
   "os.getcwd() -> String\n"
@@ -186,15 +210,28 @@ DEF(_osGetenv,
   pkSetSlotString(vm, 0, value);
 }
 
+DEF(_osExepath,
+  "os.exepath() -> String\n"
+  "Returns the path of the pocket interpreter executable.") {
+
+  char buff[MAX_PATH_LEN];
+  if (!osGetExeFilePath(buff, MAX_PATH_LEN)) {
+    pkSetRuntimeError(vm, "Cannot obtain ececutable path.");
+    return;
+  }
+
+  pkSetSlotString(vm, 0, buff);
+}
+
 /*****************************************************************************/
 /* MODULE REGISTER                                                           */
 /*****************************************************************************/
 
 void registerModuleOS(PKVM* vm) {
 
-  pkReserveSlots(vm, 2);
   PkHandle* os = pkNewModule(vm, "os");
 
+  pkReserveSlots(vm, 2);
   pkSetSlotHandle(vm, 0, os);       // slots[0] = os
   pkSetSlotString(vm, 1, OS_NAME);  // slots[1] = "windows"
   pkSetAttribute(vm, 0, "NAME", 1); // os.NAME = "windows"
@@ -208,6 +245,7 @@ void registerModuleOS(PKVM* vm) {
   pkModuleAddFunction(vm, os, "filesize", _osFileSize, 1);
   pkModuleAddFunction(vm, os, "system", _osSystem, 1);
   pkModuleAddFunction(vm, os, "getenv", _osGetenv, 1);
+  pkModuleAddFunction(vm, os, "exepath", _osExepath, 0);
 
   // TODO:
   // - Implement makedirs which recursively mkdir().

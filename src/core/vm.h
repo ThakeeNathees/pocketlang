@@ -118,6 +118,9 @@ struct PKVM {
   //      - otherwise path of the module.
   Map* modules;
 
+  // List of directories that used for search modules.
+  List* search_paths;
+
   // Array of all builtin functions.
   Closure* builtins_funcs[BUILTIN_FN_CAPACITY];
   int builtins_count;

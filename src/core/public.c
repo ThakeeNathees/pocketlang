@@ -129,6 +129,8 @@ PKVM* pkNewVM(PkConfiguration* config) {
   vm->heap_fill_percent = HEAP_FILL_PERCENT;
 
   vm->modules = newMap(vm);
+  vm->search_paths = newList(vm, 8);
+
   vm->builtins_count = 0;
 
   // This is necessary to prevent garbage collection skip the entry in this
@@ -199,6 +201,22 @@ void pkRegisterBuiltinFn(PKVM* vm, const char* name, pkNativeFn fn,
   fptr->arity = arity;
   vm->builtins_funcs[vm->builtins_count++] = newClosure(vm, fptr);
   vmPopTempRef(vm); // fptr.
+}
+
+void pkAddSearchPath(PKVM* vm, const char* path) {
+  CHECK_ARG_NULL(path);
+
+  size_t length = strlen(path);
+  ASSERT(length > 0, "Path size cannot be 0.");
+
+  char last = path[length - 1];
+  ASSERT(last == '/' || last == '\\', "Path should ends with "
+                                      "either '/' or '\\'.");
+
+  String* spath = newStringLength(vm, path, (uint32_t) length);
+  vmPushTempRef(vm, &spath->_super); // spath.
+  listAppend(vm, vm->search_paths, VAR_OBJ(spath));
+  vmPopTempRef(vm); // spath.
 }
 
 PkHandle* pkNewModule(PKVM* vm, const char* name) {

@@ -127,8 +127,9 @@ void vmCollectGarbage(PKVM* vm) {
     markObject(vm, &vm->builtin_classes[i]->_super);
   }
 
-  // Mark the modules.
+  // Mark the modules and search path.
   markObject(vm, &vm->modules->_super);
+  markObject(vm, &vm->search_paths->_super);
 
   // Mark temp references.
   for (int i = 0; i < vm->temp_reference_count; i++) {
@@ -371,6 +372,37 @@ PkResult vmCallFunction(PKVM* vm, Closure* fn, int argc, Var* argv, Var* ret) {
 /* VM INTERNALS                                                              */
 /*****************************************************************************/
 
+static Module* _importScript(PKVM* vm, String* resolved, String* name) {
+  char* source = vm->config.load_script_fn(vm, resolved->data);
+  if (source == NULL) {
+    VM_SET_ERROR(vm, stringFormat(vm, "Error loading module at \"@\"",
+      resolved));
+    return NULL;
+  }
+
+  // Make a new module, compile and cache it.
+  Module* module = newModule(vm);
+  module->path = resolved;
+  module->name = name;
+
+  vmPushTempRef(vm, &module->_super); // module.
+  {
+    initializeModule(vm, module, false);
+    PkResult result = compile(vm, module, source, NULL);
+    pkRealloc(vm, source, 0);
+    if (result == PK_RESULT_SUCCESS) {
+      vmRegisterModule(vm, module, resolved);
+    } else {
+      VM_SET_ERROR(vm, stringFormat(vm, "Error compiling module at \"@\"",
+                   resolved));
+      module = NULL; //< set to null to indicate error.
+    }
+  }
+  vmPopTempRef(vm); // module.
+
+  return module;
+}
+
 // Import and return the Module object with the [path] string. If the path
 // starts with with './' or '../' we'll only try relative imports, otherwise
 // we'll search native modules first and then at relative path.
@@ -390,11 +422,24 @@ Var vmImportModule(PKVM* vm, String* from, String* path) {
       return entry; // We're done.
     }
   }
+  char* _resolved = NULL;
 
-  // If we reached here. It's not a native module (ie. module's absolute path
-  // is required to import and cache).
-  char* _resolved = vm->config.resolve_path_fn(vm,
-                    (from) ? from->data : NULL, path->data);
+  const char* from_path = (from) ? from->data : NULL;
+  uint32_t search_path_idx = 0;
+
+  do {
+    // If we reached here. It's not a native module (ie. module's absolute path
+    // is required to import and cache).
+    _resolved = vm->config.resolve_path_fn(vm, from_path, path->data);
+    if (_resolved) break;
+
+    if (search_path_idx >= vm->search_paths->elements.count) break;
+
+    Var sp = vm->search_paths->elements.data[search_path_idx++];
+    ASSERT(IS_OBJ_TYPE(sp, OBJ_STRING), OOPS);
+    from_path = ((String*) AS_OBJ(sp))->data;
+
+  } while (true);
 
   if (_resolved == NULL) { // Can't resolve a relative module.
     pkRealloc(vm, _resolved, 0);
@@ -412,10 +457,9 @@ Var vmImportModule(PKVM* vm, String* from, String* path) {
     return entry; // We're done.
   }
 
-  // If we've reached here, the script is new. Import compile, and cache it.
-
   // The script not exists in the VM, make sure we have the script loading
   // api function.
+
   if (vm->config.load_script_fn == NULL) {
     VM_SET_ERROR(vm, newString(vm, "Cannot import. The hosting application "
                                "haven't registered the module loading API"));
@@ -425,45 +469,25 @@ Var vmImportModule(PKVM* vm, String* from, String* path) {
   Module* module = NULL;
 
   vmPushTempRef(vm, &resolved->_super); // resolved.
-  do {
-
-    char* source = vm->config.load_script_fn(vm, resolved->data);
-    if (source == NULL) {
-      VM_SET_ERROR(vm, stringFormat(vm, "Error loading module at \"@\"",
-                                    resolved));
-      break;
-    }
-
-    // Make a new module, compile and cache it.
-    module = newModule(vm);
-    module->path = resolved;
-
+  {
     // FIXME:
-    // __name__ will contain '/' instead of '.', To fix this I should use
-    // stringReplace with old = '/', new = '.' and the parameters should be
-    // string objects which should be allocated in VM statically for single
-    // char strings.
+    // stringReplace() function expect 2 strings old, and new to replace but
+    // we cannot afford to allocate new strings for single char, so we're
+    // replaceing and rehashing the string here. I should add some update
+    // string function that update a string after it's data was modified.
     //
-    // path here is the imported symbol not the actual path,
-    // Example: "foo/bar" which was imported as "foo.bar"
-    module->name = path;
-
-    vmPushTempRef(vm, &module->_super); // module.
-    {
-      initializeModule(vm, module, false);
-      PkResult result = compile(vm, module, source, NULL);
-      pkRealloc(vm, source, 0);
-      if (result == PK_RESULT_SUCCESS) {
-        vmRegisterModule(vm, module, resolved);
-      } else {
-        VM_SET_ERROR(vm, stringFormat(vm, "Error compiling module at \"@\"",
-                     resolved));
-        module = NULL; //< set to null to indicate error.
-      }
+    // The path of the module contain '/' which was replacement of '.' in the
+    // import syntax, this is done so that path resolving can be done easily.
+    // However it needs to be '.' for the name of the module.
+    String* _name = newStringLength(vm, path->data, path->length);
+    for (char* c = _name->data; c < _name->data + _name->length; c++) {
+      if (*c == '/') *c = '.';
     }
-    vmPopTempRef(vm); // module.
-
-  } while (false);
+    _name->hash = utilHashString(_name->data);
+    vmPushTempRef(vm, &_name->_super); // _name.
+    module = _importScript(vm, resolved, _name);
+    vmPopTempRef(vm); // _name.
+  }
   vmPopTempRef(vm); // resolved.
 
   if (module == NULL) {
