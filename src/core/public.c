@@ -17,7 +17,7 @@
 #include "vm.h"
 #endif
 
-// TODO: Document this or Find a better way.
+// FIXME: Document this or Find a better way.
 //
 // Pocketlang core doesn't implement path resolving funcionality. Rather it
 // should be provided the host application. By default we're using an
@@ -32,6 +32,13 @@
   void registerLibs(PKVM* vm);
   void cleanupLibs(PKVM* vm);
   char* pathResolveImport(PKVM* vm, const char* from, const char* path);
+
+#ifndef PK_NO_DL
+  void* osLoadDL(PKVM* vm, const char* path);
+  PkHandle* osImportDL(PKVM* vm, void* handle);
+  void osUnloadDL(PKVM* vm, void* handle);
+#endif
+
 #endif
 
 #define CHECK_ARG_NULL(name) \
@@ -81,15 +88,8 @@ static char* stdinRead(PKVM* vm);
 static char* loadScript(PKVM* vm, const char* path);
 
 void* pkRealloc(PKVM* vm, void* ptr, size_t size) {
-
   ASSERT(vm->config.realloc_fn != NULL, "PKVM's allocator was NULL.");
-#if TRACE_MEMORY
-  void* newptr = vm->config.realloc_fn(ptr, size, vm->config.user_data);
-  printf("[pkRealloc] %p -> %p %+li bytes\n", ptr, newptr, (long) size);
-  return ptr;
-#else
   return vm->config.realloc_fn(ptr, size, vm->config.user_data);
-#endif
 }
 
 PkConfiguration pkNewConfiguration() {
@@ -103,6 +103,13 @@ PkConfiguration pkNewConfiguration() {
   config.stdin_read = stdinRead;
 #ifndef PK_NO_LIBS
   config.resolve_path_fn = pathResolveImport;
+
+#ifndef PK_NO_DL
+  config.load_dl_fn = osLoadDL;
+  config.import_dl_fn = osImportDL;
+  config.unload_dl_fn = osUnloadDL;
+#endif
+
 #endif
   config.load_script_fn = loadScript;
 

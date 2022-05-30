@@ -109,6 +109,24 @@ typedef void (*pkSignalFn) (void*);
 // the VM will claim the ownership of the string.
 typedef char* (*pkLoadScriptFn) (PKVM* vm, const char* path);
 
+#ifndef PK_NO_DL
+
+// Load and return the native extension (*.dll, *.so) from the path, this will
+// then used to import the module with the pkImportImportDL function. On error
+// the function should return NULL and shouldn't use any error api function.
+typedef void* (*pkLoadDL) (PKVM* vm, const char* path);
+
+// Native extension loader from the dynamic library. The handle should be vaiid
+// as long as the module handle is alive. On error the function should return
+// NULL and shouldn't use any error api function.
+typedef PkHandle* (*pkImportDL) (PKVM* vm, void* handle);
+
+// Once the native module is gargage collected, the dl handle will be released
+// with pkUnloadDL function.
+typedef void (*pkUnloadDL) (PKVM* vm, void* handle);
+
+#endif // PK_NO_DL
+
 // A function callback to resolve the import statement path. [from] path can
 // be either path to a script or a directory or NULL if [path] is relative to
 // cwd. If the path is a directory it'll always ends with a path separator
@@ -188,6 +206,12 @@ struct PkConfiguration {
   // Import system callbacks.
   pkResolvePathFn resolve_path_fn;
   pkLoadScriptFn load_script_fn;
+
+  #ifndef PK_NO_DL
+  pkLoadDL load_dl_fn;
+  pkImportDL import_dl_fn;
+  pkUnloadDL unload_dl_fn;
+  #endif
 
   // If true stderr calls will use ansi color codes.
   bool use_ansi_escape;

@@ -1143,6 +1143,9 @@ void freeObject(PKVM* vm, Object* self) {
       pkVarBufferClear(&module->globals, vm);
       pkUintBufferClear(&module->global_names, vm);
       pkVarBufferClear(&module->constants, vm);
+      #ifndef PK_NO_DL
+      if (module->handle) vmUnloadDlHandle(vm, module->handle);
+      #endif
       DEALLOCATE(vm, self, Module);
       return;
     }
