@@ -14,7 +14,7 @@
 
 // The maximum number of temporary object reference to protect them from being
 // garbage collected.
-#define MAX_TEMP_REFERENCE 16
+#define MAX_TEMP_REFERENCE 64
 
 // The capacity of the builtin function array in the VM.
 #define BUILTIN_FN_CAPACITY 50

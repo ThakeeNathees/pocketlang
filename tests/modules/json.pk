@@ -1,0 +1,46 @@
+
+import io, json, path
+
+## https://support.oneskyapp.com/hc/en-us/articles/208047697-JSON-sample-files
+jsonfile = path.join(path.dirname(__file__), 'test.json')
+
+obj = json.parse(io.readfile(jsonfile))
+assert(obj is Map)
+
+sports_q1 = obj['quiz']['sport']['q1']
+assert(sports_q1['question'] == 'Which one is correct team name in NBA?')
+
+assert(sports_q1['options'] ==
+      [
+        "New York Bulls",
+        "Los Angeles Kings",
+        "Golden State Warriros",
+        "Huston Rocket",
+      ])
+
+assert(obj['quiz']['maths'] ==
+      {
+        "q1": {
+          "question": "5 + 7 = ?",
+          "options": [
+            "10",
+            "11",
+            "12",
+            "13",
+          ],
+          "answer": "12"
+        },
+        "q2": {
+          "question": "12 - 8 = ?",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+          ],
+          "answer": "4"
+        }
+      })
+
+# If we got here, that means all test were passed.
+print('All TESTS PASSED')

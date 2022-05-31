@@ -13,9 +13,8 @@
 // check if it's MSVC (and tcc in windows) or not for posix headers and
 // Refactor the bellow macro includes.
 
-#define _CWALK_IMPL
 #include "thirdparty/cwalk/cwalk.h" //<< AMALG_INLINE >>
-#undef _CWALK_IMPL
+#include "thirdparty/cwalk/cwalk.c" //<< AMALG_INLINE >>
 
 #include <sys/stat.h>
 
@@ -94,14 +93,25 @@ static char* tryImportPaths(PKVM* vm, char* path, char* buff) {
   size_t path_size = 0;
 
   static const char* EXT[] = {
+    // Path can already end with '.pk' or anything when running from
+    // pkRunFile() so it's mandatory for the bellow empty string.
     "",
+
     ".pk",
     "/_init.pk",
+
 #ifndef PK_NO_DL
-  #ifdef _WIN32
+  #if defined(_WIN32)
     ".dll",
-  #else
+    "/_init.dll",
+
+  #elif defined(__APPLE__)
+    ".dylib",
+    "/_init.dylib",
+
+  #elif defined(__linux__)
     ".so",
+    "/_init.so",
   #endif
 #endif
     NULL, // Sentinal to mark the array end.

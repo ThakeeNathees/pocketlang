@@ -8,5 +8,22 @@ assert(list_join([1, 2, 3]) == "123")
 assert(list_join(["hello", " world"]) == "hello world")
 assert(list_join([[], []]) == "[][]")
 
+assert(min(-1, 2) == -1)
+assert(max(100, -200) == 100)
+
+class N
+  def _init(n)
+    self.n = n
+  end
+  def < (other)
+    return self.n < other.n
+  end
+end
+
+n1 = N(1)
+n2 = N(2)
+assert(min(n1, n2) == n1)
+assert(max(n1, n2) == n2)
+
 ## If we got here, that means all test were passed.
 print('All TESTS PASSED')

@@ -66,7 +66,9 @@ def parse(path):
   text = ""  
   with open(path, 'r') as fp:
     for line in fp.readlines():
-      if "//<< AMALG_INLINE >>" in line:
+      if "//<< AMALG_IGNORE >>" in line:
+        continue
+      elif "//<< AMALG_INLINE >>" in line:
         path = join(dir, _get_include_path(line))
         path = path.replace('\\', '/')
         text += parse(path) + '\n'
