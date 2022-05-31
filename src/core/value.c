@@ -1451,6 +1451,19 @@ bool isValuesEqual(Var v1, Var v2) {
       return true;
     }
 
+    case OBJ_MAP: {
+      Map *m1 = (Map*) o1, *m2 = (Map*) o2;
+
+      MapEntry* e = m1->entries;
+      for (; e < m1->entries + m1->capacity; e++) {
+        if (IS_UNDEF(e->key)) continue;
+        Var v = mapGet(m2, e->key);
+        if (IS_UNDEF(v)) return false;
+        if (!isValuesEqual(e->value, v)) return false;
+      }
+      return true;
+    }
+
     default:
       return false;
   }

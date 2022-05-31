@@ -132,6 +132,20 @@ assert(l == ['h', 'e', 'l', 'l', 'o'])
 ## MAP
 ###############################################################################
 
+m = { 'fruit': 'Apple' }
+m['size'] = 'Large'
+m['colors'] = []
+colors = m['colors']
+colors.append('Red')
+colors.append('Green')
+colors.append('Blue')
+
+assert(m == {
+  "fruit": "Apple",
+  "size": "Large",
+  "colors": ["Red", "Green", "Blue"]
+})
+
 swtich = {
   0 : fn return 1 end,
   1 : fn return 2 end,

@@ -518,6 +518,30 @@ DEF(coreOrd,
   }
 }
 
+DEF(coreMin,
+  "min(a:var, b:var) -> Bool\n"
+  "Returns minimum of [a] and [b].") {
+
+  Var a = ARG(1), b = ARG(2);
+  Var islesser = varLesser(vm, a, b);
+  if (VM_HAS_ERROR(vm)) RET(VAR_NULL);
+
+  if (toBool(islesser)) RET(a);
+  RET(b);
+}
+
+DEF(coreMax,
+  "max(a:var, b:var) -> Bool\n"
+  "Returns maximum of [a] and [b].") {
+
+  Var a = ARG(1), b = ARG(2);
+  Var islesser = varLesser(vm, a, b);
+  if (VM_HAS_ERROR(vm)) RET(VAR_NULL);
+
+  if (toBool(islesser)) RET(b);
+  RET(a);
+}
+
 DEF(corePrint,
   "print(...) -> void\n"
   "Write each argument as space seperated, to the stdout and ends with a "
@@ -650,6 +674,8 @@ static void initializeBuiltinFunctions(PKVM* vm) {
   INITIALIZE_BUILTIN_FN("str",       coreToString, 1);
   INITIALIZE_BUILTIN_FN("chr",       coreChr,      1);
   INITIALIZE_BUILTIN_FN("ord",       coreOrd,      1);
+  INITIALIZE_BUILTIN_FN("min",       coreMin,      2);
+  INITIALIZE_BUILTIN_FN("max",       coreMax,      2);
   INITIALIZE_BUILTIN_FN("print",     corePrint,   -1);
   INITIALIZE_BUILTIN_FN("input",     coreInput,   -1);
   INITIALIZE_BUILTIN_FN("exit",      coreExit,    -1);
@@ -1475,16 +1501,18 @@ Closure* getSuperMethod(PKVM* vm, Var self, String* name) {
 
 #define RIGHT_OPERAND "Right operand"
 
-#define CHECK_NUMERIC_OP(op)                                \
+#define CHECK_NUMERIC_OP_AS(op, as)                         \
   do {                                                      \
     double n1, n2;                                          \
     if (isNumeric(v1, &n1)) {                               \
       if (validateNumeric(vm, v2, &n2, RIGHT_OPERAND)) {    \
-        return VAR_NUM(n1 op n2);                           \
+        return as(n1 op n2);                                \
       }                                                     \
       return VAR_NULL;                                      \
     }                                                       \
   } while (false)
+
+#define CHECK_NUMERIC_OP(op) CHECK_NUMERIC_OP_AS(op, VAR_NUM)
 
 #define CHECK_BITWISE_OP(op)                                \
   do {                                                      \
@@ -1708,7 +1736,7 @@ Var varEqals(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varGreater(PKVM* vm, Var v1, Var v2) {
-  CHECK_NUMERIC_OP(>);
+  CHECK_NUMERIC_OP_AS(>, VAR_BOOL);
   const bool inplace = false;
   CHECK_INST_BINARY_OP(">");
   UNSUPPORTED_BINARY_OP(">");
@@ -1716,7 +1744,7 @@ Var varGreater(PKVM* vm, Var v1, Var v2) {
 }
 
 Var varLesser(PKVM* vm, Var v1, Var v2) {
-  CHECK_NUMERIC_OP(<);
+  CHECK_NUMERIC_OP_AS(< , VAR_BOOL);
   const bool inplace = false;
   CHECK_INST_BINARY_OP("<");
   UNSUPPORTED_BINARY_OP("<");

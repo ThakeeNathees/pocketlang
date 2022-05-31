@@ -3,3 +3,6 @@ import path
 THIS_PATH = path.dirname(__file__)
 
 assert('path.pk' in path.listdir(THIS_PATH))
+
+# If we got here, that means all test were passed.
+print('All TESTS PASSED')

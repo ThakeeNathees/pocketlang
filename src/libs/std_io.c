@@ -424,9 +424,9 @@ DEF(_open, NULL /* == _fileOpen */) {
 
 void registerModuleIO(PKVM* vm) {
 
-  pkRegisterBuiltinFn(vm, "open", _open, -1, DOCSTRING(_fileOpen));
-
   PkHandle* io = pkNewModule(vm, "io");
+
+  pkRegisterBuiltinFn(vm, "open", _open, -1, DOCSTRING(_fileOpen));
 
   pkReserveSlots(vm, 2);
   pkSetSlotHandle(vm, 0, io);         // slot[0]        = io
@@ -449,6 +449,17 @@ void registerModuleIO(PKVM* vm) {
   pkClassAddMethod(vm, cls_file, "seek",     _fileSeek,    -1);
   pkClassAddMethod(vm, cls_file, "tell",     _fileTell,     0);
   pkReleaseHandle(vm, cls_file);
+
+  // A convinent function to read file by io.readfile(path).
+  pkModuleAddSource(vm, io,
+    "## Reads a file and return it's content as string.\n"
+    "def readfile(filepath)\n"
+    "  fp = File()\n"
+    "  fp.open(filepath, 'r')\n"
+    "  text = fp.read()\n"
+    "  fp.close()\n"
+    "  return text\n"
+    "end\n");
 
   pkRegisterModule(vm, io);
   pkReleaseHandle(vm, io);
