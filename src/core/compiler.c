@@ -2038,6 +2038,7 @@ static void exprName(Compiler* compiler) {
 void exprOr(Compiler* compiler) {
   emitOpcode(compiler, OP_OR);
   int orpatch = emitShort(compiler, 0xffff); //< Will be patched.
+  skipNewLines(compiler);
   parsePrecedence(compiler, PREC_LOGICAL_OR);
   patchJump(compiler, orpatch);
 }
@@ -2045,6 +2046,7 @@ void exprOr(Compiler* compiler) {
 void exprAnd(Compiler* compiler) {
   emitOpcode(compiler, OP_AND);
   int andpatch = emitShort(compiler, 0xffff); //< Will be patched.
+  skipNewLines(compiler);
   parsePrecedence(compiler, PREC_LOGICAL_AND);
   patchJump(compiler, andpatch);
 }

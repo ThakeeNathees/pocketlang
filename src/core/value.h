@@ -801,7 +801,7 @@ String* toString(PKVM* vm, const Var value);
 
 // Returns the representation version of the [value], similar to python's
 // __repr__() method.
-String * toRepr(PKVM * vm, const Var value);
+String* toRepr(PKVM * vm, const Var value);
 
 // Returns the truthy value of the var.
 bool toBool(Var v);

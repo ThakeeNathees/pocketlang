@@ -8,15 +8,43 @@
 
 #ifndef PK_AMALGAMATED
 #include "libs.h"
+#include "../core/value.h"
+#include "../core/vm.h"
 #endif
+
+DEF(_typesHashable,
+  "types.hashable(value:Var) -> Bool\n"
+  "Returns true if the [value] is hashable.") {
+
+  // Get argument 1 directly.
+  ASSERT(vm->fiber != NULL, OOPS);
+  ASSERT(1 < pkGetSlotsCount(vm), OOPS);
+  Var value = vm->fiber->ret[1];
+
+  if (!IS_OBJ(value)) pkSetSlotBool(vm, 0, true);
+  else pkSetSlotBool(vm, 0, isObjectHashable(AS_OBJ(value)->type));
+}
+
+DEF(_typesHash,
+  "types.hash(value:Var) -> Number\n"
+  "Returns the hash of the [value]") {
+
+  // Get argument 1 directly.
+  ASSERT(vm->fiber != NULL, OOPS);
+  ASSERT(1 < pkGetSlotsCount(vm), OOPS);
+  Var value = vm->fiber->ret[1];
+
+  if (IS_OBJ(value) && !isObjectHashable(AS_OBJ(value)->type)) {
+    pkSetRuntimeErrorFmt(vm, "Type '%s' is not hashable.", varTypeName(value));
+    return;
+  }
+
+  pkSetSlotNumber(vm, 0, varHashValue(value));
+}
 
 /*****************************************************************************/
 /* BYTE BUFFER                                                               */
 /*****************************************************************************/
-
-#ifndef PK_AMALGAMATED
-#include "../core/value.h"
-#endif
 
 void* _bytebuffNew(PKVM* vm) {
   pkByteBuffer* self = pkRealloc(vm, NULL, sizeof(pkByteBuffer));
@@ -262,6 +290,9 @@ void _vectorRepr(PKVM* vm) {
 
 void registerModuleTypes(PKVM* vm) {
   PkHandle* types = pkNewModule(vm, "types");
+
+  pkModuleAddFunction(vm, types, "hashable", _typesHashable, 1);
+  pkModuleAddFunction(vm, types, "hash", _typesHash, 1);
 
   PkHandle* cls_byte_buffer = pkNewClass(vm, "ByteBuffer", NULL, types,
                                          _bytebuffNew, _bytebuffDelete);

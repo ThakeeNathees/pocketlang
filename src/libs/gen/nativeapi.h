@@ -54,6 +54,7 @@ typedef void (*pkSetSlotNumber_t)(PKVM*, int, double);
 typedef void (*pkSetSlotString_t)(PKVM*, int, const char*);
 typedef void (*pkSetSlotStringLength_t)(PKVM*, int, const char*, uint32_t);
 typedef void (*pkSetSlotHandle_t)(PKVM*, int, PkHandle*);
+typedef uint32_t (*pkGetSlotHash_t)(PKVM*, int);
 typedef void (*pkPlaceSelf_t)(PKVM*, int);
 typedef void (*pkGetClass_t)(PKVM*, int, int);
 typedef bool (*pkNewInstance_t)(PKVM*, int, int, int, int);
@@ -113,6 +114,7 @@ typedef struct {
   pkSetSlotString_t pkSetSlotString_ptr;
   pkSetSlotStringLength_t pkSetSlotStringLength_ptr;
   pkSetSlotHandle_t pkSetSlotHandle_ptr;
+  pkGetSlotHash_t pkGetSlotHash_ptr;
   pkPlaceSelf_t pkPlaceSelf_ptr;
   pkGetClass_t pkGetClass_ptr;
   pkNewInstance_t pkNewInstance_ptr;
@@ -129,8 +131,9 @@ typedef struct {
   pkImportModule_t pkImportModule_ptr;
 } PkNativeApi;
 
-#define PK_API_INIT_FN_NAME "pkInitApi" 
-#define PK_EXPORT_FN_NAME "pkExportModule" 
+#define PK_API_INIT_FN_NAME "pkInitApi"
+#define PK_EXPORT_FN_NAME "pkExportModule"
+#define PK_CLEANUP_FN_NAME "pkCleanupModule"
 
 typedef void (*pkInitApiFn)(PkNativeApi*);
 typedef PkHandle* (*pkExportModuleFn)(PKVM*);
@@ -184,6 +187,7 @@ PkNativeApi pkMakeNativeAPI() {
   api.pkSetSlotString_ptr = pkSetSlotString;
   api.pkSetSlotStringLength_ptr = pkSetSlotStringLength;
   api.pkSetSlotHandle_ptr = pkSetSlotHandle;
+  api.pkGetSlotHash_ptr = pkGetSlotHash;
   api.pkPlaceSelf_ptr = pkPlaceSelf;
   api.pkGetClass_ptr = pkGetClass;
   api.pkNewInstance_ptr = pkNewInstance;

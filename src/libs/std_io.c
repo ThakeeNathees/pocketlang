@@ -96,7 +96,7 @@ typedef struct {
   bool closed;         // True if the file isn't closed yet.
 } File;
 
-void* _newFile(PKVM* vm) {
+void* _fileNew(PKVM* vm) {
   File* file = pkRealloc(vm, NULL, sizeof(File));
   ASSERT(file != NULL, "pkRealloc failed.");
   file->closed = true;
@@ -105,7 +105,7 @@ void* _newFile(PKVM* vm) {
   return file;
 }
 
-void _deleteFile(PKVM* vm, void* ptr) {
+void _fileDelete(PKVM* vm, void* ptr) {
   File* file = (File*)ptr;
   if (!file->closed) {
     ASSERT(file->fp != NULL, OOPS);
@@ -440,7 +440,7 @@ void registerModuleIO(PKVM* vm) {
   pkModuleAddFunction(vm, io, "write", _ioWrite, 2);
   pkModuleAddFunction(vm, io, "flush", _ioFlush, 0);
 
-  PkHandle* cls_file = pkNewClass(vm, "File", NULL, io, _newFile, _deleteFile);
+  PkHandle* cls_file = pkNewClass(vm, "File", NULL, io, _fileNew, _fileDelete);
   pkClassAddMethod(vm, cls_file, "open",     _fileOpen,    -1);
   pkClassAddMethod(vm, cls_file, "read",     _fileRead,    -1);
   pkClassAddMethod(vm, cls_file, "write",    _fileWrite,    1);

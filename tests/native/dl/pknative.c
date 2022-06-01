@@ -51,6 +51,7 @@ typedef void (*pkSetSlotNumber_t)(PKVM*, int, double);
 typedef void (*pkSetSlotString_t)(PKVM*, int, const char*);
 typedef void (*pkSetSlotStringLength_t)(PKVM*, int, const char*, uint32_t);
 typedef void (*pkSetSlotHandle_t)(PKVM*, int, PkHandle*);
+typedef uint32_t (*pkGetSlotHash_t)(PKVM*, int);
 typedef void (*pkPlaceSelf_t)(PKVM*, int);
 typedef void (*pkGetClass_t)(PKVM*, int, int);
 typedef bool (*pkNewInstance_t)(PKVM*, int, int, int, int);
@@ -110,6 +111,7 @@ typedef struct {
   pkSetSlotString_t pkSetSlotString_ptr;
   pkSetSlotStringLength_t pkSetSlotStringLength_ptr;
   pkSetSlotHandle_t pkSetSlotHandle_ptr;
+  pkGetSlotHash_t pkGetSlotHash_ptr;
   pkPlaceSelf_t pkPlaceSelf_ptr;
   pkGetClass_t pkGetClass_ptr;
   pkNewInstance_t pkNewInstance_ptr;
@@ -172,6 +174,7 @@ PK_EXPORT void pkInitApi(PkNativeApi* api) {
   pk_api.pkSetSlotString_ptr = api->pkSetSlotString_ptr;
   pk_api.pkSetSlotStringLength_ptr = api->pkSetSlotStringLength_ptr;
   pk_api.pkSetSlotHandle_ptr = api->pkSetSlotHandle_ptr;
+  pk_api.pkGetSlotHash_ptr = api->pkGetSlotHash_ptr;
   pk_api.pkPlaceSelf_ptr = api->pkPlaceSelf_ptr;
   pk_api.pkGetClass_ptr = api->pkGetClass_ptr;
   pk_api.pkNewInstance_ptr = api->pkNewInstance_ptr;
@@ -358,6 +361,10 @@ void pkSetSlotStringLength(PKVM* vm, int index, const char* value, uint32_t leng
 
 void pkSetSlotHandle(PKVM* vm, int index, PkHandle* handle) {
   pk_api.pkSetSlotHandle_ptr(vm, index, handle);
+}
+
+uint32_t pkGetSlotHash(PKVM* vm, int index) {
+  return pk_api.pkGetSlotHash_ptr(vm, index);
 }
 
 void pkPlaceSelf(PKVM* vm, int index) {
