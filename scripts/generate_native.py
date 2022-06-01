@@ -23,6 +23,7 @@ PK_API = "pk_api"
 PK_API_TYPE = "PkNativeApi"
 PK_API_INIT = 'pkInitApi'
 PK_EXPORT_MODULE = 'pkExportModule'
+PK_CLEANUP_MODULE = 'pkCleanupModule'
 
 API_DEF = f'''\
 static {PK_API_TYPE} {PK_API};
@@ -147,6 +148,7 @@ def generate():
 
     fp.write(f'#define PK_API_INIT_FN_NAME "{PK_API_INIT}" \n')
     fp.write(f'#define PK_EXPORT_FN_NAME "{PK_EXPORT_MODULE}" \n\n')
+    fp.write(f'#define PK_CLEANUP_FN_NAME "{PK_CLEANUP_MODULE}" \n\n')
     fp.write(f'typedef void (*{PK_API_INIT}Fn)({PK_API_TYPE}*);\n')
     fp.write(f'typedef PkHandle* (*{PK_EXPORT_MODULE}Fn)(PKVM*);\n')
     fp.write(f'\n')

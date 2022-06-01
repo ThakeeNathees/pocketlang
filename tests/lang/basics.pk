@@ -60,6 +60,13 @@ if a and b then assert(false) end
 if a or b then val = 42 else assert(false) end assert(val == 42)
 if get_true() or false then val = 12 end assert(val == 12)
 
+if (get_true() or false) and ## New line after and.
+   ((a or b) or (a and b))
+  assert(true) ## Reachable.
+else
+  assert(false) ## Unreachable
+end
+
 ## Newer logical or implementation.
 ## a or b  === if (a) return a else return b
 ## a and b === if (!a) return a else return b

@@ -97,6 +97,9 @@ PkHandle* osImportDL(PKVM* vm, void* handle) {
 }
 
 void osUnloadDL(PKVM* vm, void* handle) {
+  pkExportModuleFn cleanup_fn = \
+    (pkExportModuleFn)GetProcAddress((HMODULE) handle, PK_CLEANUP_FN_NAME);
+  if (cleanup_fn != NULL) cleanup_fn(vm);
   FreeLibrary((HMODULE) handle);
 }
 

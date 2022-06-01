@@ -826,6 +826,14 @@ void pkSetSlotHandle(PKVM* vm, int index, PkHandle* handle) {
   SET_SLOT(index, handle->value);
 }
 
+uint32_t pkGetSlotHash(PKVM* vm, int index) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_SLOT_INDEX(index);
+  Var value = SLOT(index);
+  ASSERT(!IS_OBJ(value) || isObjectHashable(AS_OBJ(value)->type), OOPS);
+  return varHashValue(value);
+}
+
 bool pkSetAttribute(PKVM* vm, int instance, const char* name, int value) {
   CHECK_FIBER_EXISTS(vm);
   CHECK_ARG_NULL(name);
