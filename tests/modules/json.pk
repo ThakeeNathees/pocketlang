@@ -42,5 +42,7 @@ assert(obj['quiz']['maths'] ==
         }
       })
 
+assert(json.parse(json.print(obj)) == obj)
+
 # If we got here, that means all test were passed.
 print('All TESTS PASSED')

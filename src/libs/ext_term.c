@@ -9,6 +9,10 @@
 #include "gen/ext_term.pk.h"  //<< AMALG_INLINE >>
 #endif
 
+#ifdef _WIN32
+#include <fcntl.h>
+#endif
+
 #define TERM_IMPLEMENT
 #include "thirdparty/term/term.h"  //<< AMALG_INLINE >>
 #undef TERM_IMPLEMENT
@@ -229,6 +233,14 @@ void _termReadEvent(PKVM* vm) {
   pkSetSlotBool(vm, 0, term_read_event(event));
 }
 
+// On windows it'll set stdout to binary mode, on other platforms this function
+// won't make make any difference.
+void _termBinaryMode(PKVM* vm) {
+  #ifdef _WIN32
+    (void) _setmode(_fileno(stdout), _O_BINARY);
+  #endif
+}
+
 /*****************************************************************************/
 /* MODULE REGISTER                                                           */
 /*****************************************************************************/
@@ -251,6 +263,11 @@ void registerModuleTerm(PKVM* vm) {
   pkClassAddMethod(vm, _cls_term_event, "@getter", _termEventGetter, 1);
 
   pkModuleAddSource(vm, term, ext_term_pk);
+
+  // This is required for language server. Since we need to send '\r\n' to
+  // the lsp client but windows will change '\n' to '\r\n' and it'll become
+  // '\r\r\n', binary mode will prevent this.
+  pkModuleAddFunction(vm, term, "binary_mode", _termBinaryMode, 0);
 
   pkRegisterModule(vm, term);
   pkReleaseHandle(vm, term);

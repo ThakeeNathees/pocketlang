@@ -82,6 +82,83 @@ static Var _cJsonToPocket(PKVM* vm, cJSON* item) {
   UNREACHABLE();
 }
 
+static cJSON* _pocketToCJson(PKVM* vm, Var item) {
+  PkVarType vt = getVarType(item);
+  switch (vt) {
+    case PK_NULL:
+      return cJSON_CreateNull();
+
+    case PK_BOOL:
+      return cJSON_CreateBool(AS_BOOL(item));
+
+    case PK_NUMBER:
+      return cJSON_CreateNumber(AS_NUM(item));
+
+    case PK_STRING:
+      return cJSON_CreateString(((String*) AS_OBJ(item))->data);
+
+    case PK_LIST: {
+      List* list = (List*) AS_OBJ(item);
+      cJSON* arr = cJSON_CreateArray();
+
+      bool err = false;
+      for (uint32_t i = 0; i < list->elements.count; i++) {
+        cJSON* elem = _pocketToCJson(vm, list->elements.data[i]);
+        if (elem == NULL) {
+          err = true; break;
+        };
+        cJSON_AddItemToArray(arr, elem);
+      }
+
+      if (err) {
+        cJSON_Delete(arr);
+        return NULL;
+      }
+
+      return arr;
+    }
+
+    case PK_MAP: {
+      Map* map = (Map*) AS_OBJ(item);
+      cJSON* obj = cJSON_CreateObject();
+
+      bool err = false;
+      MapEntry* e = map->entries;
+      for (; e < map->entries + map->capacity; e++) {
+        if (IS_UNDEF(e->key)) continue;
+
+        if (!IS_OBJ_TYPE(e->key, OBJ_STRING)) {
+          pkSetRuntimeErrorFmt(vm, "Expected string as json object key, "
+                               "instead got type '%s'.", varTypeName(e->key));
+          err = true; break;
+        }
+
+        cJSON* value = _pocketToCJson(vm, e->value);
+        if (value == NULL) { err = true; break; }
+
+        cJSON_AddItemToObject(obj, ((String*) AS_OBJ(e->key))->data, value);
+      }
+
+      if (err) {
+        cJSON_Delete(obj);
+        return NULL;
+      }
+
+      return obj;
+    }
+
+    default: {
+      pkSetRuntimeErrorFmt(vm, "Object of type '%s' cannot be serialized "
+                          "to json.", varTypeName(item));
+      return NULL;
+    }
+
+  }
+
+  UNREACHABLE();
+  return NULL;
+}
+
 DEF(_jsonParse,
   "json.parse(json_str:String) -> var\n"
   "Parse a json string into pocket lang object.") {
@@ -108,6 +185,39 @@ DEF(_jsonParse,
   vm->fiber->ret[0] = obj;
 }
 
+DEF(_jsonPrint,
+  "json.print(value:Var[, pretty:Bool=false])\n"
+  "Render a pocketlang value into text. Takes an optional argument pretty, if "
+  "true it'll pretty print the output.") {
+
+  int argc = pkGetArgc(vm);
+  if (!pkCheckArgcRange(vm, argc, 1, 2)) return;
+
+  bool pretty = false;
+  if (argc == 2) {
+    if (!pkValidateSlotBool(vm, 2, &pretty)) return;
+  }
+
+  Var value = vm->fiber->ret[1];
+  cJSON* json = _pocketToCJson(vm, value);
+
+  // A runtime error already set.
+  if (json == NULL) return;
+
+  char* string = (pretty)
+    ? cJSON_Print(json)
+    : cJSON_PrintUnformatted(json);
+  cJSON_Delete(json);
+
+  if (string == NULL) {
+    pkSetRuntimeError(vm, "Failed to print json.");
+    return;
+  }
+
+  pkSetSlotString(vm, 0, string);
+  free(string);
+}
+
 /*****************************************************************************/
 /* MODULE REGISTER                                                           */
 /*****************************************************************************/
@@ -116,6 +226,7 @@ void registerModuleJson(PKVM* vm) {
   PkHandle* json = pkNewModule(vm, "json");
 
   pkModuleAddFunction(vm, json, "parse", _jsonParse, 1);
+  pkModuleAddFunction(vm, json, "print", _jsonPrint, -1);
 
   pkRegisterModule(vm, json);
   pkReleaseHandle(vm, json);
