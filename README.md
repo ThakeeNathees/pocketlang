@@ -11,7 +11,7 @@ which is less than <strong>300KB</strong> and the language itself can be compile
 </p>
 
 <div class="center">
-    <a class="button" target="_blank" href="./tryonline.html"> Try Online </a>
+    <a class="button" target="_blank" href="./try-online.html"> Try Online </a>
     <a class="button" target="_blank" href="https://www.github.com/ThakeeNathees/pocketlang/"> GitHub </a>
 </div>
 
