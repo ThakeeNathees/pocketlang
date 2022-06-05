@@ -181,7 +181,8 @@ bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var* argv) {
   if ((fiber->closure->fn->arity != -1) && argc != fiber->closure->fn->arity) {
     char buff[STR_INT_BUFF_SIZE];
     sprintf(buff, "%d", fiber->closure->fn->arity);
-    _ERR_FAIL(stringFormat(vm, "Expected exactly $ argument(s).", buff));
+    _ERR_FAIL(stringFormat(vm, "Expected exactly $ argument(s) for "
+                           "function $.", buff, fiber->closure->fn->name));
   }
 
   if (fiber->state != FIBER_NEW) {
@@ -1245,7 +1246,8 @@ L_do_call:
         // No constructor is defined on the class. Just return self.
         if (closure == NULL) {
           if (argc != 0) {
-            String* msg = stringFormat(vm, "Expected exactly 0 argument(s).");
+            String* msg = stringFormat(vm, "Expected exactly 0 argument(s) "
+                                       "for constructor $.", cls->name->data);
             RUNTIME_ERROR(msg);
           }
 
@@ -1265,8 +1267,8 @@ L_do_call:
       // -1 argument means multiple number of args.
       if (closure->fn->arity != -1 && closure->fn->arity != argc) {
         char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", closure->fn->arity);
-        String* msg = stringFormat(vm, "Expected exactly $ argument(s).",
-                                   buff);
+        String* msg = stringFormat(vm, "Expected exactly $ argument(s) "
+                                  "for function $", buff, closure->fn->name);
         RUNTIME_ERROR(msg);
       }
 

@@ -35,14 +35,12 @@ DEF(_ioWrite,
       pkSetRuntimeError(vm, "Cannot write to stdin.");
       return;
 
-    // TODO: If the string contain null bytes it won't print anything after
-    // that, not sure if that needs to be fixed.
     case 1:
-      fprintf(stdout, "%s", bytes);
+      fwrite(bytes, sizeof(char), length, stdout);
       return;
 
     case 2:
-      fprintf(stderr, "%s", bytes);
+      fwrite(bytes, sizeof(char), length, stderr);
       return;
   }
 }
@@ -52,6 +50,13 @@ DEF(_ioFlush,
   "Warning: the function is subjected to be changed anytime soon.\n"
   "Flush stdout buffer.\n") {
   fflush(stdout);
+}
+
+DEF(_ioGetc,
+  "io.getc() -> String\n"
+  "Read a single character from stdin and return it.") {
+  char c = (char) fgetc(stdin);
+  pkSetSlotStringLength(vm, 0, &c, 1);
 }
 
 /*****************************************************************************/
@@ -81,8 +86,8 @@ typedef enum {
   FMODE_APPEND_EXT = (_FMODE_EXT | FMODE_APPEND),
 
   FMODE_READ_BIN   = (_FMODE_BIN | FMODE_READ),
-  FMODE_WRITE_BIN  = (_FMODE_BIN | FMODE_READ),
-  FMODE_APPEND_BIN = (_FMODE_BIN | FMODE_READ),
+  FMODE_WRITE_BIN  = (_FMODE_BIN | FMODE_WRITE),
+  FMODE_APPEND_BIN = (_FMODE_BIN | FMODE_APPEND),
 
   FMODE_READ_BIN_EXT   = (_FMODE_BIN | FMODE_READ_EXT),
   FMODE_WRITE_BIN_EXT  = (_FMODE_BIN | FMODE_WRITE_EXT),
@@ -439,6 +444,7 @@ void registerModuleIO(PKVM* vm) {
 
   pkModuleAddFunction(vm, io, "write", _ioWrite, 2);
   pkModuleAddFunction(vm, io, "flush", _ioFlush, 0);
+  pkModuleAddFunction(vm, io, "getc",  _ioGetc, 0);
 
   PkHandle* cls_file = pkNewClass(vm, "File", NULL, io, _fileNew, _fileDelete);
   pkClassAddMethod(vm, cls_file, "open",     _fileOpen,    -1);

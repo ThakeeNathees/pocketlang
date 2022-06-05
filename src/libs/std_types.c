@@ -46,17 +46,17 @@ DEF(_typesHash,
 /* BYTE BUFFER                                                               */
 /*****************************************************************************/
 
-void* _bytebuffNew(PKVM* vm) {
+static void* _bytebuffNew(PKVM* vm) {
   pkByteBuffer* self = pkRealloc(vm, NULL, sizeof(pkByteBuffer));
   pkByteBufferInit(self);
   return self;
 }
 
-void _bytebuffDelete(PKVM* vm, void* buff) {
+static void _bytebuffDelete(PKVM* vm, void* buff) {
   pkRealloc(vm, buff, 0);
 }
 
-void _bytebuffReserve(PKVM* vm) {
+DEF(_bytebuffReserve, "") {
   double size;
   if (!pkValidateSlotNumber(vm, 1, &size)) return;
 
@@ -65,7 +65,7 @@ void _bytebuffReserve(PKVM* vm) {
 }
 
 // buff.fill(data, count)
-void _bytebuffFill(PKVM* vm) {
+DEF(_bytebuffFill, "") {
   uint32_t n;
   if (!pkValidateSlotInteger(vm, 1, &n)) return;
   if (n < 0x00 || n > 0xff) {
@@ -81,14 +81,14 @@ void _bytebuffFill(PKVM* vm) {
   pkByteBufferFill(self, vm, (uint8_t) n, (int) count);
 }
 
-void _bytebuffClear(PKVM* vm) {
+DEF(_bytebuffClear, "") {
   // TODO: Should I also zero or reduce the capacity?
   pkByteBuffer* self = pkGetSelf(vm);
   self->count = 0;
 }
 
 // Returns the length of bytes were written.
-void _bytebuffWrite(PKVM* vm) {
+DEF(_bytebuffWrite, "") {
   pkByteBuffer* self = pkGetSelf(vm);
 
   PkVarType type = pkGetSlotType(vm, 1);
@@ -135,7 +135,7 @@ void _bytebuffWrite(PKVM* vm) {
 
 }
 
-void _bytebuffSubscriptGet(PKVM* vm) {
+DEF(_bytebuffSubscriptGet, "") {
   double index;
   if (!pkValidateSlotNumber(vm, 1, &index)) return;
   if (floor(index) != index) {
@@ -154,7 +154,7 @@ void _bytebuffSubscriptGet(PKVM* vm) {
 
 }
 
-void _bytebuffSubscriptSet(PKVM* vm) {
+DEF(_bytebuffSubscriptSet, "") {
   double index, value;
   if (!pkValidateSlotNumber(vm, 1, &index)) return;
   if (!pkValidateSlotNumber(vm, 2, &value)) return;
@@ -184,12 +184,12 @@ void _bytebuffSubscriptSet(PKVM* vm) {
 
 }
 
-void _bytebuffString(PKVM* vm) {
+DEF(_bytebuffString, "") {
   pkByteBuffer* self = pkGetSelf(vm);
   pkSetSlotStringLength(vm, 0, self->data, self->count);
 }
 
-void _bytebuffCount(PKVM* vm) {
+DEF(_bytebuffCount, "") {
   pkByteBuffer* self = pkGetSelf(vm);
   pkSetSlotNumber(vm, 0, self->count);
 }
@@ -202,17 +202,17 @@ typedef struct {
   double x, y, z;
 } Vector;
 
-void* _vectorNew(PKVM* vm) {
+static void* _vectorNew(PKVM* vm) {
   Vector* vec = pkRealloc(vm, NULL, sizeof(Vector));
   memset(vec, 0, sizeof(Vector));
   return vec;
 }
 
-void _vectorDelete(PKVM* vm, void* vec) {
+static void _vectorDelete(PKVM* vm, void* vec) {
   pkRealloc(vm, vec, 0);
 }
 
-void _vectorInit(PKVM* vm) {
+DEF(_vectorInit, "") {
   int argc = pkGetArgc(vm);
   if (!pkCheckArgcRange(vm, argc, 0, 3)) return;
 
@@ -237,7 +237,7 @@ void _vectorInit(PKVM* vm) {
 
 }
 
-void _vectorGetter(PKVM* vm) {
+DEF(_vectorGetter, "") {
   const char* name; uint32_t length;
   if (!pkValidateSlotString(vm, 1, &name, &length)) return;
 
@@ -256,7 +256,7 @@ void _vectorGetter(PKVM* vm) {
   }
 }
 
-void _vectorSetter(PKVM* vm) {
+DEF(_vectorSetter, "") {
   const char* name; uint32_t length;
   if (!pkValidateSlotString(vm, 1, &name, &length)) return;
 
@@ -279,7 +279,7 @@ void _vectorSetter(PKVM* vm) {
   }
 }
 
-void _vectorRepr(PKVM* vm) {
+DEF(_vectorRepr, "") {
   Vector* vec = pkGetSelf(vm);
   pkSetSlotStringFmt(vm, 0, "[%g, %g, %g]", vec->x, vec->y, vec->z);
 }
