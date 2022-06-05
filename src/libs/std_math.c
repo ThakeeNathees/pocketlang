@@ -14,7 +14,8 @@
 #define PK_PI 3.14159265358979323846
 
 DEF(stdMathFloor,
-  "floor(value:num) -> num\n") {
+  "math.floor(value:Numberber) -> Numberber",
+  "Return the floor value.") {
 
   double num;
   if (!pkValidateSlotNumber(vm, 1, &num)) return;
@@ -22,7 +23,8 @@ DEF(stdMathFloor,
 }
 
 DEF(stdMathCeil,
-  "ceil(value:num) -> num\n") {
+  "math.ceil(value:Number) -> Number",
+  "Returns the ceiling value.") {
 
   double num;
   if (!pkValidateSlotNumber(vm, 1, &num)) return;
@@ -30,7 +32,8 @@ DEF(stdMathCeil,
 }
 
 DEF(stdMathPow,
-  "pow(a:num, b:num) -> num\n") {
+  "math.pow(a:Number, b:Number) -> Number",
+  "Returns the power 'b' of 'a' similler to a**b.") {
 
   double num, ex;
   if (!pkValidateSlotNumber(vm, 1, &num)) return;
@@ -39,7 +42,8 @@ DEF(stdMathPow,
 }
 
 DEF(stdMathSqrt,
-  "sqrt(value:num) -> num\n") {
+  "math.sqrt(value:Number) -> Number",
+  "Returns the square root of the value") {
 
   double num;
   if (!pkValidateSlotNumber(vm, 1, &num)) return;
@@ -47,7 +51,8 @@ DEF(stdMathSqrt,
 }
 
 DEF(stdMathAbs,
-  "abs(value:num) -> num\n") {
+  "math.abs(value:Number) -> Number",
+  "Returns the absolute value.") {
 
   double num;
   if (!pkValidateSlotNumber(vm, 1, &num)) return;
@@ -56,7 +61,8 @@ DEF(stdMathAbs,
 }
 
 DEF(stdMathSign,
-  "sign(value:num) -> num\n") {
+  "math.sign(value:Number) -> Number",
+  "return the sign of the which is one of (+1, 0, -1).") {
 
   double num;
   if (!pkValidateSlotNumber(vm, 1, &num)) return;
@@ -67,7 +73,7 @@ DEF(stdMathSign,
 }
 
 DEF(stdMathSine,
-  "sin(rad:num) -> num\n"
+  "math.sin(rad:Number) -> Number",
   "Return the sine value of the argument [rad] which is an angle expressed "
   "in radians.") {
 
@@ -77,7 +83,7 @@ DEF(stdMathSine,
 }
 
 DEF(stdMathCosine,
-  "cos(rad:num) -> num\n"
+  "math.cos(rad:Number) -> Number",
   "Return the cosine value of the argument [rad] which is an angle expressed "
   "in radians.") {
 
@@ -87,7 +93,7 @@ DEF(stdMathCosine,
 }
 
 DEF(stdMathTangent,
-  "tan(rad:num) -> num\n"
+  "math.tan(rad:Number) -> Number",
   "Return the tangent value of the argument [rad] which is an angle expressed "
   "in radians.") {
 
@@ -97,7 +103,7 @@ DEF(stdMathTangent,
 }
 
 DEF(stdMathSinh,
-  "sinh(val) -> val\n"
+  "math.sinh(val:Number) -> Number",
   "Return the hyperbolic sine value of the argument [val].") {
 
   double val;
@@ -106,7 +112,7 @@ DEF(stdMathSinh,
 }
 
 DEF(stdMathCosh,
-  "cosh(val) -> val\n"
+  "math.cosh(val:Number) -> Number",
   "Return the hyperbolic cosine value of the argument [val].") {
 
   double val;
@@ -115,7 +121,7 @@ DEF(stdMathCosh,
 }
 
 DEF(stdMathTanh,
-  "tanh(val) -> val\n"
+  "math.tanh(val:Number) -> Number",
   "Return the hyperbolic tangent value of the argument [val].") {
 
   double val;
@@ -124,7 +130,7 @@ DEF(stdMathTanh,
 }
 
 DEF(stdMathArcSine,
-  "asin(num) -> num\n"
+  "math.asin(num:Number) -> Number",
   "Return the arcsine value of the argument [num] which is an angle "
   "expressed in radians.") {
 
@@ -139,7 +145,7 @@ DEF(stdMathArcSine,
 }
 
 DEF(stdMathArcCosine,
-  "acos(num) -> num\n"
+  "math.acos(num:Number) -> Number",
   "Return the arc cosine value of the argument [num] which is "
   "an angle expressed in radians.") {
 
@@ -154,7 +160,7 @@ DEF(stdMathArcCosine,
 }
 
 DEF(stdMathArcTangent,
-  "atan(num) -> num\n"
+  "math.atan(num:Number) -> Number",
   "Return the arc tangent value of the argument [num] which is "
   "an angle expressed in radians.") {
 
@@ -164,7 +170,7 @@ DEF(stdMathArcTangent,
 }
 
 DEF(stdMathLog10,
-  "log10(value:num) -> num\n"
+  "math.log10(value:Number) -> Number",
   "Return the logarithm to base 10 of argument [value]") {
 
   double num;
@@ -173,7 +179,7 @@ DEF(stdMathLog10,
 }
 
 DEF(stdMathRound,
-  "round(value:num) -> num\n"
+  "math.round(value:Number) -> Number",
   "Round to nearest integer, away from zero and return the number.") {
 
   double num;
@@ -182,7 +188,7 @@ DEF(stdMathRound,
 }
 
 DEF(stdMathRand,
-  "rand() -> num\n"
+  "math.rand() -> Number",
   "Return a random runber in the range of 0..0x7fff.") {
 
   // RAND_MAX is implementation dependent but is guaranteed to be at least
@@ -205,24 +211,24 @@ void registerModuleMath(PKVM* vm) {
   pkSetSlotNumber(vm, 1, PK_PI);  // slot[1]    = 3.14
   pkSetAttribute(vm, 0, "PI", 1); // slot[0].PI = slot[1]
 
-  pkModuleAddFunction(vm, math, "floor",  stdMathFloor,      1);
-  pkModuleAddFunction(vm, math, "ceil",   stdMathCeil,       1);
-  pkModuleAddFunction(vm, math, "pow",    stdMathPow,        2);
-  pkModuleAddFunction(vm, math, "sqrt",   stdMathSqrt,       1);
-  pkModuleAddFunction(vm, math, "abs",    stdMathAbs,        1);
-  pkModuleAddFunction(vm, math, "sign",   stdMathSign,       1);
-  pkModuleAddFunction(vm, math, "sin",    stdMathSine,       1);
-  pkModuleAddFunction(vm, math, "cos",    stdMathCosine,     1);
-  pkModuleAddFunction(vm, math, "tan",    stdMathTangent,    1);
-  pkModuleAddFunction(vm, math, "sinh",   stdMathSinh,       1);
-  pkModuleAddFunction(vm, math, "cosh",   stdMathCosh,       1);
-  pkModuleAddFunction(vm, math, "tanh",   stdMathTanh,       1);
-  pkModuleAddFunction(vm, math, "asin",   stdMathArcSine,    1);
-  pkModuleAddFunction(vm, math, "acos",   stdMathArcCosine,  1);
-  pkModuleAddFunction(vm, math, "atan",   stdMathArcTangent, 1);
-  pkModuleAddFunction(vm, math, "log10",  stdMathLog10,      1);
-  pkModuleAddFunction(vm, math, "round",  stdMathRound,      1);
-  pkModuleAddFunction(vm, math, "rand",   stdMathRand,       0);
+  REGISTER_FN(math, "floor",  stdMathFloor,      1);
+  REGISTER_FN(math, "ceil",   stdMathCeil,       1);
+  REGISTER_FN(math, "pow",    stdMathPow,        2);
+  REGISTER_FN(math, "sqrt",   stdMathSqrt,       1);
+  REGISTER_FN(math, "abs",    stdMathAbs,        1);
+  REGISTER_FN(math, "sign",   stdMathSign,       1);
+  REGISTER_FN(math, "sin",    stdMathSine,       1);
+  REGISTER_FN(math, "cos",    stdMathCosine,     1);
+  REGISTER_FN(math, "tan",    stdMathTangent,    1);
+  REGISTER_FN(math, "sinh",   stdMathSinh,       1);
+  REGISTER_FN(math, "cosh",   stdMathCosh,       1);
+  REGISTER_FN(math, "tanh",   stdMathTanh,       1);
+  REGISTER_FN(math, "asin",   stdMathArcSine,    1);
+  REGISTER_FN(math, "acos",   stdMathArcCosine,  1);
+  REGISTER_FN(math, "atan",   stdMathArcTangent, 1);
+  REGISTER_FN(math, "log10",  stdMathLog10,      1);
+  REGISTER_FN(math, "round",  stdMathRound,      1);
+  REGISTER_FN(math, "rand",   stdMathRand,       0);
 
   pkRegisterModule(vm, math);
   pkReleaseHandle(vm, math);

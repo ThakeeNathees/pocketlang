@@ -117,8 +117,10 @@
 
 // A macro to declare a function, with docstring, which is defined as
 // _pk_doc_<fn> = docstring; That'll used to generate function help text.
-#define DEF(fn, docstring)                      \
-  static const char* DOCSTRING(fn) = docstring; \
+// [signature] is the function name and parameter names with type information.
+// ex: `io.open(path:String, mode:String) -> io.File`
+#define DEF(fn, signature, docstring)                            \
+  static const char* DOCSTRING(fn) = signature "\n\n" docstring; \
   static void fn(PKVM* vm)
 
 #endif //PK_COMMON_H

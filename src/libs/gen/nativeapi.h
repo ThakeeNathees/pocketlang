@@ -22,9 +22,9 @@ typedef void* (*pkRealloc_t)(PKVM*, void*, size_t);
 typedef void (*pkReleaseHandle_t)(PKVM*, PkHandle*);
 typedef PkHandle* (*pkNewModule_t)(PKVM*, const char*);
 typedef void (*pkRegisterModule_t)(PKVM*, PkHandle*);
-typedef void (*pkModuleAddFunction_t)(PKVM*, PkHandle*, const char*, pkNativeFn, int);
-typedef PkHandle* (*pkNewClass_t)(PKVM*, const char*, PkHandle*, PkHandle*, pkNewInstanceFn, pkDeleteInstanceFn);
-typedef void (*pkClassAddMethod_t)(PKVM*, PkHandle*, const char*, pkNativeFn, int);
+typedef void (*pkModuleAddFunction_t)(PKVM*, PkHandle*, const char*, pkNativeFn, int, const char*);
+typedef PkHandle* (*pkNewClass_t)(PKVM*, const char*, PkHandle*, PkHandle*, pkNewInstanceFn, pkDeleteInstanceFn, const char*);
+typedef void (*pkClassAddMethod_t)(PKVM*, PkHandle*, const char*, pkNativeFn, int, const char*);
 typedef void (*pkModuleAddSource_t)(PKVM*, PkHandle*, const char*);
 typedef PkResult (*pkRunString_t)(PKVM*, const char*);
 typedef PkResult (*pkRunFile_t)(PKVM*, const char*);
@@ -131,9 +131,10 @@ typedef struct {
   pkImportModule_t pkImportModule_ptr;
 } PkNativeApi;
 
-#define PK_API_INIT_FN_NAME "pkInitApi"
-#define PK_EXPORT_FN_NAME "pkExportModule"
-#define PK_CLEANUP_FN_NAME "pkCleanupModule"
+#define PK_API_INIT_FN_NAME "pkInitApi" 
+#define PK_EXPORT_FN_NAME "pkExportModule" 
+
+#define PK_CLEANUP_FN_NAME "pkCleanupModule" 
 
 typedef void (*pkInitApiFn)(PkNativeApi*);
 typedef PkHandle* (*pkExportModuleFn)(PKVM*);

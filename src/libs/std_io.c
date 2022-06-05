@@ -12,7 +12,7 @@
 #endif
 
 DEF(_ioWrite,
-  "io.write(stream:var, bytes:String) -> null\n"
+  "io.write(stream:Var, bytes:String) -> Null",
   "Warning: the function is subjected to be changed anytime soon.\n"
   "Write [bytes] string to the stream. stream should be any of io.stdin, "
   "io.stdout, io.stderr.") {
@@ -46,14 +46,14 @@ DEF(_ioWrite,
 }
 
 DEF(_ioFlush,
-  "io.flush() -> null\n"
+  "io.flush() -> Null",
   "Warning: the function is subjected to be changed anytime soon.\n"
-  "Flush stdout buffer.\n") {
+  "Flush stdout buffer.") {
   fflush(stdout);
 }
 
 DEF(_ioGetc,
-  "io.getc() -> String\n"
+  "io.getc() -> String",
   "Read a single character from stdin and return it.") {
   char c = (char) fgetc(stdin);
   pkSetSlotStringLength(vm, 0, &c, 1);
@@ -129,7 +129,21 @@ void _fileDelete(PKVM* vm, void* ptr) {
 /* FILE MODULE FUNCTIONS                                                     */
 /*****************************************************************************/
 
-DEF(_fileOpen, "") {
+DEF(_fileOpen,
+  "io.File.open(path:String, mode:String) -> Null",
+  "Opens a file at the [path] with the [mode]. Path should be either "
+  "absolute or relative to the current working directory. and [mode] can be"
+  "'r', 'w', 'a' in combination with 'b' (binary) and/or '+' (extended).\n"
+  "\n"
+  " mode | If already exists | If does not exist |\n"
+  " -----+-------------------+-------------------|\n"
+  " 'r'  |  read from start  |   failure to open |\n"
+  " 'w'  |  destroy contents |   create new      |\n"
+  " 'a'  |  write to end     |   create new      |\n"
+  " 'r+' |  read from start  |   error           |\n"
+  " 'w+' |  destroy contents |   create new      |\n"
+  " 'a+' |  write to end     |   create new      |\n"
+  "") {
 
   int argc = pkGetArgc(vm);
   if (!pkCheckArgcRange(vm, argc, 1, 2)) return;
@@ -181,7 +195,10 @@ DEF(_fileOpen, "") {
   }
 }
 
-DEF(_fileRead, "") {
+DEF(_fileRead,
+  "io.File.read(count:Number) -> String",
+  "Reads [count] number of bytes from the file and return it as String."
+  "If the count is -1 it'll read till the end of file and return it.") {
 
   int argc = pkGetArgc(vm);
   if (!pkCheckArgcRange(vm, argc, 0, 1)) return;
@@ -265,7 +282,10 @@ L_done:
 
 // Note that fgetline is not standard in older version of C. so we're defining
 // something similler.
-DEF(_fileGetLine, "") {
+DEF(_fileGetLine,
+  "io.File.getline() -> String",
+  "Reads a line from the file and return it as string. This function can only "
+  "be used for files that are opened with text mode.") {
   File* file = (File*) pkGetSelf(vm);
 
   if (file->closed) {
@@ -316,7 +336,10 @@ L_done:
   return;
 }
 
-DEF(_fileWrite, "") {
+DEF(_fileWrite,
+  "io.File.write(data:String) -> Null",
+  "Write the [data] to the file. Since pocketlang string support any valid"
+  "byte value in it's string, binary data can also be written with strings.") {
 
   File* file = (File*) pkGetSelf(vm);
   const char* text; uint32_t length;
@@ -342,7 +365,9 @@ DEF(_fileWrite, "") {
   }
 }
 
-DEF(_fileClose, "") {
+DEF(_fileClose,
+  "io.File.close()",
+  "Closes the opend file.") {
 
   File* file = (File*) pkGetSelf(vm);
 
@@ -362,8 +387,12 @@ DEF(_fileClose, "") {
 }
 
 DEF(_fileSeek,
-  "io.File.seek(offset:int, whence:int) -> null\n"
-  "") {
+  "io.File.seek(offset:Number, whence:Number) -> Null",
+  "Move the file read/write offset. where [offset] is the offset from "
+  "[whence] which should be any of the bellow three.\n"
+  "  0: Begining of the file.\n"
+  "  1: Current position.\n"
+  "  2: End of the file.") {
 
   int argc = pkGetArgc(vm);
   if (!pkCheckArgcRange(vm, argc, 1, 2)) return;
@@ -392,7 +421,9 @@ DEF(_fileSeek,
   }
 }
 
-DEF(_fileTell, "") {
+DEF(_fileTell,
+  "io.File.tell() -> Number",
+  "Returns the read/write position of the file.") {
   File* file = (File*) pkGetSelf(vm);
 
   if (file->closed) {
@@ -404,11 +435,22 @@ DEF(_fileTell, "") {
   pkSetSlotNumber(vm, 0, (double) ftell(file->fp));
 }
 
-// open(path, mode='r') is equal to:
-//
-// from io import File
-// return File().open(path, mode)
-DEF(_open, NULL /* == _fileOpen */) {
+// TODO: The docstring is copyied from io.File.open() this violates DRY.
+DEF(_open,
+  "open(path:String, mode:String) -> Null",
+  "Opens a file at the [path] with the [mode]. Path should be either "
+  "absolute or relative to the current working directory. and [mode] can be"
+  "'r', 'w', 'a' in combination with 'b' (binary) and/or '+' (extended).\n"
+  "\n"
+  " mode | If already exists | If does not exist |\n"
+  " -----+-------------------+-------------------|\n"
+  " 'r'  |  read from start  |   failure to open |\n"
+  " 'w'  |  destroy contents |   create new      |\n"
+  " 'a'  |  write to end     |   create new      |\n"
+  " 'r+' |  read from start  |   error           |\n"
+  " 'w+' |  destroy contents |   create new      |\n"
+  " 'a+' |  write to end     |   create new      |\n"
+  "") {
   pkReserveSlots(vm, 3);
 
   // slots[1] = path
@@ -431,7 +473,7 @@ void registerModuleIO(PKVM* vm) {
 
   PkHandle* io = pkNewModule(vm, "io");
 
-  pkRegisterBuiltinFn(vm, "open", _open, -1, DOCSTRING(_fileOpen));
+  pkRegisterBuiltinFn(vm, "open", _open, -1, DOCSTRING(_open));
 
   pkReserveSlots(vm, 2);
   pkSetSlotHandle(vm, 0, io);         // slot[0]        = io
@@ -442,24 +484,27 @@ void registerModuleIO(PKVM* vm) {
   pkSetSlotNumber(vm, 1, 2);          // slot[1]        = 2
   pkSetAttribute(vm, 0, "stderr", 1); // slot[0].stderr = slot[1]
 
-  pkModuleAddFunction(vm, io, "write", _ioWrite, 2);
-  pkModuleAddFunction(vm, io, "flush", _ioFlush, 0);
-  pkModuleAddFunction(vm, io, "getc",  _ioGetc, 0);
+  REGISTER_FN(io, "write", _ioWrite, 2);
+  REGISTER_FN(io, "flush", _ioFlush, 0);
+  REGISTER_FN(io, "getc",  _ioGetc, 0);
 
-  PkHandle* cls_file = pkNewClass(vm, "File", NULL, io, _fileNew, _fileDelete);
-  pkClassAddMethod(vm, cls_file, "open",     _fileOpen,    -1);
-  pkClassAddMethod(vm, cls_file, "read",     _fileRead,    -1);
-  pkClassAddMethod(vm, cls_file, "write",    _fileWrite,    1);
-  pkClassAddMethod(vm, cls_file, "getline",  _fileGetLine,  0);
-  pkClassAddMethod(vm, cls_file, "close",    _fileClose,    0);
-  pkClassAddMethod(vm, cls_file, "seek",     _fileSeek,    -1);
-  pkClassAddMethod(vm, cls_file, "tell",     _fileTell,     0);
+  PkHandle* cls_file = pkNewClass(vm, "File", NULL, io,
+                                  _fileNew, _fileDelete,
+                                  "A simple file type.");
+
+  ADD_METHOD(cls_file, "open",     _fileOpen,    -1);
+  ADD_METHOD(cls_file, "read",     _fileRead,    -1);
+  ADD_METHOD(cls_file, "write",    _fileWrite,    1);
+  ADD_METHOD(cls_file, "getline",  _fileGetLine,  0);
+  ADD_METHOD(cls_file, "close",    _fileClose,    0);
+  ADD_METHOD(cls_file, "seek",     _fileSeek,    -1);
+  ADD_METHOD(cls_file, "tell",     _fileTell,     0);
   pkReleaseHandle(vm, cls_file);
 
   // A convinent function to read file by io.readfile(path).
   pkModuleAddSource(vm, io,
-    "## Reads a file and return it's content as string.\n"
     "def readfile(filepath)\n"
+    "  \"Reads a file and return it's content as string\""
     "  fp = File()\n"
     "  fp.open(filepath, 'r')\n"
     "  text = fp.read()\n"

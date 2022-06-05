@@ -25,7 +25,9 @@ void _deleteDummy(PKVM* vm, void* ptr) {
   pkRealloc(vm, ptr, 0);
 }
 
-DEF(_dummyInit, "") {
+DEF(_dummyInit,
+  "dummy.Dummy._init(n:Number)",
+  "Initialize a dummy instance with [n].") {
   double val;
   if (!pkValidateSlotNumber(vm, 1, &val)) return;
 
@@ -33,7 +35,8 @@ DEF(_dummyInit, "") {
   self->val = val;
 }
 
-DEF(_dummyGetter, "") {
+DEF(_dummyGetter, "dummy.Dummy.@getter()", "") {
+
   const char* name = pkGetSlotString(vm, 1, NULL);
   Dummy* self = (Dummy*)pkGetSelf(vm);
   if (strcmp("val", name) == 0) {
@@ -42,7 +45,7 @@ DEF(_dummyGetter, "") {
   }
 }
 
-DEF(_dummySetter, "") {
+DEF(_dummySetter, "dummy.Dummy.@setter()", "") {
   const char* name = pkGetSlotString(vm, 1, NULL);
   Dummy* self = (Dummy*)pkGetSelf(vm);
   if (strcmp("val", name) == 0) {
@@ -53,7 +56,9 @@ DEF(_dummySetter, "") {
   }
 }
 
-DEF(_dummyAdd, "") {
+DEF(_dummyAdd,
+  "dummy.Dummy.+(other:dummy.Dummy) -> dummy.Dummy",
+  "Adds two dummy instances.") {
   Dummy* self = (Dummy*) pkGetSelf(vm);
 
   pkReserveSlots(vm, 4); // Now we have slots [0, 1, 2, 3].
@@ -72,7 +77,9 @@ DEF(_dummyAdd, "") {
   if (!pkNewInstance(vm, 2, 0, 1, 3)) return;
 }
 
-DEF(_dummyEq, "") {
+DEF(_dummyEq,
+  "dummy.Dummy.==(other:dummy.Dummy) -> Bool",
+  "Check if two dummy instances are the equal.") {
 
   // TODO: Currently there is no way of getting another native instance
   // So, it's impossible to check self == other. So for now checking with
@@ -84,7 +91,9 @@ DEF(_dummyEq, "") {
   pkSetSlotBool(vm, 0, value == self->val);
 }
 
-DEF(_dummyGt, "") {
+DEF(_dummyGt,
+  "dummy.Dummy.>(other:dummy.Dummy) -> Bool",
+  "Check if the dummy instance is greater than [other].") {
 
   // TODO: Currently there is no way of getting another native instance
   // So, it's impossible to check self == other. So for now checking with
@@ -97,7 +106,7 @@ DEF(_dummyGt, "") {
 }
 
 DEF(_dummyMethod,
-  "Dummy.a_method(n1:num, n2:num) -> num\n"
+  "Dummy.a_method(n1:Number, n2:Number) -> Number",
   "A dummy method to check dummy method calls. Will take 2 number arguments "
   "and return the multiplication.") {
 
@@ -109,7 +118,7 @@ DEF(_dummyMethod,
 }
 
 DEF(_dummyFunction,
-  "dummy.afunc(s1:str, s2:str) -> str\n"
+  "dummy.afunc(s1:String, s2:String) -> String",
   "A dummy function the'll return s2 + s1.") {
 
   const char *s1, *s2;
@@ -120,8 +129,8 @@ DEF(_dummyFunction,
 }
 
 DEF(_dummyCallNative,
-  "dummy.call_native(f:fn) -> void\n"
-  "Calls the function 'f' with arguments 'foo', 42, false.") {
+  "dummy.call_native(fn:Closure) -> Null",
+  "Calls the function 'fn' with arguments 'foo', 42, false.") {
   if (!pkValidateSlotType(vm, 1, PK_CLOSURE)) return;
 
   pkReserveSlots(vm, 5); // Now we have slots [0, 1, 2, 3, 4].
@@ -134,7 +143,7 @@ DEF(_dummyCallNative,
 }
 
 DEF(_dummyCallMethod,
-  "dummy.call_method(o:Obj, method:str, a1, a2) -> \n"
+  "dummy.call_method(o:Var, method:String, a1:Var, a2:Var) -> Var",
   "Calls the method int the object [o] with two arguments [a1] and [a2].") {
   const char* method;
   if (!pkValidateSlotString(vm, 2, &method, NULL)) return;
@@ -152,19 +161,20 @@ void registerModuleDummy(PKVM* vm) {
 
   PkHandle* dummy = pkNewModule(vm, "dummy");
 
-  pkModuleAddFunction(vm, dummy, "afunc", _dummyFunction, 2);
-  pkModuleAddFunction(vm, dummy, "call_native", _dummyCallNative, 1);
-  pkModuleAddFunction(vm, dummy, "call_method", _dummyCallMethod, 4);
+  REGISTER_FN(dummy, "afunc", _dummyFunction, 2);
+  REGISTER_FN(dummy, "call_native", _dummyCallNative, 1);
+  REGISTER_FN(dummy, "call_method", _dummyCallMethod, 4);
 
   PkHandle* cls_dummy = pkNewClass(vm, "Dummy", NULL, dummy,
-                                   _newDummy, _deleteDummy);
-  pkClassAddMethod(vm, cls_dummy, "_init",    _dummyInit,   1);
-  pkClassAddMethod(vm, cls_dummy, "@getter",  _dummyGetter, 1);
-  pkClassAddMethod(vm, cls_dummy, "@setter",  _dummySetter, 2);
-  pkClassAddMethod(vm, cls_dummy, "+",        _dummyAdd,    1);
-  pkClassAddMethod(vm, cls_dummy, "==",       _dummyEq,     1);
-  pkClassAddMethod(vm, cls_dummy, ">",        _dummyGt,     1);
-  pkClassAddMethod(vm, cls_dummy, "a_method", _dummyMethod, 2);
+                                   _newDummy, _deleteDummy, NULL);
+  ADD_METHOD(cls_dummy, "_init",    _dummyInit,   1);
+  ADD_METHOD(cls_dummy, "@getter",  _dummyGetter, 1);
+  ADD_METHOD(cls_dummy, "@setter",  _dummySetter, 2);
+  ADD_METHOD(cls_dummy, "+",        _dummyAdd,    1);
+  ADD_METHOD(cls_dummy, "==",       _dummyEq,     1);
+  ADD_METHOD(cls_dummy, ">",        _dummyGt,     1);
+  ADD_METHOD(cls_dummy, "a_method", _dummyMethod, 2);
+
   pkReleaseHandle(vm, cls_dummy);
 
   pkRegisterModule(vm, dummy);

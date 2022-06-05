@@ -42,7 +42,8 @@ void _termEventDelete(PKVM* vm, void* event) {
   pkRealloc(vm, event, 0);
 }
 
-void _termEventGetter(PKVM* vm) {
+PKDEF(_termEventGetter,
+  "term.Event@getter() -> Var", "") {
   const char* name;
   if (!pkValidateSlotString(vm, 1, &name, NULL)) return;
 
@@ -168,41 +169,60 @@ void _registerEnums(PKVM* vm, PkHandle* term) {
 
 }
 
-void _termInit(PKVM* vm) {
+PKDEF(_termInit,
+  "term.init(capture_events:Bool) -> Null",
+  "Initialize terminal with raw mode for tui applications, set "
+  "[capture_events] true to enable event handling.") {
   bool capture_events;
   if (!pkValidateSlotBool(vm, 1, &capture_events)) return;
   term_init(capture_events);
 }
 
-void _termCleanup(PKVM* vm) {
+PKDEF(_termCleanup,
+  "term.cleanup() -> Null",
+  "Cleanup and resotre the last terminal state.") {
   term_cleanup();
 }
 
-void _termIsatty(PKVM* vm) {
+PKDEF(_termIsatty,
+  "term.isatty() -> Bool",
+  "Returns true if both stdin and stdout are tty.") {
   pkSetSlotBool(vm, 0, term_isatty());
 }
 
-void _termNewScreenBuffer(PKVM* vm) {
+PKDEF(_termNewScreenBuffer,
+  "term.new_screen_buffer() -> Null",
+  "Switch to an alternative screen buffer.") {
   term_new_screen_buffer();
 }
 
-void _termRestoreScreenBuffer(PKVM* vm) {
+PKDEF(_termRestoreScreenBuffer,
+  "term.restore_screen_buffer() -> Null",
+  "Restore the alternative buffer which was created with "
+  "term.new_screen_buffer()") {
   term_restore_screen_buffer();
 }
 
-void _termGetSize(PKVM* vm) {
+PKDEF(_termGetSize,
+  "term.getsize() -> types.Vector",
+  "Returns the screen size.") {
   pkReserveSlots(vm, 2);
   term_Vec size = term_getsize();
   _setSlotVector(vm, 0, 1, size.x, size.y);
 }
 
-void _termGetPosition(PKVM* vm) {
+PKDEF(_termGetPosition,
+  "term.getposition() -> types.Vector",
+  "Returns the cursor position in the screen on a zero based coordinate.") {
   pkReserveSlots(vm, 2);
   term_Vec pos = term_getposition();
   _setSlotVector(vm, 0, 1, pos.x, pos.y);
 }
 
-void _termSetPosition(PKVM* vm) {
+PKDEF(_termSetPosition,
+  "term.setposition(pos:types.Vector | {x, y}) -> Null",
+  "Set cursor position at the [position] in the screen no a zero"
+  "based coordinate.") {
   double x, y;
 
   int argc = pkGetArgc(vm);
@@ -224,7 +244,10 @@ void _termSetPosition(PKVM* vm) {
   term_setposition(pos);
 }
 
-void _termReadEvent(PKVM* vm) {
+PKDEF(_termReadEvent,
+  "term.read_event(event:term.Event) -> Bool",
+  "Read an event and update the argument [event] and return true."
+  "If no event was read it'll return false.") {
   pkReserveSlots(vm, 3);
   pkSetSlotHandle(vm, 2, _cls_term_event);
   if (!pkValidateSlotInstanceOf(vm, 1, 2)) return;
@@ -233,9 +256,10 @@ void _termReadEvent(PKVM* vm) {
   pkSetSlotBool(vm, 0, term_read_event(event));
 }
 
-// On windows it'll set stdout to binary mode, on other platforms this function
-// won't make make any difference.
-void _termBinaryMode(PKVM* vm) {
+PKDEF(_termBinaryMode,
+  "term.binary_mode() -> Null",
+  "On windows it'll set stdout to binary mode, on other platforms this "
+  "function won't make make any difference.") {
   #ifdef _WIN32
     (void) _setmode(_fileno(stdout), _O_BINARY);
   #endif
@@ -249,25 +273,29 @@ void registerModuleTerm(PKVM* vm) {
   PkHandle* term = pkNewModule(vm, "term");
 
   _registerEnums(vm, term);
-  pkModuleAddFunction(vm, term, "init", _termInit, 1);
-  pkModuleAddFunction(vm, term, "cleanup", _termCleanup, 0);
-  pkModuleAddFunction(vm, term, "isatty", _termIsatty, 0);
-  pkModuleAddFunction(vm, term, "new_screen_buffer", _termNewScreenBuffer, 0);
-  pkModuleAddFunction(vm, term, "restore_screen_buffer", _termRestoreScreenBuffer, 0);
-  pkModuleAddFunction(vm, term, "getsize", _termGetSize, 0);
-  pkModuleAddFunction(vm, term, "getposition", _termGetPosition, 0);
-  pkModuleAddFunction(vm, term, "setposition", _termSetPosition, -1);
-  pkModuleAddFunction(vm, term, "read_event", _termReadEvent, 1);
+  REGISTER_FN(term, "init", _termInit, 1);
+  REGISTER_FN(term, "cleanup", _termCleanup, 0);
+  REGISTER_FN(term, "isatty", _termIsatty, 0);
+  REGISTER_FN(term, "new_screen_buffer", _termNewScreenBuffer, 0);
+  REGISTER_FN(term, "restore_screen_buffer", _termRestoreScreenBuffer, 0);
+  REGISTER_FN(term, "getsize", _termGetSize, 0);
+  REGISTER_FN(term, "getposition", _termGetPosition, 0);
+  REGISTER_FN(term, "setposition", _termSetPosition, -1);
+  REGISTER_FN(term, "read_event", _termReadEvent, 1);
 
-  _cls_term_event = pkNewClass(vm, "Event", NULL, term, _termEventNew, _termEventDelete);
-  pkClassAddMethod(vm, _cls_term_event, "@getter", _termEventGetter, 1);
+  _cls_term_event = pkNewClass(vm, "Event", NULL, term,
+                              _termEventNew, _termEventDelete,
+  "The terminal event type, that'll be used at term.read_event function to "
+  "fetch events.");
+
+  ADD_METHOD(_cls_term_event, "@getter", _termEventGetter, 1);
 
   pkModuleAddSource(vm, term, ext_term_pk);
 
   // This is required for language server. Since we need to send '\r\n' to
   // the lsp client but windows will change '\n' to '\r\n' and it'll become
   // '\r\r\n', binary mode will prevent this.
-  pkModuleAddFunction(vm, term, "binary_mode", _termBinaryMode, 0);
+  REGISTER_FN(term, "binary_mode", _termBinaryMode, 0);
 
   pkRegisterModule(vm, term);
   pkReleaseHandle(vm, term);

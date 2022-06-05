@@ -272,7 +272,7 @@ static void _collectMethods(PKVM* vm, List* list, Class* cls) {
 /*****************************************************************************/
 
 DEF(coreHelp,
-  "help([fn:Closure]) -> null\n"
+  "help([value:Closure|Class]) -> Null",
   "It'll print the docstring the object and return.") {
 
   int argc = ARGC;
@@ -290,25 +290,40 @@ DEF(coreHelp,
     // TODO: Extend help() to work with modules and classes.
     //       Add docstring (like python) to support it in pocketlang.
 
-    Closure* closure;
-    if (!validateArgClosure(vm, 1, &closure)) return;
-
-    // If there ins't an io function callback, we're done.
     if (vm->config.stdout_write == NULL) RET(VAR_NULL);
+    Var value = ARG(1);
 
-    if (closure->fn->docstring != NULL) {
-      vm->config.stdout_write(vm, closure->fn->docstring);
-      vm->config.stdout_write(vm, "\n\n");
+    if (IS_OBJ_TYPE(value, OBJ_CLOSURE)) {
+      Closure* closure = (Closure*) AS_OBJ(value);
+      // If there ins't an io function callback, we're done.
+
+      if (closure->fn->docstring != NULL) {
+        vm->config.stdout_write(vm, closure->fn->docstring);
+        vm->config.stdout_write(vm, "\n\n");
+      } else {
+        vm->config.stdout_write(vm, "function '");
+        vm->config.stdout_write(vm, closure->fn->name);
+        vm->config.stdout_write(vm, "()' doesn't have a docstring.\n");
+      }
+    } else if (IS_OBJ_TYPE(value, OBJ_CLASS)) {
+      Class* cls = (Class*) AS_OBJ(value);
+      if (cls->docstring != NULL) {
+        vm->config.stdout_write(vm, cls->docstring);
+        vm->config.stdout_write(vm, "\n\n");
+      } else {
+        vm->config.stdout_write(vm, "class '");
+        vm->config.stdout_write(vm, cls->name->data);
+        vm->config.stdout_write(vm, "' doesn't have a docstring.\n");
+      }
     } else {
-      vm->config.stdout_write(vm, "function '");
-      vm->config.stdout_write(vm, closure->fn->name);
-      vm->config.stdout_write(vm, "()' doesn't have a docstring.\n");
+      RET_ERR(newString(vm, "Expected a closure or class to get help."));
     }
   }
+
 }
 
 DEF(coreDir,
-  "dir(v:var) -> List[String]\n"
+  "dir(v:Var) -> List[String]",
   "It'll return all the elements of the variable [v]. If [v] is a module "
   "it'll return the names of globals, functions, and classes. If it's an "
   "instance it'll return all the attributes and methods.") {
@@ -377,7 +392,7 @@ DEF(coreDir,
 }
 
 DEF(coreAssert,
-  "assert(condition:bool [, msg:string]) -> void\n"
+  "assert(condition:Bool [, msg:String]) -> Null",
   "If the condition is false it'll terminate the current fiber with the "
   "optional error message") {
 
@@ -408,7 +423,7 @@ DEF(coreAssert,
 }
 
 DEF(coreBin,
-  "bin(value:num) -> string\n"
+  "bin(value:Number) -> String",
   "Returns as a binary value string with '0b' prefix.") {
 
   int64_t value;
@@ -439,7 +454,7 @@ DEF(coreBin,
 }
 
 DEF(coreHex,
-  "hex(value:num) -> string\n"
+  "hex(value:Number) -> String",
   "Returns as a hexadecimal value string with '0x' prefix.") {
 
   int64_t value;
@@ -466,7 +481,7 @@ DEF(coreHex,
 }
 
 DEF(coreYield,
-  "yield([value]) -> var\n"
+  "yield([value:Var]) -> Var",
   "Return the current function with the yield [value] to current running "
   "fiber. If the fiber is resumed, it'll run from the next statement of the "
   "yield() call. If the fiber resumed with with a value, the return value of "
@@ -481,7 +496,7 @@ DEF(coreYield,
 }
 
 DEF(coreToString,
-  "str(value:var) -> string\n"
+  "str(valueVar) -> String",
   "Returns the string representation of the value.") {
 
   String* str = varToString(vm, ARG(1), false);
@@ -490,7 +505,7 @@ DEF(coreToString,
 }
 
 DEF(coreChr,
-  "chr(value:num) -> string\n"
+  "chr(value:Num) -> String",
   "Returns the ASCII string value of the integer argument.") {
 
   int64_t num;
@@ -505,7 +520,7 @@ DEF(coreChr,
 }
 
 DEF(coreOrd,
-  "ord(value:string) -> num\n"
+  "ord(value:String) -> Number",
   "Returns integer value of the given ASCII character.") {
 
   String* c;
@@ -519,7 +534,7 @@ DEF(coreOrd,
 }
 
 DEF(coreMin,
-  "min(a:var, b:var) -> Bool\n"
+  "min(a:Var, b:Var) -> Bool",
   "Returns minimum of [a] and [b].") {
 
   Var a = ARG(1), b = ARG(2);
@@ -531,7 +546,7 @@ DEF(coreMin,
 }
 
 DEF(coreMax,
-  "max(a:var, b:var) -> Bool\n"
+  "max(a:var, b:var) -> Bool",
   "Returns maximum of [a] and [b].") {
 
   Var a = ARG(1), b = ARG(2);
@@ -543,7 +558,7 @@ DEF(coreMax,
 }
 
 DEF(corePrint,
-  "print(...) -> void\n"
+  "print(...) -> Null",
   "Write each argument as space seperated, to the stdout and ends with a "
   "newline.") {
 
@@ -562,7 +577,7 @@ DEF(corePrint,
 }
 
 DEF(coreInput,
-  "input([msg:var]) -> string\n"
+  "input([msg:Var]) -> String",
   "Read a line from stdin and returns it without the line ending. Accepting "
   "an optional argument [msg] and prints it before reading.") {
 
@@ -591,7 +606,7 @@ DEF(coreInput,
 }
 
 DEF(coreExit,
-  "exit([value:num]) -> null\n"
+  "exit([value:Number]) -> Null",
   "Exit the process with an optional exit code provided by the argument "
   "[value]. The default exit code is would be 0.") {
 
@@ -613,7 +628,7 @@ DEF(coreExit,
 // ---------------
 
 DEF(coreListAppend,
-  "list_append(self:List, value:var) -> List\n"
+  "list_append(self:List, value:Var) -> List",
   "Append the [value] to the list [self] and return the list.") {
 
   List* list;
@@ -627,7 +642,7 @@ DEF(coreListAppend,
 // TODO: currently it takes one argument (to test string interpolation).
 //       Add join delimeter as an optional argument.
 DEF(coreListJoin,
-  "list_join(self:List) -> String\n"
+  "list_join(self:List) -> String",
   "Concatinate the elements of the list and return as a string.") {
 
   List* list;
@@ -732,7 +747,7 @@ void moduleAddFunctionInternal(PKVM* vm, Module* module,
 // 'lang' library methods.
 
 DEF(stdLangGC,
-  "lang.gc() -> num\n"
+  "lang.gc() -> Number",
   "Trigger garbage collection and return the amount of bytes cleaned.") {
 
   size_t bytes_before = vm->bytes_allocated;
@@ -742,7 +757,7 @@ DEF(stdLangGC,
 }
 
 DEF(stdLangDisas,
-  "lang.disas(fn:Closure) -> String\n"
+  "lang.disas(fn:Closure) -> String",
   "Returns the disassembled opcode of the function [fn].") {
 
   // TODO: support dissasemble class constructors and module main body.
@@ -757,7 +772,7 @@ DEF(stdLangDisas,
 }
 
 DEF(stdLangBackTrace,
-  "lang.backtrace() -> String\n"
+  "lang.backtrace() -> String",
   "Returns the backtrace as a string, each line is formated as "
   "'<function>;<file>;<line>\n'.") {
 
@@ -806,7 +821,7 @@ DEF(stdLangBackTrace,
 }
 
 DEF(stdLangModules,
-  "lang.modules() -> List\n"
+  "lang.modules() -> List",
   "Returns the list of all registered modules.") {
 
   List* list = newList(vm, 8);
@@ -822,7 +837,7 @@ DEF(stdLangModules,
 
 #ifdef DEBUG
 DEF(stdLangDebugBreak,
-  "lang.debug_break() -> null\n"
+  "lang.debug_break() -> Null",
   "A debug function for development (will be removed).") {
 
   DEBUG_BREAK();
@@ -928,19 +943,19 @@ static void _ctorFiber(PKVM* vm) {
 #define SELF (vm->fiber->self)
 
 DEF(_objTypeName,
-  "Object.typename() -> String\n"
+  "Object.typename() -> String",
   "Returns the type name of the object.") {
   RET(VAR_OBJ(newString(vm, varTypeName(SELF))));
 }
 
 DEF(_objRepr,
-  "Object._repr() -> String\n"
+  "Object._repr() -> String",
   "Returns the repr string of the object.") {
   RET(VAR_OBJ(toRepr(vm, SELF)));
 }
 
 DEF(_numberTimes,
-  "Number.times(f:fn)\n"
+  "Number.times(f:Closure)",
   "Iterate the function [f] n times. Here n is the integral value of the "
   "number. If the number is not an integer the floor value will be taken.") {
 
@@ -960,21 +975,21 @@ DEF(_numberTimes,
 }
 
 DEF(_numberIsint,
-    "Number.isint() -> bool\n"
+    "Number.isint() -> Bool",
     "Returns true if the number is a whold number, otherwise false.") {
   double n = AS_NUM(SELF);
   RET(VAR_BOOL(floor(n) == n));
 }
 
 DEF(_numberIsbyte,
-  "Number.isbyte() -> bool\n"
+  "Number.isbyte() -> bool",
   "Returns true if the number is an integer and is between 0x00 and 0xff.") {
   double n = AS_NUM(SELF);
   RET(VAR_BOOL((floor(n) == n) && (0x00 <= n && n <= 0xff)));
 }
 
 DEF(_stringFind,
-  "String.find(sub:String[, start:Number=0]) -> Number\n"
+  "String.find(sub:String[, start:Number=0]) -> Number",
   "Returns the first index of the substring [sub] found from the "
   "[start] index") {
 
@@ -1006,7 +1021,7 @@ DEF(_stringFind,
 }
 
 DEF(_stringReplace,
-  "String.replace(old:Sttring, new:String[, count:Number=-1]) -> String\n"
+  "String.replace(old:Sttring, new:String[, count:Number=-1]) -> String",
   "Returns a copy of the string where [count] occurrence of the substring "
   "[old] will be replaced with [new]. If [count] == -1 all the occurrence "
   "will be replaced.") {
@@ -1031,7 +1046,7 @@ DEF(_stringReplace,
 }
 
 DEF(_stringSplit,
-  "String.split(sep:String) -> List\n"
+  "String.split(sep:String) -> List",
   "Split the string into a list of string seperated by [sep] delimeter.") {
 
   String* sep;
@@ -1045,28 +1060,28 @@ DEF(_stringSplit,
 }
 
 DEF(_stringStrip,
-  "String.strip() -> String\n"
+  "String.strip() -> String",
   "Returns a copy of the string where the leading and trailing whitespace "
   "removed.") {
   RET(VAR_OBJ(stringStrip(vm, (String*) AS_OBJ(SELF))));
 }
 
 DEF(_stringLower,
-  "String.lower() -> String\n"
+  "String.lower() -> String",
   "Returns a copy of the string where all the characters are converted to "
   "lower case letters.") {
   RET(VAR_OBJ(stringLower(vm, (String*) AS_OBJ(SELF))));
 }
 
 DEF(_stringUpper,
-  "String.lower() -> String\n"
+  "String.lower() -> String",
   "Returns a copy of the string where all the characters are converted to "
   "upper case letters.") {
   RET(VAR_OBJ(stringUpper(vm, (String*) AS_OBJ(SELF))));
 }
 
 DEF(_stingStartswith,
-  "String.startswith(prefix: String | List) -> Bool\n"
+  "String.startswith(prefix: String | List) -> Bool",
   "Returns true if the string starts the specified prefix.") {
 
   Var prefix = ARG(1);
@@ -1097,7 +1112,7 @@ DEF(_stingStartswith,
 }
 
 DEF(_stingEndswith,
-  "String.endswith(suffix: String | List) -> Bool\n"
+  "String.endswith(suffix: String | List) -> Bool",
   "Returns true if the string ends with the specified suffix.") {
 
   Var suffix = ARG(1);
@@ -1132,7 +1147,7 @@ DEF(_stingEndswith,
 }
 
 DEF(_listAppend,
-  "List.append(value:var) -> List\n"
+  "List.append(value:Var) -> List",
   "Append the [value] to the list and return the List.") {
 
   ASSERT(IS_OBJ_TYPE(SELF, OBJ_LIST), OOPS);
@@ -1142,7 +1157,7 @@ DEF(_listAppend,
 }
 
 DEF(_listInsert,
-  "List.insert(index:Number, value:var) -> null\n"
+  "List.insert(index:Number, value:Var) -> Null",
   "Insert the element at the given index. The index should be "
   "0 <= index <= list.length.") {
 
@@ -1159,7 +1174,7 @@ DEF(_listInsert,
 }
 
 DEF(_listPop,
-  "List.pop(index=-1) -> var\n"
+  "List.pop(index:Number=-1) -> Var",
   "Removes the last element of the list and return it.") {
 
   ASSERT(IS_OBJ_TYPE(SELF, OBJ_LIST), OOPS);
@@ -1184,7 +1199,7 @@ DEF(_listPop,
 }
 
 DEF(_listFind,
-  "List.find(value:var) -> Number\n"
+  "List.find(value:Var) -> Number",
   "Find the value and return its index. If the vlaue not exists "
   "it'll return -1.") {
 
@@ -1204,20 +1219,20 @@ DEF(_listFind,
 }
 
 DEF(_listClear,
-  "List.clear() -> null\n"
+  "List.clear() -> Null",
   "Removes all the entries in the list.") {
   listClear(vm, (List*) AS_OBJ(SELF));
 }
 
 DEF(_mapClear,
-  "Map.clear() -> null\n"
+  "Map.clear() -> Null",
   "Removes all the entries in the map.") {
   Map* self = (Map*) AS_OBJ(SELF);
   mapClear(vm, self);
 }
 
 DEF(_mapGet,
-  "Map.get(key:var, default=null) -> var\n"
+  "Map.get(key:Var, default=Null) -> Var",
   "Returns the key if its in the map, otherwise the default value will "
   "be returned.") {
 
@@ -1233,7 +1248,7 @@ DEF(_mapGet,
 }
 
 DEF(_mapHas,
-  "Map.has(key:var) -> Bool\n"
+  "Map.has(key:Var) -> Bool",
   "Returns true if the key exists.") {
 
   Map* self = (Map*)AS_OBJ(SELF);
@@ -1242,7 +1257,7 @@ DEF(_mapHas,
 }
 
 DEF(_mapPop,
-  "Map.pop(key:var) -> var\n"
+  "Map.pop(key:Var) -> Var",
   "Pops the value at the key and return it.") {
 
   Map* self = (Map*)AS_OBJ(SELF);
@@ -1254,7 +1269,7 @@ DEF(_mapPop,
 }
 
 DEF(_fiberRun,
-  "Fiber.run(...) -> var\n"
+  "Fiber.run(...) -> Var",
   "Runs the fiber's function with the provided arguments and returns it's "
   "return value or the yielded value if it's yielded.") {
 
@@ -1272,7 +1287,7 @@ DEF(_fiberRun,
 }
 
 DEF(_fiberResume,
-  "Fiber.resume() -> var\n"
+  "Fiber.resume() -> Var",
   "Resumes a yielded function from a previous call of fiber_run() function. "
   "Return it's return value or the yielded value if it's yielded.") {
 
@@ -1918,6 +1933,13 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
       Closure* closure = (Closure*)obj;
       switch (attrib->hash) {
 
+        case CHECK_HASH("_docs", 0x8fb536a9):
+          if (closure->fn->docstring) {
+            return VAR_OBJ(newString(vm, closure->fn->docstring));
+          } else {
+            return VAR_OBJ(newString(vm, ""));
+          }
+
         case CHECK_HASH("arity", 0x3e96bd7a):
           return VAR_NUM((double)(closure->fn->arity));
 
@@ -1942,9 +1964,17 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
       }
     } break;
 
-    case OBJ_CLASS:
-      // TODO:
-      break;
+    case OBJ_CLASS: {
+      Class* cls = (Class*) obj;
+      if (attrib->hash == CHECK_HASH("_docs", 0x8fb536a9)) {
+        if (cls->docstring) {
+          return VAR_OBJ(newString(vm, cls->docstring));
+        } else {
+          return VAR_OBJ(newString(vm, ""));
+        }
+      }
+
+    } break;
 
     case OBJ_INST: {
       Instance* inst = (Instance*)obj;

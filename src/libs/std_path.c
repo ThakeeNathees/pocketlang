@@ -225,7 +225,9 @@ static inline size_t pathAbs(const char* path, char* buff, size_t buffsz) {
 /* PATH MODULE FUNCTIONS                                                     */
 /*****************************************************************************/
 
-DEF(_pathGetCWD, "") {
+DEF(_pathGetCWD,
+  "path.getcwd() -> String",
+  "Returns the current working directory.") {
   char cwd[MAX_PATH_LEN];
   if (getcwd(cwd, sizeof(cwd)) == NULL) {
     // TODO: Handle error.
@@ -233,7 +235,9 @@ DEF(_pathGetCWD, "") {
   pkSetSlotString(vm, 0, cwd);
 }
 
-DEF(_pathAbspath, "") {
+DEF(_pathAbspath,
+  "path.abspath(path:String) -> String",
+  "Returns the absolute path of the [path].") {
   const char* path;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
@@ -242,7 +246,10 @@ DEF(_pathAbspath, "") {
   pkSetSlotStringLength(vm, 0, abspath, len);
 }
 
-DEF(_pathRelpath, "") {
+DEF(_pathRelpath,
+  "path.relpath(path:String, from:String) -> String",
+  "Returns the relative path of the [path] argument from the [from] "
+  "directory.") {
   const char* path, * from;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
   if (!pkValidateSlotString(vm, 2, &from, NULL)) return;
@@ -259,7 +266,10 @@ DEF(_pathRelpath, "") {
   pkSetSlotStringLength(vm, 0, result, len);
 }
 
-DEF(_pathJoin, "") {
+DEF(_pathJoin,
+  "path.join(...) -> String",
+  "Joins path with path seperator and return it. The maximum count of paths "
+  "which can be joined for a call is " TOSTRING(MAX_JOIN_PATHS) ".") {
   const char* paths[MAX_JOIN_PATHS + 1]; // +1 for NULL.
   int argc = pkGetArgc(vm);
 
@@ -280,7 +290,9 @@ DEF(_pathJoin, "") {
   pkSetSlotStringLength(vm, 0, result, len);
 }
 
-DEF(_pathNormpath, "") {
+DEF(_pathNormpath,
+  "path.normpath(path:String) -> String",
+  "Returns the normalized path of the [path].") {
   const char* path;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
@@ -289,7 +301,9 @@ DEF(_pathNormpath, "") {
   pkSetSlotStringLength(vm, 0, result, len);
 }
 
-DEF(_pathBaseName, "") {
+DEF(_pathBaseName,
+  "path.basename(path:String) -> String",
+  "Returns the final component for the path") {
   const char* path;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
@@ -299,7 +313,9 @@ DEF(_pathBaseName, "") {
   pkSetSlotStringLength(vm, 0, base_name, (uint32_t)length);
 }
 
-DEF(_pathDirName, "") {
+DEF(_pathDirName,
+  "path.dirname(path:String) -> String",
+  "Returns the directory of the path.") {
   const char* path;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
@@ -308,14 +324,18 @@ DEF(_pathDirName, "") {
   pkSetSlotStringLength(vm, 0, path, (uint32_t)length);
 }
 
-DEF(_pathIsPathAbs, "") {
+DEF(_pathIsPathAbs,
+  "path.isabspath(path:String) -> Bool",
+  "Returns true if the path is absolute otherwise false.") {
   const char* path;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
   pkSetSlotBool(vm, 0, cwk_path_is_absolute(path));
 }
 
-DEF(_pathGetExtension, "") {
+DEF(_pathGetExtension,
+  "path.getext(path:String) -> String",
+  "Returns the file extension of the path.") {
   const char* path;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
 
@@ -328,25 +348,33 @@ DEF(_pathGetExtension, "") {
   }
 }
 
-DEF(_pathExists, "") {
+DEF(_pathExists,
+  "path.exists(path:String) -> String",
+  "Returns true if the file exists.") {
   const char* path;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
   pkSetSlotBool(vm, 0, pathIsExists(path));
 }
 
-DEF(_pathIsFile, "") {
+DEF(_pathIsFile,
+  "path.isfile(path:String) -> Bool",
+  "Returns true if the path is a file.") {
   const char* path;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
   pkSetSlotBool(vm, 0, pathIsFile(path));
 }
 
-DEF(_pathIsDir, "") {
+DEF(_pathIsDir,
+  "path.isdir(path:String) -> Bool",
+  "Returns true if the path is a directory.") {
   const char* path;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
   pkSetSlotBool(vm, 0, pathIsDir(path));
 }
 
-DEF(_pathListDir, "") {
+DEF(_pathListDir,
+  "path.listdir(path:String='.') -> List",
+  "Returns all the entries in the directory at the [path].") {
 
   int argc = pkGetArgc(vm);
   if (!pkCheckArgcRange(vm, argc, 0, 1)) return;
@@ -411,19 +439,19 @@ void registerModulePath(PKVM* vm) {
 
   PkHandle* path = pkNewModule(vm, "path");
 
-  pkModuleAddFunction(vm, path, "getcwd",    _pathGetCWD,       0);
-  pkModuleAddFunction(vm, path, "abspath",   _pathAbspath,      1);
-  pkModuleAddFunction(vm, path, "relpath",   _pathRelpath,      2);
-  pkModuleAddFunction(vm, path, "join",      _pathJoin,        -1);
-  pkModuleAddFunction(vm, path, "normpath",  _pathNormpath,     1);
-  pkModuleAddFunction(vm, path, "basename",  _pathBaseName,     1);
-  pkModuleAddFunction(vm, path, "dirname",   _pathDirName,      1);
-  pkModuleAddFunction(vm, path, "isabspath", _pathIsPathAbs,    1);
-  pkModuleAddFunction(vm, path, "getext",    _pathGetExtension, 1);
-  pkModuleAddFunction(vm, path, "exists",    _pathExists,       1);
-  pkModuleAddFunction(vm, path, "isfile",    _pathIsFile,       1);
-  pkModuleAddFunction(vm, path, "isdir",     _pathIsDir,        1);
-  pkModuleAddFunction(vm, path, "listdir",   _pathListDir,     -1);
+  REGISTER_FN(path, "getcwd",    _pathGetCWD,       0);
+  REGISTER_FN(path, "abspath",   _pathAbspath,      1);
+  REGISTER_FN(path, "relpath",   _pathRelpath,      2);
+  REGISTER_FN(path, "join",      _pathJoin,        -1);
+  REGISTER_FN(path, "normpath",  _pathNormpath,     1);
+  REGISTER_FN(path, "basename",  _pathBaseName,     1);
+  REGISTER_FN(path, "dirname",   _pathDirName,      1);
+  REGISTER_FN(path, "isabspath", _pathIsPathAbs,    1);
+  REGISTER_FN(path, "getext",    _pathGetExtension, 1);
+  REGISTER_FN(path, "exists",    _pathExists,       1);
+  REGISTER_FN(path, "isfile",    _pathIsFile,       1);
+  REGISTER_FN(path, "isdir",     _pathIsDir,        1);
+  REGISTER_FN(path, "listdir",   _pathListDir,     -1);
 
   pkRegisterModule(vm, path);
   pkReleaseHandle(vm, path);
