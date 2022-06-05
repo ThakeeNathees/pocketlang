@@ -160,7 +160,7 @@ static cJSON* _pocketToCJson(PKVM* vm, Var item) {
 }
 
 DEF(_jsonParse,
-  "json.parse(json_str:String) -> var\n"
+  "json.parse(json_str:String) -> Var",
   "Parse a json string into pocket lang object.") {
 
   const char* string;
@@ -186,7 +186,7 @@ DEF(_jsonParse,
 }
 
 DEF(_jsonPrint,
-  "json.print(value:Var[, pretty:Bool=false])\n"
+  "json.print(value:Var, pretty:Bool=false)",
   "Render a pocketlang value into text. Takes an optional argument pretty, if "
   "true it'll pretty print the output.") {
 
@@ -225,8 +225,8 @@ DEF(_jsonPrint,
 void registerModuleJson(PKVM* vm) {
   PkHandle* json = pkNewModule(vm, "json");
 
-  pkModuleAddFunction(vm, json, "parse", _jsonParse, 1);
-  pkModuleAddFunction(vm, json, "print", _jsonPrint, -1);
+  REGISTER_FN(json, "parse", _jsonParse, 1);
+  REGISTER_FN(json, "print", _jsonPrint, -1);
 
   pkRegisterModule(vm, json);
   pkReleaseHandle(vm, json);

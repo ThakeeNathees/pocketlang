@@ -245,19 +245,19 @@ void pkRegisterModule(PKVM* vm, PkHandle* module) {
 }
 
 void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name,
-                         pkNativeFn fptr, int arity) {
+                         pkNativeFn fptr, int arity, const char* docstring) {
   CHECK_HANDLE_TYPE(module, OBJ_MODULE);
   CHECK_ARG_NULL(fptr);
 
   moduleAddFunctionInternal(vm, (Module*)AS_OBJ(module->value),
-                            name, fptr, arity,
-                            NULL /*TODO: Public API for function docstring.*/);
+                            name, fptr, arity, docstring);
 }
 
 PkHandle* pkNewClass(PKVM* vm, const char* name,
                      PkHandle* base_class, PkHandle* module,
                      pkNewInstanceFn new_fn,
-                     pkDeleteInstanceFn delete_fn) {
+                     pkDeleteInstanceFn delete_fn,
+                     const char* docstring) {
   CHECK_ARG_NULL(module);
   CHECK_ARG_NULL(name);
   CHECK_HANDLE_TYPE(module, OBJ_MODULE);
@@ -270,7 +270,7 @@ PkHandle* pkNewClass(PKVM* vm, const char* name,
 
   Class* class_ = newClass(vm, name, (int)strlen(name),
                            super, (Module*)AS_OBJ(module->value),
-                           NULL, NULL);
+                           docstring, NULL);
   class_->new_fn = new_fn;
   class_->delete_fn = delete_fn;
 
@@ -282,7 +282,7 @@ PkHandle* pkNewClass(PKVM* vm, const char* name,
 
 void pkClassAddMethod(PKVM* vm, PkHandle* cls,
                       const char* name,
-                      pkNativeFn fptr, int arity) {
+                      pkNativeFn fptr, int arity, const char* docstring) {
   CHECK_ARG_NULL(cls);
   CHECK_ARG_NULL(fptr);
   CHECK_HANDLE_TYPE(cls, OBJ_CLASS);
@@ -294,7 +294,7 @@ void pkClassAddMethod(PKVM* vm, PkHandle* cls,
   Class* class_ = (Class*)AS_OBJ(cls->value);
 
   Function* fn = newFunction(vm, name, (int)strlen(name),
-                             class_->owner, true, NULL, NULL);
+                             class_->owner, true, docstring, NULL);
   vmPushTempRef(vm, &fn->_super); // fn.
 
   fn->arity = arity;

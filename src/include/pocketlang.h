@@ -55,6 +55,17 @@ extern "C" {
   #define PK_PUBLIC
 #endif
 
+// Returns the docstring of the function, which is a static const char* defined
+// just above the function by the DEF() macro below.
+#define PK_DOCS(fn) _pk_doc_##fn
+
+// A macro to declare a function, with docstring, which is defined as
+// _pk_doc_<fn> = docstring; That'll used to generate function help text.
+// [signature] is the function name and parameter names with type information.
+// ex: `io.open(path:String, mode:String) -> io.File`
+#define PKDEF(fn, signature, docstring)        \
+  static const char* PK_DOCS(fn) = signature "\n\n" docstring;  \
+  static void fn(PKVM* vm)
 
 /*****************************************************************************/
 /* POCKETLANG TYPEDEFS & CALLBACKS                                           */
@@ -276,22 +287,28 @@ PK_PUBLIC void pkRegisterModule(PKVM* vm, PkHandle* module);
 // Add a native function to the given module. If [arity] is -1 that means
 // the function has variadic parameters and use pkGetArgc() to get the argc.
 // Note that the function will be added as a global variable of the module.
+// [docstring] is optional and could be omitted with NULL.
 PK_PUBLIC void pkModuleAddFunction(PKVM* vm, PkHandle* module,
                                    const char* name,
-                                   pkNativeFn fptr, int arity);
+                                   pkNativeFn fptr, int arity,
+                                   const char* docstring);
 
 // Create a new class on the [module] with the [name] and return it.
 // If the [base_class] is NULL by default it'll set to "Object" class.
+// [docstring] is optional and could be omitted with NULL.
 PK_PUBLIC PkHandle* pkNewClass(PKVM* vm, const char* name,
                                PkHandle* base_class, PkHandle* module,
                                pkNewInstanceFn new_fn,
-                               pkDeleteInstanceFn delete_fn);
+                               pkDeleteInstanceFn delete_fn,
+                               const char* docstring);
 
 // Add a native method to the given class. If the [arity] is -1 that means
 // the method has variadic parameters and use pkGetArgc() to get the argc.
+// [docstring] is optional and could be omitted with NULL.
 PK_PUBLIC void pkClassAddMethod(PKVM* vm, PkHandle* cls,
                                 const char* name,
-                                pkNativeFn fptr, int arity);
+                                pkNativeFn fptr, int arity,
+                                const char* docstring);
 
 // It'll compile the pocket [source] for the module which result all the
 // functions and classes in that [source] to register on the module.

@@ -31,6 +31,12 @@
 #define REPORT_ERRNO(fn) \
   pkSetRuntimeErrorFmt(vm, "C." #fn " errno:%i - %s.", errno, strerror(errno))
 
+#define REGISTER_FN(module, name, fn, argc) \
+  pkModuleAddFunction(vm, module, name, fn, argc, PK_DOCS(fn))
+
+#define ADD_METHOD(cls, name, fn, argc) \
+  pkClassAddMethod(vm, cls, name, fn, argc, PK_DOCS(fn));
+
 /*****************************************************************************/
 /* SHARED FUNCTIONS                                                          */
 /*****************************************************************************/

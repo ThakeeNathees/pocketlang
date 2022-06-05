@@ -13,7 +13,7 @@
 #endif
 
 DEF(_typesHashable,
-  "types.hashable(value:Var) -> Bool\n"
+  "types.hashable(value:Var) -> Bool",
   "Returns true if the [value] is hashable.") {
 
   // Get argument 1 directly.
@@ -26,7 +26,7 @@ DEF(_typesHashable,
 }
 
 DEF(_typesHash,
-  "types.hash(value:Var) -> Number\n"
+  "types.hash(value:Var) -> Number",
   "Returns the hash of the [value]") {
 
   // Get argument 1 directly.
@@ -56,7 +56,11 @@ static void _bytebuffDelete(PKVM* vm, void* buff) {
   pkRealloc(vm, buff, 0);
 }
 
-DEF(_bytebuffReserve, "") {
+DEF(_bytebuffReserve,
+  "types.ByteBuffer.reserve(count:Number) -> Null",
+  "Reserve [count] number of bytes internally. This is use full if the final "
+  "size of the buffer is known beforehand to avoid reduce the number of "
+  "re-allocations.") {
   double size;
   if (!pkValidateSlotNumber(vm, 1, &size)) return;
 
@@ -65,7 +69,10 @@ DEF(_bytebuffReserve, "") {
 }
 
 // buff.fill(data, count)
-DEF(_bytebuffFill, "") {
+DEF(_bytebuffFill,
+  "types.ByteBuffer.fill(value:Number) -> Null",
+  "Fill the buffer with the given byte value. Note that the value must be in "
+  "between 0 and 0xff inclusive.") {
   uint32_t n;
   if (!pkValidateSlotInteger(vm, 1, &n)) return;
   if (n < 0x00 || n > 0xff) {
@@ -81,14 +88,20 @@ DEF(_bytebuffFill, "") {
   pkByteBufferFill(self, vm, (uint8_t) n, (int) count);
 }
 
-DEF(_bytebuffClear, "") {
+DEF(_bytebuffClear,
+  "types.ByteBuffer.clear() -> Null",
+  "Clear the buffer values.") {
   // TODO: Should I also zero or reduce the capacity?
   pkByteBuffer* self = pkGetSelf(vm);
   self->count = 0;
 }
 
 // Returns the length of bytes were written.
-DEF(_bytebuffWrite, "") {
+DEF(_bytebuffWrite,
+  "types.ByteBuffer.write(data:Number|String) -> Null",
+  "Writes the data to the buffer. If the [data] is a number that should be in "
+  "between 0 and 0xff inclusively. If the [data] is a string all the bytes "
+  "of the string will be written to the buffer.") {
   pkByteBuffer* self = pkGetSelf(vm);
 
   PkVarType type = pkGetSlotType(vm, 1);
@@ -135,7 +148,8 @@ DEF(_bytebuffWrite, "") {
 
 }
 
-DEF(_bytebuffSubscriptGet, "") {
+DEF(_bytebuffSubscriptGet,
+  "types.ByteBuffer.[](index:Number)", "") {
   double index;
   if (!pkValidateSlotNumber(vm, 1, &index)) return;
   if (floor(index) != index) {
@@ -154,7 +168,8 @@ DEF(_bytebuffSubscriptGet, "") {
 
 }
 
-DEF(_bytebuffSubscriptSet, "") {
+DEF(_bytebuffSubscriptSet,
+  "types.ByteBuffer.[]=(index:Number, value:Number)", "") {
   double index, value;
   if (!pkValidateSlotNumber(vm, 1, &index)) return;
   if (!pkValidateSlotNumber(vm, 2, &value)) return;
@@ -184,12 +199,16 @@ DEF(_bytebuffSubscriptSet, "") {
 
 }
 
-DEF(_bytebuffString, "") {
+DEF(_bytebuffString,
+  "types.ByteBuffer.string() -> String",
+  "Returns the buffered values as String.") {
   pkByteBuffer* self = pkGetSelf(vm);
   pkSetSlotStringLength(vm, 0, self->data, self->count);
 }
 
-DEF(_bytebuffCount, "") {
+DEF(_bytebuffCount,
+  "types.ByteBuffer.count() -> Number",
+  "Returns the number of bytes that have written to the buffer.") {
   pkByteBuffer* self = pkGetSelf(vm);
   pkSetSlotNumber(vm, 0, self->count);
 }
@@ -212,7 +231,8 @@ static void _vectorDelete(PKVM* vm, void* vec) {
   pkRealloc(vm, vec, 0);
 }
 
-DEF(_vectorInit, "") {
+DEF(_vectorInit,
+  "types.Vector._init()", "") {
   int argc = pkGetArgc(vm);
   if (!pkCheckArgcRange(vm, argc, 0, 3)) return;
 
@@ -237,7 +257,8 @@ DEF(_vectorInit, "") {
 
 }
 
-DEF(_vectorGetter, "") {
+DEF(_vectorGetter,
+  "types.Vector.@getter()", "") {
   const char* name; uint32_t length;
   if (!pkValidateSlotString(vm, 1, &name, &length)) return;
 
@@ -256,7 +277,8 @@ DEF(_vectorGetter, "") {
   }
 }
 
-DEF(_vectorSetter, "") {
+DEF(_vectorSetter,
+  "types.Vector.@setter()", "") {
   const char* name; uint32_t length;
   if (!pkValidateSlotString(vm, 1, &name, &length)) return;
 
@@ -279,7 +301,8 @@ DEF(_vectorSetter, "") {
   }
 }
 
-DEF(_vectorRepr, "") {
+DEF(_vectorRepr,
+  "types.Vector._repr()", "") {
   Vector* vec = pkGetSelf(vm);
   pkSetSlotStringFmt(vm, 0, "[%g, %g, %g]", vec->x, vec->y, vec->z);
 }
@@ -291,29 +314,36 @@ DEF(_vectorRepr, "") {
 void registerModuleTypes(PKVM* vm) {
   PkHandle* types = pkNewModule(vm, "types");
 
-  pkModuleAddFunction(vm, types, "hashable", _typesHashable, 1);
-  pkModuleAddFunction(vm, types, "hash", _typesHash, 1);
+  REGISTER_FN(types, "hashable", _typesHashable, 1);
+  REGISTER_FN(types, "hash", _typesHash, 1);
 
   PkHandle* cls_byte_buffer = pkNewClass(vm, "ByteBuffer", NULL, types,
-                                         _bytebuffNew, _bytebuffDelete);
+                                         _bytebuffNew, _bytebuffDelete,
+  "A simple dynamically allocated byte buffer type. This can be used for "
+  "constructing larger strings without allocating and adding smaller "
+  "intermeidate strings.");
 
-  pkClassAddMethod(vm, cls_byte_buffer, "[]",      _bytebuffSubscriptGet, 1);
-  pkClassAddMethod(vm, cls_byte_buffer, "[]=",     _bytebuffSubscriptSet, 2);
-  pkClassAddMethod(vm, cls_byte_buffer, "reserve", _bytebuffReserve, 1);
-  pkClassAddMethod(vm, cls_byte_buffer, "fill",    _bytebuffFill, 2);
-  pkClassAddMethod(vm, cls_byte_buffer, "clear",   _bytebuffClear, 0);
-  pkClassAddMethod(vm, cls_byte_buffer, "write",   _bytebuffWrite, 1);
-  pkClassAddMethod(vm, cls_byte_buffer, "string",  _bytebuffString, 0);
-  pkClassAddMethod(vm, cls_byte_buffer, "count",   _bytebuffCount, 0);
+  ADD_METHOD(cls_byte_buffer, "[]",      _bytebuffSubscriptGet, 1);
+  ADD_METHOD(cls_byte_buffer, "[]=",     _bytebuffSubscriptSet, 2);
+  ADD_METHOD(cls_byte_buffer, "reserve", _bytebuffReserve, 1);
+  ADD_METHOD(cls_byte_buffer, "fill",    _bytebuffFill, 2);
+  ADD_METHOD(cls_byte_buffer, "clear",   _bytebuffClear, 0);
+  ADD_METHOD(cls_byte_buffer, "write",   _bytebuffWrite, 1);
+  ADD_METHOD(cls_byte_buffer, "string",  _bytebuffString, 0);
+  ADD_METHOD(cls_byte_buffer, "count",   _bytebuffCount, 0);
+
   pkReleaseHandle(vm, cls_byte_buffer);
 
   // TODO: add move mthods.
   PkHandle* cls_vector = pkNewClass(vm, "Vector", NULL, types,
-                                    _vectorNew, _vectorDelete);
-  pkClassAddMethod(vm, cls_vector, "_init", _vectorInit, -1);
-  pkClassAddMethod(vm, cls_vector, "@getter", _vectorGetter, 1);
-  pkClassAddMethod(vm, cls_vector, "@setter", _vectorSetter, 2);
-  pkClassAddMethod(vm, cls_vector, "_repr", _vectorRepr, 0);
+                                    _vectorNew, _vectorDelete,
+  "A simple vector type contains x, y, and z components.");
+
+  ADD_METHOD(cls_vector, "_init", _vectorInit, -1);
+  ADD_METHOD(cls_vector, "@getter", _vectorGetter, 1);
+  ADD_METHOD(cls_vector, "@setter", _vectorSetter, 2);
+  ADD_METHOD(cls_vector, "_repr", _vectorRepr, 0);
+
   pkReleaseHandle(vm, cls_vector);
 
   pkRegisterModule(vm, types);

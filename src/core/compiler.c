@@ -2630,6 +2630,14 @@ static int compileClass(Compiler* compiler) {
   emitShort(compiler, cls_index);
 
   skipNewLines(compiler);
+  if (match(compiler, TK_STRING)) {
+    Token* str = &compiler->parser.previous;
+    int index = compilerAddConstant(compiler, str->value);
+    String* docstring = moduleGetStringAt(compiler->module, index);
+    cls->docstring = docstring->data;
+  }
+
+  skipNewLines(compiler);
   while (!compiler->parser.has_syntax_error && !match(compiler, TK_END)) {
 
     if (match(compiler, TK_EOF)) {
@@ -2845,6 +2853,14 @@ static void compileFunction(Compiler* compiler, FuncType fn_type) {
 
   func->arity = argc;
   compilerChangeStack(compiler, argc);
+
+  skipNewLines(compiler);
+  if (match(compiler, TK_STRING)) {
+    Token* str = &compiler->parser.previous;
+    int index = compilerAddConstant(compiler, str->value);
+    String* docstring = moduleGetStringAt(compiler->module, index);
+    func->docstring = docstring->data;
+  }
 
   compileBlockBody(compiler, BLOCK_FUNC);
 

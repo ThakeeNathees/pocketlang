@@ -175,7 +175,7 @@ bool osGetExeFilePath(char* buff, int size) {
 
 // Yes both 'os' and 'path' have getcwd functions.
 DEF(_osGetCWD,
-  "os.getcwd() -> String\n"
+  "os.getcwd() -> String",
   "Returns the current working directory") {
   char cwd[MAX_PATH_LEN];
   if (getcwd(cwd, sizeof(cwd)) == NULL) {
@@ -185,7 +185,7 @@ DEF(_osGetCWD,
 }
 
 DEF(_osChdir,
-  "os.chdir(path:String)\n"
+  "os.chdir(path:String)",
   "Change the current working directory") {
 
   const char* path;
@@ -195,7 +195,7 @@ DEF(_osChdir,
 }
 
 DEF(_osMkdir,
-  "os.mkdir(path:String)\n"
+  "os.mkdir(path:String)",
   "Creates a directory at the path. The path should be valid.") {
 
   const char* path;
@@ -213,7 +213,7 @@ DEF(_osMkdir,
 }
 
 DEF(_osRmdir,
-  "os.rmdir(path:String)\n"
+  "os.rmdir(path:String)",
   "Removes an empty directory at the path.") {
 
   const char* path;
@@ -222,7 +222,7 @@ DEF(_osRmdir,
 }
 
 DEF(_osUnlink,
-  "os.rmdir(path:String)\n"
+  "os.rmdir(path:String)",
   "Removes a file at the path.") {
 
   const char* path;
@@ -231,7 +231,7 @@ DEF(_osUnlink,
 }
 
 DEF(_osModitime,
-  "os.moditime(path:String) -> Number\n"
+  "os.moditime(path:String) -> Number",
   "Returns the modified timestamp of the file.") {
   const char* path;
   if (!pkValidateSlotString(vm, 1, &path, NULL)) return;
@@ -243,7 +243,7 @@ DEF(_osModitime,
 }
 
 DEF(_osFileSize,
-  "os.filesize(path:String) -> Number\n"
+  "os.filesize(path:String) -> Number",
   "Returns the file size in bytes.") {
   const char* path;
 
@@ -260,7 +260,7 @@ DEF(_osFileSize,
 }
 
 DEF(_osSystem,
-  "os.system(cmd:String) -> Number\n"
+  "os.system(cmd:String) -> Number",
   "Execute the command in a subprocess, Returns the exit code of the child "
   "process.") {
   const char* cmd;
@@ -278,7 +278,7 @@ DEF(_osSystem,
 }
 
 DEF(_osGetenv,
-  "os.getenv(name:String) -> String\n"
+  "os.getenv(name:String) -> String",
   "Returns the environment variable as String if it exists otherwise it'll "
   "return null.") {
 
@@ -295,7 +295,7 @@ DEF(_osGetenv,
 }
 
 DEF(_osExepath,
-  "os.exepath() -> String\n"
+  "os.exepath() -> String",
   "Returns the path of the pocket interpreter executable.") {
 
   char buff[MAX_PATH_LEN];
@@ -320,16 +320,16 @@ void registerModuleOS(PKVM* vm) {
   pkSetSlotString(vm, 1, OS_NAME);  // slots[1] = "windows"
   pkSetAttribute(vm, 0, "NAME", 1); // os.NAME = "windows"
 
-  pkModuleAddFunction(vm, os, "getcwd", _osGetCWD, 0);
-  pkModuleAddFunction(vm, os, "chdir", _osChdir, 1);
-  pkModuleAddFunction(vm, os, "mkdir", _osMkdir, 1);
-  pkModuleAddFunction(vm, os, "rmdir", _osRmdir, 1);
-  pkModuleAddFunction(vm, os, "unlink", _osUnlink, 1);
-  pkModuleAddFunction(vm, os, "moditime", _osModitime, 1);
-  pkModuleAddFunction(vm, os, "filesize", _osFileSize, 1);
-  pkModuleAddFunction(vm, os, "system", _osSystem, 1);
-  pkModuleAddFunction(vm, os, "getenv", _osGetenv, 1);
-  pkModuleAddFunction(vm, os, "exepath", _osExepath, 0);
+  REGISTER_FN(os, "getcwd", _osGetCWD, 0);
+  REGISTER_FN(os, "chdir", _osChdir, 1);
+  REGISTER_FN(os, "mkdir", _osMkdir, 1);
+  REGISTER_FN(os, "rmdir", _osRmdir, 1);
+  REGISTER_FN(os, "unlink", _osUnlink, 1);
+  REGISTER_FN(os, "moditime", _osModitime, 1);
+  REGISTER_FN(os, "filesize", _osFileSize, 1);
+  REGISTER_FN(os, "system", _osSystem, 1);
+  REGISTER_FN(os, "getenv", _osGetenv, 1);
+  REGISTER_FN(os, "exepath", _osExepath, 0);
 
   // TODO:
   // - Implement makedirs which recursively mkdir().

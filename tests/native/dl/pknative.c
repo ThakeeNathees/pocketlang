@@ -19,9 +19,9 @@ typedef void* (*pkRealloc_t)(PKVM*, void*, size_t);
 typedef void (*pkReleaseHandle_t)(PKVM*, PkHandle*);
 typedef PkHandle* (*pkNewModule_t)(PKVM*, const char*);
 typedef void (*pkRegisterModule_t)(PKVM*, PkHandle*);
-typedef void (*pkModuleAddFunction_t)(PKVM*, PkHandle*, const char*, pkNativeFn, int);
-typedef PkHandle* (*pkNewClass_t)(PKVM*, const char*, PkHandle*, PkHandle*, pkNewInstanceFn, pkDeleteInstanceFn);
-typedef void (*pkClassAddMethod_t)(PKVM*, PkHandle*, const char*, pkNativeFn, int);
+typedef void (*pkModuleAddFunction_t)(PKVM*, PkHandle*, const char*, pkNativeFn, int, const char*);
+typedef PkHandle* (*pkNewClass_t)(PKVM*, const char*, PkHandle*, PkHandle*, pkNewInstanceFn, pkDeleteInstanceFn, const char*);
+typedef void (*pkClassAddMethod_t)(PKVM*, PkHandle*, const char*, pkNativeFn, int, const char*);
 typedef void (*pkModuleAddSource_t)(PKVM*, PkHandle*, const char*);
 typedef PkResult (*pkRunString_t)(PKVM*, const char*);
 typedef PkResult (*pkRunFile_t)(PKVM*, const char*);
@@ -235,16 +235,16 @@ void pkRegisterModule(PKVM* vm, PkHandle* module) {
   pk_api.pkRegisterModule_ptr(vm, module);
 }
 
-void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name, pkNativeFn fptr, int arity) {
-  pk_api.pkModuleAddFunction_ptr(vm, module, name, fptr, arity);
+void pkModuleAddFunction(PKVM* vm, PkHandle* module, const char* name, pkNativeFn fptr, int arity, const char* docstring) {
+  pk_api.pkModuleAddFunction_ptr(vm, module, name, fptr, arity, docstring);
 }
 
-PkHandle* pkNewClass(PKVM* vm, const char* name, PkHandle* base_class, PkHandle* module, pkNewInstanceFn new_fn, pkDeleteInstanceFn delete_fn) {
-  return pk_api.pkNewClass_ptr(vm, name, base_class, module, new_fn, delete_fn);
+PkHandle* pkNewClass(PKVM* vm, const char* name, PkHandle* base_class, PkHandle* module, pkNewInstanceFn new_fn, pkDeleteInstanceFn delete_fn, const char* docstring) {
+  return pk_api.pkNewClass_ptr(vm, name, base_class, module, new_fn, delete_fn, docstring);
 }
 
-void pkClassAddMethod(PKVM* vm, PkHandle* cls, const char* name, pkNativeFn fptr, int arity) {
-  pk_api.pkClassAddMethod_ptr(vm, cls, name, fptr, arity);
+void pkClassAddMethod(PKVM* vm, PkHandle* cls, const char* name, pkNativeFn fptr, int arity, const char* docstring) {
+  pk_api.pkClassAddMethod_ptr(vm, cls, name, fptr, arity, docstring);
 }
 
 void pkModuleAddSource(PKVM* vm, PkHandle* module, const char* source) {

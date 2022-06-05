@@ -504,6 +504,7 @@ Class* newClass(PKVM* vm, const char* name, int length,
 
   cls->class_of = PK_INSTANCE;
   cls->super_class = super;
+  cls->docstring = docstring;
 
   // Builtin types doesn't belongs to a module.
   if (module != NULL) {
