@@ -1223,6 +1223,15 @@ L_do_call:
       if (IS_OBJ_TYPE(callable, OBJ_CLOSURE)) {
         closure = (const Closure*)AS_OBJ(callable);
 
+      } else if (IS_OBJ_TYPE(callable, OBJ_METHOD_BIND)) {
+        const MethodBind* mb = (const MethodBind*) AS_OBJ(callable);
+        if (IS_UNDEF(mb->instance)) {
+          RUNTIME_ERROR(newString(vm, "Cannot call an unbound method."));
+          CHECK_ERROR();
+        }
+        fiber->self = mb->instance;
+        closure = mb->method;
+
       } else if (IS_OBJ_TYPE(callable, OBJ_CLASS)) {
         Class* cls = (Class*)AS_OBJ(callable);
 
@@ -1422,6 +1431,7 @@ L_do_call:
         case OBJ_MODULE:
         case OBJ_FUNC:
         case OBJ_CLOSURE:
+        case OBJ_METHOD_BIND:
         case OBJ_UPVALUE:
         case OBJ_FIBER:
         case OBJ_CLASS:

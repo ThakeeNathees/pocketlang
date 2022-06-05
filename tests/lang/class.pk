@@ -21,6 +21,8 @@ print(a)
 b = B()
 assert((b is B) and (b is A))
 
+assert(B.parent == A)
+
 class Shape
   def display()
     return "${self.name} shape"

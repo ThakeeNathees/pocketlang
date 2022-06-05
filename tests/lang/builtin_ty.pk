@@ -182,5 +182,31 @@ def foo(p1, p2, p3) end
 assert(foo.name == "foo")
 assert(foo.arity == 3)
 
+###############################################################################
+## METHOD BIND
+###############################################################################
+
+class Foo
+  def bar()
+    return self
+  end
+end
+
+foo = Foo()
+bar = foo.bar
+assert(bar() == foo)
+
+class Bar
+  def baz()
+    "baz doc string"
+    return self
+  end
+end
+
+bar = Bar()
+bz = Bar.baz
+assert(bz._docs == "baz doc string")
+bz.bind(bar)()
+
 ## If we got here, that means all test were passed.
 print('All TESTS PASSED')

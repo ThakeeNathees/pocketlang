@@ -1,0 +1,93 @@
+#!pocket
+## Copyright (c) 2020-2021 Thakee Nathees
+## Copyright (c) 2021-2022 Pocketlang Contributors
+## Distributed Under The MIT License
+
+import lang
+from path import dirname, join, normpath
+
+ROOT_PATH = normpath(join(dirname(__file__), '..'))
+
+REFERENCE_DIR = join(ROOT_PATH, 'docs/Reference/')
+SIDEBAR_FILE = join(ROOT_PATH, 'docs/_sidebar.md')
+
+sidebar = "\
+* Getting Started
+  * [Home](/)
+  * [Language Manual](/GettingStarted/LanguageManual.md)
+
+* Library Reference
+"
+
+def main()
+  for module in lang.modules()
+    ## Dummy module is for testing internals and will be
+    ##removed soon so skip it.
+    if module._name == 'dummy'
+      continue
+    end
+    f = open(join(REFERENCE_DIR, module._name + '.md'), 'w')
+    gen_module_docs(f, module)
+    f.close()
+  end
+  
+  f = open(SIDEBAR_FILE, 'w')
+  f.write(sidebar)
+  f.close()
+  
+end
+
+## Write the [module]'s documentation content to the file [f].
+def gen_module_docs(f, module)
+  name = module._name
+  sidebar += '  * [$name](/Reference/$name.md)\n'
+  f.write('# $name\n')
+  for global in module.globals()
+  
+    { ## Map as switch statement alternative.
+      Null: fn end,
+      Number: fn end,
+      String: fn end,
+      
+      Closure : fn
+        write_fn_doc(f, global)
+      end,
+      
+      Class: fn
+        write_cls_doc(f, global)
+      end,
+      
+    } [global._class]()
+  end
+end
+
+## Write the function's documentation to the file [f].
+def write_fn_doc(f, func)
+  f.write('\n')
+  f.write('### ${func.name}\n')
+  f.write('\n')
+  i = func._docs.find('\n\n')
+  symbol = func._docs[0..i-1]
+  desc = func._docs[i+1..-1]
+  f.write("```ruby\n$symbol\n```\n")
+  f.write(desc)
+  f.write('\n')
+end
+
+## Write the class's documentation to the file [f].
+def write_cls_doc(f, cls)
+  f.write('\n')
+  f.write('## ${cls.name}\n')
+  f.write('${cls._docs}\n')
+  for method in cls.methods()
+    if method.name == '_init'
+      continue ## Constructor.
+    end
+    write_fn_doc(f, method)
+  end
+end
+
+
+if _name == "@main"
+  main()
+end

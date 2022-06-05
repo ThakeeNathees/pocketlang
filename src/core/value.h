@@ -192,6 +192,7 @@ typedef struct Range Range;
 typedef struct Module Module;
 typedef struct Function Function;
 typedef struct Closure Closure;
+typedef struct MethodBind MethodBind;
 typedef struct Upvalue Upvalue;
 typedef struct Fiber Fiber;
 typedef struct Class Class;
@@ -223,6 +224,7 @@ typedef enum {
   OBJ_MODULE,
   OBJ_FUNC,
   OBJ_CLOSURE,
+  OBJ_METHOD_BIND,
   OBJ_UPVALUE,
   OBJ_FIBER,
   OBJ_CLASS,
@@ -402,7 +404,17 @@ struct Closure {
 
   Function* fn;
   Upvalue* upvalues[DYNAMIC_TAIL_ARRAY];
+};
 
+// Method bounds are first class callable of methods. That are bound to an
+// instace which will be used as the self when the underlying method invoked.
+// If the vallue [instance] is VAR_UNDEFINED it's unbound and cannot be
+// called.
+struct MethodBind {
+  Object _super;
+
+  Closure* method;
+  Var instance;
 };
 
 // In addition to locals (which lives on the stack), a closure has upvalues.
@@ -593,6 +605,8 @@ Range* newRange(PKVM* vm, double from, double to);
 Module* newModule(PKVM* vm);
 
 Closure* newClosure(PKVM* vm, Function* fn);
+
+MethodBind* newMethodBind(PKVM* vm, Closure* method);
 
 Upvalue* newUpvalue(PKVM* vm, Var* value);
 
