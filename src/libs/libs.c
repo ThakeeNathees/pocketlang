@@ -18,10 +18,8 @@ void registerModulePath(PKVM* vm);
 void registerModuleOS(PKVM* vm);
 void registerModuleJson(PKVM* vm);
 void registerModuleDummy(PKVM* vm);
-
-// Extra libraries.
-
 void registerModuleTerm(PKVM* vm);
+
 void cleanupModuleTerm(PKVM* vm);
 
 // Registers the modules.
@@ -34,8 +32,8 @@ void registerLibs(PKVM* vm) {
   registerModuleOS(vm);
   registerModuleJson(vm);
   registerModuleDummy(vm);
-
   registerModuleTerm(vm);
+
 }
 
 // Cleanup the modules.

@@ -5,6 +5,20 @@
 
 ## TODO: write some tests here.
 
+## No enums supports (yet?)
+class Day end
+Day.SUNDAY    = 0
+Day.MONDAY    = 1
+Day.TUESDAY   = 2
+Day.WEDNESDAY = 3
+Day.THURSDAY  = 4
+Day.FRIDAY    = 5
+Day.SATURDAY  = 6
+
+assert(Day.SUNDAY == 0)
+assert(Day.FRIDAY == 5)
+
+
 ###############################################################################
 ## INHERITANCE
 ###############################################################################
