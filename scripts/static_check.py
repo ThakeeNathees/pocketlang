@@ -36,9 +36,9 @@ IGNORE_FILES = (
   "cli/argparse.h",             ## FIXME: collect all thirdparty files.  
   ## Contain longer lines. I shoule add something like static-check-off,
   ## static-check-on like clang or just use clang.
-  "src/libs/ext_term.c",
+  "src/libs/std_term.c",
   ## Contain extendedted ascii characters that raise UnicodeDecodeError.
-  "src/libs/ext_term.pk",
+  "src/libs/std_term.pk",
 )
 
 ## A list of directory, contains C source files to perform static checks.

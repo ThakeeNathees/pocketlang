@@ -543,6 +543,9 @@ struct Class {
   // A buffer of methods of the class.
   pkClosureBuffer methods;
 
+  // Static attributes of the class.
+  Map* static_attribs;
+
   // Allocater and de-allocator functions for native types.
   // For script/ builtin types it'll be NULL.
   pkNewInstanceFn new_fn;

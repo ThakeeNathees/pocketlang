@@ -246,6 +246,7 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       markObject(vm, &cls->owner->_super);
       markObject(vm, &cls->ctor->_super);
       markObject(vm, &cls->name->_super);
+      markObject(vm, &cls->static_attribs->_super);
 
       markClosureBuffer(vm, &cls->methods);
       vm->bytes_allocated += sizeof(Closure) * cls->methods.capacity;
@@ -520,6 +521,7 @@ Class* newClass(PKVM* vm, const char* name, int length,
   vmPushTempRef(vm, &cls->_super); // class.
 
   pkClosureBufferInit(&cls->methods);
+  cls->static_attribs = newMap(vm);
 
   cls->class_of = PK_INSTANCE;
   cls->super_class = super;

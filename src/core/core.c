@@ -125,6 +125,7 @@ static inline bool validateCond(PKVM* vm, bool condition, const char* err) {
  VALIDATE_ARG_OBJ(Closure, OBJ_CLOSURE, "closure")
  VALIDATE_ARG_OBJ(Fiber, OBJ_FIBER, "fiber")
  VALIDATE_ARG_OBJ(Class, OBJ_CLASS, "class")
+ VALIDATE_ARG_OBJ(Module, OBJ_MODULE, "module")
 
 /*****************************************************************************/
 /* SHARED FUNCTIONS                                                          */
@@ -147,7 +148,6 @@ void initializeModule(PKVM* vm, Module* module, bool is_main) {
   if (is_main) {
     // TODO: consider static string "@main" stored in PKVM. to reduce
     // allocations everytime here.
-    ASSERT(module->name == NULL, OOPS);
     name = newString(vm, "@main");
     module->name = name;
     vmPushTempRef(vm, &name->_super); // _main.
@@ -2112,6 +2112,9 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
           }
       }
 
+      Var value = mapGet(cls->static_attribs, VAR_OBJ(attrib));
+      if (!IS_UNDEF(value)) return  value;
+
       for (int i = 0; i < (int)cls->methods.count; i++) {
         Closure* method_ = cls->methods.data[i];
         ASSERT(method_->fn->is_method, OOPS);
@@ -2186,6 +2189,12 @@ void varSetAttrib(PKVM* vm, Var on, String* attrib, Var value) {
     case OBJ_UPVALUE:
       UNREACHABLE(); // Functions aren't first class objects.
       break;
+
+    case OBJ_CLASS: {
+      Class* cls = (Class*) obj;
+      mapSet(vm, cls->static_attribs, VAR_OBJ(attrib), value);
+      return;
+    }
 
     case OBJ_INST: {
 
