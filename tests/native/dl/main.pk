@@ -3,7 +3,7 @@
 ## from either mylib.so, or mylib.dll
 import mylib
 
-if __name__ == "__main__"
+if _name == "@main"
   ## Call the registered function.
   print('mylib.hello() = ${mylib.hello()}')
 end

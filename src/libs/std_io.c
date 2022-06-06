@@ -134,7 +134,7 @@ DEF(_fileOpen,
   "Opens a file at the [path] with the [mode]. Path should be either "
   "absolute or relative to the current working directory. and [mode] can be"
   "'r', 'w', 'a' in combination with 'b' (binary) and/or '+' (extended).\n"
-  "\n"
+  "```\n"
   " mode | If already exists | If does not exist |\n"
   " -----+-------------------+-------------------|\n"
   " 'r'  |  read from start  |   failure to open |\n"
@@ -143,7 +143,7 @@ DEF(_fileOpen,
   " 'r+' |  read from start  |   error           |\n"
   " 'w+' |  destroy contents |   create new      |\n"
   " 'a+' |  write to end     |   create new      |\n"
-  "") {
+  "```") {
 
   int argc = pkGetArgc(vm);
   if (!pkCheckArgcRange(vm, argc, 1, 2)) return;
@@ -441,7 +441,7 @@ DEF(_open,
   "Opens a file at the [path] with the [mode]. Path should be either "
   "absolute or relative to the current working directory. and [mode] can be"
   "'r', 'w', 'a' in combination with 'b' (binary) and/or '+' (extended).\n"
-  "\n"
+  "```\n"
   " mode | If already exists | If does not exist |\n"
   " -----+-------------------+-------------------|\n"
   " 'r'  |  read from start  |   failure to open |\n"
@@ -450,7 +450,7 @@ DEF(_open,
   " 'r+' |  read from start  |   error           |\n"
   " 'w+' |  destroy contents |   create new      |\n"
   " 'a+' |  write to end     |   create new      |\n"
-  "") {
+  "```") {
   pkReserveSlots(vm, 3);
 
   // slots[1] = path

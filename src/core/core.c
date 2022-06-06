@@ -145,9 +145,11 @@ void initializeModule(PKVM* vm, Module* module, bool is_main) {
   String *path = module->path, *name = NULL;
 
   if (is_main) {
-    // TODO: consider static string "__main__" stored in PKVM. to reduce
+    // TODO: consider static string "@main" stored in PKVM. to reduce
     // allocations everytime here.
-    name = newString(vm, "__main__");
+    ASSERT(module->name == NULL, OOPS);
+    name = newString(vm, "@main");
+    module->name = name;
     vmPushTempRef(vm, &name->_super); // _main.
   } else {
     ASSERT(module->name != NULL, OOPS);
@@ -163,7 +165,7 @@ void initializeModule(PKVM* vm, Module* module, bool is_main) {
     moduleSetGlobal(vm, module, "__file__", 8, VAR_OBJ(path));
   }
 
-  moduleSetGlobal(vm, module, "__name__", 8, VAR_OBJ(name));
+  moduleSetGlobal(vm, module, "_name", 5, VAR_OBJ(name));
 
   if (is_main) vmPopTempRef(vm); // _main.
 }
@@ -272,7 +274,7 @@ static void _collectMethods(PKVM* vm, List* list, Class* cls) {
 /*****************************************************************************/
 
 DEF(coreHelp,
-  "help([value:Closure|Class]) -> Null",
+  "help([value:Closure|MethodBind|Class]) -> Null",
   "It'll print the docstring the object and return.") {
 
   int argc = ARGC;
@@ -305,6 +307,18 @@ DEF(coreHelp,
         vm->config.stdout_write(vm, closure->fn->name);
         vm->config.stdout_write(vm, "()' doesn't have a docstring.\n");
       }
+    } else if (IS_OBJ_TYPE(value, OBJ_METHOD_BIND)) {
+      MethodBind* mb = (MethodBind*) AS_OBJ(value);
+      // If there ins't an io function callback, we're done.
+
+      if (mb->method->fn->docstring != NULL) {
+        vm->config.stdout_write(vm, mb->method->fn->docstring);
+        vm->config.stdout_write(vm, "\n\n");
+      } else {
+        vm->config.stdout_write(vm, "method '");
+        vm->config.stdout_write(vm, mb->method->fn->name);
+        vm->config.stdout_write(vm, "()' doesn't have a docstring.\n");
+      }
     } else if (IS_OBJ_TYPE(value, OBJ_CLASS)) {
       Class* cls = (Class*) AS_OBJ(value);
       if (cls->docstring != NULL) {
@@ -316,7 +330,8 @@ DEF(coreHelp,
         vm->config.stdout_write(vm, "' doesn't have a docstring.\n");
       }
     } else {
-      RET_ERR(newString(vm, "Expected a closure or class to get help."));
+      RET_ERR(newString(vm, "Expected a Closure, MethodBind or "
+                        "Class to get help."));
     }
   }
 
@@ -405,7 +420,7 @@ DEF(coreAssert,
     String* msg = NULL;
 
     if (argc == 2) {
-      if (AS_OBJ(ARG(2))->type != OBJ_STRING) {
+      if (!IS_OBJ_TYPE(ARG(2), OBJ_STRING)) {
         msg = varToString(vm, ARG(2), false);
         if (msg == NULL) return; //< Error at _to_string override.
 
@@ -828,7 +843,14 @@ DEF(stdLangModules,
   vmPushTempRef(vm, &list->_super); // list.
   for (uint32_t i = 0; i < vm->modules->capacity; i++) {
     if (!IS_UNDEF(vm->modules->entries[i].key)) {
-      listAppend(vm, list, vm->modules->entries[i].value);
+      Var entry = vm->modules->entries[i].value;
+      ASSERT(IS_OBJ_TYPE(entry, OBJ_MODULE), OOPS);
+      Module* module = (Module*) AS_OBJ(entry);
+      ASSERT(module->name != NULL, OOPS);
+      if (module->name->data[0] == SPECIAL_NAME_CHAR) {
+        continue;
+      }
+      listAppend(vm, list, entry);
     }
   }
   vmPopTempRef(vm); // list.
@@ -1268,6 +1290,78 @@ DEF(_mapPop,
   RET(value);
 }
 
+DEF(_methodBindBind,
+  "MethodBind.bind(instance:Var) -> MethodBind",
+  "Bind the method to the instance and the method bind will be returned. The "
+  "method should be a valid method of the instance. ie. the instance's "
+  "interitance tree should contain the method.") {
+
+  MethodBind* self = (MethodBind*) AS_OBJ(SELF);
+
+  // We can only bind the method if the instance has that method.
+  String* method_name = newString(vm, self->method->fn->name);
+  vmPushTempRef(vm, &method_name->_super); // method_name.
+
+  Var instance = ARG(1);
+
+  Closure* method;
+  if (!hasMethod(vm, instance, method_name, &method)
+                     || method != self->method) {
+    VM_SET_ERROR(vm, newString(vm, "Cannot bind method, instance and method "
+                                   "types miss-match."));
+    return;
+  }
+
+  self->instance = instance;
+  vmPopTempRef(vm); // method_name.
+
+  RET(SELF);
+}
+
+DEF(_classMethods,
+  "Class.methods() -> List",
+  "Returns a list of unbound MethodBind of the class.") {
+
+  Class* self = (Class*) AS_OBJ(SELF);
+
+  List* list = newList(vm, self->methods.count);
+  vmPushTempRef(vm, &list->_super); // list.
+  for (int i = 0; i < (int) self->methods.count; i++) {
+    Closure* method = self->methods.data[i];
+    ASSERT(method->fn->name, OOPS);
+    if (method->fn->name[0] == SPECIAL_NAME_CHAR) continue;
+    MethodBind* mb = newMethodBind(vm, method);
+    vmPushTempRef(vm, &mb->_super); // mb.
+    listAppend(vm, list, VAR_OBJ(mb));
+    vmPopTempRef(vm); // mb.
+  }
+  vmPopTempRef(vm); // list.
+
+  RET(VAR_OBJ(list));
+
+}
+
+DEF(_moduleGlobals,
+  "Module.globals() -> List",
+  "Returns a list of all the globals in the module. Since classes and "
+  "functinos are also globals to a module it'll contain them too.") {
+
+  Module* self = (Module*) AS_OBJ(SELF);
+
+  List* list = newList(vm, self->globals.count);
+  vmPushTempRef(vm, &list->_super); // list.
+  for (int i = 0; i < (int) self->globals.count; i++) {
+    if (moduleGetStringAt(self,
+      self->global_names.data[i])->data[0] == SPECIAL_NAME_CHAR) {
+      continue;
+    }
+    listAppend(vm, list, self->globals.data[i]);
+  }
+  vmPopTempRef(vm); // list.
+
+  RET(VAR_OBJ(list));
+}
+
 DEF(_fiberRun,
   "Fiber.run(...) -> Var",
   "Runs the fiber's function with the provided arguments and returns it's "
@@ -1382,6 +1476,12 @@ static void initializePrimitiveClasses(PKVM* vm) {
   ADD_METHOD(PK_MAP,    "get",    _mapGet,        -1);
   ADD_METHOD(PK_MAP,    "has",    _mapHas,         1);
   ADD_METHOD(PK_MAP,    "pop",    _mapPop,         1);
+
+  ADD_METHOD(PK_METHOD_BIND, "bind", _methodBindBind, 1);
+
+  ADD_METHOD(PK_CLASS, "methods", _classMethods, 0);
+
+  ADD_METHOD(PK_MODULE, "globals", _moduleGlobals, 0);
 
   ADD_METHOD(PK_FIBER,  "run",    _fiberRun,      -1);
   ADD_METHOD(PK_FIBER,  "resume", _fiberResume,   -1);
@@ -1867,6 +1967,10 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
   VM_SET_ERROR(vm, stringFormat(vm, "'$' object has no attribute named '$'.", \
                                 varTypeName(on), attrib->data))
 
+  if (attrib->hash == CHECK_HASH("_class", 0xa2d93eae)) {
+    return VAR_OBJ(getClass(vm, on));
+  }
+
   if (!IS_OBJ(on)) {
     ERR_NO_ATTRIB(vm, on, attrib);
     return VAR_NULL;
@@ -1933,6 +2037,9 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
       Closure* closure = (Closure*)obj;
       switch (attrib->hash) {
 
+        case CHECK_HASH("name", 0x8d39bde6):
+          return VAR_OBJ(newString(vm, closure->fn->name));
+
         case CHECK_HASH("_docs", 0x8fb536a9):
           if (closure->fn->docstring) {
             return VAR_OBJ(newString(vm, closure->fn->docstring));
@@ -1943,9 +2050,28 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
         case CHECK_HASH("arity", 0x3e96bd7a):
           return VAR_NUM((double)(closure->fn->arity));
 
-        case CHECK_HASH("name", 0x8d39bde6):
-          return VAR_OBJ(newString(vm, closure->fn->name));
       }
+    } break;
+
+    case OBJ_METHOD_BIND: {
+      MethodBind* mb = (MethodBind*) obj;
+
+      switch (attrib->hash) {
+        case CHECK_HASH("_docs", 0x8fb536a9):
+          if (mb->method->fn->docstring) {
+            return VAR_OBJ(newString(vm, mb->method->fn->docstring));
+          } else {
+            return VAR_OBJ(newString(vm, ""));
+          }
+
+        case CHECK_HASH("name", 0x8d39bde6):
+          return VAR_OBJ(newString(vm, mb->method->fn->name));
+
+        case CHECK_HASH("instance", 0xb86d992):
+          if (IS_UNDEF(mb->instance)) return VAR_NULL;
+          return mb->instance;
+      }
+
     } break;
 
     case OBJ_UPVALUE:
@@ -1966,11 +2092,32 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
     case OBJ_CLASS: {
       Class* cls = (Class*) obj;
-      if (attrib->hash == CHECK_HASH("_docs", 0x8fb536a9)) {
-        if (cls->docstring) {
-          return VAR_OBJ(newString(vm, cls->docstring));
-        } else {
-          return VAR_OBJ(newString(vm, ""));
+
+      switch (attrib->hash) {
+        case CHECK_HASH("_docs", 0x8fb536a9):
+          if (cls->docstring) {
+            return VAR_OBJ(newString(vm, cls->docstring));
+          } else {
+            return VAR_OBJ(newString(vm, ""));
+          }
+
+        case CHECK_HASH("name", 0x8d39bde6):
+          return VAR_OBJ(newString(vm, cls->name->data));
+
+        case CHECK_HASH("parent", 0xeacdfcfd):
+          if (cls->super_class != NULL) {
+            return VAR_OBJ(cls->super_class);
+          } else {
+            return VAR_NULL;
+          }
+      }
+
+      for (int i = 0; i < (int)cls->methods.count; i++) {
+        Closure* method_ = cls->methods.data[i];
+        ASSERT(method_->fn->is_method, OOPS);
+        const char* method_name = method_->fn->name;
+        if (IS_CSTR_EQ(attrib, method_name, strlen(method_name))) {
+          return VAR_OBJ(newMethodBind(vm, method_));
         }
       }
 
@@ -1998,6 +2145,13 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 
       value = mapGet(inst->attribs, VAR_OBJ(attrib));
       if (!IS_UNDEF(value)) return value;
+
+      Closure* method;
+      if (hasMethod(vm, on, attrib, &method)) {
+        MethodBind* mb = newMethodBind(vm, method);
+        mb->instance = on;
+        return VAR_OBJ(mb);
+      }
 
     } break;
   }

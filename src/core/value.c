@@ -189,6 +189,15 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
 
     } break;
 
+    case OBJ_METHOD_BIND:
+    {
+      MethodBind* mb = (MethodBind*) obj;
+      markObject(vm, &mb->method->_super);
+      markValue(vm, mb->instance);
+
+      vm->bytes_allocated += sizeof(MethodBind);
+    } break;
+
     case OBJ_UPVALUE:
     {
       Upvalue* upvalue = (Upvalue*)obj;
@@ -407,6 +416,16 @@ Closure* newClosure(PKVM* vm, Function* fn) {
   memset(closure->upvalues, 0, sizeof(Upvalue*) * fn->upvalue_count);
 
   return closure;
+}
+
+MethodBind* newMethodBind(PKVM* vm, Closure* method) {
+  MethodBind* mb = ALLOCATE(vm, MethodBind);
+  varInitObject(&mb->_super, vm, OBJ_METHOD_BIND);
+
+  mb->method = method;
+  mb->instance = VAR_UNDEFINED;
+
+  return mb;
 }
 
 Upvalue* newUpvalue(PKVM* vm, Var* value) {
@@ -920,6 +939,10 @@ static uint32_t _hashObject(Object* obj) {
       return utilHashNumber(range->from) ^ utilHashNumber(range->to);
     }
 
+    case OBJ_CLASS: {
+      return utilHashBits( (int64_t) obj);
+    }
+
     default: break;
   }
 
@@ -1168,6 +1191,11 @@ void freeObject(PKVM* vm, Object* self) {
       return;
     }
 
+    case OBJ_METHOD_BIND: {
+      DEALLOCATE(vm, self, MethodBind);
+      return;
+    }
+
     case OBJ_UPVALUE: {
       DEALLOCATE(vm, self, Upvalue);
       return;
@@ -1309,6 +1337,7 @@ PkVarType getObjPkVarType(ObjectType type) {
     case OBJ_MODULE:  return PK_MODULE;
     case OBJ_FUNC:    UNREACHABLE();
     case OBJ_CLOSURE: return PK_CLOSURE;
+    case OBJ_METHOD_BIND: return PK_METHOD_BIND;
     case OBJ_UPVALUE: UNREACHABLE();
     case OBJ_FIBER:   return PK_FIBER;
     case OBJ_CLASS:   return PK_CLASS;
@@ -1327,15 +1356,16 @@ ObjectType getPkVarObjType(PkVarType type) {
     case PK_NUMBER:
       UNREACHABLE();
 
-    case PK_STRING:   return OBJ_STRING;
-    case PK_LIST:     return OBJ_LIST;
-    case PK_MAP:      return OBJ_MAP;
-    case PK_RANGE:    return OBJ_RANGE;
-    case PK_MODULE:   return OBJ_MODULE;
-    case PK_CLOSURE:  return OBJ_CLOSURE;
-    case PK_FIBER:    return OBJ_FIBER;
-    case PK_CLASS:    return OBJ_CLASS;
-    case PK_INSTANCE: return OBJ_INST;
+    case PK_STRING:      return OBJ_STRING;
+    case PK_LIST:        return OBJ_LIST;
+    case PK_MAP:         return OBJ_MAP;
+    case PK_RANGE:       return OBJ_RANGE;
+    case PK_MODULE:      return OBJ_MODULE;
+    case PK_CLOSURE:     return OBJ_CLOSURE;
+    case PK_METHOD_BIND: return OBJ_METHOD_BIND;
+    case PK_FIBER:       return OBJ_FIBER;
+    case PK_CLASS:       return OBJ_CLASS;
+    case PK_INSTANCE:    return OBJ_INST;
   }
 
   UNREACHABLE();
@@ -1365,6 +1395,7 @@ const char* getObjectTypeName(ObjectType type) {
     case OBJ_MODULE:  return "Module";
     case OBJ_FUNC:    return "Func";
     case OBJ_CLOSURE: return "Closure";
+    case OBJ_METHOD_BIND: return "MethodBind";
     case OBJ_UPVALUE: return "Upvalue";
     case OBJ_FIBER:   return "Fiber";
     case OBJ_CLASS:   return "Class";
@@ -1472,7 +1503,7 @@ bool isValuesEqual(Var v1, Var v2) {
 
 bool isObjectHashable(ObjectType type) {
   // Only String and Range are hashable (since they're immutable).
-  return type == OBJ_STRING || type == OBJ_RANGE;
+  return type == OBJ_STRING || type == OBJ_RANGE || type == OBJ_CLASS;
 }
 
 // This will prevent recursive list/map from crash when calling to_string, by
@@ -1681,7 +1712,7 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
       }
 
       case OBJ_FUNC: {
-        const Function* fn = (const Function*)obj;
+        const Function* fn = (const Function*) obj;
         pkByteBufferAddString(buff, vm, "[Func:", 6);
         pkByteBufferAddString(buff, vm, fn->name, (uint32_t)strlen(fn->name));
         pkByteBufferWrite(buff, vm, ']');
@@ -1689,16 +1720,24 @@ static void _toStringInternal(PKVM* vm, const Var v, pkByteBuffer* buff,
       }
 
       case OBJ_CLOSURE: {
-        const Closure* closure = (const Closure*)obj;
+        const Closure* closure = (const Closure*) obj;
         pkByteBufferAddString(buff, vm, "[Closure:", 9);
         pkByteBufferAddString(buff, vm, closure->fn->name,
                                         (uint32_t)strlen(closure->fn->name));
         pkByteBufferWrite(buff, vm, ']');
         return;
       }
+      case OBJ_METHOD_BIND: {
+        const MethodBind* mb = (const MethodBind*) obj;
+        pkByteBufferAddString(buff, vm, "[MethodBind:", 12);
+        pkByteBufferAddString(buff, vm, mb->method->fn->name,
+                              (uint32_t)strlen(mb->method->fn->name));
+        pkByteBufferWrite(buff, vm, ']');
+        return;
+      }
 
       case OBJ_FIBER: {
-        const Fiber* fb = (const Fiber*)obj;
+        const Fiber* fb = (const Fiber*) obj;
         pkByteBufferAddString(buff, vm, "[Fiber:", 7);
         pkByteBufferAddString(buff, vm, fb->closure->fn->name,
                             (uint32_t)strlen(fb->closure->fn->name));
@@ -1784,6 +1823,7 @@ bool toBool(Var v) {
     case OBJ_MODULE:
     case OBJ_FUNC:
     case OBJ_CLOSURE:
+    case OBJ_METHOD_BIND:
     case OBJ_UPVALUE:
     case OBJ_FIBER:
     case OBJ_CLASS:
