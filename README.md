@@ -63,7 +63,7 @@ directory. They were executed using a small python script in the test directory.
 
 ## Building From Source
 
-It can be build from source easily without any dependencies, or additional requirements
+It can be built from source easily without any dependencies, or additional requirements
 except for a c99 compatible compiler. It can be compiled with the following command.
 
 #### GCC / MinGw / Clang (alias with gcc)
