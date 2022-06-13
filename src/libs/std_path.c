@@ -98,12 +98,17 @@ static char* tryImportPaths(PKVM* vm, char* path, char* buff) {
     "",
 
     ".pk",
+
+#ifdef _WIN32
+    "\\_init.pk",
+#else
     "/_init.pk",
+#endif
 
 #ifndef PK_NO_DL
   #if defined(_WIN32)
     ".dll",
-    "/_init.dll",
+    "\\_init.dll",
 
   #elif defined(__APPLE__)
     ".dylib",
@@ -412,13 +417,23 @@ DEF(_pathListDir,
 // Add the executables path and exe_path + 'libs/' as a search path for
 // the PKVM.
 void _registerSearchPaths(PKVM* vm) {
+  enum cwk_path_style ps = cwk_path_get_style();
+
+  char cwd[MAX_PATH_LEN];
+  if (getcwd(cwd, sizeof(cwd)) != NULL) {
+    size_t len = strlen(cwd);
+    if (len < MAX_PATH_LEN - 1) {
+      cwd[len] = (ps == CWK_STYLE_WINDOWS) ? '\\' : '/';
+      cwd[++len] = '\0';
+      pkAddSearchPath(vm, cwd);
+    }
+  }
+
   char buff[MAX_PATH_LEN];
   if (!osGetExeFilePath(buff, MAX_PATH_LEN)) return;
   size_t length;
   cwk_path_get_dirname(buff, &length);
   if (length == 0) return;
-
-  enum cwk_path_style ps = cwk_path_get_style();
 
   // Add path separator. Otherwise pkAddSearchPath will fail an assertion.
   char last = buff[length - 1];
@@ -430,6 +445,7 @@ void _registerSearchPaths(PKVM* vm) {
   // FIXME: the bellow code is hard coded.
   ASSERT(length + strlen("libs/") < MAX_PATH_LEN, OOPS);
   strcpy(buff + length, (ps == CWK_STYLE_WINDOWS) ? "libs\\" : "libs/");
+
   pkAddSearchPath(vm, buff);
 }
 
