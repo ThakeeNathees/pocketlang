@@ -370,7 +370,14 @@ static Module* _importDL(PKVM* vm, String* resolved, String* name) {
     return NULL;
   }
 
+  // Since the DL library can use stack via slots api, we need to update
+  // ret and then restore it back. We're using offset instead of a pointer
+  // because the stack might be reallocated if it grows.
+  uintptr_t ret_offset = vm->fiber->ret - vm->fiber->stack;
+  vm->fiber->ret = vm->fiber->sp;
   PkHandle* pkhandle = vm->config.import_dl_fn(vm, handle);
+  vm->fiber->ret = vm->fiber->stack + ret_offset;
+
   if (pkhandle == NULL) {
     VM_SET_ERROR(vm, stringFormat(vm, "Error loading module at \"@\"",
       resolved));

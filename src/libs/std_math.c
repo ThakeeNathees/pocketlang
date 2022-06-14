@@ -169,6 +169,19 @@ DEF(stdMathArcTangent,
   pkSetSlotNumber(vm, 0, atan(num));
 }
 
+DEF(stdMathArcTan2,
+  "math.atan2(y:Number, x:Number) -> Number",
+  "These functions calculate the principal value of the arc tangent "
+  "of y / x, using the signs of the two arguments to determine the "
+  "quadrant of the result") {
+
+  double y, x;
+  if (!pkValidateSlotNumber(vm, 1, &y)) return;
+  if (!pkValidateSlotNumber(vm, 2, &x)) return;
+
+  pkSetSlotNumber(vm, 0, atan2(y, x));
+}
+
 DEF(stdMathLog10,
   "math.log10(value:Number) -> Number",
   "Return the logarithm to base 10 of argument [value]") {
@@ -226,6 +239,7 @@ void registerModuleMath(PKVM* vm) {
   REGISTER_FN(math, "asin",   stdMathArcSine,    1);
   REGISTER_FN(math, "acos",   stdMathArcCosine,  1);
   REGISTER_FN(math, "atan",   stdMathArcTangent, 1);
+  REGISTER_FN(math, "atan2",  stdMathArcTan2,    2);
   REGISTER_FN(math, "log10",  stdMathLog10,      1);
   REGISTER_FN(math, "round",  stdMathRound,      1);
   REGISTER_FN(math, "rand",   stdMathRand,       0);
