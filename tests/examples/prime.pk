@@ -2,7 +2,7 @@
 ## Prime numbers.
 
 def is_prime(n)
-  if n < 2 then return false end  
+  if n < 2 then return false end
   for i in 2..n
     if n % i == 0 then return false end
   end
@@ -13,8 +13,8 @@ def get_all_primes(n)
   res = []
   for i in 0..n
     if is_prime(i)
-		list_append(res, i)
-	end
+    res.append(i)
+  end
   end
   return res
 end

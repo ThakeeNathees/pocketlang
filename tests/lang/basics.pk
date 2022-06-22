@@ -33,11 +33,25 @@ l1 = [] + [1]; assert(l1.length == 1); assert(l1[0] == 1)
 l1 = [1] + []; assert(l1.length == 1); assert(l1[0] == 1)
 l2 = l1 + [1,2,3]; assert(l2.length == 4); assert(l2 == [1,1,2,3])
 l3 = l2 + l1 + l2; assert(l3 == [1,1,2,3,1,1,1,2,3])
+assert(l3.join(',') == '1,1,2,3,1,1,1,2,3')
+l3.resize(-3); assert(l3.length == 6)
+l3.resize(3); assert(l3.length == 3); assert(l3.join(',') == '1,1,2')
+l3.resize(5); assert(l3 == [1,1,2,null,null])
+l4 = List(10); assert(l4.length == 10); assert(l4[9] == null)
 
 ## list references are shared.
 l1 = [1];l2 = l1;l1 += [2]
 assert(l2[1] == 2)
 assert(l1 == l2)
+
+## Maps test.
+m = {1: '1', '2': 2, 'foo': 'bar', 3: 3}
+assert(m.keys.length == m.length)
+assert(m.values.length == m.length)
+keys = m.keys; values = m.values
+for i in 0..keys.length
+  assert(m[keys[i]] == values[i])
+end
 
 ## in tests.
 assert(!('abc' in 'a'))
@@ -78,7 +92,7 @@ assert((a or b) == b or a)
 
 ## Recursive str list/map
 l = [1]
-list_append(l, l)
+l.append(l)
 assert(str(l) == '[1, [...]]')
 m = {}
 m['m'] = m

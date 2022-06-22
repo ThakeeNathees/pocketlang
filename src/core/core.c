@@ -67,6 +67,21 @@ static inline bool isInteger(Var var, int64_t* value) {
   return false;
 }
 
+// Check if [var] is a nature value and set [value].
+static inline bool isNature(Var var, int64_t* value) {
+  double number;
+  if (isNumeric(var, &number)) {
+    // TODO: check if the number is larger for a 64 bit integer.
+    if (floor(number) == number && number >= 0) {
+      ASSERT(INT64_MIN <= number && number <= INT64_MAX,
+        "TODO: Large numbers haven't handled yet. Please report!");
+      *value = (int64_t)(number);
+      return true;
+    }
+  }
+  return false;
+}
+
 // Check if [var] is bool/number. If not, it'll set error and return false.
 static inline bool validateNumeric(PKVM* vm, Var var, double* value,
                                    const char* name) {
@@ -83,6 +98,13 @@ static inline bool validateInteger(PKVM* vm, Var var, int64_t* value,
   return false;
 }
 
+// Check if [var] is natural number. If not, it'll set error and return false.
+static inline bool validateNatural(PKVM* vm, Var var, int64_t* value,
+                                   const char* name) {
+  if (isNature(var, value)) return true;
+  VM_SET_ERROR(vm, stringFormat(vm, "$ must be a natural number.", name));
+  return false;
+}
 // Index is could be larger than 32 bit integer, but the size in pocketlang
 // limited to 32 unsigned bit integer
 static inline bool validateIndex(PKVM* vm, int64_t index, uint32_t size,
@@ -639,46 +661,6 @@ DEF(coreExit,
   exit((int)value);
 }
 
-// List functions.
-// ---------------
-
-DEF(coreListAppend,
-  "list_append(self:List, value:Var) -> List",
-  "Append the [value] to the list [self] and return the list.") {
-
-  List* list;
-  if (!validateArgList(vm, 1, &list)) return;
-  Var elem = ARG(2);
-
-  listAppend(vm, list, elem);
-  RET(VAR_OBJ(list));
-}
-
-// TODO: currently it takes one argument (to test string interpolation).
-//       Add join delimeter as an optional argument.
-DEF(coreListJoin,
-  "list_join(self:List) -> String",
-  "Concatinate the elements of the list and return as a string.") {
-
-  List* list;
-  if (!validateArgList(vm, 1, &list)) return;
-
-  pkByteBuffer buff;
-  pkByteBufferInit(&buff);
-
-  for (uint32_t i = 0; i < list->elements.count; i++) {
-    String* str = varToString(vm, list->elements.data[i], false);
-    if (str == NULL) RET(VAR_NULL);
-    vmPushTempRef(vm, &str->_super); // elem
-    pkByteBufferAddString(&buff, vm, str->data, str->length);
-    vmPopTempRef(vm); // elem
-  }
-
-  String* str = newStringLength(vm, (const char*)buff.data, buff.count);
-  pkByteBufferClear(&buff, vm);
-  RET(VAR_OBJ(str));
-}
-
 static void initializeBuiltinFN(PKVM* vm, Closure** bfn, const char* name,
                                 int length, int arity, pkNativeFn ptr,
                                 const char* docstring) {
@@ -709,10 +691,6 @@ static void initializeBuiltinFunctions(PKVM* vm) {
   INITIALIZE_BUILTIN_FN("print",     corePrint,   -1);
   INITIALIZE_BUILTIN_FN("input",     coreInput,   -1);
   INITIALIZE_BUILTIN_FN("exit",      coreExit,    -1);
-
-  // List functions.
-  INITIALIZE_BUILTIN_FN("list_append", coreListAppend, 2);
-  INITIALIZE_BUILTIN_FN("list_join",   coreListJoin,   1);
 
 #undef INITIALIZE_BUILTIN_FN
 }
@@ -931,12 +909,11 @@ static void _ctorString(PKVM* vm) {
 }
 
 static void _ctorList(PKVM* vm) {
-  List* list = newList(vm, ARGC);
-  vmPushTempRef(vm, &list->_super); // list.
-  for (int i = 0; i < ARGC; i++) {
-    listAppend(vm, list, ARG(i + 1));
-  }
-  vmPopTempRef(vm); // list.
+  int64_t natural;
+  if (!validateNatural(vm, ARG(1), &natural, "Argument 1")) return;
+
+  List* list = newList(vm, natural);
+  list->elements.count = natural;
   RET(VAR_OBJ(list));
 }
 
@@ -1243,7 +1220,73 @@ DEF(_listFind,
 DEF(_listClear,
   "List.clear() -> Null",
   "Removes all the entries in the list.") {
+
+  ASSERT(IS_OBJ_TYPE(SELF, OBJ_LIST), OOPS);
   listClear(vm, (List*) AS_OBJ(SELF));
+}
+
+DEF(_listResize,
+  "List.resize(length:Number) -> Null",
+  "Resize a list.") {
+
+  ASSERT(IS_OBJ_TYPE(SELF, OBJ_LIST), OOPS);
+  List* self = (List*)AS_OBJ(SELF);
+
+  int64_t len;
+  if (!validateInteger(vm, ARG(1), &len, "Argument 1")) return;
+
+  if (len < 0) {
+    len = self->elements.count + len;
+  }
+  if (len < 0) {
+    RET_ERR(newString(vm, "List.resize index out of bounds."));
+  }
+
+  if (len == 0) {
+    listClear(vm, self);
+
+  } else if (len > self->elements.count) {
+    pkVarBufferFill(&self->elements, vm, VAR_NULL,
+      len-self->elements.count);
+
+  } else if (len < self->elements.count) {
+      self->elements.count = len;
+      listShrink(vm, self);
+  }
+  RET(SELF);
+}
+
+DEF(_listJoin,
+  "List.join([sep:String=""]) -> String",
+  "Concatinate the elements of the list and return as a string.") {
+
+  ASSERT(IS_OBJ_TYPE(SELF, OBJ_LIST), OOPS);
+  List* self = (List*)AS_OBJ(SELF);
+  String* sep = NULL;
+
+  if (!pkCheckArgcRange(vm, ARGC, 0, 1)) return;
+
+  if (ARGC == 1) {
+    sep = varToString(vm, ARG(1), false);
+  }
+
+  pkByteBuffer buff;
+  pkByteBufferInit(&buff);
+
+  for (uint32_t i = 0; i < self->elements.count; i++) {
+    String* str = varToString(vm, self->elements.data[i], false);
+    if (str == NULL) RET(VAR_NULL);
+    vmPushTempRef(vm, &str->_super); // elem
+    if (sep != NULL && i != 0) {
+      pkByteBufferAddString(&buff, vm, sep->data, sep->length);
+    }
+    pkByteBufferAddString(&buff, vm, str->data, str->length);
+    vmPopTempRef(vm); // elem
+  }
+
+  String* str = newStringLength(vm, (const char*)buff.data, buff.count);
+  pkByteBufferClear(&buff, vm);
+  RET(VAR_OBJ(str));
 }
 
 DEF(_mapClear,
@@ -1431,7 +1474,7 @@ static void initializePrimitiveClasses(PKVM* vm) {
   ADD_CTOR(PK_NUMBER, "@ctorNumber", _ctorNumber,  1);
   ADD_CTOR(PK_STRING, "@ctorString", _ctorString, -1);
   ADD_CTOR(PK_RANGE,  "@ctorRange",  _ctorRange,   2);
-  ADD_CTOR(PK_LIST,   "@ctorList",   _ctorList,   -1);
+  ADD_CTOR(PK_LIST,   "@ctorList",   _ctorList,    1);
   ADD_CTOR(PK_MAP,    "@ctorMap",    _ctorMap,     0);
   ADD_CTOR(PK_FIBER,  "@ctorFiber",  _ctorFiber,   1);
 #undef ADD_CTOR
@@ -1471,6 +1514,8 @@ static void initializePrimitiveClasses(PKVM* vm) {
   ADD_METHOD(PK_LIST,   "append", _listAppend,     1);
   ADD_METHOD(PK_LIST,   "pop",    _listPop,       -1);
   ADD_METHOD(PK_LIST,   "insert", _listInsert,     2);
+  ADD_METHOD(PK_LIST,   "resize", _listResize,     1);
+  ADD_METHOD(PK_LIST,   "join",   _listJoin,      -1);
 
   ADD_METHOD(PK_MAP,    "clear",  _mapClear,       0);
   ADD_METHOD(PK_MAP,    "get",    _mapGet,        -1);
@@ -1997,7 +2042,38 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     } break;
 
     case OBJ_MAP: {
-      // TODO:
+      Map* map = (Map*)obj;
+
+      switch (attrib->hash) {
+
+        case CHECK_HASH("length", 0x83d03615):
+          return VAR_NUM((double)(map->count));
+
+        case CHECK_HASH("keys", 0xF94A08CD): {
+          List* list = newList(vm, map->count);
+          vmPushTempRef(vm, &list->_super); // list.
+          for (uint32_t i = 0; i < map->capacity; i++) {
+            if (!IS_UNDEF(map->entries[i].key)) {
+              listAppend(vm, list, map->entries[i].key);
+            }
+          }
+          vmPopTempRef(vm); // list.
+          return VAR_OBJ(list);
+        }
+
+        case CHECK_HASH("values", 0x34474C3B): {
+          List* list = newList(vm, map->count);
+          vmPushTempRef(vm, &list->_super); // list.
+          for (uint32_t i = 0; i < map->capacity; i++) {
+            if (!IS_UNDEF(map->entries[i].key)) {
+              listAppend(vm, list, map->entries[i].value);
+            }
+          }
+          vmPopTempRef(vm); // list.
+          return VAR_OBJ(list);
+        }
+
+      }
     } break;
 
     case OBJ_RANGE: {

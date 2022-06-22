@@ -5,7 +5,7 @@ def fib(n)
   res = []
   a = 0; b = 1
   for _ in 0..n
-    list_append(res, a)
+    res.append(a)
     temp = a; a = b; b += temp;
   end
   return res

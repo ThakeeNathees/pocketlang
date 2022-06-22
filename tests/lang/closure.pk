@@ -50,12 +50,9 @@ def f4
   x = 10
   for i in 0..2
     j = i ## 'i' is shared, but 'j' doesn't
-    list_append(
-      a,
-      fn
+    a.append fn
         return x + j
-      end
-    )
+    end
   end
   x = 20
   return a

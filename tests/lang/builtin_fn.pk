@@ -4,9 +4,9 @@
 assert("append" in dir([]))
 assert("_repr" in dir(null))
 
-assert(list_join([1, 2, 3]) == "123")
-assert(list_join(["hello", " world"]) == "hello world")
-assert(list_join([[], []]) == "[][]")
+assert([1, 2, 3].join() == "123")
+assert(["hello", " world"].join() == "hello world")
+assert([[], []].join() == "[][]")
 
 assert(min(-1, 2) == -1)
 assert(max(100, -200) == 100)

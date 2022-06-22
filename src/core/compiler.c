@@ -492,9 +492,9 @@ struct Compiler {
   // meaningless).
   bool is_last_call;
 
-  // Since the compiler manually call some builtin functions we need to cache
-  // the index of the functions in order to prevent search for them each time.
-  int bifn_list_join;
+  // Since the compiler manually call some builtin methods we need to cache
+  // the index of the methods in order to prevent search for them each time.
+  int join_index;
 };
 
 typedef struct {
@@ -583,9 +583,10 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
 
   parserInit(&compiler->parser, vm, compiler, source, source_path);
 
-  // Cache the required built functions.
-  compiler->bifn_list_join = findBuiltinFunction(vm, "list_join", 9);
-  ASSERT(compiler->bifn_list_join >= 0, OOPS);
+  // Cache the required built functions/methods.
+  moduleAddString(compiler->module, compiler->parser.vm, "join", 4,
+    &compiler->join_index);
+  ASSERT(compiler->join_index >= 0, OOPS);
 }
 
 /*****************************************************************************/
@@ -1841,9 +1842,6 @@ static void exprLiteral(Compiler* compiler) {
 //     list_join(["Hello ", name, "!"])
 //
 static void exprInterpolation(Compiler* compiler) {
-  emitOpcode(compiler, OP_PUSH_BUILTIN_FN);
-  emitByte(compiler, compiler->bifn_list_join);
-
   emitOpcode(compiler, OP_PUSH_LIST);
   int size_index = emitShort(compiler, 0);
 
@@ -1878,15 +1876,10 @@ static void exprInterpolation(Compiler* compiler) {
 
   patchListSize(compiler, size_index, size);
 
-  // Call the list_join function (which is at the stack top).
-  emitOpcode(compiler, OP_CALL);
-  emitByte(compiler, 1);
-
-  // After the above call, the lits and the "list_join" function will be popped
-  // from the stack and a string will be pushed. The so the result stack effect
-  // is -1.
-  compilerChangeStack(compiler, -1);
-
+  // Call the List.join() method.
+  emitOpcode(compiler, OP_METHOD_CALL);
+  emitByte(compiler, 0);
+  emitShort(compiler, compiler->join_index);
 }
 
 static void exprFunction(Compiler* compiler) {
