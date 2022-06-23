@@ -597,13 +597,13 @@ bool pkCheckArgcRange(PKVM* vm, int argc, int min, int max) {
 
   if (argc < min) {
     char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", min);
-    VM_SET_ERROR(vm, stringFormat(vm, "Expected at least %s argument(s).",
+    VM_SET_ERROR(vm, stringFormat(vm, "Expected at least $ argument(s).",
                                        buff));
     return false;
 
   } else if (argc > max) {
     char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", max);
-    VM_SET_ERROR(vm, stringFormat(vm, "Expected at most %s argument(s).",
+    VM_SET_ERROR(vm, stringFormat(vm, "Expected at most $ argument(s).",
                                        buff));
     return false;
   }
