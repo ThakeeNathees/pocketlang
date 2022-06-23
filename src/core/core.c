@@ -269,6 +269,26 @@ static void _collectMethods(PKVM* vm, List* list, Class* cls) {
   _collectMethods(vm, list, cls->super_class);
 }
 
+static void _listJoinImpl(PKVM* vm, List* list, String* sep) {
+  pkByteBuffer buff;
+  pkByteBufferInit(&buff);
+
+  for (uint32_t i = 0; i < list->elements.count; i++) {
+    String* str = varToString(vm, list->elements.data[i], false);
+    if (str == NULL) RET(VAR_NULL);
+    vmPushTempRef(vm, &str->_super); // elem
+    if (sep != NULL && i != 0) {
+      pkByteBufferAddString(&buff, vm, sep->data, sep->length);
+    }
+    pkByteBufferAddString(&buff, vm, str->data, str->length);
+    vmPopTempRef(vm); // elem
+  }
+
+  String* str = newStringLength(vm, (const char*)buff.data, buff.count);
+  pkByteBufferClear(&buff, vm);
+  RET(VAR_OBJ(str));
+}
+
 /*****************************************************************************/
 /* CORE BUILTIN FUNCTIONS                                                    */
 /*****************************************************************************/
@@ -654,29 +674,22 @@ DEF(coreListAppend,
   RET(VAR_OBJ(list));
 }
 
-// TODO: currently it takes one argument (to test string interpolation).
-//       Add join delimeter as an optional argument.
 DEF(coreListJoin,
-  "list_join(self:List) -> String",
+  "list_join(self:List [, sep:String=""]) -> String",
   "Concatinate the elements of the list and return as a string.") {
 
-  List* list;
-  if (!validateArgList(vm, 1, &list)) return;
-
-  pkByteBuffer buff;
-  pkByteBufferInit(&buff);
-
-  for (uint32_t i = 0; i < list->elements.count; i++) {
-    String* str = varToString(vm, list->elements.data[i], false);
-    if (str == NULL) RET(VAR_NULL);
-    vmPushTempRef(vm, &str->_super); // elem
-    pkByteBufferAddString(&buff, vm, str->data, str->length);
-    vmPopTempRef(vm); // elem
+  int argc = ARGC;
+  if (argc != 1 && argc != 2) {
+    RET_ERR(newString(vm, "Invalid argument count."));
   }
 
-  String* str = newStringLength(vm, (const char*)buff.data, buff.count);
-  pkByteBufferClear(&buff, vm);
-  RET(VAR_OBJ(str));
+  List* list;
+  String* sep = NULL;
+
+  if (!validateArgList(vm, 1, &list)) return;
+  if (argc == 2) sep = varToString(vm, ARG(2), false);
+
+  _listJoinImpl(vm, list, sep);
 }
 
 static void initializeBuiltinFN(PKVM* vm, Closure** bfn, const char* name,
@@ -712,7 +725,7 @@ static void initializeBuiltinFunctions(PKVM* vm) {
 
   // List functions.
   INITIALIZE_BUILTIN_FN("list_append", coreListAppend, 2);
-  INITIALIZE_BUILTIN_FN("list_join",   coreListJoin,   1);
+  INITIALIZE_BUILTIN_FN("list_join",   coreListJoin,  -1);
 
 #undef INITIALIZE_BUILTIN_FN
 }
@@ -1240,6 +1253,20 @@ DEF(_listFind,
   RET(VAR_NUM(-1));
 }
 
+DEF(_listJoin,
+  "List.join([sep:String=""]) -> String",
+  "Concatinate the elements of the list and return as a string.") {
+
+  ASSERT(IS_OBJ_TYPE(SELF, OBJ_LIST), OOPS);
+  List* list = (List*)AS_OBJ(SELF);
+  String* sep = NULL;
+
+  if (!pkCheckArgcRange(vm, ARGC, 0, 1)) return;
+  if (ARGC == 1) sep = varToString(vm, ARG(1), false);
+
+  _listJoinImpl(vm, list, sep);
+}
+
 DEF(_listClear,
   "List.clear() -> Null",
   "Removes all the entries in the list.") {
@@ -1471,6 +1498,7 @@ static void initializePrimitiveClasses(PKVM* vm) {
   ADD_METHOD(PK_LIST,   "append", _listAppend,     1);
   ADD_METHOD(PK_LIST,   "pop",    _listPop,       -1);
   ADD_METHOD(PK_LIST,   "insert", _listInsert,     2);
+  ADD_METHOD(PK_LIST,   "join",   _listJoin,      -1);
 
   ADD_METHOD(PK_MAP,    "clear",  _mapClear,       0);
   ADD_METHOD(PK_MAP,    "get",    _mapGet,        -1);
