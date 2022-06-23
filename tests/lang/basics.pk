@@ -34,6 +34,8 @@ l1 = [1] + []; assert(l1.length == 1); assert(l1[0] == 1)
 l2 = l1 + [1,2,3]; assert(l2.length == 4); assert(l2 == [1,1,2,3])
 l3 = l2 + l1 + l2; assert(l3 == [1,1,2,3,1,1,1,2,3])
 
+l4 = List(10); assert(l4.length == 10); assert(l4[9] == null)
+
 ## list references are shared.
 l1 = [1];l2 = l1;l1 += [2]
 assert(l2[1] == 2)

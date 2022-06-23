@@ -67,6 +67,21 @@ static inline bool isInteger(Var var, int64_t* value) {
   return false;
 }
 
+// Check if [var] is a nature value and set [value].
+static inline bool isNature(Var var, int64_t* value) {
+  double number;
+  if (isNumeric(var, &number)) {
+    // TODO: check if the number is larger for a 64 bit integer.
+    if (floor(number) == number && number >= 0) {
+      ASSERT(INT64_MIN <= number && number <= INT64_MAX,
+        "TODO: Large numbers haven't handled yet. Please report!");
+      *value = (int64_t)(number);
+      return true;
+    }
+  }
+  return false;
+}
+
 // Check if [var] is bool/number. If not, it'll set error and return false.
 static inline bool validateNumeric(PKVM* vm, Var var, double* value,
                                    const char* name) {
@@ -80,6 +95,14 @@ static inline bool validateInteger(PKVM* vm, Var var, int64_t* value,
                                    const char* name) {
   if (isInteger(var, value)) return true;
   VM_SET_ERROR(vm, stringFormat(vm, "$ must be an Integer.", name));
+  return false;
+}
+
+// Check if [var] is natural number. If not, it'll set error and return false.
+static inline bool validateNatural(PKVM* vm, Var var, int64_t* value,
+                                   const char* name) {
+  if (isNature(var, value)) return true;
+  VM_SET_ERROR(vm, stringFormat(vm, "$ must be a natural number.", name));
   return false;
 }
 
@@ -931,12 +954,11 @@ static void _ctorString(PKVM* vm) {
 }
 
 static void _ctorList(PKVM* vm) {
-  List* list = newList(vm, ARGC);
-  vmPushTempRef(vm, &list->_super); // list.
-  for (int i = 0; i < ARGC; i++) {
-    listAppend(vm, list, ARG(i + 1));
-  }
-  vmPopTempRef(vm); // list.
+  int64_t natural;
+  if (!validateNatural(vm, ARG(1), &natural, "Argument 1")) return;
+
+  List* list = newList(vm, natural);
+  list->elements.count = natural;
   RET(VAR_OBJ(list));
 }
 
