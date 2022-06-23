@@ -702,6 +702,13 @@ static void eatString(Compiler* compiler, bool single_quote) {
     }
 
     if (c == '$') {
+      // allow dollar sign in string by doubling it.
+      if (peekChar(parser) == '$') {
+        eatChar(parser);
+        pkByteBufferWrite(&buff, parser->vm, '$');
+        continue;
+      }
+
       if (parser->si_depth < MAX_STR_INTERP_DEPTH) {
         tk_type = TK_STRING_INTERP;
 
