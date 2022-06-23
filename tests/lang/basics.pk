@@ -39,6 +39,14 @@ l1 = [1];l2 = l1;l1 += [2]
 assert(l2[1] == 2)
 assert(l1 == l2)
 
+## Maps test.
+m = {1: '1', '2': 2, 'foo': 'bar', 3: 3}
+m[1..2] = fn end
+assert(m.keys.length == m.length)
+assert(m.values.length == m.length)
+keys = m.keys; values = m.values
+for i in 0..keys.length do assert(m[keys[i]] == values[i]) end
+
 ## in tests.
 assert(!('abc' in 'a'))
 assert(42 in [12, 42, 3.14])

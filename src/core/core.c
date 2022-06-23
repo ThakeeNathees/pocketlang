@@ -1997,7 +1997,37 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
     } break;
 
     case OBJ_MAP: {
-      // TODO:
+      Map* map = (Map*)obj;
+      switch (attrib->hash) {
+
+        case CHECK_HASH("length", 0x83d03615):
+          return VAR_NUM((double)(map->count));
+
+        case CHECK_HASH("keys", 0xF94A08CD): {
+          List* list = newList(vm, map->count);
+          vmPushTempRef(vm, &list->_super); // list.
+          for (uint32_t i = 0; i < map->capacity; i++) {
+            if (!IS_UNDEF(map->entries[i].key)) {
+              listAppend(vm, list, map->entries[i].key);
+            }
+          }
+          vmPopTempRef(vm); // list.
+          return VAR_OBJ(list);
+        }
+
+        case CHECK_HASH("values", 0x34474C3B): {
+          List* list = newList(vm, map->count);
+          vmPushTempRef(vm, &list->_super); // list.
+          for (uint32_t i = 0; i < map->capacity; i++) {
+            if (!IS_UNDEF(map->entries[i].key)) {
+              listAppend(vm, list, map->entries[i].value);
+            }
+          }
+          vmPopTempRef(vm); // list.
+          return VAR_OBJ(list);
+        }
+
+      } // switch
     } break;
 
     case OBJ_RANGE: {
