@@ -878,6 +878,15 @@ void listInsert(PKVM* vm, List* self, uint32_t index, Var value) {
   self->elements.data[index] = value;
 }
 
+void listShrink(PKVM* vm, List* self) {
+  if (self->elements.capacity / GROW_FACTOR >= self->elements.count) {
+    self->elements.data = (Var*) vmRealloc(vm, self->elements.data,
+      sizeof(Var) * self->elements.capacity,
+      sizeof(Var) * self->elements.capacity / GROW_FACTOR);
+    self->elements.capacity /= GROW_FACTOR;
+  }
+}
+
 Var listRemoveAt(PKVM* vm, List* self, uint32_t index) {
   ASSERT_INDEX(index, self->elements.count);
 
@@ -890,12 +899,7 @@ Var listRemoveAt(PKVM* vm, List* self, uint32_t index) {
   }
 
   // Shrink the size if it's too much excess.
-  if (self->elements.capacity / GROW_FACTOR >= self->elements.count) {
-    self->elements.data = (Var*) vmRealloc(vm, self->elements.data,
-      sizeof(Var) * self->elements.capacity,
-      sizeof(Var) * self->elements.capacity / GROW_FACTOR);
-    self->elements.capacity /= GROW_FACTOR;
-  }
+  listShrink(vm, self);
 
   if (IS_OBJ(removed)) vmPopTempRef(vm);
 
