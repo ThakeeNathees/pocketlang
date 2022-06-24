@@ -8,7 +8,7 @@ PK_EXPORT void hello(PKVM* vm) {
 PK_EXPORT PkHandle* pkExportModule(PKVM* vm) {
   PkHandle* mylib = pkNewModule(vm, "mylib");
   
-  pkModuleAddFunction(vm, mylib, "hello", hello, 0);
+  pkModuleAddFunction(vm, mylib, "hello", hello, 0, NULL);
 
   return mylib;
 }
