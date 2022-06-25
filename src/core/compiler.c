@@ -676,7 +676,7 @@ static void setNextValueToken(Parser* parser, _TokenType type, Var value);
 static void setNextToken(Parser* parser, _TokenType type);
 static bool matchChar(Parser* parser, char c);
 
-static void eatString(Compiler* compiler, bool single_quote) {
+static void eatString(Compiler* compiler, bool single_quote, bool is_raw) {
   Parser* parser = &compiler->parser;
 
   pkByteBuffer buff;
@@ -701,7 +701,7 @@ static void eatString(Compiler* compiler, bool single_quote) {
       break;
     }
 
-    if (c == '$') {
+    if (c == '$' && !is_raw) {
       if (parser->si_depth < MAX_STR_INTERP_DEPTH) {
         tk_type = TK_STRING_INTERP;
 
@@ -740,7 +740,7 @@ static void eatString(Compiler* compiler, bool single_quote) {
       break;
     }
 
-    if (c == '\\') {
+    if (c == '\\' && !is_raw) {
       switch (eatChar(parser)) {
         case '"':  pkByteBufferWrite(&buff, parser->vm, '"'); break;
         case '\'': pkByteBufferWrite(&buff, parser->vm, '\''); break;
@@ -1044,7 +1044,7 @@ static void lexToken(Compiler* compiler) {
     if (parser->si_name_end != NULL) {
       if (parser->current_char == parser->si_name_end) {
         parser->si_name_end = NULL;
-        eatString(compiler, parser->si_name_quote == '\'');
+        eatString(compiler, parser->si_name_quote == '\'', false);
         return;
       } else {
         ASSERT(parser->current_char < parser->si_name_end, OOPS);
@@ -1074,7 +1074,7 @@ static void lexToken(Compiler* compiler) {
 
             char quote = parser->si_quote[parser->si_depth - 1];
             parser->si_depth--; //< Exit the depth.
-            eatString(compiler, quote == '\'');
+            eatString(compiler, quote == '\'', false);
             return;
 
           } else { // Decrease the open brace at the current depth.
@@ -1187,17 +1187,21 @@ static void lexToken(Compiler* compiler) {
         setNextTwoCharToken(parser, '=', TK_FSLASH, TK_DIVEQ);
         return;
 
-      case '"': eatString(compiler, false); return;
+      case '"': eatString(compiler, false, false); return;
 
-      case '\'': eatString(compiler, true); return;
+      case '\'': eatString(compiler, true, false); return;
 
       default: {
-
-        if (utilIsDigit(c)) {
+        char c2 = peekChar(parser);
+        if (c == 'r' && (c2 == '"' || c2 == '\'')) {
+          eatChar(parser);
+          eatString(compiler, c2 == '\'', true); return;
+        }
+        else if (utilIsDigit(c)) {
           eatNumber(compiler);
           if (parser->has_syntax_error) return;
-
-        } else if (utilIsName(c)) {
+        }
+        else if (utilIsName(c)) {
           eatName(parser);
 
         } else {
