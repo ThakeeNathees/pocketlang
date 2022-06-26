@@ -76,6 +76,7 @@ DEF(_reMatch,
   "  \\w      Match alphanumeric [a-zA-Z0-9_]\n"
   "  \\W      Match non-alphanumeric\n"
   "  \\d      Match decimal digit\n"
+  "  \\D      Match non-decimal digit\n"
   "  \\n      Match new line character\n"
   "  \\r      Match line feed character\n"
   "  \\f      Match form feed character\n"
@@ -86,7 +87,7 @@ DEF(_reMatch,
   "  +?      Match one or more times (non-greedy)\n"
   "  *       Match zero or more times (greedy)\n"
   "  *?      Match zero or more times (non-greedy)\n"
-  "  ?       Match zero or once (non-greedy)\n"
+  "  ?       Match zero or once (greedy)\n"
   "  x|y     Match x or y (alternation operator)\n"
   "  \\meta   Match one of the meta character: ^$().[]*+?|\\\n"
   "  \\xHH    Match byte with hex value 0xHH, e.g. \\x4a\n"
@@ -156,7 +157,7 @@ DEF(_reTest,
   int i = slre_match(pattern, input, input_len, caps,
     MAX_CAPTURES, flags & SLRE_IGNORE_CASE);
 
-  pkSetSlotBool(vm, 0, i > 0);
+  pkSetSlotBool(vm, 0, !(i < 0 || i > input_len));
 
   _re_error(vm, i);
   _re_exit(vm, caps);

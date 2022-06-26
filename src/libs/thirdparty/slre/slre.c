@@ -74,7 +74,7 @@ struct regex_info {
 };
 
 static int is_metacharacter(const unsigned char *s) {
-  static const char *metacharacters = "^$().[]*+?|\\SsWwdbfnrtv";
+  static const char *metacharacters = "^$().[]*+?|\\SsWwDdbfnrtv";
   return strchr(metacharacters, *s) != NULL;
 }
 
@@ -119,6 +119,7 @@ static int match_op(const unsigned char *re, const unsigned char *s,
         case 's': FAIL_IF(!isspace(*s), SLRE_NO_MATCH); result++; break;
         case 'W': FAIL_IF(isalnum(*s) || *s == '_', SLRE_NO_MATCH); result++; break;
         case 'w': FAIL_IF(!(isalnum(*s) || *s == '_'), SLRE_NO_MATCH); result++; break;
+        case 'D': FAIL_IF(isdigit(*s), SLRE_NO_MATCH); result++; break;
         case 'd': FAIL_IF(!isdigit(*s), SLRE_NO_MATCH); result++; break;
         case 'b': FAIL_IF(*s != '\b', SLRE_NO_MATCH); result++; break;
         case 'f': FAIL_IF(*s != '\f', SLRE_NO_MATCH); result++; break;
