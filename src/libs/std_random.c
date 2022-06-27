@@ -116,10 +116,7 @@ DEF(_randomSample,
   "random.sample(list:List) -> Var",
   "Returns a random element from the list.") {
 
-  if (pkGetSlotType(vm, 1) != PK_LIST) {
-    pkSetRuntimeError(vm, "Expected a non-empty list.");
-    return;
-  }
+  if (!pkValidateSlotType(vm, 1, PK_LIST)) return;
 
   List* list = (List*) AS_OBJ(ARG(1));
   if (list->elements.count == 0) {
@@ -135,10 +132,7 @@ DEF(_randomShuffle,
   "random.shuffle(list:List) -> List",
   "Shuffles a list.") {
 
-  if (pkGetSlotType(vm, 1) != PK_LIST) {
-    pkSetRuntimeError(vm, "Expected a list.");
-    return;
-  }
+  if (!pkValidateSlotType(vm, 1, PK_LIST)) return;
 
   PkHandle* handle = pkGetSlotHandle(vm, 1);
   List* list = (List*) AS_OBJ(ARG(1));
