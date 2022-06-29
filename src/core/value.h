@@ -471,6 +471,8 @@ typedef enum {
 struct Fiber {
   Object _super;
 
+  bool trying;
+
   FiberState state;
 
   // The root closure of the fiber.

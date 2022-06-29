@@ -812,29 +812,53 @@ PkResult vmRunFiber(PKVM* vm, Fiber* fiber_) {
     ASSERT(caller == NULL || caller->state == FIBER_RUNNING, OOPS); \
     fiber->state = FIBER_DONE;                                      \
     fiber->caller = NULL;                                           \
+    if (caller && !fiber->trying) {                                 \
+      caller->error = fiber->error;                                 \
+    }                                                               \
     fiber = caller;                                                 \
     vm->fiber = fiber;                                              \
   } while (false)
 
+// Check if current fiber is running in "trying" mode.
+bool isTrying(Fiber* fiber) {
+  while (fiber != NULL) {
+    if (fiber->trying) return true;
+    fiber = fiber->caller;
+  }
+  return false;
+}
+
 // Check if any runtime error exists and if so returns RESULT_RUNTIME_ERROR.
-#define CHECK_ERROR()                 \
-  do {                                \
-    if (VM_HAS_ERROR(vm)) {           \
-      UPDATE_FRAME();                 \
-      vmReportError(vm);              \
-      FIBER_SWITCH_BACK();            \
-      return PK_RESULT_RUNTIME_ERROR; \
-    }                                 \
+#define CHECK_ERROR()                     \
+  do {                                    \
+    if (VM_HAS_ERROR(vm)) {               \
+      UPDATE_FRAME();                     \
+      if (isTrying(fiber)) {              \
+        FIBER_SWITCH_BACK();              \
+        LOAD_FRAME();                     \
+        DISPATCH();                       \
+      } else {                            \
+        vmReportError(vm);                \
+        FIBER_SWITCH_BACK();              \
+        return PK_RESULT_RUNTIME_ERROR;   \
+      }                                   \
+    }                                     \
   } while (false)
 
 // [err_msg] must be of type String.
-#define RUNTIME_ERROR(err_msg)       \
-  do {                               \
-    VM_SET_ERROR(vm, err_msg);       \
-    UPDATE_FRAME();                  \
-    vmReportError(vm);               \
-    FIBER_SWITCH_BACK();             \
-    return PK_RESULT_RUNTIME_ERROR;  \
+#define RUNTIME_ERROR(err_msg)            \
+  do {                                    \
+    VM_SET_ERROR(vm, err_msg);            \
+    UPDATE_FRAME();                       \
+    if(isTrying(fiber)) {                 \
+      FIBER_SWITCH_BACK();                \
+      LOAD_FRAME();                       \
+      DISPATCH();                         \
+    } else {                              \
+      vmReportError(vm);                  \
+      FIBER_SWITCH_BACK();                \
+      return PK_RESULT_RUNTIME_ERROR;     \
+    }                                     \
   } while (false)
 
 // Load the last call frame to vm's execution variables to resume/run the
