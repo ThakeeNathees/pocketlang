@@ -12,64 +12,28 @@
 #include "../core/vm.h"
 #endif
 
-// https://xoroshiro.di.unimi.it/xoroshiro128plus.c
-/*  Written in 2016-2018 by David Blackman and Sebastiano Vigna (vigna@acm.org)
+// https://prng.di.unimi.it/splitmix64.c
 
-To the extent possible under law, the author has dedicated all copyright
-and related and neighboring rights to this software to the public domain
-worldwide. This software is distributed without any warranty.
+static uint64_t x; /* The state can be seeded with any value. */
 
-See <http://creativecommons.org/publicdomain/zero/1.0/>. */
-
-static inline uint64_t rotl(const uint64_t x, int k) {
-  return (x << k) | (x >> (64 - k));
+uint64_t next() {
+  uint64_t z = (x += 0x9e3779b97f4a7c15);
+  z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
+  z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
+  return z ^ (z >> 31);
 }
 
-static uint64_t s[2];
-
-static uint64_t next(void) {
-  const uint64_t s0 = s[0];
-  uint64_t s1 = s[1];
-  const uint64_t result = s0 + s1;
-
-  s1 ^= s0;
-  s[0] = rotl(s0, 24) ^ s1 ^ (s1 << 16); // a, b
-  s[1] = rotl(s1, 37); // c
-
-  return result;
-}
-
-static void jump(void) {
-  static const uint64_t JUMP[] = { 0xdf900294d8f554a5, 0x170865df4b3201fc };
-
-  uint64_t s0 = 0;
-  uint64_t s1 = 0;
-  for(int i = 0; i < sizeof JUMP / sizeof *JUMP; i++)
-    for(int b = 0; b < 64; b++) {
-      if (JUMP[i] & UINT64_C(1) << b) {
-        s0 ^= s[0];
-        s1 ^= s[1];
-      }
-      next();
-    }
-
-  s[0] = s0;
-  s[1] = s1;
-}
-
-static void seed(int32_t n) {
-  s[0] = n >> 16;
-  s[1] = (n & 0xffff) + 1;
-  jump();
+static void seed(uint64_t n) {
+  x = n;
 }
 
 DEF(_randomSeed,
   "random.seed(n:Number) -> Null",
   "Initialize the random number generator.") {
 
-  int32_t n = 0;
-  if (!pkValidateSlotInteger(vm, 1, &n)) return;
-  seed(n);
+  double n = 0;
+  if (!pkValidateSlotNumber(vm, 1, &n)) return;
+  seed(*(uint64_t*)&n);
 }
 
 DEF(_randomRand,
@@ -158,8 +122,18 @@ DEF(_randomShuffle,
 /* MODULE REGISTER                                                           */
 /*****************************************************************************/
 
+#if defined(_WIN32) || defined(__NT__)
+  #include <windows.h>
+#endif
+
 void registerModuleRandom(PKVM* vm) {
-  seed(time(NULL));
+  #if defined(_WIN32) || defined(__NT__)
+    uint64_t ticks;
+    QueryPerformanceCounter((LARGE_INTEGER*)&ticks);
+    seed(ticks);
+  #else
+    seed(time(NULL));
+  #endif
 
   PkHandle* random = pkNewModule(vm, "random");
 
