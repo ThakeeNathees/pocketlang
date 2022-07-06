@@ -219,6 +219,119 @@ String* varToString(PKVM* vm, Var self, bool repr) {
   return toString(vm, self);
 }
 
+Var pkSprintf(PKVM* vm, String* string, List* args) {
+  pkByteBuffer retbuff;
+  pkByteBufferInit(&retbuff);
+
+  pkByteBuffer fmtbuff;
+  pkByteBufferInit(&fmtbuff);
+  pkByteBufferReserve(&fmtbuff, vm, 32);
+
+  pkByteBuffer outbuff;
+  pkByteBufferInit(&outbuff);
+  pkByteBufferReserve(&outbuff, vm, 64);
+
+  int index = 0; // index of args
+  char* cur = string->data;
+  char* percent = NULL;
+
+  while (cur < string->data + string->length) {
+    if (percent == NULL) {
+      if (*cur == '%') {
+        percent = cur++;
+      } else {
+        pkByteBufferWrite(&retbuff, vm, *cur++);
+      }
+      continue;
+    }
+
+    char specifier;
+    switch (*cur++) {
+      case '%':
+        pkByteBufferWrite(&retbuff, vm, '%');
+        percent = NULL;
+        continue;
+
+      case 'f': case 'F': case 'e': case 'E': case 'g': case 'G':
+        specifier = 'f'; break;
+
+      case 'd': case 'i': case 'u': case 'x': case 'X': case 'o': case 'b':
+        specifier = 'i'; break;
+
+      case 'c':
+        specifier = 'c'; break;
+
+      case 's':
+        specifier = 's'; break;
+
+      default:
+        continue;
+    }
+
+    fmtbuff.count = 0;
+    while (percent < cur) {
+      char c = *percent++;
+      if (c == 'c') c = 's'; // support encode to utf8 later
+      if (c != '*') pkByteBufferWrite(&fmtbuff, vm, c); // don't support '*'
+    }
+    pkByteBufferWrite(&fmtbuff, vm, 0);
+    percent = NULL;
+
+    double num = 0;
+    String* str = NULL;
+
+    if (index < args->elements.count) {
+      if (specifier == 's') {
+        str = varToString(vm, args->elements.data[index], false);
+
+      } else {
+        if (!isNumeric(args->elements.data[index], &num)) {
+          if (IS_OBJ_TYPE(args->elements.data[index], OBJ_STRING)) {
+            str = (String*) AS_OBJ(args->elements.data[index]);
+            utilToNumber(str->data, &num);
+          }
+        }
+      }
+      index++;
+    }
+
+    int len = 0;
+    for (;;) {
+      switch (specifier) {
+        case 'f':
+          len = snprintf(outbuff.data, outbuff.capacity, fmtbuff.data, num);
+          break;
+        case 'i':
+          len = snprintf(outbuff.data, outbuff.capacity, fmtbuff.data, (int64_t) num);
+          break;
+        case 'c':
+          uint8_t utf8[4];
+          utf8[utf8_encodeValue((int) num, utf8)] = 0;
+          len = snprintf(outbuff.data, outbuff.capacity, fmtbuff.data, utf8);
+          break;
+        case 's':
+          if (str != NULL) {
+            len = snprintf(outbuff.data, outbuff.capacity, fmtbuff.data, str->data);
+          }
+          break;
+        default:
+          UNREACHABLE();
+      }
+
+      if (len + 1 <= outbuff.capacity) break;
+      pkByteBufferReserve(&outbuff, vm, len + 1);
+    }
+
+    pkByteBufferAddString(&retbuff, vm, outbuff.data, len);
+  }
+
+  String* str = newStringLength(vm, (const char*)retbuff.data, retbuff.count);
+  pkByteBufferClear(&retbuff, vm);
+  pkByteBufferClear(&outbuff, vm);
+  pkByteBufferClear(&fmtbuff, vm);
+  return VAR_OBJ(str);
+}
+
 // Calls a unary operator overload method. If the method does not exists it'll
 // return false, otherwise it'll call the method and return true. If any error
 // occures it'll set an error.
@@ -1740,7 +1853,18 @@ Var varModulo(PKVM* vm, Var v1, Var v2, bool inplace) {
   }
 
   if (IS_OBJ_TYPE(v1, OBJ_STRING)) {
-    TODO; // "fmt" % v2.
+    Var result;
+    if (IS_OBJ_TYPE(v2, OBJ_LIST)) {
+      result = pkSprintf(vm, (String*) AS_OBJ(v1), (List*) AS_OBJ(v2));
+
+    } else {
+      List* args = newList(vm, 1);
+      vmPushTempRef(vm, &args->_super);
+      listAppend(vm, args, v2);
+      result = pkSprintf(vm, (String*) AS_OBJ(v1), args);
+      vmPopTempRef(vm);
+    }
+    return result;
   }
 
   CHECK_INST_BINARY_OP("%");
