@@ -296,6 +296,7 @@ Var pkSprintf(PKVM* vm, String* string, List* args) {
     }
 
     int len = 0;
+    uint8_t utf8[4];
     for (;;) {
       switch (specifier) {
         case 'f':
@@ -305,7 +306,6 @@ Var pkSprintf(PKVM* vm, String* string, List* args) {
           len = snprintf(outbuff.data, outbuff.capacity, fmtbuff.data, (int64_t) num);
           break;
         case 'c':
-          uint8_t utf8[4];
           utf8[utf8_encodeValue((int) num, utf8)] = 0;
           len = snprintf(outbuff.data, outbuff.capacity, fmtbuff.data, utf8);
           break;
