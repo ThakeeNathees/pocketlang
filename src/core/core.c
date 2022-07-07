@@ -2070,6 +2070,9 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
         case CHECK_HASH("instance", 0xb86d992):
           if (IS_UNDEF(mb->instance)) return VAR_NULL;
           return mb->instance;
+
+        case CHECK_HASH("arity", 0x3e96bd7a):
+          return VAR_NUM((double)(mb->method->fn->arity));
       }
 
     } break;
