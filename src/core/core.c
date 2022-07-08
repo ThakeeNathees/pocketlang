@@ -1074,10 +1074,6 @@ DEF(_stringSplit,
   String* sep;
   if (!validateArgString(vm, 1, &sep)) return;
 
-  if (sep->length == 0) {
-    RET_ERR(newString(vm, "Cannot use empty string as a seperator."));
-  }
-
   RET(VAR_OBJ(stringSplit(vm, (String*)AS_OBJ(SELF), sep)));
 }
 
