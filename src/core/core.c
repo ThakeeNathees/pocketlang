@@ -1631,8 +1631,11 @@ Closure* getSuperMethod(PKVM* vm, Var self, String* name) {
   do {                                                      \
     if (IS_OBJ_TYPE(v1, OBJ_STRING) && IS_OBJ_TYPE(v2, OBJ_STRING)) { \
       String* s1 = (String*)AS_OBJ(v1), *s2 = (String*)AS_OBJ(v2);    \
-      return as(memcmp(s1->data, s2->data, s1->length) op 0);         \
-    }                                                       \
+      int l1 = s1->length, l2 = s2->length, min = (l1 < l2 ? l1: l2); \
+      int result = memcmp(s1->data, s2->data, min);                   \
+      if (result == 0) return as((l1 - l2) op 0);                     \
+      else return as(result op 0);                                    \
+    }                                                                 \
   } while (false)
 
 #define CHECK_NUMERIC_OP(op) CHECK_NUMERIC_OP_AS(op, VAR_NUM)
