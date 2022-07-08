@@ -933,32 +933,32 @@ static void _ctorString(PKVM* vm) {
 static void _ctorList(PKVM* vm) {
   if (!pkCheckArgcRange(vm, ARGC, 0, 1)) return;
   List* list = newList(vm, ARGC);
+  vmPushTempRef(vm, &list->_super); // list.
   if (ARGC == 1) {
     List* src_list;
     if (!validateArgList(vm, 1, &src_list)) return;
-    vmPushTempRef(vm, &src_list->_super);
     for (uint32_t i = 0; i < src_list->elements.count; i++) {
       listAppend(vm, list, src_list->elements.data[i]);
     }
-    vmPopTempRef(vm);
   }
+  vmPopTempRef(vm);
   RET(VAR_OBJ(list));
 }
 
 static void _ctorMap(PKVM* vm) {
   if (!pkCheckArgcRange(vm, ARGC, 0, 1)) return;
   Map* map = newMap(vm);
+  vmPushTempRef(vm, &map->_super); // list.
   if (ARGC == 1) {
     Map* src_map;
     if (!validateArgMap(vm, 1, &src_map)) return;
-    vmPushTempRef(vm, &src_map->_super);
     for (uint32_t i = 0; i < src_map->capacity; i++) {
       if (!IS_UNDEF(src_map->entries[i].key)) {
         mapSet(vm, map, src_map->entries[i].key, src_map->entries[i].value);
       }
     }
-    vmPopTempRef(vm);
   }
+  vmPopTempRef(vm);
   RET(VAR_OBJ(map));
 }
 
