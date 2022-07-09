@@ -780,7 +780,7 @@ List* stringSplit(PKVM* vm, String* self, String* sep) {
   List* list = newList(vm, 0);
   vmPushTempRef(vm, &list->_super); // list.
 
-  if (sep->length == 0) {
+  if (sep == NULL || sep->length == 0) {
     for (int i = 0; i < self->length; i++) {
       String* ch = newStringLength(vm, &self->data[i], 1);
       vmPushTempRef(vm, &ch->_super); // ch
