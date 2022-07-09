@@ -680,8 +680,8 @@ String* stringStrip(PKVM* vm, String* self);
 String* stringReplace(PKVM* vm, String* self,
                       String* old, String* new_, int count);
 
-// Split the string into a list of string separated by [sep]. String [sep] must
-// not be of length 0 otherwise an assertion will fail.
+// Split the string into a list of string separated by [sep].
+// If [sep] == "", split string into characters.
 List* stringSplit(PKVM* vm, String* self, String* sep);
 
 // Creates a new string from the arguments. This is intended for internal

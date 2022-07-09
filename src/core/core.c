@@ -1068,16 +1068,13 @@ DEF(_stringReplace,
 }
 
 DEF(_stringSplit,
-  "String.split(sep:String) -> List",
+  "String.split([sep:String]) -> List",
   "Split the string into a list of string seperated by [sep] delimeter.") {
 
-  String* sep;
-  if (!validateArgString(vm, 1, &sep)) return;
+  if (!pkCheckArgcRange(vm, ARGC, 0, 1)) return;
+  String* sep = NULL;
 
-  if (sep->length == 0) {
-    RET_ERR(newString(vm, "Cannot use empty string as a seperator."));
-  }
-
+  if (ARGC == 1) sep = varToString(vm, ARG(1), false);
   RET(VAR_OBJ(stringSplit(vm, (String*)AS_OBJ(SELF), sep)));
 }
 
@@ -1462,7 +1459,7 @@ static void initializePrimitiveClasses(PKVM* vm) {
   ADD_METHOD(PK_STRING, "upper",   _stringUpper,    0);
   ADD_METHOD(PK_STRING, "find",    _stringFind,    -1);
   ADD_METHOD(PK_STRING, "replace", _stringReplace, -1);
-  ADD_METHOD(PK_STRING, "split",   _stringSplit,    1);
+  ADD_METHOD(PK_STRING, "split",   _stringSplit,   -1);
   ADD_METHOD(PK_STRING, "startswith", _stingStartswith, 1);
   ADD_METHOD(PK_STRING, "endswith", _stingEndswith, 1);
 
