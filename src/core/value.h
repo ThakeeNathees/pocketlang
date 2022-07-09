@@ -733,6 +733,9 @@ void mapClear(PKVM* vm, Map* self);
 // otherwise return VAR_UNDEFINED.
 Var mapRemoveKey(PKVM* vm, Map* self, Var key);
 
+// Duplicate a map.
+Map* mapDup(PKVM* vm, Map* self);
+
 // Returns true if the fiber has error, and if it has any the fiber cannot be
 // resumed anymore.
 bool fiberHasError(Fiber* fiber);

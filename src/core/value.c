@@ -908,17 +908,15 @@ void listClear(PKVM* vm, List* self) {
 }
 
 List* listAdd(PKVM* vm, List* l1, List* l2) {
+  // l1 and l2 can be NULL, and always return a new list
+  // returned list should not have the same reference of l1 or l2.
 
-  // Optimize end case.
-  if (l1->elements.count == 0) return l2;
-  if (l2->elements.count == 0) return l1;
-
-  uint32_t size = l1->elements.count + l2->elements.count;
+  uint32_t size = (l1? l1->elements.count: 0) + (l2? l2->elements.count: 0);
   List* list = newList(vm, size);
 
   vmPushTempRef(vm, &list->_super); // list.
-  pkVarBufferConcat(&list->elements, vm, &l1->elements);
-  pkVarBufferConcat(&list->elements, vm, &l2->elements);
+  if (l1) pkVarBufferConcat(&list->elements, vm, &l1->elements);
+  if (l2) pkVarBufferConcat(&list->elements, vm, &l2->elements);
   vmPopTempRef(vm); // list.
 
   return list;
@@ -1124,6 +1122,17 @@ Var mapRemoveKey(PKVM* vm, Map* self, Var key) {
   if (IS_OBJ(value)) vmPopTempRef(vm);
 
   return value;
+}
+
+Map* mapDup(PKVM* vm, Map* self) {
+  Map* map = newMap(vm);
+  vmPushTempRef(vm, &map->_super); // map.
+  map->capacity = self->capacity;
+  map->count = self->count;
+  map->entries = ALLOCATE_ARRAY(vm, MapEntry, self->capacity);
+  memcpy(map->entries, self->entries, self->capacity * sizeof(MapEntry));
+  vmPopTempRef(vm); // map
+  return map;
 }
 
 bool fiberHasError(Fiber* fiber) {
