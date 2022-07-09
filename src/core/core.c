@@ -947,6 +947,8 @@ static void _ctorList(PKVM* vm) {
     } else {
       RET_ERR(newString(vm, "Expected a natural number or a list."));
     }
+  } else {
+    list = newList(vm, 0);
   }
   RET(VAR_OBJ(list));
 }
