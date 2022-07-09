@@ -1627,6 +1627,17 @@ Closure* getSuperMethod(PKVM* vm, Var self, String* name) {
     }                                                       \
   } while (false)
 
+#define CHECK_STRING_OP_AS(op, as)                          \
+  do {                                                      \
+    if (IS_OBJ_TYPE(v1, OBJ_STRING) && IS_OBJ_TYPE(v2, OBJ_STRING)) { \
+      String* s1 = (String*)AS_OBJ(v1), *s2 = (String*)AS_OBJ(v2);    \
+      int l1 = s1->length, l2 = s2->length, min = (l1 < l2 ? l1: l2); \
+      int result = memcmp(s1->data, s2->data, min);                   \
+      if (result == 0) return as((l1 - l2) op 0);                     \
+      else return as(result op 0);                                    \
+    }                                                                 \
+  } while (false)
+
 #define CHECK_NUMERIC_OP(op) CHECK_NUMERIC_OP_AS(op, VAR_NUM)
 
 #define CHECK_BITWISE_OP(op)                                \
@@ -1852,6 +1863,7 @@ Var varEqals(PKVM* vm, Var v1, Var v2) {
 
 Var varGreater(PKVM* vm, Var v1, Var v2) {
   CHECK_NUMERIC_OP_AS(>, VAR_BOOL);
+  CHECK_STRING_OP_AS(>, VAR_BOOL);
   const bool inplace = false;
   CHECK_INST_BINARY_OP(">");
   UNSUPPORTED_BINARY_OP(">");
@@ -1860,6 +1872,7 @@ Var varGreater(PKVM* vm, Var v1, Var v2) {
 
 Var varLesser(PKVM* vm, Var v1, Var v2) {
   CHECK_NUMERIC_OP_AS(< , VAR_BOOL);
+  CHECK_STRING_OP_AS(<, VAR_BOOL);
   const bool inplace = false;
   CHECK_INST_BINARY_OP("<");
   UNSUPPORTED_BINARY_OP("<");
