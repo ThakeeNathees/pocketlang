@@ -21,7 +21,9 @@ int cmpVarAsc(const void * a, const void * b, void * c) {
   PKVM* vm = (PKVM*) c;
   Var l = *((Var*) a), r = *((Var*) b);
   Var isGreater = varGreater(vm, l, r);
+  if (VM_HAS_ERROR(vm)) return 0;
   Var isLesser = varLesser(vm, l, r);
+  if (VM_HAS_ERROR(vm)) return 0;
   return toBool(isGreater) - toBool(isLesser);
 }
 
@@ -29,7 +31,9 @@ int cmpVarDesc(const void * a, const void * b, void * c) {
   PKVM* vm = (PKVM*) c;
   Var l = *((Var*) a), r = *((Var*) b);
   Var isGreater = varGreater(vm, l, r);
+  if (VM_HAS_ERROR(vm)) return 0;
   Var isLesser = varLesser(vm, l, r);
+  if (VM_HAS_ERROR(vm)) return 0;
   return toBool(isLesser) - toBool(isGreater);
 }
 
@@ -41,7 +45,7 @@ int cmpVarCustomAsc(const void * a, const void * b, void * c) {
   ARG(1) = l; ARG(2) = r;
   pkCallFunction(vm, 0, 2, 1, 3);
 
-  if (pkGetSlotType(vm, 3) != PK_NUMBER) return 0;
+  if (pkGetSlotType(vm, 3) != PK_NUMBER || VM_HAS_ERROR(vm)) return 0;
   double ret = pkGetSlotNumber(vm, 3);
   return ret > 0 ? 1 : (ret < 0 ? -1 : 0) ;
 }
@@ -54,7 +58,7 @@ int cmpVarCustomDesc(const void * a, const void * b, void * c) {
   ARG(1) = l; ARG(2) = r;
   pkCallFunction(vm, 0, 2, 1, 3);
 
-  if (pkGetSlotType(vm, 3) != PK_NUMBER) return 0;
+  if (pkGetSlotType(vm, 3) != PK_NUMBER || VM_HAS_ERROR(vm)) return 0;
   double ret = pkGetSlotNumber(vm, 3);
   return ret < 0 ? 1 : (ret > 0 ? -1 : 0) ;
 }
@@ -126,7 +130,7 @@ DEF(algorithmSort,
 }
 
 DEF(algorithmIsSorted,
-  "isSorted(list:List[, cmp:Closure, reverse=false]) -> List",
+  "isSorted(list:List[, cmp:Closure, reverse=false]) -> Bool",
   "Checks to see whether [list] is already sorted.") {
 
   int argc = pkGetArgc(vm);
@@ -272,6 +276,48 @@ DEF(algorithmReverse,
   pkReleaseHandle(vm, handle);
 }
 
+static void _callfn(PKVM* vm, pkNativeFn fn) {
+  int argc = pkGetArgc(vm);
+  pkReserveSlots(vm, argc + 1);
+  for (int i = argc; i > 0; i--) {
+    ARG(i + 1) = ARG(i);
+  }
+  pkPlaceSelf(vm, 1);
+
+  vm->fiber->sp += 1; // is there a bettery way?
+  fn(vm);
+  vm->fiber->sp -= 1;
+}
+
+DEF(listSort,
+  "List.sort([cmp:Closure, reverse=false]) -> List",
+  "Sort the [list] by TimSort algorithm.") {
+  if (!pkCheckArgcRange(vm, pkGetArgc(vm), 0, 2)) return;
+  _callfn(vm, algorithmSort);
+}
+
+DEF(listIsSorted,
+  "List.isSorted([cmp:Closure, reverse=false]) -> Bool",
+  "Checks to see whether [list] is already sorted.") {
+  if (!pkCheckArgcRange(vm, pkGetArgc(vm), 0, 2)) return;
+  _callfn(vm, algorithmIsSorted);
+}
+
+DEF(listBinarySearch,
+  "List.binarySearch(key:Var[, cmp:Closure]) -> Number",
+  "Binary search for key in [list]. Return the index of key or -1 if not found. "
+  "Assumes that list is sorted.") {
+  if (!pkCheckArgcRange(vm, pkGetArgc(vm), 1, 2)) return;
+  _callfn(vm, algorithmBinarySearch);
+}
+
+DEF(listReverse,
+  "List.reverse([range:Range]) -> List",
+  "Reverse the [list].") {
+  if (!pkCheckArgcRange(vm, pkGetArgc(vm), 0, 1)) return;
+  _callfn(vm, algorithmReverse);
+}
+
 #undef ARG
 
 /*****************************************************************************/
@@ -286,7 +332,18 @@ void registerModuleAlgorithm(PKVM* vm) {
   REGISTER_FN(algorithm, "binarySearch", algorithmBinarySearch, -1);
   REGISTER_FN(algorithm, "reverse", algorithmReverse, -1);
 
+  // Wrap algorithm functions to methods of List.
+  // These methods can be call without `import algorithm`.
+  pkReserveSlots(vm, 1);
+  pkNewList(vm, 0);
+  pkGetClass(vm, 0, 0);
+  PkHandle* clsList = pkGetSlotHandle(vm, 0);
+  ADD_METHOD(clsList, "sort", listSort, -1);
+  ADD_METHOD(clsList, "isSorted", listIsSorted, -1);
+  ADD_METHOD(clsList, "reverse", listReverse, -1);
+  ADD_METHOD(clsList, "binarySearch", listBinarySearch, -1);
+  pkReleaseHandle(vm, clsList);
+
   pkRegisterModule(vm, algorithm);
   pkReleaseHandle(vm, algorithm);
 }
-
