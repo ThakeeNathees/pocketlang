@@ -1977,6 +1977,18 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
   }
 
   Object* obj = AS_OBJ(on);
+
+  if (attrib->hash == CHECK_HASH("_attr", 0x89ec270d)) {
+    switch (obj->type) {
+      case OBJ_CLASS:
+        Class* cls = (Class*) obj;
+        return VAR_OBJ(cls->static_attribs);
+      case OBJ_INST:
+        Instance* inst = (Instance*) obj;
+        return VAR_OBJ(inst->attribs);
+    }
+  }
+
   switch (obj->type) {
     case OBJ_STRING: {
       String* str = (String*)obj;
