@@ -258,7 +258,7 @@ DEF(_vectorInit,
 }
 
 DEF(_vectorGetter,
-  "types.Vector.@getter()", "") {
+  "types.Vector._getter()", "") {
   const char* name; uint32_t length;
   if (!pkValidateSlotString(vm, 1, &name, &length)) return;
 
@@ -278,7 +278,7 @@ DEF(_vectorGetter,
 }
 
 DEF(_vectorSetter,
-  "types.Vector.@setter()", "") {
+  "types.Vector._setter()", "") {
   const char* name; uint32_t length;
   if (!pkValidateSlotString(vm, 1, &name, &length)) return;
 
@@ -340,8 +340,8 @@ void registerModuleTypes(PKVM* vm) {
   "A simple vector type contains x, y, and z components.");
 
   ADD_METHOD(cls_vector, "_init", _vectorInit, -1);
-  ADD_METHOD(cls_vector, "@getter", _vectorGetter, 1);
-  ADD_METHOD(cls_vector, "@setter", _vectorSetter, 2);
+  ADD_METHOD(cls_vector, "_getter", _vectorGetter, 1);
+  ADD_METHOD(cls_vector, "_setter", _vectorSetter, 2);
   ADD_METHOD(cls_vector, "_repr", _vectorRepr, 0);
 
   pkReleaseHandle(vm, cls_vector);

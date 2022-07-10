@@ -288,7 +288,7 @@ void registerModuleTerm(PKVM* vm) {
   "The terminal event type, that'll be used at term.read_event function to "
   "fetch events.");
 
-  ADD_METHOD(_cls_term_event, "@getter", _termEventGetter, 1);
+  ADD_METHOD(_cls_term_event, "_getter", _termEventGetter, 1);
 
   pkModuleAddSource(vm, term, ext_term_pk);
 
