@@ -1,84 +1,468 @@
-
 import re
 
-test_vectors = [
-  [true, "\\d", "5", 1],
-  [true, "\\w+", "hej", 3],
-  [true, "\\s", "\t \n", 1],
-  [false, "\\S", "\t \n", 0],
-  [true, "[\\s]", "\t \n", 1],
-  [false, "[\\S]", "\t \n", 0],
-  [false, "\\D", "5", 0],
-  [false, "\\W+", "hej", 0],
-  [true, "[0-9]+", "12345", 5],
-  [true, "\\D", "hej", 1],
-  [false, "\\d", "hej", 0],
-  [true, "[^\\w]", "\\", 1],
-  [true, "[\\W]", "\\", 1],
-  [false, "[\\w]", "\\", 0],
-  [true, "[^\\d]", "d", 1],
-  [false, "[\\d]", "d", 0],
-  [false, "[^\\D]", "d", 0],
-  [true, "[\\D]", "d", 1],
-  [true, "^.*\\\\.*\$", "c:\\Tools", 8],
-  [true, "^[\\+-]*[\\d]+\$", "+27", 3],
-  [true, "[abc]", "1c2", 1],
-  [false, "[abc]", "1C2", 0],
-  [true, "[1-5]+", "0123456789", 5],
-  [true, "[.2]", "1C2", 1],
-  [true, "a*\$", "Xaa", 2],
-  [true, "a*\$", "Xaa", 2],
-  [true, "[a-h]+", "abcdefghxxx", 8],
-  [false, "[a-h]+", "ABCDEFGH", 0],
-  [true, "[A-H]+", "ABCDEFGH", 8],
-  [false, "[A-H]+", "abcdefgh", 0],
-  [true, "[^\\s]+", "abc def", 3],
-  [true, "[^fc]+", "abc def", 2],
-  [true, "[^d\\sf]+", "abc def", 3],
-  [true, "\n", "abc\ndef", 1],
-  [true, "b.\\s*\n", "aa\r\nbb\r\ncc\r\n\r\n",4],
-  [true, ".*c", "abcabc", 6],
-  [true, ".+c", "abcabc", 6],
-  [true, "[b-z].*", "ab", 1],
-  [true, "b[k-z]*", "ab", 1],
-  [false, "[0-9]", " - ", 0],
-  [true, "[^0-9]", " - ", 1],
-  [true, "0\\|", "0|", 2],
-  [false, "\\d\\d:\\d\\d:\\d\\d", "0s:00:00", 0],
-  [false, "\\d\\d:\\d\\d:\\d\\d", "000:00", 0],
-  [false, "\\d\\d:\\d\\d:\\d\\d", "00:0000", 0],
-  [false, "\\d\\d:\\d\\d:\\d\\d", "100:0:00", 0],
-  [false, "\\d\\d:\\d\\d:\\d\\d", "00:100:00", 0],
-  [false, "\\d\\d:\\d\\d:\\d\\d", "0:00:100", 0],
-  [true, "\\d\\d?:\\d\\d?:\\d\\d?", "0:0:0", 5],
-  [true, "\\d\\d?:\\d\\d?:\\d\\d?", "0:00:0", 6],
-  [true, "\\d\\d?:\\d\\d?:\\d\\d?", "0:0:00", 6],
-  [true, "\\d\\d?:\\d\\d?:\\d\\d?", "00:0:0", 6],
-  [true, "\\d\\d?:\\d\\d?:\\d\\d?", "00:00:0", 7],
-  [true, "\\d\\d?:\\d\\d?:\\d\\d?", "00:0:00", 7],
-  [true, "\\d\\d?:\\d\\d?:\\d\\d?", "0:00:00", 7],
-  [true, "\\d\\d?:\\d\\d?:\\d\\d?", "00:00:00", 8],
-  [true, "[Hh]ello [Ww]orld\\s*[!]?", "Hello world !", 13],
-  [true, "[Hh]ello [Ww]orld\\s*[!]?", "hello world !", 13],
-  [true, "[Hh]ello [Ww]orld\\s*[!]?", "Hello World !", 13],
-  [true, "[Hh]ello [Ww]orld\\s*[!]?", "Hello world! ", 12],
-  [true, "[Hh]ello [Ww]orld\\s*[!]?", "Hello world !", 13],
-  [true, "[Hh]ello [Ww]orld\\s*[!]?", "hello World !", 13],
-  [false, "\\d\\d?:\\d\\d?:\\d\\d?", "a:0", 0],
-  [true, "[^\\w][^-1-4]", ")T", 2],
-  [true, "[^\\w][^-1-4]", ")^", 2],
-  [true, "[^\\w][^-1-4]", "*)", 2],
-  [true, "[^\\w][^-1-4]", "!.", 2],
-  [true, "[^\\w][^-1-4]", " x", 2],
-  [true, "[^\\w][^-1-4]", "\$b", 2],
-  [true, ".?bar", "real_bar", 4],
-  [false, ".?bar", "real_foo", 0],
-  [false, "X?Y", "Z", 0],
-  [true, "[a-z]+\nbreak", "blahblah\nbreak", 14],
-  [true, "[a-z\\s]+\nbreak", "bla bla \nbreak", 14],
-]
-
-for vec in test_vectors
-  assert(re.test(vec[1], vec[2]) == vec[0])
-  if vec[0] then assert(re.match(vec[1], vec[2])[0].length == vec[3]) end
+def rerange(pattern, text, flag)
+  result = ""
+  for r in re.range(pattern, text, flag)
+    if r
+      result += "(${r.first},${r.last})"
+    else
+      result += "(?,?)"
+    end
+  end
+  while result.endswith("(?,?)")
+    result = result[0..-6]
+  end
+  return result
 end
+
+def check(pattern, text, result)
+  assert(rerange(pattern, text, 0) == result)
+end
+
+def checki(pattern, text, result)
+  assert(rerange(pattern, text, re.I) == result)
+end
+
+def test1
+  check('\\d', '5', '(0,1)')
+  check('\\w+', 'hej', '(0,3)')
+  check('\\s', '\t \n', '(0,1)')
+  check('\\S', '\t \n', '')
+  check('[\\s]', '\t \n', '(0,1)')
+  check('[\\S]', '\t \n', '')
+  check('\\D', '5', '')
+  check('\\W+', 'hej', '')
+  check('[0-9]+', '12345', '(0,5)')
+  check('\\D', 'hej', '(0,1)')
+  check('\\d', 'hej', '')
+  check('[^\\w]', '\\', '(0,1)')
+  check('[\\W]', '\\', '(0,1)')
+  check('[\\w]', '\\', '')
+  check('[^\\d]', 'd', '(0,1)')
+  check('[\\d]', 'd', '')
+  check('[^\\D]', 'd', '')
+  check('[\\D]', 'd', '(0,1)')
+  check('^.*\\\\.*\$', 'c:\\Tools', '(0,8)')
+  check('^[\\+-]*[\\d]+\$', '+27', '(0,3)')
+  check('[abc]', '1c2', '(1,2)')
+  check('[abc]', '1C2', '')
+  check('[1-5]+', '0123456789', '(1,6)')
+  check('[.2]', '1C2', '(2,3)')
+  check('a*\$', 'Xaa', '(1,3)')
+  check('a*\$', 'Xaa', '(1,3)')
+  check('[a-h]+', 'abcdefghxxx', '(0,8)')
+  check('[a-h]+', 'ABCDEFGH', '')
+  check('[A-H]+', 'ABCDEFGH', '(0,8)')
+  check('[A-H]+', 'abcdefgh', '')
+  check('[^\\s]+', 'abc def', '(0,3)')
+  check('[^fc]+', 'abc def', '(0,2)')
+  check('[^d\\sf]+', 'abc def', '(0,3)')
+  check('\n', 'abc\ndef', '(3,4)')
+  check('b.\\s*\n', 'aa\r\nbb\r\ncc\r\n\r\n', '(4,8)')
+  check('.*c', 'abcabc', '(0,6)')
+  check('.+c', 'abcabc', '(0,6)')
+  check('[b-z].*', 'ab', '(1,2)')
+  check('b[k-z]*', 'ab', '(1,2)')
+  check('[0-9]', ' - ', '')
+  check('[^0-9]', ' - ', '(0,1)')
+  check('0\\|', '0|', '(0,2)')
+  check('\\d\\d:\\d\\d:\\d\\d', '0s:00:00', '')
+  check('\\d\\d:\\d\\d:\\d\\d', '000:00', '')
+  check('\\d\\d:\\d\\d:\\d\\d', '00:0000', '')
+  check('\\d\\d:\\d\\d:\\d\\d', '100:0:00', '')
+  check('\\d\\d:\\d\\d:\\d\\d', '00:100:00', '')
+  check('\\d\\d:\\d\\d:\\d\\d', '0:00:100', '')
+  check('\\d\\d?:\\d\\d?:\\d\\d?', '0:0:0', '(0,5)')
+  check('\\d\\d?:\\d\\d?:\\d\\d?', '0:00:0', '(0,6)')
+  check('\\d\\d?:\\d\\d?:\\d\\d?', '0:0:00', '(0,6)')
+  check('\\d\\d?:\\d\\d?:\\d\\d?', '00:0:0', '(0,6)')
+  check('\\d\\d?:\\d\\d?:\\d\\d?', '00:00:0', '(0,7)')
+  check('\\d\\d?:\\d\\d?:\\d\\d?', '00:0:00', '(0,7)')
+  check('\\d\\d?:\\d\\d?:\\d\\d?', '0:00:00', '(0,7)')
+  check('\\d\\d?:\\d\\d?:\\d\\d?', '00:00:00', '(0,8)')
+  check('[Hh]ello [Ww]orld\\s*[!]?', 'Hello world !', '(0,13)')
+  check('[Hh]ello [Ww]orld\\s*[!]?', 'hello world !', '(0,13)')
+  check('[Hh]ello [Ww]orld\\s*[!]?', 'Hello World !', '(0,13)')
+  check('[Hh]ello [Ww]orld\\s*[!]?', 'Hello world! ', '(0,12)')
+  check('[Hh]ello [Ww]orld\\s*[!]?', 'Hello world !', '(0,13)')
+  check('[Hh]ello [Ww]orld\\s*[!]?', 'hello World !', '(0,13)')
+  check('\\d\\d?:\\d\\d?:\\d\\d?', 'a:0', '')
+  check('[^\\w][^-1-4]', ')T', '(0,2)')
+  check('[^\\w][^-1-4]', ')^', '(0,2)')
+  check('[^\\w][^-1-4]', '*)', '(0,2)')
+  check('[^\\w][^-1-4]', '!.', '(0,2)')
+  check('[^\\w][^-1-4]', ' x', '(0,2)')
+  check('[^\\w][^-1-4]', '\$b', '(0,2)')
+  check('.?bar', 'real_bar', '(4,8)')
+  check('.?bar', 'real_foo', '')
+  check('X?Y', 'Z', '')
+  check('[a-z]+\nbreak', 'blahblah\nbreak', '(0,14)')
+  check('[a-z\\s]+\nbreak', 'bla bla \nbreak', '(0,14)')
+end
+
+def test2
+  check('abracadabra\$', 'abracadabracadabra', '(7,18)')
+  check('a...b', 'abababbb', '(2,7)')
+  check('XXXXXX', '..XXXXXX', '(2,8)')
+  check('\\)', '()', '(1,2)')
+  check('a]', 'a]a', '(0,2)')
+  check('}', '}', '(0,1)')
+  check('\\}', '}', '(0,1)')
+  check('\\]', ']', '(0,1)')
+  check('\\[', '[', '(0,1)')
+  check(']', ']', '(0,1)')
+  check('\\{', '{', '(0,1)')
+  check('}', '}', '(0,1)')
+  check('^a', 'ax', '(0,1)')
+  check('\\^a', 'a^a', '(1,3)')
+  check('a\\^', 'a^', '(0,2)')
+  check('a\$', 'aa', '(1,2)')
+  check('a\\\$', 'a\$', '(0,2)')
+  check('^\$', '', '(0,0)')
+  check('\$^', '', '(0,0)')
+  check('a(\$)', 'aa', '(1,2)(2,2)')
+  check('a*(^a)', 'aa', '(0,1)(0,1)')
+  check('(..)*(...)*', 'a', '(0,0)')
+  check('(..)*(...)*', 'abcd', '(0,4)(2,4)')
+  check('(ab|a)(bc|c)', 'abc', '(0,3)(0,2)(2,3)')
+  check('(ab)c|abc', 'abc', '(0,3)(0,2)')
+  check('a{0}b', 'ab', '(1,2)')
+  check('(a*)(b?)(b+)b{3}', 'aaabbbbbbb', '(0,10)(0,3)(3,4)(4,7)')
+  check('(a*)(b{0,1})(b{1,})b{3}', 'aaabbbbbbb', '(0,10)(0,3)(3,4)(4,7)')
+  check('((a|a)|a)', 'a', '(0,1)(0,1)(0,1)')
+  check('(a*)(a|aa)', 'aaaa', '(0,4)(0,3)(3,4)')
+  check('a*(a.|aa)', 'aaaa', '(0,4)(2,4)')
+  check('a(b)|c(d)|a(e)f', 'aef', '(0,3)(?,?)(?,?)(1,2)')
+  check('(a|b)?.*', 'b', '(0,1)(0,1)')
+  check('(a|b)c|a(b|c)', 'ac', '(0,2)(0,1)')
+  check('(a|b)c|a(b|c)', 'ab', '(0,2)(?,?)(1,2)')
+  check('(a|b)*c|(a|ab)*c', 'abc', '(0,3)(1,2)')
+  check('(a|b)*c|(a|ab)*c', 'xc', '(1,2)')
+  check('(.a|.b).*|.*(.a|.b)', 'xa', '(0,2)(0,2)')
+  check('a?(ab|ba)ab', 'abab', '(0,4)(0,2)')
+  check('a?(ac{0}b|ba)ab', 'abab', '(0,4)(0,2)')
+  check('ab|abab', 'abbabab', '(0,2)')
+  check('aba|bab|bba', 'baaabbbaba', '(5,8)')
+  check('aba|bab', 'baaabbbaba', '(6,9)')
+  check('(aa|aaa)*|(a|aaaaa)', 'aa', '(0,2)(0,2)')
+  check('(a.|.a.)*|(a|.a...)', 'aa', '(0,2)(0,2)')
+  check('ab|a', 'xabc', '(1,3)')
+  check('ab|a', 'xxabc', '(2,4)')
+  checki('(Ab|cD)*', 'aBcD', '(0,4)(2,4)')
+  check('[^-]', '--a', '(2,3)')
+  check('[a-]*', '--a', '(0,3)')
+  check('[a-m-]*', '--amoma--', '(0,4)')
+  check(':::1:::0:|:::1:1:0:', ':::0:::1:::1:::0:', '(8,17)')
+  check(':::1:::0:|:::1:1:1:', ':::0:::1:::1:::0:', '(8,17)')
+  check('[[-]]', '[[-]]', '(2,4)')
+  check('\n', '\n', '(0,1)')
+  check('\n', '\n', '(0,1)')
+  check('[^a]', '\n', '(0,1)')
+  check('\na', '\na', '(0,2)')
+  check('(a)(b)(c)', 'abc', '(0,3)(0,1)(1,2)(2,3)')
+  check('xxx', 'xxx', '(0,3)')
+  check('a?(ab|ba)*', 'ababababababababababababababababababababababababababababababababababababababababa', '(0,81)(79,81)')
+  check('abaa|abbaa|abbbaa|abbbbaa', 'ababbabbbabbbabbbbabbbbaa', '(18,25)')
+  check('abaa|abbaa|abbbaa|abbbbaa', 'ababbabbbabbbabbbbabaa', '(18,22)')
+  check('aaac|aabc|abac|abbc|baac|babc|bbac|bbbc', 'baaabbbabac', '(7,11)')
+  check('.*', '\x01\x7f', '(0,2)')
+  check('aaaa|bbbb|cccc|ddddd|eeeeee|fffffff|gggg|hhhh|iiiii|jjjjj|kkkkk|llll', 'XaaaXbbbXcccXdddXeeeXfffXgggXhhhXiiiXjjjXkkkXlllXcbaXaaaa', '(53,57)')
+  check('aaaa\nbbbb\ncccc\nddddd\neeeeee\nfffffff\ngggg\nhhhh\niiiii\\nkkkkk\nllll', 'XaaaXbbbXcccXdddXeeeXfffXgggXhhhXiiiXjjjXkkkXlllXcbaXaaaa', '')
+  check('a*a*a*a*a*b', 'aaaaaaaaab', '(0,10)')
+  check('^', '', '(0,0)')
+  check('\$', '', '(0,0)')
+  check('^\$', '', '(0,0)')
+  check('^a\$', 'a', '(0,1)')
+  check('abc', 'abc', '(0,3)')
+  check('abc', 'xabcy', '(1,4)')
+  check('abc', 'ababc', '(2,5)')
+  check('ab*c', 'abc', '(0,3)')
+  check('ab*bc', 'abc', '(0,3)')
+  check('ab*bc', 'abbc', '(0,4)')
+  check('ab*bc', 'abbbbc', '(0,6)')
+  check('ab+bc', 'abbc', '(0,4)')
+  check('ab+bc', 'abbbbc', '(0,6)')
+  check('ab?bc', 'abbc', '(0,4)')
+  check('ab?bc', 'abc', '(0,3)')
+  check('ab?c', 'abc', '(0,3)')
+  check('^abc\$', 'abc', '(0,3)')
+  check('^abc', 'abcc', '(0,3)')
+  check('abc\$', 'aabc', '(1,4)')
+  check('^', 'abc', '(0,0)')
+  check('\$', 'abc', '(3,3)')
+  check('a.c', 'abc', '(0,3)')
+  check('a.c', 'axc', '(0,3)')
+  check('a.*c', 'axyzc', '(0,5)')
+  check('a[bc]d', 'abd', '(0,3)')
+  check('a[b-d]e', 'ace', '(0,3)')
+  check('a[b-d]', 'aac', '(1,3)')
+  check('a[-b]', 'a-', '(0,2)')
+  check('a[b-]', 'a-', '(0,2)')
+  check('a]', 'a]', '(0,2)')
+  check('a[\\]]b', 'a]b', '(0,3)')
+  check('a[^bc]d', 'aed', '(0,3)')
+  check('a[^-b]c', 'adc', '(0,3)')
+  check('a[^\\]b]c', 'adc', '(0,3)')
+  check('ab|cd', 'abc', '(0,2)')
+  check('ab|cd', 'abcd', '(0,2)')
+  check('a\\(b', 'a(b', '(0,3)')
+  check('a\\(*b', 'ab', '(0,2)')
+  check('a\\(*b', 'a((b', '(0,4)')
+  check('((a))', 'abc', '(0,1)(0,1)(0,1)')
+  check('(a)b(c)', 'abc', '(0,3)(0,1)(2,3)')
+  check('a+b+c', 'aabbabc', '(4,7)')
+  check('a*', 'aaa', '(0,3)')
+  check('(a*)*', '-', '(0,0)')
+  check('(a*)+', '-', '(0,0)(0,0)')
+  check('(a*|b)*', '-', '(0,0)')
+  check('(a*|b)*', '-', '(0,0)')
+  check('(a+|b)*', 'ab', '(0,2)(1,2)')
+  check('(a+|b)+', 'ab', '(0,2)(1,2)')
+  check('(a+|b)?', 'ab', '(0,1)(0,1)')
+  check('[^ab]*', 'cde', '(0,3)')
+  check('(^)*', '-', '(0,0)')
+  check('a*', '', '(0,0)')
+  check('([abc])*d', 'abbbcd', '(0,6)(4,5)')
+  check('([abc])*bcd', 'abcd', '(0,4)(0,1)')
+  check('a|b|c|d|e', 'e', '(0,1)')
+  check('(a|b|c|d|e)f', 'ef', '(0,2)(0,1)')
+  check('((a*|b))*', '-', '(0,0)')
+  check('abcd*efg', 'abcdefg', '(0,7)')
+  check('ab*', 'xabyabbbz', '(1,3)')
+  check('ab*', 'xayabbbz', '(1,2)')
+  check('(ab|cd)e', 'abcde', '(2,5)(2,4)')
+  check('[abhgefdc]ij', 'hij', '(0,3)')
+  check('(a|b)c*d', 'abcd', '(1,4)(1,2)')
+  check('(ab|ab*)bc', 'abc', '(0,3)(0,1)')
+  check('a([bc]*)c*', 'abc', '(0,3)(1,3)')
+  check('a([bc]*)(c*d)', 'abcd', '(0,4)(1,3)(3,4)')
+  check('a([bc]+)(c*d)', 'abcd', '(0,4)(1,3)(3,4)')
+  check('a([bc]*)(c+d)', 'abcd', '(0,4)(1,2)(2,4)')
+  check('a[bcd]*dcdcde', 'adcdcde', '(0,7)')
+  check('(ab|a)b*c', 'abc', '(0,3)(0,2)')
+  check('((a)(b)c)(d)', 'abcd', '(0,4)(0,3)(0,1)(1,2)(3,4)')
+  check('[A-Za-z_][A-Za-z0-9_]*', 'alpha', '(0,5)')
+  check('^a(bc+|b[eh])g|.h\$', 'abh', '(1,3)')
+  check('(bc+d\$|ef*g.|h?i(j|k))', 'effgz', '(0,5)(0,5)')
+  check('(bc+d\$|ef*g.|h?i(j|k))', 'ij', '(0,2)(0,2)(1,2)')
+  check('(bc+d\$|ef*g.|h?i(j|k))', 'reffgz', '(1,6)(1,6)')
+  check('(((((((((a)))))))))', 'a', '(0,1)(0,1)(0,1)(0,1)(0,1)(0,1)(0,1)(0,1)(0,1)(0,1)')
+  check('multiple words', 'multiple words yeah', '(0,14)')
+  check('(.*)c(.*)', 'abcde', '(0,5)(0,2)(3,5)')
+  check('abcd', 'abcd', '(0,4)')
+  check('a(bc)d', 'abcd', '(0,4)(1,3)')
+  check('a[-]?c', 'ac', '(0,3)')
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Muammar Qaddafi", "(0,15)(?,?)(10,12)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Mo'ammar Gadhafi", "(0,16)(?,?)(11,13)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Muammar Kaddafi", "(0,15)(?,?)(10,12)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Muammar Qadhafi", "(0,15)(?,?)(10,12)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Muammar Gadafi", "(0,14)(?,?)(10,11)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Mu'ammar Qadafi", "(0,15)(?,?)(11,12)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Moamar Gaddafi", "(0,14)(?,?)(9,11)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Mu'ammar Qadhdhafi", "(0,18)(?,?)(13,15)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Muammar Khaddafi", "(0,16)(?,?)(11,13)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Muammar Ghaddafy", "(0,16)(?,?)(11,13)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Muammar Ghadafi", "(0,15)(?,?)(11,12)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Muammar Ghaddafi", "(0,16)(?,?)(11,13)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Muamar Kaddafi", "(0,14)(?,?)(9,11)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Muammar Quathafi", "(0,16)(?,?)(11,13)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Muammar Gheddafi", "(0,16)(?,?)(11,13)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Moammar Khadafy", "(0,15)(?,?)(11,12)")
+  check("M[ou]'?am+[ae]r .*([AEae]l[- ])?[GKQ]h?[aeu]+([dtz][dhz]?)+af[iy]", "Moammar Qudhafi", "(0,15)(?,?)(10,12)")
+  check('a+(b|c)*d+', 'aabcdd', '(0,6)(3,4)')
+  check('^.+\$', 'vivi', '(0,4)')
+  check('^(.+)\$', 'vivi', '(0,4)(0,4)')
+  check('^([^!.]+).att.com!(.+)\$', 'gryphon.att.com!eby', '(0,19)(0,7)(16,19)')
+  check('^([^!]+!)?([^!]+)\$', 'bas', '(0,3)(?,?)(0,3)')
+  check('^([^!]+!)?([^!]+)\$', 'bar!bas', '(0,7)(0,4)(4,7)')
+  check('^([^!]+!)?([^!]+)\$', 'foo!bas', '(0,7)(0,4)(4,7)')
+  check('^.+!([^!]+!)([^!]+)\$', 'foo!bar!bas', '(0,11)(4,8)(8,11)')
+  check('((foo)|(bar))!bas', 'bar!bas', '(0,7)(0,3)(?,?)(0,3)')
+  check('((foo)|(bar))!bas', 'foo!bar!bas', '(4,11)(4,7)(?,?)(4,7)')
+  check('((foo)|(bar))!bas', 'foo!bas', '(0,7)(0,3)(0,3)')
+  check('((foo)|bar)!bas', 'bar!bas', '(0,7)(0,3)')
+  check('((foo)|bar)!bas', 'foo!bar!bas', '(4,11)(4,7)')
+  check('((foo)|bar)!bas', 'foo!bas', '(0,7)(0,3)(0,3)')
+  check('(foo|(bar))!bas', 'bar!bas', '(0,7)(0,3)(0,3)')
+  check('(foo|(bar))!bas', 'foo!bar!bas', '(4,11)(4,7)(4,7)')
+  check('(foo|(bar))!bas', 'foo!bas', '(0,7)(0,3)')
+  check('(foo|bar)!bas', 'bar!bas', '(0,7)(0,3)')
+  check('(foo|bar)!bas', 'foo!bar!bas', '(4,11)(4,7)')
+  check('(foo|bar)!bas', 'foo!bas', '(0,7)(0,3)')
+  check('^(([^!]+!)?([^!]+)|.+!([^!]+!)([^!]+))\$', 'foo!bar!bas', '(0,11)(0,11)(?,?)(?,?)(4,8)(8,11)')
+  check('^([^!]+!)?([^!]+)\$|^.+!([^!]+!)([^!]+)\$', 'bas', '(0,3)(?,?)(0,3)')
+  check('^([^!]+!)?([^!]+)\$|^.+!([^!]+!)([^!]+)\$', 'bar!bas', '(0,7)(0,4)(4,7)')
+  check('^([^!]+!)?([^!]+)\$|^.+!([^!]+!)([^!]+)\$', 'foo!bar!bas', '(0,11)(?,?)(?,?)(4,8)(8,11)')
+  check('^([^!]+!)?([^!]+)\$|^.+!([^!]+!)([^!]+)\$', 'foo!bas', '(0,7)(0,4)(4,7)')
+  check('^(([^!]+!)?([^!]+)|.+!([^!]+!)([^!]+))\$', 'bas', '(0,3)(0,3)(?,?)(0,3)')
+  check('^(([^!]+!)?([^!]+)|.+!([^!]+!)([^!]+))\$', 'bar!bas', '(0,7)(0,7)(0,4)(4,7)')
+  check('^(([^!]+!)?([^!]+)|.+!([^!]+!)([^!]+))\$', 'foo!bar!bas', '(0,11)(0,11)(?,?)(?,?)(4,8)(8,11)')
+  check('^(([^!]+!)?([^!]+)|.+!([^!]+!)([^!]+))\$', 'foo!bas', '(0,7)(0,7)(0,4)(4,7)')
+  check('.*(/XXX).*', '/XXX', '(0,4)(0,4)')
+  check('.*(\\\\XXX).*', '\\XXX', '(0,4)(0,4)')
+  check('\\\\XXX', '\\XXX', '(0,4)')
+  check('.*(/000).*', '/000', '(0,4)(0,4)')
+  check('.*(\\\\000).*', '\\000', '(0,4)(0,4)')
+  check('\\\\000', '\\000', '(0,4)')
+end
+
+def test3
+  check('(a*)*', 'a', '(0,1)(0,1)')
+  check('(a*)*', 'x', '(0,0)')
+  check('(a*)*', 'aaaaaa', '(0,6)(0,6)')
+  check('(a*)*', 'aaaaaax', '(0,6)(0,6)')
+  check('(a*)+', 'a', '(0,1)(0,1)')
+  check('(a*)+', 'x', '(0,0)(0,0)')
+  check('(a*)+', 'aaaaaa', '(0,6)(0,6)')
+  check('(a*)+', 'aaaaaax', '(0,6)(0,6)')
+  check('(a+)*', 'a', '(0,1)(0,1)')
+  check('(a+)*', 'x', '(0,0)')
+  check('(a+)*', 'aaaaaa', '(0,6)(0,6)')
+  check('(a+)*', 'aaaaaax', '(0,6)(0,6)')
+  check('(a+)+', 'a', '(0,1)(0,1)')
+  check('(a+)+', 'x', '')
+  check('(a+)+', 'aaaaaa', '(0,6)(0,6)')
+  check('(a+)+', 'aaaaaax', '(0,6)(0,6)')
+  check('([a]*)*', 'a', '(0,1)(0,1)')
+  check('([a]*)*', 'x', '(0,0)')
+  check('([a]*)*', 'aaaaaa', '(0,6)(0,6)')
+  check('([a]*)*', 'aaaaaax', '(0,6)(0,6)')
+  check('([a]*)+', 'a', '(0,1)(0,1)')
+  check('([a]*)+', 'x', '(0,0)(0,0)')
+  check('([a]*)+', 'aaaaaa', '(0,6)(0,6)')
+  check('([a]*)+', 'aaaaaax', '(0,6)(0,6)')
+  check('([^b]*)*', 'a', '(0,1)(0,1)')
+  check('([^b]*)*', 'b', '(0,0)')
+  check('([^b]*)*', 'aaaaaa', '(0,6)(0,6)')
+  check('([^b]*)*', 'aaaaaab', '(0,6)(0,6)')
+  check('([ab]*)*', 'a', '(0,1)(0,1)')
+  check('([ab]*)*', 'aaaaaa', '(0,6)(0,6)')
+  check('([ab]*)*', 'ababab', '(0,6)(0,6)')
+  check('([ab]*)*', 'bababa', '(0,6)(0,6)')
+  check('([ab]*)*', 'b', '(0,1)(0,1)')
+  check('([ab]*)*', 'bbbbbb', '(0,6)(0,6)')
+  check('([ab]*)*', 'aaaabcde', '(0,5)(0,5)')
+  check('([^a]*)*', 'b', '(0,1)(0,1)')
+  check('([^a]*)*', 'bbbbbb', '(0,6)(0,6)')
+  check('([^a]*)*', 'aaaaaa', '(0,0)')
+  check('([^ab]*)*', 'ccccxx', '(0,6)(0,6)')
+  check('([^ab]*)*', 'ababab', '(0,0)')
+  check('((?:z)+|a)*', 'zabcde', '(0,2)(1,2)')
+  check('a+?', 'aaaaaa', '(0,1)')
+  check('(a)', 'aaa', '(0,1)(0,1)')
+  check('(a*?)', 'aaa', '(0,0)(0,0)')
+  check('(a)*?', 'aaa', '(0,0)')
+  check('(a*?)*?', 'aaa', '(0,0)')
+  check('(a*)*(x)', 'x', '(0,1)(?,?)(0,1)')
+  check('(a*)*(x)', 'ax', '(0,2)(0,1)(1,2)')
+  check('(a*)*(x)', 'axa', '(0,2)(0,1)(1,2)')
+  check('(a*)*(x)', 'x', '(0,1)(?,?)(0,1)')
+  check('(a*)*(x)', 'ax', '(0,2)(0,1)(1,2)')
+  check('(a*)*(x)', 'axa', '(0,2)(0,1)(1,2)')
+  check('(a*)+(x)', 'x', '(0,1)(0,0)(0,1)')
+  check('(a*)+(x)', 'ax', '(0,2)(0,1)(1,2)')
+  check('(a*)+(x)', 'axa', '(0,2)(0,1)(1,2)')
+  check('(a*){2}(x)', 'x', '(0,1)(0,0)(0,1)')
+  check('(a*){2}(x)', 'ax', '(0,2)(1,1)(1,2)')
+  check('(a*){2}(x)', 'axa', '(0,2)(1,1)(1,2)')
+end
+
+def test4
+  check('((..)|(.))', '', '')
+  check('((..)|(.))((..)|(.))', '', '')
+  check('((..)|(.))((..)|(.))((..)|(.))', '', '')
+  check('((..)|(.)){1}', '', '')
+  check('((..)|(.)){2}', '', '')
+  check('((..)|(.)){3}', '', '')
+  check('((..)|(.))*', '', '(0,0)')
+  check('((..)|(.))', 'a', '(0,1)(0,1)(?,?)(0,1)')
+  check('((..)|(.))((..)|(.))', 'a', '')
+  check('((..)|(.))((..)|(.))((..)|(.))', 'a', '')
+  check('((..)|(.)){1}', 'a', '(0,1)(0,1)(?,?)(0,1)')
+  check('((..)|(.)){2}', 'a', '')
+  check('((..)|(.)){3}', 'a', '')
+  check('((..)|(.))*', 'a', '(0,1)(0,1)(?,?)(0,1)')
+  check('((..)|(.))', 'aa', '(0,2)(0,2)(0,2)')
+  check('((..)|(.))((..)|(.))', 'aa', '(0,2)(0,1)(?,?)(0,1)(1,2)(?,?)(1,2)')
+  check('((..)|(.))((..)|(.))((..)|(.))', 'aa', '')
+  check('((..)|(.)){1}', 'aa', '(0,2)(0,2)(0,2)')
+  check('((..)|(.)){2}', 'aa', '(0,2)(1,2)(?,?)(1,2)')
+  check('((..)|(.)){3}', 'aa', '')
+  check('((..)|(.))*', 'aa', '(0,2)(0,2)(0,2)')
+  check('((..)|(.))', 'aaa', '(0,2)(0,2)(0,2)')
+  check('((..)|(.))((..)|(.))', 'aaa', '(0,3)(0,2)(0,2)(?,?)(2,3)(?,?)(2,3)')
+  check('((..)|(.))((..)|(.))((..)|(.))', 'aaa', '(0,3)(0,1)(?,?)(0,1)(1,2)(?,?)(1,2)(2,3)(?,?)(2,3)')
+  check('((..)|(.)){1}', 'aaa', '(0,2)(0,2)(0,2)')
+  check('((..)|(.)){2}', 'aaa', '(0,3)(2,3)(0,2)(2,3)')
+  check('((..)|(.)){3}', 'aaa', '(0,3)(2,3)(?,?)(2,3)')
+  check('((..)|(.))*', 'aaa', '(0,3)(2,3)(0,2)(2,3)')
+  check('((..)|(.))', 'aaaa', '(0,2)(0,2)(0,2)')
+  check('((..)|(.))((..)|(.))', 'aaaa', '(0,4)(0,2)(0,2)(?,?)(2,4)(2,4)')
+  check('((..)|(.))((..)|(.))((..)|(.))', 'aaaa', '(0,4)(0,2)(0,2)(?,?)(2,3)(?,?)(2,3)(3,4)(?,?)(3,4)')
+  check('((..)|(.)){1}', 'aaaa', '(0,2)(0,2)(0,2)')
+  check('((..)|(.)){2}', 'aaaa', '(0,4)(2,4)(2,4)')
+  check('((..)|(.)){3}', 'aaaa', '(0,4)(3,4)(0,2)(3,4)')
+  check('((..)|(.))*', 'aaaa', '(0,4)(2,4)(2,4)')
+  check('((..)|(.))', 'aaaaa', '(0,2)(0,2)(0,2)')
+  check('((..)|(.))((..)|(.))', 'aaaaa', '(0,4)(0,2)(0,2)(?,?)(2,4)(2,4)')
+  check('((..)|(.))((..)|(.))((..)|(.))', 'aaaaa', '(0,5)(0,2)(0,2)(?,?)(2,4)(2,4)(?,?)(4,5)(?,?)(4,5)')
+  check('((..)|(.)){1}', 'aaaaa', '(0,2)(0,2)(0,2)')
+  check('((..)|(.)){2}', 'aaaaa', '(0,4)(2,4)(2,4)')
+  check('((..)|(.)){3}', 'aaaaa', '(0,5)(4,5)(2,4)(4,5)')
+  check('((..)|(.))*', 'aaaaa', '(0,5)(4,5)(2,4)(4,5)')
+  check('((..)|(.))', 'aaaaaa', '(0,2)(0,2)(0,2)')
+  check('((..)|(.))((..)|(.))', 'aaaaaa', '(0,4)(0,2)(0,2)(?,?)(2,4)(2,4)')
+  check('((..)|(.))((..)|(.))((..)|(.))', 'aaaaaa', '(0,6)(0,2)(0,2)(?,?)(2,4)(2,4)(?,?)(4,6)(4,6)')
+  check('((..)|(.)){1}', 'aaaaaa', '(0,2)(0,2)(0,2)')
+  check('((..)|(.)){2}', 'aaaaaa', '(0,4)(2,4)(2,4)')
+  check('((..)|(.)){3}', 'aaaaaa', '(0,6)(4,6)(4,6)')
+  check('((..)|(.))*', 'aaaaaa', '(0,6)(4,6)(4,6)')
+  check('X(.?){0,}Y', 'X1234567Y', '(0,9)(7,8)')
+  check('X(.?){1,}Y', 'X1234567Y', '(0,9)(7,8)')
+  # check('X(.?){2,}Y', 'X1234567Y', '(0,9)(7,8)')
+  # check('X(.?){3,}Y', 'X1234567Y', '(0,9)(7,8)')
+  # check('X(.?){4,}Y', 'X1234567Y', '(0,9)(7,8)')
+  # check('X(.?){5,}Y', 'X1234567Y', '(0,9)(7,8)')
+  # check('X(.?){6,}Y', 'X1234567Y', '(0,9)(7,8)')
+  # check('X(.?){7,}Y', 'X1234567Y', '(0,9)(7,8)')
+  # check('X(.?){8,}Y', 'X1234567Y', '(0,9)(8,8)')
+  check('X(.?){0,8}Y', 'X1234567Y', '(0,9)(8,8)')
+  check('X(.?){1,8}Y', 'X1234567Y', '(0,9)(8,8)')
+  check('X(.?){2,8}Y', 'X1234567Y', '(0,9)(8,8)')
+  check('X(.?){3,8}Y', 'X1234567Y', '(0,9)(8,8)')
+  check('X(.?){4,8}Y', 'X1234567Y', '(0,9)(8,8)')
+  check('X(.?){5,8}Y', 'X1234567Y', '(0,9)(8,8)')
+  check('X(.?){6,8}Y', 'X1234567Y', '(0,9)(8,8)')
+  check('X(.?){7,8}Y', 'X1234567Y', '(0,9)(8,8)')
+  check('X(.?){8,8}Y', 'X1234567Y', '(0,9)(8,8)')
+  check('(a|ab|c|bcd){0,}(d*)', 'ababcd', '(0,1)(0,1)(1,1)')
+  check('(a|ab|c|bcd){1,}(d*)', 'ababcd', '(0,1)(0,1)(1,1)')
+  check('(a|ab|c|bcd){2,}(d*)', 'ababcd', '(0,6)(3,6)(6,6)')
+  check('(a|ab|c|bcd){3,}(d*)', 'ababcd', '(0,6)(3,6)(6,6)')
+  check('(a|ab|c|bcd){4,}(d*)', 'ababcd', '')
+  check('(a|ab|c|bcd){0,10}(d*)', 'ababcd', '(0,1)(0,1)(1,1)')
+  check('(a|ab|c|bcd){1,10}(d*)', 'ababcd', '(0,1)(0,1)(1,1)')
+  check('(a|ab|c|bcd){2,10}(d*)', 'ababcd', '(0,6)(3,6)(6,6)')
+  check('(a|ab|c|bcd){3,10}(d*)', 'ababcd', '(0,6)(3,6)(6,6)')
+  check('(a|ab|c|bcd){4,10}(d*)', 'ababcd', '')
+  check('(a|ab|c|bcd)*(d*)', 'ababcd', '(0,1)(0,1)(1,1)')
+  check('(a|ab|c|bcd)+(d*)', 'ababcd', '(0,1)(0,1)(1,1)')
+  check('(ab|a|c|bcd){0,}(d*)', 'ababcd', '(0,6)(4,5)(5,6)')
+  check('(ab|a|c|bcd){1,}(d*)', 'ababcd', '(0,6)(4,5)(5,6)')
+  check('(ab|a|c|bcd){2,}(d*)', 'ababcd', '(0,6)(4,5)(5,6)')
+  check('(ab|a|c|bcd){3,}(d*)', 'ababcd', '(0,6)(4,5)(5,6)')
+  check('(ab|a|c|bcd){4,}(d*)', 'ababcd', '')
+  check('(ab|a|c|bcd){0,10}(d*)', 'ababcd', '(0,6)(4,5)(5,6)')
+  check('(ab|a|c|bcd){1,10}(d*)', 'ababcd', '(0,6)(4,5)(5,6)')
+  check('(ab|a|c|bcd){2,10}(d*)', 'ababcd', '(0,6)(4,5)(5,6)')
+  check('(ab|a|c|bcd){3,10}(d*)', 'ababcd', '(0,6)(4,5)(5,6)')
+  check('(ab|a|c|bcd){4,10}(d*)', 'ababcd', '')
+  check('(ab|a|c|bcd)*(d*)', 'ababcd', '(0,6)(4,5)(5,6)')
+  check('(ab|a|c|bcd)+(d*)', 'ababcd', '(0,6)(4,5)(5,6)')
+end
+
+test1()
+test2()
+test3()
+test4()
+print('All TESTS PASSED')
