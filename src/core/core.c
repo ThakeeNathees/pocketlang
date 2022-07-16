@@ -2488,3 +2488,93 @@ void varsetSubscript(PKVM* vm, Var on, Var key, Var value) {
                varTypeName(on)));
   return;
 }
+
+bool varIterate(PKVM* vm, Var seq, Var* iterator, Var* value) {
+  Object* obj = AS_OBJ(seq);
+  switch (obj->type) {
+    case OBJ_STRING: {
+      if (IS_NULL(*iterator)) *iterator = VAR_NUM((double) 0);
+      uint32_t iter = (uint32_t) AS_NUM(*iterator);
+
+      // TODO: Need to consider utf8.
+      String* str = ((String*)obj);
+      if (iter >= str->length) return false;
+
+      // TODO: vm's char (and reusable) strings.
+      *value = VAR_OBJ(newStringLength(vm, str->data + iter, 1));
+      *iterator = VAR_NUM((double)iter + 1);
+      return true;
+    }
+
+    case OBJ_LIST: {
+      if (IS_NULL(*iterator)) *iterator = VAR_NUM((double) 0);
+      uint32_t iter = (uint32_t) AS_NUM(*iterator);
+
+      pkVarBuffer* elems = &((List*)obj)->elements;
+      if (iter >= elems->count) return false;
+      *value = elems->data[iter];
+      *iterator = VAR_NUM((double)iter + 1);
+      return true;
+    }
+
+    case OBJ_MAP: {
+      if (IS_NULL(*iterator)) *iterator = VAR_NUM((double) 0);
+      uint32_t iter = (uint32_t) AS_NUM(*iterator);
+
+      Map* map = (Map*)obj;
+      if (map->entries == NULL) return false;
+      MapEntry* e = map->entries + iter;
+      for (; iter < map->capacity; iter++, e++) {
+        if (!IS_UNDEF(e->key)) break;
+      }
+      if (iter >= map->capacity) return false;
+
+      *value = map->entries[iter].key;
+      *iterator = VAR_NUM((double)iter + 1);
+      return true;
+    }
+
+    case OBJ_RANGE: {
+      if (IS_NULL(*iterator)) *iterator = VAR_NUM((double) 0);
+      double iter = AS_NUM(*iterator);
+      double from = ((Range*)obj)->from;
+      double to = ((Range*)obj)->to;
+      if (from == to) return false;
+
+      double current;
+      if (from <= to) { //< Straight range.
+        current = from + iter;
+      } else {          //< Reversed range.
+        current = from - iter;
+      }
+      if (current == to) return false;
+      *value = VAR_NUM(current);
+      *iterator = VAR_NUM(iter + 1);
+      return true;
+    }
+
+    case OBJ_INST: {
+      for(;;) {
+        if (!_callBinaryOpMethod(vm, seq, *iterator, "iterate", iterator)) break;
+        if (IS_NULL(*iterator)) return false;
+
+        if (!_callBinaryOpMethod(vm, seq, *iterator, "iteratorValue", value)) break;
+        return true;
+      }
+      goto _default;
+    }
+
+    case OBJ_FIBER:
+    case OBJ_CLOSURE:
+    case OBJ_MODULE:
+    case OBJ_FUNC:
+    case OBJ_METHOD_BIND:
+    case OBJ_UPVALUE:
+    case OBJ_CLASS:
+
+    default:
+    _default:
+      VM_SET_ERROR(vm, stringFormat(vm, "$ is not iterable.", varTypeName(seq)));
+  }
+  return false;
+}

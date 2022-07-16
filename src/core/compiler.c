@@ -3187,10 +3187,9 @@ static void compileForStatement(Compiler* compiler) {
   compileExpression(compiler);
   compiler->can_define = can_define;
 
-  // Add iterator to locals. It's an increasing integer indicating that the
-  // current loop is nth starting from 0.
+  // Add iterator to locals and initialize it to null.
   compilerAddVariable(compiler, "@iterator", 9, iter_line); // Iterator.
-  emitOpcode(compiler, OP_PUSH_0);
+  emitOpcode(compiler, OP_PUSH_NULL);
 
   // Add the iteration value. It'll be updated to each element in an array of
   // each character in a string etc.

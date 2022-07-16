@@ -149,4 +149,8 @@ Var varGetSubscript(PKVM* vm, Var on, Var key);
 // Set subscript [value] with the [key] (ie. on[key] = value).
 void varsetSubscript(PKVM* vm, Var on, Var key, Var value);
 
+// Iterate over [seq] store as [value], [iterator] start with null.
+// Returns ture to continue loop, false to break.
+bool varIterate(PKVM* vm, Var seq, Var* iterator, Var* value);
+
 #endif // PK_CORE_H
