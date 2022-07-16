@@ -18,6 +18,7 @@
 #define LITS__init      "_init"
 #define LITS__str       "_str"
 #define LITS__repr      "_repr"
+#define LITS__call      "_call"
 
 // Functions, methods, classes and  other names which are intrenal / special to
 // pocketlang are starts with the following character (ex: @main, @literalFn).

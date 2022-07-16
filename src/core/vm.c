@@ -1272,9 +1272,24 @@ L_do_call:
         }
 
       } else {
-        RUNTIME_ERROR(stringFormat(vm, "$ '$'.", "Expected a callable to "
-                      "call, instead got",
-                      varTypeName(callable)));
+        bool error = true;
+
+        // try to call a "callable instance" via "_call".
+        if (IS_OBJ_TYPE(callable, OBJ_INST)) {
+          String* name = newString(vm, LITS__call);
+          vmPushTempRef(vm, &name->_super); // name.
+          if (hasMethod(vm, callable, name, (Closure**) &closure)) {
+            fiber->self = callable;
+            error = false;
+          }
+          vmPopTempRef(vm); // name.
+        }
+
+        if (error) {
+          RUNTIME_ERROR(stringFormat(vm, "$ '$'.", "Expected a callable to "
+                        "call, instead got",
+                        varTypeName(callable)));
+        }
       }
 
       // If we reached here it's a valid callable.
