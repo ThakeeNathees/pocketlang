@@ -132,6 +132,9 @@ struct PKVM {
 
   // Current fiber.
   Fiber* fiber;
+
+  // The fiber that error occured.
+  Fiber* perpetrator;
 };
 
 // A realloc() function wrapper which handles memory allocations of the VM.
