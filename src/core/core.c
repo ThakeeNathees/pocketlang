@@ -2555,10 +2555,10 @@ bool varIterate(PKVM* vm, Var seq, Var* iterator, Var* value) {
 
     case OBJ_INST: {
       for(;;) {
-        if (!_callBinaryOpMethod(vm, seq, *iterator, "iterate", iterator)) break;
+        if (!_callBinaryOpMethod(vm, seq, *iterator, LITS__next, iterator)) break;
         if (IS_NULL(*iterator)) return false;
 
-        if (!_callBinaryOpMethod(vm, seq, *iterator, "iteratorValue", value)) break;
+        if (!_callBinaryOpMethod(vm, seq, *iterator, LITS__value, value)) break;
         return true;
       }
       goto _default;
