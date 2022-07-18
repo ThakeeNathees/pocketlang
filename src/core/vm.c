@@ -1280,12 +1280,10 @@ L_do_call:
       // If we reached here it's a valid callable.
       ASSERT(closure != NULL, OOPS);
 
-      // -1 argument means multiple number of args.
-      if (closure->fn->arity != -1 && closure->fn->arity != argc) {
-        char buff[STR_INT_BUFF_SIZE]; sprintf(buff, "%d", closure->fn->arity);
-        String* msg = stringFormat(vm, "Expected exactly $ argument(s) "
-                                  "for function $", buff, closure->fn->name);
-        RUNTIME_ERROR(msg);
+      // Like lua: Extra arguments are thrown away; extra parameters get null.
+      while (closure->fn->arity != -1 && closure->fn->arity > argc) {
+        PUSH(VAR_NULL);
+        argc++;
       }
 
       if (closure->fn->is_native) {
