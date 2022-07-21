@@ -1281,9 +1281,14 @@ L_do_call:
       ASSERT(closure != NULL, OOPS);
 
       // Like lua: Extra arguments are thrown away; extra parameters get null.
-      while (closure->fn->arity != -1 && closure->fn->arity > argc) {
-        PUSH(VAR_NULL);
-        argc++;
+      if (closure->fn->arity != -1) {
+        if (argc > closure->fn->arity) { // adjust stack
+          fiber->sp -= argc - closure->fn->arity;
+        }
+        while (closure->fn->arity > argc) {
+          PUSH(VAR_NULL);
+          argc++;
+        }
       }
 
       if (closure->fn->is_native) {
