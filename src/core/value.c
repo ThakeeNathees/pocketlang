@@ -553,10 +553,13 @@ Instance* newInstance(PKVM* vm, Class* cls) {
   vmPushTempRef(vm, &inst->_super); // inst.
 
   inst->cls = cls;
-  if (cls->new_fn != NULL) {
-    inst->native = cls->new_fn(vm);
-  } else {
-    inst->native = NULL;
+  inst->native = NULL;
+  while (cls != NULL) {
+    if (cls->new_fn != NULL) {
+      inst->native = cls->new_fn(vm);
+      break;
+    }
+    cls = cls->super_class;
   }
 
   inst->attribs = newMap(vm);
