@@ -2838,11 +2838,26 @@ static void compileFunction(Compiler* compiler, FuncType fn_type) {
                       "Multiple definition of a parameter.");
       }
 
-      compilerAddVariable(compiler, param_name, param_len,
+      int index = compilerAddVariable(compiler, param_name, param_len,
                           compiler->parser.previous.line);
+
+      // parameter with default value
+      // def foo(a=expr) compile into: if (a != null) then a = expr end
+      if (match(compiler, TK_EQ)) {
+        emitPushValue(compiler, NAME_LOCAL_VAR, index);
+        emitOpcode(compiler, OP_PUSH_NULL);
+        emitOpcode(compiler, OP_EQEQ);
+        emitOpcode(compiler, OP_JUMP_IF_NOT);
+        int ifpatch = emitShort(compiler, 0xffff); //< Will be patched.
+        compileExpression(compiler);
+        emitStoreValue(compiler, NAME_LOCAL_VAR, index);
+        emitOpcode(compiler, OP_POP);
+        patchJump(compiler, ifpatch);
+      }
 
     } while (match(compiler, TK_COMMA));
 
+    skipNewLines(compiler); // \n is allowed both after '(' and before ')'.
     consume(compiler, TK_RPARAN, "Expected ')' after parameter list.");
   }
 
