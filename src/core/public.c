@@ -839,7 +839,7 @@ bool pkSetAttribute(PKVM* vm, int instance, const char* name, int value) {
 
   String* sname = newString(vm, name);
   vmPushTempRef(vm, &sname->_super); // sname.
-  varSetAttrib(vm, SLOT(instance), sname, SLOT(value), false);
+  varSetAttrib(vm, SLOT(instance), sname, SLOT(value), true);
   vmPopTempRef(vm); // sname.
 
   return !VM_HAS_ERROR(vm);
@@ -854,7 +854,7 @@ bool pkGetAttribute(PKVM* vm, int instance, const char* name,
 
   String* sname = newString(vm, name);
   vmPushTempRef(vm, &sname->_super); // sname.
-  SET_SLOT(index, varGetAttrib(vm, SLOT(instance), sname, false));
+  SET_SLOT(index, varGetAttrib(vm, SLOT(instance), sname, true));
   vmPopTempRef(vm); // sname.
 
   return !VM_HAS_ERROR(vm);
