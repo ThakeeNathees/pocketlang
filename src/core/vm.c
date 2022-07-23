@@ -178,11 +178,14 @@ bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var* argv) {
   ASSERT(fiber->closure->fn->arity >= -1,
          OOPS " (Forget to initialize arity.)");
 
-  if ((fiber->closure->fn->arity != -1) && argc != fiber->closure->fn->arity) {
-    char buff[STR_INT_BUFF_SIZE];
-    sprintf(buff, "%d", fiber->closure->fn->arity);
-    _ERR_FAIL(stringFormat(vm, "Expected exactly $ argument(s) for "
-                           "function $.", buff, fiber->closure->fn->name));
+  // Like lua: Extra arguments are thrown away; extra parameters get null.
+  int nulls = 0;
+  if (fiber->closure->fn->arity != -1) {
+    if (argc > fiber->closure->fn->arity) {
+      argc = fiber->closure->fn->arity;
+    } else {
+      nulls = fiber->closure->fn->arity - argc;
+    }
   }
 
   if (fiber->state != FIBER_NEW) {
@@ -202,8 +205,8 @@ bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var* argv) {
   ASSERT(fiber->stack != NULL && fiber->sp == fiber->stack + 1, OOPS);
   ASSERT(fiber->ret == fiber->stack, OOPS);
 
-  vmEnsureStackSize(vm, fiber, (int) (fiber->sp - fiber->stack) + argc);
-  ASSERT((fiber->stack + fiber->stack_size) - fiber->sp >= argc, OOPS);
+  vmEnsureStackSize(vm, fiber, (int)(fiber->sp - fiber->stack) + argc + nulls);
+  ASSERT((fiber->stack + fiber->stack_size) - fiber->sp >= argc + nulls, OOPS);
 
   // Pass the function arguments.
 
@@ -212,7 +215,10 @@ bool vmPrepareFiber(PKVM* vm, Fiber* fiber, int argc, Var* argv) {
   for (int i = 0; i < argc; i++) {
     fiber->ret[1 + i] = *(argv + i); // +1: ret[0] is return value.
   }
-  fiber->sp += argc; // Parameters.
+  for (int i = 0; i < nulls; i++) {
+    fiber->ret[1 + i + argc] = VAR_NULL;
+  }
+  fiber->sp += argc + nulls; // Parameters.
 
   // Native functions doesn't own a stack frame so, we're done here.
   if (fiber->closure->fn->is_native) return true;
