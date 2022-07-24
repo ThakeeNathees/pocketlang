@@ -39,6 +39,9 @@ typedef struct {
   // each evaluated non-null values.
   bool repl_mode;
 
+  // compile at runtime.
+  bool runtime;
+
 } CompileOptions;
 
 // Create a new CompilerOptions with the default values and return it.

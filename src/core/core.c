@@ -639,6 +639,78 @@ DEF(coreExit,
   exit((int)value);
 }
 
+DEF(coreCompile,
+  "compile(code:String) -> Closure",
+  "Compiles source code into a closure (does not execute automatically).") {
+
+  String* code;
+  if (!validateArgString(vm, 1, &code)) return;
+  vmPushTempRef(vm, &code->_super); // code.
+
+  Module* module = newModule(vm);
+  vmPushTempRef(vm, &module->_super); // module.
+  {
+    module->path = newString(vm, "@(meta)");
+    Function* body_fn = newFunction(vm, "@meta", 5, module, false,
+      NULL, NULL);
+    body_fn->arity = 0;
+
+    vmPushTempRef(vm, &body_fn->_super); // body_fn.
+    module->body = newClosure(vm, body_fn);
+    vmPopTempRef(vm); // body_fn.
+
+    CompileOptions options = newCompilerOptions();
+    options.runtime = true;
+    PkResult result = compile(vm, module, code->data, &options);
+
+    if (result == PK_RESULT_SUCCESS) {
+      ARG(0) = VAR_OBJ(module->body);
+    }
+  }
+  vmPopTempRef(vm); // module.
+  vmPopTempRef(vm); // code.
+}
+
+DEF(coreEval,
+  "eval(expression:String) -> Var",
+  "Evaluate an expression and returns the result.\n"
+  "Only global variables can be used in the expression.") {
+
+  String* expr;
+  if (!validateArgString(vm, 1, &expr)) return;
+
+  String* code = stringFormat(vm, "return (@)", expr);
+  vmPushTempRef(vm, &code->_super); // code.
+  {
+    CallFrame* frame = &vm->fiber->frames[vm->fiber->frame_count - 1];
+    Module* current_module = frame->closure->fn->owner;
+
+    Module* new_module = newModule(vm);
+    vmPushTempRef(vm, &new_module->_super); // new_module.
+    {
+      // let global variables become available
+      pkVarBufferConcat(&new_module->constants, vm,
+        &current_module->constants);
+      pkVarBufferConcat(&new_module->globals, vm,
+        &current_module->globals);
+      pkUintBufferConcat(&new_module->global_names, vm,
+        &current_module->global_names);
+
+      CompileOptions options = newCompilerOptions();
+      options.runtime = true;
+      PkResult result = compile(vm, new_module, code->data, &options);
+
+      if (result == PK_RESULT_SUCCESS) {
+        Var ret = VAR_NULL;
+        vmCallFunction(vm, new_module->body, 0, NULL, &ret);
+        ARG(0) = ret;
+      }
+    }
+    vmPopTempRef(vm); // new_module.
+  }
+  vmPopTempRef(vm); // code.
+}
+
 // List functions.
 // ---------------
 
@@ -709,6 +781,8 @@ static void initializeBuiltinFunctions(PKVM* vm) {
   INITIALIZE_BUILTIN_FN("print",     corePrint,   -1);
   INITIALIZE_BUILTIN_FN("input",     coreInput,   -1);
   INITIALIZE_BUILTIN_FN("exit",      coreExit,    -1);
+  INITIALIZE_BUILTIN_FN("compile",   coreCompile,  1);
+  INITIALIZE_BUILTIN_FN("eval",      coreEval,     1);
 
   // List functions.
   INITIALIZE_BUILTIN_FN("list_append", coreListAppend, 2);

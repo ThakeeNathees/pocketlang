@@ -593,12 +593,31 @@ static void compilerInit(Compiler* compiler, PKVM* vm, const char* source,
 /*****************************************************************************/
 
 // Internal error report function for lexing and parsing.
-static void reportError(Parser* parser, Token tk,
+static void reportError(Parser* parser, bool runtime, Token tk,
                         const char* fmt, va_list args) {
 
   parser->has_errors = true;
 
   PKVM* vm = parser->vm;
+  if (runtime) {
+    ASSERT(vm->fiber != NULL, OOPS);
+
+    pkByteBuffer buff;
+    pkByteBufferInit(&buff);
+
+    va_list args_copy;
+    va_copy(args_copy, args);
+    int size = vsnprintf(NULL, 0, fmt, args_copy) + 1;
+    va_end(args_copy);
+
+    ASSERT(size >= 0, "vnsprintf() failed.");
+    pkByteBufferReserve(&buff, vm, size);
+    vsnprintf((char*)buff.data, size, fmt, args);
+    VM_SET_ERROR(vm, newString(vm, buff.data));
+    pkByteBufferClear(&buff, vm);
+    return;
+  }
+
   if (vm->config.stderr_write == NULL) return;
 
   // If the source is incomplete we're not printing an error message,
@@ -617,6 +636,7 @@ static void reportError(Parser* parser, Token tk,
 // which is [parser->previous].
 static void syntaxError(Compiler* compiler, Token tk, const char* fmt, ...) {
   Parser* parser = &compiler->parser;
+  bool runtime = compiler->options && compiler->options->runtime;
 
   // Only one syntax error is reported.
   if (parser->has_syntax_error) return;
@@ -624,19 +644,20 @@ static void syntaxError(Compiler* compiler, Token tk, const char* fmt, ...) {
   parser->has_syntax_error = true;
   va_list args;
   va_start(args, fmt);
-  reportError(parser, tk, fmt, args);
+  reportError(parser, runtime, tk, fmt, args);
   va_end(args);
 }
 
 static void semanticError(Compiler* compiler, Token tk, const char* fmt, ...) {
   Parser* parser = &compiler->parser;
+  bool runtime = compiler->options && compiler->options->runtime;
 
   // If the parser has synax errors, semantic errors are not reported.
   if (parser->has_syntax_error) return;
 
   va_list args;
   va_start(args, fmt);
-  reportError(parser, tk, fmt, args);
+  reportError(parser, runtime, tk, fmt, args);
   va_end(args);
 }
 
@@ -645,10 +666,11 @@ static void semanticError(Compiler* compiler, Token tk, const char* fmt, ...) {
 // need to pass the line number the error originated from.
 static void resolveError(Compiler* compiler, Token tk, const char* fmt, ...) {
   Parser* parser = &compiler->parser;
+  bool runtime = compiler->options && compiler->options->runtime;
 
   va_list args;
   va_start(args, fmt);
-  reportError(parser, tk, fmt, args);
+  reportError(parser, runtime, tk, fmt, args);
   va_end(args);
 }
 
@@ -3271,8 +3293,8 @@ static void compileStatement(Compiler* compiler) {
     emitLoopJump(compiler);
 
   } else if (match(compiler, TK_RETURN)) {
-
-    if (compiler->scope_depth == DEPTH_GLOBAL) {
+    if (compiler->scope_depth == DEPTH_GLOBAL &&
+        !(compiler->options && compiler->options->runtime)) {
       syntaxError(compiler, compiler->parser.previous,
                   "Invalid 'return' outside a function.");
       return;
@@ -3380,6 +3402,7 @@ CompileOptions newCompilerOptions() {
   CompileOptions options;
   options.debug = false;
   options.repl_mode = false;
+  options.runtime = false;
   return options;
 }
 
