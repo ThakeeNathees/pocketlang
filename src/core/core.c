@@ -200,15 +200,21 @@ String* varToString(PKVM* vm, Var self, bool repr) {
     if (has_method) {
       Var ret = VAR_NULL;
       PkResult result = vmCallMethod(vm, self, closure, 0, NULL, &ret);
-      if (result != PK_RESULT_SUCCESS) return NULL;
 
-      if (!IS_OBJ_TYPE(ret, OBJ_STRING)) {
-        VM_SET_ERROR(vm, newString(vm, "method " LITS__str " returned "
-                                       "non-string type."));
-        return NULL;
+      if (!VM_HAS_ERROR(vm)) {
+        if (result != PK_RESULT_SUCCESS) return NULL;
+        if (!IS_OBJ_TYPE(ret, OBJ_STRING)) {
+          VM_SET_ERROR(vm, newString(vm, "method " LITS__str " returned "
+                                         "non-string type."));
+          return NULL;
+        }
+        return (String*)AS_OBJ(ret);
       }
 
-      return (String*)AS_OBJ(ret);
+      // already has error -> dealing with error message
+      if (result == PK_RESULT_SUCCESS && IS_OBJ_TYPE(ret, OBJ_STRING)) {
+        return (String*)AS_OBJ(ret);
+      }
     }
 
     // If we reached here, it doesn't have a to string override. just
@@ -446,21 +452,11 @@ DEF(coreRaise,
     RET_ERR(newString(vm, "Invalid argument count."));
   }
 
-  String* msg = NULL;
-
-  if (argc == 1) {
-    if (!IS_OBJ_TYPE(ARG(1), OBJ_STRING)) {
-      msg = varToString(vm, ARG(1), false);
-      if (msg == NULL) return; //< Error at _to_string override.
-
-    } else {
-      msg = (String*)AS_OBJ(ARG(1));
-    }
-
-    VM_SET_ERROR(vm, msg);
-  } else {
-    VM_SET_ERROR(vm, newString(vm, "No exception to reraise."));
+  if (argc == 1 && ARG(1) != VAR_NULL) {
+    vm->fiber->error = ARG(1);
+    return;
   }
+  VM_SET_ERROR(vm, newString(vm, "No exception to reraise."));
 }
 
 DEF(coreBin,
@@ -2137,7 +2133,7 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
           return VAR_OBJ(fb->closure);
 
         case CHECK_HASH("error", 0x21918751):
-          return (fb->error) ? VAR_OBJ(fb->error) : VAR_NULL;
+          return fb->error;
       }
     } break;
 

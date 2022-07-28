@@ -516,7 +516,7 @@ struct Fiber {
   Fiber *caller, *native;
 
   // Runtime error initially NULL, heap allocated.
-  String* error;
+  Var error;
 };
 
 struct Class {

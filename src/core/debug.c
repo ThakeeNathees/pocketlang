@@ -222,7 +222,14 @@ void reportRuntimeError(PKVM* vm, Fiber* fiber, bool* is_first) {
   // Error message.
   if (*is_first) {
     _printRed(vm, "Error: ");
-    writefn(vm, fiber->error->data);
+    String* msg = NULL;
+    if (IS_OBJ_TYPE(fiber->error, OBJ_STRING)) {
+      msg = (String*)AS_OBJ(fiber->error);
+    } else {
+      msg = varToString(vm, fiber->error, false);
+    }
+
+    writefn(vm, msg->data);
     writefn(vm, "\n");
     *is_first = false;
   }
