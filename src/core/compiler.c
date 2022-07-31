@@ -1559,6 +1559,7 @@ static void compilerChangeStack(Compiler* compiler, int num);
 static void parsePrecedence(Compiler* compiler, Precedence precedence);
 static void compileFunction(Compiler* compiler, FuncType fn_type);
 static void compileExpression(Compiler* compiler);
+static void compilePureExpression(Compiler* compiler);
 
 static void exprLiteral(Compiler* compiler);
 static void exprInterpolation(Compiler* compiler);
@@ -1578,6 +1579,7 @@ static void exprMap(Compiler* compiler);
 static void exprCall(Compiler* compiler);
 static void exprAttrib(Compiler* compiler);
 static void exprSubscript(Compiler* compiler);
+static void exprIf(Compiler* compiler);
 
 // true, false, null, self.
 static void exprValue(Compiler* compiler);
@@ -1658,7 +1660,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_THEN       */   NO_RULE,
   /* TK_WHILE      */   NO_RULE,
   /* TK_FOR        */   NO_RULE,
-  /* TK_IF         */   NO_RULE,
+  /* TK_IF         */ { exprIf,        NULL,             NO_INFIX },
   /* TK_ELIF       */   NO_RULE,
   /* TK_ELSE       */   NO_RULE,
   /* TK_BREAK      */   NO_RULE,
@@ -1948,10 +1950,7 @@ static void exprName(Compiler* compiler) {
       }
 
       // Compile the assigned value.
-      bool can_define = compiler->can_define;
-      compiler->can_define = false;
-      compileExpression(compiler);
-      compiler->can_define = can_define;
+      compilePureExpression(compiler);
 
     } else { // name += / -= / *= ... = (expr);
 
@@ -2219,6 +2218,42 @@ static void exprSubscript(Compiler* compiler) {
 
   } else {
     emitOpcode(compiler, OP_GET_SUBSCRIPT);
+  }
+}
+
+static void exprIf(Compiler* compiler) {
+  skipNewLines(compiler);
+
+  compilePureExpression(compiler); //< Condition.
+  skipNewLines(compiler);
+
+  // then is optional
+  if (match(compiler, TK_THEN)) {
+    skipNewLines(compiler);
+  }
+
+  emitOpcode(compiler, OP_JUMP_IF_NOT);
+  int ifpatch = emitShort(compiler, 0xffff); //< Will be patched.
+
+  compilePureExpression(compiler); //< Value
+  skipNewLines(compiler);
+
+  emitOpcode(compiler, OP_JUMP);
+  int exit_jump = emitShort(compiler, 0xffff); //< Will be patched.
+  patchJump(compiler, ifpatch);
+
+  if (match(compiler, TK_ELIF)) {
+    exprIf(compiler);
+    compilerChangeStack(compiler, -1);
+
+  } else {
+    consume(compiler, TK_ELSE, "Expect 'else' after if expressoin.");
+    skipNewLines(compiler);
+
+    compilePureExpression(compiler); //< Value
+
+    patchJump(compiler, exit_jump);
+    compilerChangeStack(compiler, -1);
   }
 }
 
@@ -3089,14 +3124,18 @@ static void compileExpression(Compiler* compiler) {
   parsePrecedence(compiler, PREC_LOWEST);
 }
 
+// Same as compileExpression, but set `can_define` to false.
+static void compilePureExpression(Compiler* compiler) {
+  bool can_define = compiler->can_define;
+  compiler->can_define = false;
+  parsePrecedence(compiler, PREC_LOWEST);
+  compiler->can_define = can_define;
+}
+
 static void compileIfStatement(Compiler* compiler, bool elif) {
 
   skipNewLines(compiler);
-
-  bool can_define = compiler->can_define;
-  compiler->can_define = false;
-  compileExpression(compiler); //< Condition.
-  compiler->can_define = can_define;
+  compilePureExpression(compiler); //< Condition.
 
   emitOpcode(compiler, OP_JUMP_IF_NOT);
   int ifpatch = emitShort(compiler, 0xffff); //< Will be patched.
@@ -3146,10 +3185,7 @@ static void compileWhileStatement(Compiler* compiler) {
   loop.depth = compiler->scope_depth;
   compiler->loop = &loop;
 
-  bool can_define = compiler->can_define;
-  compiler->can_define = false;
-  compileExpression(compiler); //< Condition.
-  compiler->can_define = can_define;
+  compilePureExpression(compiler); //< Condition.
 
   emitOpcode(compiler, OP_JUMP_IF_NOT);
   int whilepatch = emitShort(compiler, 0xffff); //< Will be patched.
@@ -3182,10 +3218,7 @@ static void compileForStatement(Compiler* compiler) {
 
   // Compile and store sequence.
   compilerAddVariable(compiler, "@Sequence", 9, iter_line); // Sequence
-  bool can_define = compiler->can_define;
-  compiler->can_define = false;
-  compileExpression(compiler);
-  compiler->can_define = can_define;
+  compilePureExpression(compiler);
 
   // Add iterator to locals. It's an increasing integer indicating that the
   // current loop is nth starting from 0.
@@ -3296,10 +3329,7 @@ static void compileStatement(Compiler* compiler) {
                     "Cannor 'return' a value from constructor.");
       }
 
-      bool can_define = compiler->can_define;
-      compiler->can_define = false;
-      compileExpression(compiler); //< Return value is at stack top.
-      compiler->can_define = can_define;
+      compilePureExpression(compiler); //< Return value is at stack top.
 
       // If the last expression parsed with compileExpression() is a call
       // is_last_call would be true by now.
