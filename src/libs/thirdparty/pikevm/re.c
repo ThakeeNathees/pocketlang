@@ -703,7 +703,7 @@ RE* re_compile(const char *pattern, int insensitive) {
   return re;
 }
 
-int inline re_max_matches(RE* re) {
+int re_max_matches(RE* re) {
   return re->count;
 }
 
