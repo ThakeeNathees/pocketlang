@@ -553,10 +553,13 @@ Instance* newInstance(PKVM* vm, Class* cls) {
   vmPushTempRef(vm, &inst->_super); // inst.
 
   inst->cls = cls;
-  if (cls->new_fn != NULL) {
-    inst->native = cls->new_fn(vm);
-  } else {
-    inst->native = NULL;
+  inst->native = NULL;
+  while (cls != NULL) {
+    if (cls->new_fn != NULL) {
+      inst->native = cls->new_fn(vm);
+      break;
+    }
+    cls = cls->super_class;
   }
 
   inst->attribs = newMap(vm);
@@ -1220,9 +1223,15 @@ void freeObject(PKVM* vm, Object* self) {
 
     case OBJ_INST: {
       Instance* inst = (Instance*)self;
-      if (inst->cls->delete_fn != NULL) {
-        inst->cls->delete_fn(vm, inst->native);
+      Class* cls = inst->cls;
+      while (cls != NULL) {
+        if (cls->delete_fn != NULL) {
+          cls->delete_fn(vm, inst->native);
+          break;
+        }
+        cls = cls->super_class;
       }
+
       DEALLOCATE(vm, inst, Instance);
       return;
     }
