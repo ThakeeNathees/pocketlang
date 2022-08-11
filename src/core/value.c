@@ -1223,9 +1223,15 @@ void freeObject(PKVM* vm, Object* self) {
 
     case OBJ_INST: {
       Instance* inst = (Instance*)self;
-      if (inst->cls->delete_fn != NULL) {
-        inst->cls->delete_fn(vm, inst->native);
+      Class* cls = inst->cls;
+      while (cls != NULL) {
+        if (cls->delete_fn != NULL) {
+          cls->delete_fn(vm, inst->native);
+          break;
+        }
+        cls = cls->super_class;
       }
+
       DEALLOCATE(vm, inst, Instance);
       return;
     }
