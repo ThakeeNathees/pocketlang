@@ -1,0 +1,145 @@
+def test1
+  isRaise = fn(flag)
+    if flag then raise("NOT OK") end
+    return "OK"
+  end
+
+  fiber = Fiber(isRaise)
+  result = fiber.try(false)
+  assert(result == "OK")
+  assert(fiber.error == null)
+
+  fiber = Fiber(isRaise)
+  result = fiber.try(true)
+  assert(result == null)
+  assert(fiber.error == "NOT OK")
+end
+
+class Error
+  def _init(msg) self.msg = msg end
+  def _str() return "Error: " + self.msg end
+end
+
+def run(f1)
+  fiber = Fiber(f1)
+  result = fiber.run()
+  if not fiber.error then return result end
+end
+
+def try(f1)
+  fiber = Fiber(f1)
+  result = fiber.try()
+  if not fiber.error then return result end
+end
+
+def tryExcept(f1, f2)
+  fiber = Fiber(f1)
+  result = fiber.try()
+  if fiber.error
+    if f2.arity == 0 then f2()
+    else f2(Error(fiber.error)) end
+    return
+  end
+  return result
+end
+
+def tryExceptFinally(f1, f2, f3)
+  fiber = Fiber(f1)
+  result = fiber.try()
+  if fiber.error
+    if f2.arity == 0 then f2()
+    else f2(Error(fiber.error)) end
+    f3()
+    return
+  end
+  f3()
+  return result
+end
+
+def test2
+  try fn # ignore error
+    raise("some error")
+  end
+
+  result = ""
+  tryExcept(fn
+    raise("some error")
+    result += "Try"
+
+  end, fn(err) # except
+    assert(err is Error)
+    assert(err.msg == "some error")
+    result += "Except"
+
+  end) # finally
+  assert(result == "Except")
+
+  result = ""
+  tryExceptFinally(fn
+    raise("some error")
+    result += "Try"
+
+  end, fn(err) # except
+    assert(err is Error)
+    assert(err.msg == "some error")
+    result += "Except"
+
+  end, fn # finally
+    result += "Finally"
+  end)
+  assert(result == "ExceptFinally")
+
+  result = ""
+  tryExceptFinally(fn
+    result += "Try"
+  end, fn
+    result += "Except"
+  end, fn
+    result += "Finally"
+  end)
+  assert(result == "TryFinally")
+
+end
+
+def test3
+  result = ""
+  try fn
+    run fn
+      run fn
+        run fn
+          result += "1"
+          raise()
+          print("")
+        end
+        result += "2" # UNREACHABLE
+      end
+      result += "3" # UNREACHABLE
+    end
+    result += "4" # UNREACHABLE
+  end
+  assert(result == "1")
+
+  result = ""
+  try fn
+    run fn
+      try fn
+        run fn
+          result += "1"
+          raise()
+        end
+        result += "2" # UNREACHABLE
+      end
+      result += "3"
+      raise()
+    end
+    result += "4" # UNREACHABLE
+  end
+  assert(result == "13")
+end
+
+test1()
+test2()
+test3()
+
+# If we got here, that means all test were passed.
+print('All TESTS PASSED')

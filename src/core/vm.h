@@ -38,14 +38,17 @@
 #define HEAP_FILL_PERCENT 75
 
 // Evaluated to "true" if a runtime error set on the current fiber.
-#define VM_HAS_ERROR(vm) (vm->fiber->error != NULL)
+#define VM_HAS_ERROR(vm) (vm->fiber->error != VAR_NULL)
 
 // Set the error message [err] to the [vm]'s current fiber.
 #define VM_SET_ERROR(vm, err)        \
   do {                               \
     ASSERT(!VM_HAS_ERROR(vm), OOPS); \
-    (vm->fiber->error = err);        \
+    (vm->fiber->error = VAR_OBJ(err)); \
   } while (false)
+
+// Reset the error of the current fiber.
+#define VM_RESET_ERROR(vm) (vm->fiber->error = VAR_NULL)
 
 // A doubly link list of vars that have reference in the host application.
 // Handles are wrapper around Var that lives on the host application.
@@ -132,6 +135,9 @@ struct PKVM {
 
   // Current fiber.
   Fiber* fiber;
+
+  // The fiber that error occured.
+  Fiber* perpetrator;
 };
 
 // A realloc() function wrapper which handles memory allocations of the VM.

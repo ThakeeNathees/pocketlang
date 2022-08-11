@@ -18,7 +18,7 @@ void reportCompileTimeError(PKVM* vm, const char* path, int line,
                             const char* fmt, va_list args);
 
 // Pretty print runtime error.
-void reportRuntimeError(PKVM* vm, Fiber* fiber);
+void reportRuntimeError(PKVM* vm, Fiber* fiber, bool* first);
 
 // Dump opcodes of the given function to the stdout.
 void dumpFunctionCode(PKVM* vm, Function* func);

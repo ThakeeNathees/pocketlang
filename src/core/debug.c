@@ -214,15 +214,25 @@ static void _reportStackFrame(PKVM* vm, CallFrame* frame) {
   }
 }
 
-void reportRuntimeError(PKVM* vm, Fiber* fiber) {
+void reportRuntimeError(PKVM* vm, Fiber* fiber, bool* is_first) {
 
   pkWriteFn writefn = vm->config.stderr_write;
   if (writefn == NULL) return;
 
   // Error message.
-  _printRed(vm, "Error: ");
-  writefn(vm, fiber->error->data);
-  writefn(vm, "\n");
+  if (*is_first) {
+    _printRed(vm, "Error: ");
+    String* msg = NULL;
+    if (IS_OBJ_TYPE(fiber->error, OBJ_STRING)) {
+      msg = (String*)AS_OBJ(fiber->error);
+    } else {
+      msg = varToString(vm, fiber->error, false);
+    }
+
+    writefn(vm, msg->data);
+    writefn(vm, "\n");
+    *is_first = false;
+  }
 
   // If the stack frames are greater than 2 * max_dump_frames + 1,
   // we're only print the first [max_dump_frames] and last [max_dump_frames]
