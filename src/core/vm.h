@@ -47,6 +47,9 @@
     (vm->fiber->error = VAR_OBJ(err)); \
   } while (false)
 
+// Reset the error of the current fiber.
+#define VM_RESET_ERROR(vm) (vm->fiber->error = VAR_NULL)
+
 // A doubly link list of vars that have reference in the host application.
 // Handles are wrapper around Var that lives on the host application.
 struct PkHandle {
