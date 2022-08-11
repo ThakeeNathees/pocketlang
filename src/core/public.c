@@ -864,11 +864,20 @@ static Var _newInstance(PKVM* vm, Class* cls, int argc, Var* argv) {
   Var instance = preConstructSelf(vm, cls);
   if (VM_HAS_ERROR(vm)) return VAR_NULL;
 
-  if (IS_OBJ(instance)) vmPushTempRef(vm, AS_OBJ(instance)); // instance.
+  bool pushed = false;
+  if (IS_OBJ(instance)) {
+    vmPushTempRef(vm, AS_OBJ(instance)); // instance.
+    pushed = true;
+  }
 
-  Closure* ctor = getMagicMethod(cls, METHOD_INIT);
-  if (ctor != NULL) vmCallMethod(vm, instance, ctor, argc, argv, NULL);
-  if (IS_OBJ(instance)) vmPopTempRef(vm); // instance.
+  Closure* init = getMagicMethod(cls, METHOD_INIT);
+  if (init != NULL) {
+    // for builtin classes, preConstructSelf returns null,
+    // and instance is returned by _init.
+    vmCallMethod(vm, instance, init, argc, argv,
+      IS_NULL(instance) ? &instance : NULL);
+  }
+  if (pushed) vmPopTempRef(vm); // instance.
 
   return instance;
 }
