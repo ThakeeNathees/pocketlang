@@ -15,7 +15,7 @@ tests = {
 
 def main()
   for expr in tests
-    r = eval(expr, 0); assert(r[1] != -1)
+    r = evaluate(expr, 0); assert(r[1] != -1)
     val = r[0]
     assert(val == tests[expr])
   end
@@ -25,11 +25,11 @@ end
 ## -------------------------------------------------
 
 ## Return [value, index], if error index will be -1.
-def eval(expr, ind)
+def evaluate(expr, ind)
   c = expr[ind]; ind += 1
 
   if c == '('
-    r = eval(expr, ind)
+    r = evaluate(expr, ind)
     val = r[0]
     ind = r[1]
     if ind == -1 then return [null, -1] end
@@ -43,27 +43,27 @@ def eval(expr, ind)
       print("Expected ')'"); return [null, -1]
     end
     return [val, ind]
-  
+
   elif c == '+'
     r = binary_op(expr, ind)
     if not r[0] then return [null, -1] end
     return [r[1] + r[2], r[3]]
-  
+
   elif c == '-'
     r = binary_op(expr, ind)
     if not r[0] then return [null, -1] end
     return [r[1] - r[2], r[3]]
-  
+
   elif c == '*'
     r = binary_op(expr, ind)
     if not r[0] then return [null, -1] end
     return [r[1] * r[2], r[3]]
-  
+
   elif c == '/'
     r = binary_op(expr, ind)
     if not r[0] then return [null, -1] end
     return [r[1] / r[2], r[3]]
-    
+
   elif isnum(c)
     val = ord(c) - ord('0')
     assert(0 <= val and val < 10)
@@ -72,21 +72,21 @@ def eval(expr, ind)
   else
     print("Uexpected token:", c)
     return [null, -1]
-    
+
   end ## switch(c)
-  
+
 end
 
 ## return [success, v1, v2, index]
 def binary_op(expr, ind)
-  r = eval(expr, ind)
+  r = evaluate(expr, ind)
   v1 = r[0]; ind = r[1]
   if ind == -1 then return [false, null, null, -1] end
-    
-  r = eval(expr, ind)
+
+  r = evaluate(expr, ind)
   v2 = r[0]; ind = r[1]
   if ind == -1 then return [false, null, null, -1] end
-  
+
   return [true, v1, v2, ind]
 end
 
