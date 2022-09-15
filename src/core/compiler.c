@@ -2802,7 +2802,7 @@ static void compileFunction(Compiler* compiler, FuncType fn_type) {
     global_index = compilerAddVariable(compiler, name, name_length, name_line);
   }
 
-  if (fn_type == FUNC_METHOD && strncmp(name, CTOR_NAME, name_length) == 0) {
+  if (fn_type == FUNC_METHOD && strncmp(name, LITS__init, name_length) == 0) {
     fn_type = FUNC_CONSTRUCTOR;
   }
 
