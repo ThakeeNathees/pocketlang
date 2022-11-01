@@ -71,6 +71,12 @@ DEF(_ioGetc,
  // 'r+' |  read from start  |   error           |
  // 'w+' |  destroy contents |   create new      |
  // 'a+' |  write to end     |   create new      |
+
+// https://github.com/LADSoft/OrangeC/issues/751#issuecomment-1298598172
+#ifdef __ORANGEC__
+#undef _FMODE_EXT
+#endif
+
 typedef enum {
   FMODE_NONE       = 0,
 
