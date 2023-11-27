@@ -167,7 +167,7 @@ typedef void (*pkDeleteInstanceFn) (PKVM* vm, void*);
 /*****************************************************************************/
 
 // Type enum of the pocketlang's first class types. Note that Object isn't
-// instanciable (as of now) but they're considered first calss.
+// instanciable (as of now) but they're considered first class.
 enum PkVarType {
   PK_OBJECT = 0,
 
