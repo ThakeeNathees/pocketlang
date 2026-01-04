@@ -89,7 +89,7 @@ Var getMethod(PKVM* vm, Var self, String* name, bool* is_method);
 
 // Returns the method (closure) from the instance's super class. If the method
 // doesn't exists, it'll set an error on the VM.
-Closure* getSuperMethod(PKVM* vm, Var self, String* name);
+Closure* getSuperMethod(PKVM* vm, Class* class, String* name);
 
 // Unlike getMethod this will not set error and will not try to get attribute
 // with the same name. It'll return true if the method exists on [self], false

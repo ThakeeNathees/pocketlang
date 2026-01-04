@@ -1130,6 +1130,8 @@ L_vm_main_loop:
         cls->ctor = method;
       }
 
+      method->class = cls;
+
       pkClosureBufferWrite(&cls->methods, vm, method);
 
       DROP();
@@ -1198,7 +1200,9 @@ L_vm_main_loop:
         fiber->self = *fiber->ret; //< Self for the next call.
         index = READ_SHORT();
         name = moduleGetStringAt(module, (int)index);
-        Closure* super_method = getSuperMethod(vm, fiber->self, name);
+        Class* class = frame->closure->class;
+        if ( NULL == class ) class = getClass( vm, fiber->self );
+        Closure* super_method = getSuperMethod(vm, class, name);
         CHECK_ERROR(); // Will return if super_method is NULL.
         callable = VAR_OBJ(super_method);
       goto L_do_call;
@@ -1253,6 +1257,7 @@ L_do_call:
         *fiber->ret = fiber->self;
 
         closure = (const Closure*)(cls)->ctor;
+        const char* class_name = cls->name->data;
         while (closure == NULL) {
           cls = cls->super_class;
           if (cls == NULL) break;
@@ -1263,7 +1268,7 @@ L_do_call:
         if (closure == NULL) {
           if (argc != 0) {
             String* msg = stringFormat(vm, "Expected exactly 0 argument(s) "
-                                       "for constructor $.", cls->name->data);
+                                       "for constructor $.", class_name );
             RUNTIME_ERROR(msg);
           }
 

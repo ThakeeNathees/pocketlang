@@ -402,6 +402,7 @@ struct Function {
 struct Closure {
   Object _super;
 
+  Class* class;
   Function* fn;
   Upvalue* upvalues[DYNAMIC_TAIL_ARRAY];
 };

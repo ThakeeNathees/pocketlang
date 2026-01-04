@@ -306,6 +306,7 @@ void pkClassAddMethod(PKVM* vm, PkHandle* cls,
   // won't be garbage collected (class handle has reference to the module).
 
   Closure* method = newClosure(vm, fn);
+  method->class = class_;
   vmPopTempRef(vm); // fn.
   vmPushTempRef(vm, &method->_super); // method.
   {

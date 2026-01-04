@@ -1590,11 +1590,11 @@ Var getMethod(PKVM* vm, Var self, String* name, bool* is_method) {
   return varGetAttrib(vm, self, name);
 }
 
-Closure* getSuperMethod(PKVM* vm, Var self, String* name) {
-  Class* super = getClass(vm, self)->super_class;
+Closure* getSuperMethod(PKVM* vm, Class* class, String* name) {
+  Class* super = NULL == class ? NULL : class->super_class;
   if (super == NULL) {
-    VM_SET_ERROR(vm, stringFormat(vm, "'$' object has no parent class.", \
-                 varTypeName(self)));
+    VM_SET_ERROR(vm, stringFormat(vm, "'$' has no parent class.", \
+                 class->name));
     return NULL;
   };
 

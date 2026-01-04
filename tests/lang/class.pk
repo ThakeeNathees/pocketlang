@@ -246,7 +246,20 @@ class B is A
   end
 end
 
+class C is B
+  def _init()
+    super()
+    print("C init")
+  end
+  def foo()
+    print("C foo")
+    return super.foo()
+  end
+end
+
 b = B()
 assert(b.foo() == "A.bar")
+c = C()
+assert(c.foo() == "A.bar")
 
 print('ALL TESTS PASSED')
