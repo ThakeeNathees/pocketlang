@@ -1649,7 +1649,7 @@ GrammarRule rules[] = {  // Prefix       Infix             Infix Precedence
   /* TK_IS         */ { NULL,          exprBinaryOp,     PREC_TEST },
   /* TK_AND        */ { NULL,          exprAnd,          PREC_LOGICAL_AND },
   /* TK_OR         */ { NULL,          exprOr,           PREC_LOGICAL_OR },
-  /* TK_NOT        */ { exprUnaryOp,   NULL,             PREC_UNARY },
+  /* TK_NOT        */ { exprUnaryOp,   NULL,             NO_INFIX },
   /* TK_TRUE       */ { exprValue,     NULL,             NO_INFIX },
   /* TK_FALSE      */ { exprValue,     NULL,             NO_INFIX },
   /* TK_SELF       */ { exprSelf,      NULL,             NO_INFIX },
