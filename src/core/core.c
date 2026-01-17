@@ -931,17 +931,41 @@ static void _ctorString(PKVM* vm) {
 }
 
 static void _ctorList(PKVM* vm) {
-  List* list = newList(vm, ARGC);
-  vmPushTempRef(vm, &list->_super); // list.
-  for (int i = 0; i < ARGC; i++) {
-    listAppend(vm, list, ARG(i + 1));
+  if (!pkCheckArgcRange(vm, ARGC, 0, 1)) return;
+  List* list;
+  int64_t natural;
+
+  if (ARGC == 1) {
+    if (isInteger(ARG(1), &natural) && natural >= 0) {
+      list = newList(vm, natural);
+      list->elements.count = natural;
+
+    } else if (IS_OBJ_TYPE(ARG(1), OBJ_LIST)) {
+      List* src_list = (List*) AS_OBJ(ARG(1));
+      list = listAdd(vm, src_list, NULL);
+
+    } else {
+      RET_ERR(newString(vm, "Expected a natural number or a list."));
+    }
+  } else {
+    list = newList(vm, 0);
   }
-  vmPopTempRef(vm); // list.
   RET(VAR_OBJ(list));
 }
 
 static void _ctorMap(PKVM* vm) {
-  RET(VAR_OBJ(newMap(vm)));
+  if (!pkCheckArgcRange(vm, ARGC, 0, 1)) return;
+  Map* map;
+
+  if (ARGC == 1) {
+    Map* src_map;
+    if (!validateArgMap(vm, 1, &src_map)) return;
+    map = mapDup(vm, src_map);
+
+  } else {
+    map = newMap(vm);
+  }
+  RET(VAR_OBJ(map));
 }
 
 static void _ctorRange(PKVM* vm) {
@@ -1432,7 +1456,7 @@ static void initializePrimitiveClasses(PKVM* vm) {
   ADD_CTOR(PK_STRING, "@ctorString", _ctorString, -1);
   ADD_CTOR(PK_RANGE,  "@ctorRange",  _ctorRange,   2);
   ADD_CTOR(PK_LIST,   "@ctorList",   _ctorList,   -1);
-  ADD_CTOR(PK_MAP,    "@ctorMap",    _ctorMap,     0);
+  ADD_CTOR(PK_MAP,    "@ctorMap",    _ctorMap,    -1);
   ADD_CTOR(PK_FIBER,  "@ctorFiber",  _ctorFiber,   1);
 #undef ADD_CTOR
 
