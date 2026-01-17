@@ -233,8 +233,8 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
 
       markObject(vm, &fiber->caller->_super);
       markObject(vm, &fiber->native->_super);
-      markObject(vm, &fiber->error->_super);
 
+      markValue(vm, fiber->error);
       markValue(vm, fiber->self);
 
     } break;
@@ -495,6 +495,7 @@ Fiber* newFiber(PKVM* vm, Closure* closure) {
 
   fiber->open_upvalues = NULL;
   fiber->self = VAR_UNDEFINED;
+  fiber->error = VAR_NULL;
 
   // Initialize the return value to null (doesn't really have to do that here
   // but if we're trying to debut it may crash when dumping the return value).
@@ -1127,7 +1128,7 @@ Var mapRemoveKey(PKVM* vm, Map* self, Var key) {
 }
 
 bool fiberHasError(Fiber* fiber) {
-  return fiber->error != NULL;
+  return fiber->error != VAR_NULL;
 }
 
 void freeObject(PKVM* vm, Object* self) {

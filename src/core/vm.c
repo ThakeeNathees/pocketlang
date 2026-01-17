@@ -118,6 +118,10 @@ void vmCollectGarbage(PKVM* vm) {
     markObject(vm, &vm->fiber->_super);
   }
 
+  if (vm->perpetrator != NULL) {
+    markObject(vm, &vm->perpetrator->_super);
+  }
+
   // Reset VM's bytes_allocated value and count it again so that we don't
   // required to know the size of each object that'll be freeing.
   vm->bytes_allocated = 0;
@@ -757,10 +761,30 @@ static void closeUpvalues(Fiber* fiber, Var* top) {
 static void vmReportError(PKVM* vm) {
   ASSERT(VM_HAS_ERROR(vm), "runtimeError() should be called after an error.");
 
-  // TODO: pass the error to the caller of the fiber.
-
   if (vm->config.stderr_write == NULL) return;
-  reportRuntimeError(vm, vm->fiber);
+
+  // Store the error fiber so that we can report it later.
+  if (vm->perpetrator == NULL) {
+    vm->perpetrator = vm->fiber;
+  }
+
+  // For an error that occures during vmCallMethod(),
+  // Don't report it but pass the error back to the native fiber.
+  if (vm->fiber->native != NULL) {
+    vm->fiber->native->error = vm->fiber->error;
+
+  } else {
+    // If there is no native fiber, OK, we report it.
+    // The error may be not in current fiber/stackframe,
+    // so we report the error starting from stored perpetrator.
+    bool is_first = true;
+    Fiber* fb = vm->perpetrator;
+    while (fb != NULL && fb != vm->fiber) {
+      reportRuntimeError(vm, fb, &is_first);
+      fb = fb->native;
+    }
+    reportRuntimeError(vm, vm->fiber, &is_first);
+  }
 }
 
 /******************************************************************************
@@ -812,29 +836,54 @@ PkResult vmRunFiber(PKVM* vm, Fiber* fiber_) {
     ASSERT(caller == NULL || caller->state == FIBER_RUNNING, OOPS); \
     fiber->state = FIBER_DONE;                                      \
     fiber->caller = NULL;                                           \
+    if (fiber->trying) vm->perpetrator = NULL;                      \
+    else if (caller) {                                              \
+      caller->error = fiber->error;                                 \
+    }                                                               \
     fiber = caller;                                                 \
     vm->fiber = fiber;                                              \
   } while (false)
 
+// Check if current fiber is running in "trying" mode.
+bool isTrying(Fiber* fiber) {
+  while (fiber != NULL) {
+    if (fiber->trying) return true;
+    fiber = fiber->caller;
+  }
+  return false;
+}
+
 // Check if any runtime error exists and if so returns RESULT_RUNTIME_ERROR.
-#define CHECK_ERROR()                 \
-  do {                                \
-    if (VM_HAS_ERROR(vm)) {           \
-      UPDATE_FRAME();                 \
-      vmReportError(vm);              \
-      FIBER_SWITCH_BACK();            \
-      return PK_RESULT_RUNTIME_ERROR; \
-    }                                 \
+#define CHECK_ERROR()                     \
+  do {                                    \
+    if (VM_HAS_ERROR(vm)) {               \
+      UPDATE_FRAME();                     \
+      if (isTrying(fiber)) {              \
+        FIBER_SWITCH_BACK();              \
+        LOAD_FRAME();                     \
+        DISPATCH();                       \
+      } else {                            \
+        vmReportError(vm);                \
+        FIBER_SWITCH_BACK();              \
+        return PK_RESULT_RUNTIME_ERROR;   \
+      }                                   \
+    }                                     \
   } while (false)
 
 // [err_msg] must be of type String.
-#define RUNTIME_ERROR(err_msg)       \
-  do {                               \
-    VM_SET_ERROR(vm, err_msg);       \
-    UPDATE_FRAME();                  \
-    vmReportError(vm);               \
-    FIBER_SWITCH_BACK();             \
-    return PK_RESULT_RUNTIME_ERROR;  \
+#define RUNTIME_ERROR(err_msg)            \
+  do {                                    \
+    VM_SET_ERROR(vm, err_msg);            \
+    UPDATE_FRAME();                       \
+    if(isTrying(fiber)) {                 \
+      FIBER_SWITCH_BACK();                \
+      LOAD_FRAME();                       \
+      DISPATCH();                         \
+    } else {                              \
+      vmReportError(vm);                  \
+      FIBER_SWITCH_BACK();                \
+      return PK_RESULT_RUNTIME_ERROR;     \
+    }                                     \
   } while (false)
 
 // Load the last call frame to vm's execution variables to resume/run the

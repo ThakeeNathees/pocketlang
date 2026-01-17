@@ -30,7 +30,7 @@ extern "C" {
 // String representation of the version.
 #define PK_VERSION_STRING "0.1.0"
 
-// Pocketlang visibility macros. define PK_DLL for using pocketlang as a 
+// Pocketlang visibility macros. define PK_DLL for using pocketlang as a
 // shared library and define PK_COMPILE to export symbols when compiling the
 // pocketlang it self as a shared library.
 
@@ -264,7 +264,7 @@ PK_PUBLIC void pkRegisterBuiltinFn(PKVM* vm, const char* name, pkNativeFn fn,
 // the last character of the path **must** be a path seperator '/' or '\\'.
 PK_PUBLIC void pkAddSearchPath(PKVM* vm, const char* path);
 
-// Invoke pocketlang's allocator directly.  This function should be called 
+// Invoke pocketlang's allocator directly.  This function should be called
 // when the host application want to send strings to the PKVM that are claimed
 // by the VM once the caller returned it. For other uses you **should** call
 // pkRealloc with [size] 0 to cleanup, otherwise there will be a memory leak.
@@ -340,6 +340,12 @@ PK_PUBLIC void pkSetRuntimeError(PKVM* vm, const char* message);
 
 // Set a runtime error with C formated string.
 PK_PUBLIC void pkSetRuntimeErrorFmt(PKVM* vm, const char* fmt, ...);
+
+// Set a runtime error object at slot.
+PK_PUBLIC void pkSetRuntimeErrorObj(PKVM* vm, int slot);
+
+// Get the runtime error of VM at [slot].
+PK_PUBLIC void pkGetRuntimeError(PKVM* vm, int slot);
 
 // Returns native [self] of the current method as a void*.
 PK_PUBLIC void* pkGetSelf(const PKVM* vm);

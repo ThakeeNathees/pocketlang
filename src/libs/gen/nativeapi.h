@@ -30,6 +30,8 @@ typedef PkResult (*pkRunString_t)(PKVM*, const char*);
 typedef PkResult (*pkRunFile_t)(PKVM*, const char*);
 typedef PkResult (*pkRunREPL_t)(PKVM*);
 typedef void (*pkSetRuntimeError_t)(PKVM*, const char*);
+typedef void (*pkSetRuntimeErrorObj_t)(PKVM*, int);
+typedef void (*pkGetRuntimeError_t)(PKVM*, int);
 typedef void* (*pkGetSelf_t)(const PKVM*);
 typedef int (*pkGetArgc_t)(const PKVM*);
 typedef bool (*pkCheckArgcRange_t)(PKVM*, int, int, int);
@@ -90,6 +92,8 @@ typedef struct {
   pkRunFile_t pkRunFile_ptr;
   pkRunREPL_t pkRunREPL_ptr;
   pkSetRuntimeError_t pkSetRuntimeError_ptr;
+  pkSetRuntimeErrorObj_t pkSetRuntimeErrorObj_ptr;
+  pkGetRuntimeError_t pkGetRuntimeError_ptr;
   pkGetSelf_t pkGetSelf_ptr;
   pkGetArgc_t pkGetArgc_ptr;
   pkCheckArgcRange_t pkCheckArgcRange_ptr;
@@ -164,6 +168,8 @@ PkNativeApi pkMakeNativeAPI() {
   api.pkRunFile_ptr = pkRunFile;
   api.pkRunREPL_ptr = pkRunREPL;
   api.pkSetRuntimeError_ptr = pkSetRuntimeError;
+  api.pkSetRuntimeErrorObj_ptr = pkSetRuntimeErrorObj;
+  api.pkGetRuntimeError_ptr = pkGetRuntimeError;
   api.pkGetSelf_ptr = pkGetSelf;
   api.pkGetArgc_ptr = pkGetArgc;
   api.pkCheckArgcRange_ptr = pkCheckArgcRange;
