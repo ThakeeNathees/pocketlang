@@ -710,6 +710,9 @@ String* stringJoin(PKVM* vm, String* str1, String* str2);
 // elements.
 void listInsert(PKVM* vm, List* self, uint32_t index, Var value);
 
+// Shrink the size if it's too much excess.
+void listShrink(PKVM* vm, List* self);
+
 // Remove and return element at [index].
 Var listRemoveAt(PKVM* vm, List* self, uint32_t index);
 

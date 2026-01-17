@@ -1240,6 +1240,38 @@ DEF(_listFind,
   RET(VAR_NUM(-1));
 }
 
+DEF(_listResize,
+  "List.resize(length:Number) -> List",
+  "Resize a list to length and return the List.") {
+
+  ASSERT(IS_OBJ_TYPE(SELF, OBJ_LIST), OOPS);
+  List* self = (List*)AS_OBJ(SELF);
+
+  int64_t len;
+  if (!validateInteger(vm, ARG(1), &len, "Argument 1")) return;
+
+  if (len < 0) { // negative value to reduce the size.
+    len = self->elements.count + len;
+  }
+  if (len < 0) {
+    RET_ERR(newString(vm, "List.resize index out of bounds."));
+  }
+
+  if (len == 0) {
+    listClear(vm, self);
+
+  } else if (len > self->elements.count) {
+    pkVarBufferFill(&self->elements, vm, VAR_NULL,
+      len-self->elements.count);
+
+  } else if (len < self->elements.count) {
+    self->elements.count = len;
+    listShrink(vm, self);
+  }
+
+  RET(SELF);
+}
+
 DEF(_listClear,
   "List.clear() -> Null",
   "Removes all the entries in the list.") {
@@ -1471,6 +1503,7 @@ static void initializePrimitiveClasses(PKVM* vm) {
   ADD_METHOD(PK_LIST,   "append", _listAppend,     1);
   ADD_METHOD(PK_LIST,   "pop",    _listPop,       -1);
   ADD_METHOD(PK_LIST,   "insert", _listInsert,     2);
+  ADD_METHOD(PK_LIST,   "resize", _listResize,     1);
 
   ADD_METHOD(PK_MAP,    "clear",  _mapClear,       0);
   ADD_METHOD(PK_MAP,    "get",    _mapGet,        -1);
