@@ -29,12 +29,13 @@ TEST_SUITE = {
     "lang/functions.pk",
     "lang/import.pk",
   ),
-  
+
   "Modules Test" : (
     "modules/dummy.pk",
     "modules/math.pk",
     "modules/io.pk",
     "modules/json.pk",
+    "modules/re.pk",
   ),
 
   "Random Scripts" : (
@@ -65,7 +66,7 @@ def main():
 def run_all_tests():
   ## get the interpreter.
   pocket = get_pocket_binary()
-  
+
   for suite in TEST_SUITE:
     print_title(suite)
     for test in TEST_SUITE[suite]:
@@ -142,7 +143,7 @@ def print_title(title):
   print("----------------------------------")
   print(" %s " % title)
   print("----------------------------------")
-  
+
 if __name__ == '__main__':
   ## This will enable ANSI codes in windows terminal.
   os.system('')
