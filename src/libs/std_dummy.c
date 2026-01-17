@@ -35,7 +35,7 @@ DEF(_dummyInit,
   self->val = val;
 }
 
-DEF(_dummyGetter, "dummy.Dummy.@getter()", "") {
+DEF(_dummyGetter, "dummy.Dummy._getter()", "") {
 
   const char* name = pkGetSlotString(vm, 1, NULL);
   Dummy* self = (Dummy*)pkGetSelf(vm);
@@ -45,7 +45,7 @@ DEF(_dummyGetter, "dummy.Dummy.@getter()", "") {
   }
 }
 
-DEF(_dummySetter, "dummy.Dummy.@setter()", "") {
+DEF(_dummySetter, "dummy.Dummy._setter()", "") {
   const char* name = pkGetSlotString(vm, 1, NULL);
   Dummy* self = (Dummy*)pkGetSelf(vm);
   if (strcmp("val", name) == 0) {
@@ -168,8 +168,8 @@ void registerModuleDummy(PKVM* vm) {
   PkHandle* cls_dummy = pkNewClass(vm, "Dummy", NULL, dummy,
                                    _newDummy, _deleteDummy, NULL);
   ADD_METHOD(cls_dummy, "_init",    _dummyInit,   1);
-  ADD_METHOD(cls_dummy, "@getter",  _dummyGetter, 1);
-  ADD_METHOD(cls_dummy, "@setter",  _dummySetter, 2);
+  ADD_METHOD(cls_dummy, "_getter",  _dummyGetter, 1);
+  ADD_METHOD(cls_dummy, "_setter",  _dummySetter, 2);
   ADD_METHOD(cls_dummy, "+",        _dummyAdd,    1);
   ADD_METHOD(cls_dummy, "==",       _dummyEq,     1);
   ADD_METHOD(cls_dummy, ">",        _dummyGt,     1);

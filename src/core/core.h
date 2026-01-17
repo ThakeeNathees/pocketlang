@@ -18,6 +18,9 @@
 #define LITS__init      "_init"
 #define LITS__str       "_str"
 #define LITS__repr      "_repr"
+#define LITS__getter    "_getter"
+#define LITS__setter    "_setter"
+#define LITS__call      "_call"
 
 // Functions, methods, classes and  other names which are intrenal / special to
 // pocketlang are starts with the following character (ex: @main, @literalFn).
@@ -32,15 +35,6 @@
 // Name of a literal function. All literal function will have the same name but
 // they're uniquely identified by their index in the script's function buffer.
 #define LITERAL_FN_NAME "@func"
-
-// Name of a constructor function.
-#define CTOR_NAME LITS__init
-
-// Getter/Setter method names used by the native instance to get/ set value.
-// Script instance's values doesn't support methods but they use vanila
-// '.attrib', '.attrib=' operators.
-#define GETTER_NAME "@getter"
-#define SETTER_NAME "@setter"
 
 // Initialize core language, builtin function and core libs.
 void initializeCore(PKVM* vm);
@@ -77,6 +71,12 @@ void moduleAddFunctionInternal(PKVM* vm, Module* module,
 // instanciated (ex: Class 'Module') it'll set an error and return VAR_NULL.
 // For other classes the return value will be an Instance.
 Var preConstructSelf(PKVM* vm, Class* cls);
+
+// Bind a method to a class and deal with magic methods.
+void bindMethod(PKVM* vm, Class* cls, Closure* method);
+
+// Get the specified magic method or NULL. Cache the method if possible.
+Closure* getMagicMethod(Class* cls, MagicMethod mm);
 
 // Returns the class of the [instance].
 Class* getClass(PKVM* vm, Var instance);
@@ -137,11 +137,11 @@ bool varContains(PKVM* vm, Var elem, Var container);
 bool varIsType(PKVM* vm, Var inst, Var type);
 
 // Returns the attribute named [attrib] on the variable [on].
-Var varGetAttrib(PKVM* vm, Var on, String* attrib);
+Var varGetAttrib(PKVM* vm, Var on, String* attrib, bool skipGetter);
 
 // Set the attribute named [attrib] on the variable [on] with the given
 // [value].
-void varSetAttrib(PKVM* vm, Var on, String* name, Var value);
+void varSetAttrib(PKVM* vm, Var on, String* name, Var value, bool skipSetter);
 
 // Returns the subscript value (ie. on[key]).
 Var varGetSubscript(PKVM* vm, Var on, Var key);

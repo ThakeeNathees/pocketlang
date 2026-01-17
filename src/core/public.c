@@ -307,11 +307,9 @@ void pkClassAddMethod(PKVM* vm, PkHandle* cls,
 
   Closure* method = newClosure(vm, fn);
   vmPopTempRef(vm); // fn.
+
   vmPushTempRef(vm, &method->_super); // method.
-  {
-    pkClosureBufferWrite(&class_->methods, vm, method);
-    if (!strcmp(name, CTOR_NAME)) class_->ctor = method;
-  }
+  bindMethod(vm, class_, method);
   vmPopTempRef(vm); // method.
 }
 
@@ -457,7 +455,6 @@ static inline bool isStringEmpty(const char* line) {
 // This function will get the main function from the module to run it in the
 // repl mode.
 Closure* moduleGetMainFunction(PKVM* vm, Module* module) {
-
   int main_index = moduleGetGlobalIndex(module, IMPLICIT_MAIN_NAME,
                                         (uint32_t) strlen(IMPLICIT_MAIN_NAME));
   if (main_index == -1) return NULL;
@@ -842,7 +839,7 @@ bool pkSetAttribute(PKVM* vm, int instance, const char* name, int value) {
 
   String* sname = newString(vm, name);
   vmPushTempRef(vm, &sname->_super); // sname.
-  varSetAttrib(vm, SLOT(instance), sname, SLOT(value));
+  varSetAttrib(vm, SLOT(instance), sname, SLOT(value), true);
   vmPopTempRef(vm); // sname.
 
   return !VM_HAS_ERROR(vm);
@@ -857,7 +854,7 @@ bool pkGetAttribute(PKVM* vm, int instance, const char* name,
 
   String* sname = newString(vm, name);
   vmPushTempRef(vm, &sname->_super); // sname.
-  SET_SLOT(index, varGetAttrib(vm, SLOT(instance), sname));
+  SET_SLOT(index, varGetAttrib(vm, SLOT(instance), sname, true));
   vmPopTempRef(vm); // sname.
 
   return !VM_HAS_ERROR(vm);
@@ -867,17 +864,20 @@ static Var _newInstance(PKVM* vm, Class* cls, int argc, Var* argv) {
   Var instance = preConstructSelf(vm, cls);
   if (VM_HAS_ERROR(vm)) return VAR_NULL;
 
-  if (IS_OBJ(instance)) vmPushTempRef(vm, AS_OBJ(instance)); // instance.
-
-  Closure* ctor = cls->ctor;
-  while (ctor == NULL) {
-    cls = cls->super_class;
-    if (cls == NULL) break;
-    ctor = cls->ctor;
+  bool pushed = false;
+  if (IS_OBJ(instance)) {
+    vmPushTempRef(vm, AS_OBJ(instance)); // instance.
+    pushed = true;
   }
 
-  if (ctor != NULL) vmCallMethod(vm, instance, ctor, argc, argv, NULL);
-  if (IS_OBJ(instance)) vmPopTempRef(vm); // instance.
+  Closure* init = getMagicMethod(cls, METHOD_INIT);
+  if (init != NULL) {
+    // for builtin classes, preConstructSelf returns null,
+    // and instance is returned by _init.
+    vmCallMethod(vm, instance, init, argc, argv,
+      IS_NULL(instance) ? &instance : NULL);
+  }
+  if (pushed) vmPopTempRef(vm); // instance.
 
   return instance;
 }

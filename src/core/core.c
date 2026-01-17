@@ -182,22 +182,15 @@ String* varToString(PKVM* vm, Var self, bool repr) {
     // from GC).
     Closure* closure = NULL;
 
-    bool has_method = false;
     if (!repr) {
-      String* name = newString(vm, LITS__str); // TODO: static vm string?.
-      vmPushTempRef(vm, &name->_super); // name.
-      has_method = hasMethod(vm, self, name, &closure);
-      vmPopTempRef(vm); // name.
+      closure = getMagicMethod(getClass(vm, self), METHOD_STR);
     }
 
-    if (!has_method) {
-      String* name = newString(vm, LITS__repr); // TODO: static vm string?.
-      vmPushTempRef(vm, &name->_super); // name.
-      has_method = hasMethod(vm, self, name, &closure);
-      vmPopTempRef(vm); // name.
+    if (closure == NULL) {
+      closure = getMagicMethod(getClass(vm, self), METHOD_REPR);
     }
 
-    if (has_method) {
+    if (closure != NULL) {
       Var ret = VAR_NULL;
       PkResult result = vmCallMethod(vm, self, closure, 0, NULL, &ret);
       if (result != PK_RESULT_SUCCESS) return NULL;
@@ -976,6 +969,32 @@ DEF(_objRepr,
   RET(VAR_OBJ(toRepr(vm, SELF)));
 }
 
+DEF(_objGetattr,
+  "Object.getattr(name:String[, skipGetter: bool]) -> Var",
+  "Returns the value of the named attribute of an object.") {
+
+  if (!pkCheckArgcRange(vm, ARGC, 1, 2)) return;
+
+  String* name;
+  if (!validateArgString(vm, 1, &name)) return;
+
+  bool skipGetter = (ARGC >= 2 ? toBool(ARG(2)) : false);
+  RET(varGetAttrib(vm, SELF, name, skipGetter));
+}
+
+DEF(_objSetattr,
+  "Object.setattr(name:String, value:Var[, skipSetter: bool]) -> Null",
+  "Sets the value of the attribute of an object.") {
+
+  if (!pkCheckArgcRange(vm, ARGC, 2, 3)) return;
+
+  String* name;
+  if (!validateArgString(vm, 1, &name)) return;
+
+  bool skipSetter = (ARGC >= 3 ? toBool(ARG(3)) : false);
+  varSetAttrib(vm, SELF, name, ARG(2), skipSetter);
+}
+
 DEF(_numberTimes,
   "Number.times(f:Closure)",
   "Iterate the function [f] n times. Here n is the integral value of the "
@@ -1422,7 +1441,8 @@ static void initializePrimitiveClasses(PKVM* vm) {
     fn->native = ptr;                                        \
     fn->arity = arity_;                                      \
     vmPushTempRef(vm, &fn->_super); /* fn. */                \
-    vm->builtin_classes[type]->ctor = newClosure(vm, fn);    \
+    vm->builtin_classes[type]->magic_methods[METHOD_INIT] =   \
+      newClosure(vm, fn);                                    \
     vmPopTempRef(vm); /* fn. */                              \
   } while (false)
 
@@ -1452,6 +1472,9 @@ static void initializePrimitiveClasses(PKVM* vm) {
   // TODO: write docs.
   ADD_METHOD(PK_OBJECT, "typename", _objTypeName,    0);
   ADD_METHOD(PK_OBJECT, "_repr",    _objRepr,        0);
+
+  ADD_METHOD(PK_OBJECT, "getattr",  _objGetattr,    -1);
+  ADD_METHOD(PK_OBJECT, "setattr",  _objSetattr,    -1);
 
   ADD_METHOD(PK_NUMBER, "times",  _numberTimes,     1);
   ADD_METHOD(PK_NUMBER, "isint",  _numberIsint,     0);
@@ -1536,6 +1559,49 @@ Var preConstructSelf(PKVM* vm, Class* cls) {
   return VAR_NULL;
 }
 
+void bindMethod(PKVM* vm, Class* cls, Closure* method) {
+  // TODO: check hash instead of using strcmp?
+  if (strcmp(method->fn->name, LITS__init) == 0) {
+    cls->magic_methods[METHOD_INIT] = method;
+  } else if (strcmp(method->fn->name, LITS__str) == 0) {
+    cls->magic_methods[METHOD_STR] = method;
+  } else if (strcmp(method->fn->name, LITS__repr) == 0) {
+    cls->magic_methods[METHOD_REPR] = method;
+  } else if (strcmp(method->fn->name, LITS__getter) == 0) {
+    cls->magic_methods[METHOD_GETTER] = method;
+  } else if (strcmp(method->fn->name, LITS__setter) == 0) {
+    cls->magic_methods[METHOD_SETTER] = method;
+  } else if (strcmp(method->fn->name, LITS__call) == 0) {
+    cls->magic_methods[METHOD_CALL] = method;
+  }
+
+  pkClosureBufferWrite(&cls->methods, vm, method);
+}
+
+Closure* getMagicMethod(Class* cls, MagicMethod m) {
+  ASSERT(cls != NULL, OOPS);
+
+  // magic method
+  //   -1: find the method from ancestor
+  //   NULL: not found and don't find again
+  if (cls->magic_methods[m] == (Closure*) -1) {
+    cls->magic_methods[m] = NULL;
+
+    Class* super = cls->super_class;
+    while (super != NULL) {
+      if (super->magic_methods[m] != NULL &&
+          super->magic_methods[m] != (Closure*) -1) {
+
+        cls->magic_methods[m] = super->magic_methods[m];
+        break;
+      }
+      super = super->super_class;
+    }
+  }
+  // printf("%d %p\n", m, cls->magic_methods[m]);
+  return cls->magic_methods[m];
+}
+
 Class* getClass(PKVM* vm, Var instance) {
   PkVarType type = getVarType(instance);
   if (0 <= type && type < PK_INSTANCE) {
@@ -1587,7 +1653,7 @@ Var getMethod(PKVM* vm, Var self, String* name, bool* is_method) {
 
   // If the attribute not found it'll set an error.
   if (is_method) *is_method = false;
-  return varGetAttrib(vm, self, name);
+  return varGetAttrib(vm, self, name, false);
 }
 
 Closure* getSuperMethod(PKVM* vm, Var self, String* name) {
@@ -1961,7 +2027,7 @@ bool varIsType(PKVM* vm, Var inst, Var type) {
   return false;
 }
 
-Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
+Var varGetAttrib(PKVM* vm, Var on, String* attrib, bool skipGetter) {
 
 #define ERR_NO_ATTRIB(vm, on, attrib)                                         \
   VM_SET_ERROR(vm, stringFormat(vm, "'$' object has no attribute named '$'.", \
@@ -2130,16 +2196,9 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
       Instance* inst = (Instance*)obj;
       Var value = VAR_NULL;
 
-      if (inst->native != NULL) {
-
-        Closure* getter;
-        // TODO: static vm string?
-        String* getter_name = newString(vm, GETTER_NAME);
-        vmPushTempRef(vm, &getter_name->_super); // getter_name.
-        bool has_getter = hasMethod(vm, on, getter_name, &getter);
-        vmPopTempRef(vm); // getter_name.
-
-        if (has_getter) {
+      if (!skipGetter) {
+        Closure* getter = getMagicMethod(inst->cls, METHOD_GETTER);
+        if (getter != NULL) {
           Var attrib_name = VAR_OBJ(attrib);
           vmCallMethod(vm, on, getter, 1, &attrib_name, &value);
           return value; // If any error occure, it was already set.
@@ -2165,7 +2224,8 @@ Var varGetAttrib(PKVM* vm, Var on, String* attrib) {
 #undef ERR_NO_ATTRIB
 }
 
-void varSetAttrib(PKVM* vm, Var on, String* attrib, Var value) {
+void varSetAttrib(PKVM* vm, Var on, String* attrib, Var value, bool skipSetter)
+{
 
 // Set error for accessing non-existed attribute.
 #define ERR_NO_ATTRIB(vm, on, attrib)                               \
@@ -2197,18 +2257,11 @@ void varSetAttrib(PKVM* vm, Var on, String* attrib, Var value) {
     }
 
     case OBJ_INST: {
-
       Instance* inst = (Instance*)obj;
-      if (inst->native != NULL) {
-        Closure* setter;
-        // TODO: static vm string?
-        String* setter_name = newString(vm, SETTER_NAME);
-        vmPushTempRef(vm, &setter_name->_super); // setter_name.
-        bool has_setter = hasMethod(vm, VAR_OBJ(inst), setter_name, &setter);
-        vmPopTempRef(vm); // setter_name.
 
-        if (has_setter) {
-
+      if (!skipSetter) {
+        Closure* setter = getMagicMethod(inst->cls, METHOD_SETTER);
+        if (setter != NULL) {
           // FIXME:
           // Once we retreive values from directly the stack we can pass the
           // args pointer, pointing in the VM stack, instead of creating a temp

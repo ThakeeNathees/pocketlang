@@ -1125,12 +1125,7 @@ L_vm_main_loop:
 
       Closure* method = (Closure*)AS_OBJ(PEEK(-1));
       Class* cls = (Class*)AS_OBJ(PEEK(-2));
-
-      if (strcmp(method->fn->name, CTOR_NAME) == 0) {
-        cls->ctor = method;
-      }
-
-      pkClosureBufferWrite(&cls->methods, vm, method);
+      bindMethod(vm, cls, method);
 
       DROP();
       DISPATCH();
@@ -1252,12 +1247,7 @@ L_do_call:
         // here).
         *fiber->ret = fiber->self;
 
-        closure = (const Closure*)(cls)->ctor;
-        while (closure == NULL) {
-          cls = cls->super_class;
-          if (cls == NULL) break;
-          closure = cls->ctor;
-        }
+        closure = (const Closure*) getMagicMethod(cls, METHOD_INIT);
 
         // No constructor is defined on the class. Just return self.
         if (closure == NULL) {
@@ -1272,9 +1262,22 @@ L_do_call:
         }
 
       } else {
-        RUNTIME_ERROR(stringFormat(vm, "$ '$'.", "Expected a callable to "
-                      "call, instead got",
-                      varTypeName(callable)));
+        closure = NULL;
+
+        // try to call a "callable instance" via "_call".
+        if (IS_OBJ_TYPE(callable, OBJ_INST)) {
+          Instance* inst = (Instance*)AS_OBJ(callable);
+          closure = getMagicMethod(inst->cls, METHOD_CALL);
+        }
+
+        if (closure == NULL) {
+          RUNTIME_ERROR(stringFormat(vm, "$ '$'.", "Expected a callable to "
+                        "call, instead got",
+                        varTypeName(callable)));
+
+        } else {
+          fiber->self = callable;
+        }
       }
 
       // If we reached here it's a valid callable.
@@ -1550,7 +1553,7 @@ L_do_call:
       Var on = PEEK(-1); // Don't pop yet, we need the reference for gc.
       String* name = moduleGetStringAt(module, READ_SHORT());
       ASSERT(name != NULL, OOPS);
-      Var value = varGetAttrib(vm, on, name);
+      Var value = varGetAttrib(vm, on, name, false);
       DROP(); // on
       PUSH(value);
 
@@ -1563,7 +1566,7 @@ L_do_call:
       Var on = PEEK(-1);
       String* name = moduleGetStringAt(module, READ_SHORT());
       ASSERT(name != NULL, OOPS);
-      PUSH(varGetAttrib(vm, on, name));
+      PUSH(varGetAttrib(vm, on, name, false));
       CHECK_ERROR();
       DISPATCH();
     }
@@ -1574,7 +1577,7 @@ L_do_call:
       Var on = PEEK(-2);    // Don't pop yet, we need the reference for gc.
       String* name = moduleGetStringAt(module, READ_SHORT());
       ASSERT(name != NULL, OOPS);
-      varSetAttrib(vm, on, name, value);
+      varSetAttrib(vm, on, name, value, false);
 
       DROP(); // value
       DROP(); // on

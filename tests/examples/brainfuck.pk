@@ -45,11 +45,11 @@ end
 def execute(expr)
   ptr = 0   ## Data pointer.
   mem = [0] ## Data / Memory
-  
+
   i = 0 ## Instruction pointer
   while true
     c = expr[i] ## Current char.
-  
+
     ## Increment the data pointer (to point to the next cell to the right).
     if c == '>'
       ptr += 1
@@ -70,7 +70,7 @@ def execute(expr)
       if mem[ptr] == 0 then mem[ptr] = 255
       else mem[ptr] -= 1 end
 
-    ## output the byte at the data pointer.      
+    ## output the byte at the data pointer.
     elif c == '.'
       write(chr(mem[ptr]))
 

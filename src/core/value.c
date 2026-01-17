@@ -244,9 +244,9 @@ static void popMarkedObjectsInternal(Object* obj, PKVM* vm) {
       Class* cls = (Class*)obj;
       vm->bytes_allocated += sizeof(Class);
       markObject(vm, &cls->owner->_super);
-      markObject(vm, &cls->ctor->_super);
       markObject(vm, &cls->name->_super);
       markObject(vm, &cls->static_attribs->_super);
+      // don't need to mark magic_methods, they are all in cls->methods.
 
       markClosureBuffer(vm, &cls->methods);
       vm->bytes_allocated += sizeof(Closure) * cls->methods.capacity;
@@ -526,6 +526,11 @@ Class* newClass(PKVM* vm, const char* name, int length,
   cls->class_of = PK_INSTANCE;
   cls->super_class = super;
   cls->docstring = docstring;
+
+  // Initialize to -1 as undefined
+  for (int i = 0; i < MAX_MAGIC_METHODS; i++) {
+    cls->magic_methods[i] = (Closure*)-1;
+  }
 
   // Builtin types doesn't belongs to a module.
   if (module != NULL) {

@@ -133,8 +133,8 @@ void registerVector(PKVM* vm) {
   PkHandle* Vec2 = pkNewClass(vm, "Vec2", NULL /*Base Class*/,
                               vector, _newVec, _deleteVec);
 
-  pkClassAddMethod(vm, Vec2, "@getter", _vecGetter, 1);
-  pkClassAddMethod(vm, Vec2, "@setter", _vecSetter, 2);
+  pkClassAddMethod(vm, Vec2, "_getter", _vecGetter, 1);
+  pkClassAddMethod(vm, Vec2, "_setter", _vecSetter, 2);
   pkClassAddMethod(vm, Vec2, "_init",   _vecInit,   2);
   pkClassAddMethod(vm, Vec2, "_str",    _vecStr,    0);
   pkClassAddMethod(vm, Vec2, "+",       _vecAdd,    1);
@@ -154,6 +154,6 @@ int main(int argc, char** argv) {
   registerVector(vm);
   pkRunString(vm, code);
   pkFreeVM(vm);
-  
+
   return 0;
 }
