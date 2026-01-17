@@ -1359,7 +1359,6 @@ L_do_call:
       DISPATCH();
     }
 
-    // TODO: move this to a function in pk_core.c.
     OPCODE(ITER):
     {
       Var* value    = (fiber->sp - 1);
@@ -1373,81 +1372,9 @@ L_do_call:
         DISPATCH();          \
       } while (false)
 
-      ASSERT(IS_NUM(*iterator), OOPS);
-      double it = AS_NUM(*iterator); //< Nth iteration.
-      ASSERT(AS_NUM(*iterator) == (int32_t)trunc(it), OOPS);
-
-      Object* obj = AS_OBJ(seq);
-      switch (obj->type) {
-
-        case OBJ_STRING: {
-          uint32_t iter = (int32_t)trunc(it);
-
-          // TODO: // Need to consider utf8.
-          String* str = ((String*)obj);
-          if (iter >= str->length) JUMP_ITER_EXIT();
-
-          //TODO: vm's char (and reusable) strings.
-          *value = VAR_OBJ(newStringLength(vm, str->data + iter, 1));
-          *iterator = VAR_NUM((double)iter + 1);
-
-        } DISPATCH();
-
-        case OBJ_LIST: {
-          uint32_t iter = (int32_t)trunc(it);
-          pkVarBuffer* elems = &((List*)obj)->elements;
-          if (iter >= elems->count) JUMP_ITER_EXIT();
-          *value = elems->data[iter];
-          *iterator = VAR_NUM((double)iter + 1);
-
-        } DISPATCH();
-
-        case OBJ_MAP: {
-          uint32_t iter = (int32_t)trunc(it);
-
-          Map* map = (Map*)obj;
-          if (map->entries == NULL) JUMP_ITER_EXIT();
-          MapEntry* e = map->entries + iter;
-          for (; iter < map->capacity; iter++, e++) {
-            if (!IS_UNDEF(e->key)) break;
-          }
-          if (iter >= map->capacity) JUMP_ITER_EXIT();
-
-          *value = map->entries[iter].key;
-          *iterator = VAR_NUM((double)iter + 1);
-
-        } DISPATCH();
-
-        case OBJ_RANGE: {
-          double from = ((Range*)obj)->from;
-          double to = ((Range*)obj)->to;
-          if (from == to) JUMP_ITER_EXIT();
-
-          double current;
-          if (from <= to) { //< Straight range.
-            current = from + it;
-          } else {          //< Reversed range.
-            current = from - it;
-          }
-          if (current == to) JUMP_ITER_EXIT();
-          *value = VAR_NUM(current);
-          *iterator = VAR_NUM(it + 1);
-
-        } DISPATCH();
-
-        case OBJ_MODULE:
-        case OBJ_FUNC:
-        case OBJ_CLOSURE:
-        case OBJ_METHOD_BIND:
-        case OBJ_UPVALUE:
-        case OBJ_FIBER:
-        case OBJ_CLASS:
-        case OBJ_INST:
-          TODO; break;
-        default:
-          UNREACHABLE();
-      }
-
+      bool cont = varIterate(vm, seq, iterator, value);
+      CHECK_ERROR();
+      if (!cont) JUMP_ITER_EXIT();
       DISPATCH();
     }
 
