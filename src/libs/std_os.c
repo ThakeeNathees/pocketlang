@@ -42,7 +42,7 @@
   #include <dlfcn.h>
 #endif
 
-#if defined(_MSC_VER) || (defined(_WIN32) && defined(__TINYC__))
+#if defined(_MSC_VER) || (defined(_WIN32) && defined(__TINYC__)) || (defined(_WIN32) && defined(__ORANGEC__))
   #include <direct.h>
   #include <io.h>
 

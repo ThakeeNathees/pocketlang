@@ -14,7 +14,7 @@
   #include <windows.h>
 #endif
 
-#if !defined(_MSC_VER) && !(defined(_WIN32) && defined(__TINYC__))
+#if !defined(_MSC_VER) && !(defined(_WIN32) && defined(__TINYC__)) && !(defined(_WIN32) && defined(__ORANGEC__))
   #include <unistd.h> // usleep
 #endif
 
@@ -38,7 +38,7 @@ DEF(_timeSleep,
   double t;
   pkValidateSlotNumber(vm, 1, &t);
 
-#if defined(_MSC_VER) || (defined(_WIN32) && defined(__TINYC__))
+#if defined(_MSC_VER) || (defined(_WIN32) && defined(__TINYC__)) || (defined(_WIN32) && defined(__ORANGEC__))
   // Sleep(milli seconds)
   Sleep((DWORD) t);
 
